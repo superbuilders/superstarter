@@ -1,0 +1,39 @@
+language js // Applies to JavaScript and TypeScript
+
+// This rule enforces the structured logging interface by restricting logger method calls
+// to have at most 2 arguments and ensuring the first argument is a simple string literal.
+// See `rules/structured-logging.mdc` for the approved logging interface.
+
+or {
+	// Case 1: 3+ arguments (most restrictive, check first)
+	`logger.$method($arg1, $arg2, $arg3, $...)` as $logger_call where {
+		$method <: or {
+			"error",
+			"debug",
+			"warn",
+			"info"
+		},
+		register_diagnostic(span=$logger_call, message="Logger method calls must have at most 2 arguments: message and optional context object. Found 3 or more arguments. Use structured logging as detailed in `rules/structured-logging.mdc`.", severity="error")
+	},
+	// Case 2: String concatenation in first argument
+	`logger.$method($left + $right, $...)` as $logger_call where {
+		$method <: or {
+			"error",
+			"debug",
+			"warn",
+			"info"
+		},
+		register_diagnostic(span=$logger_call, message="Logger first argument must be a simple string literal, not string concatenation. Use structured logging with context object instead. See `rules/structured-logging.mdc`.", severity="error")
+	},
+	// Case 3: First argument is not a simple string literal
+	`logger.$method($arg, $...)` as $logger_call where {
+		$method <: or {
+			"error",
+			"debug",
+			"warn",
+			"info"
+		},
+		not ($arg <: `"$_"`),
+		register_diagnostic(span=$logger_call, message="Logger first argument must be a simple double-quoted string literal (not template literal, variable, or expression). Use structured logging as detailed in `rules/structured-logging.mdc`.", severity="error")
+	}
+}

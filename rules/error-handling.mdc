@@ -1,0 +1,257 @@
+---
+description: 
+globs: *.tsx,*.ts
+alwaysApply: false
+---
+### Error Handling
+
+Always import the errors namespace: `import * as errors from "@superbuilders/errors"`. Never use regular try/catch blocks; always use `errors.try` instead. The `if (result.error)` block **MUST** be placed on the line immediately following the operation. No empty newlines are permitted between the line containing `errors.try`/`errors.trySync` and the subsequent `if (result.error)` statement.
+
+```typescript
+const result = await errors.try(somePromise)
+if (result.error) {
+	// Handle error case by throwing the error
+	throw errors.wrap(result.error, "operation")
+	// DO NOT use console.error or slog.error here - propagate the error instead
+}
+const data = result.data // Safe to use the data now
+```
+
+When propagating errors, always use `errors.wrap` with throw for errors from external sources:
+
+```typescript
+const result = await errors.try(somePromise)
+if (result.error) {
+	throw errors.wrap(result.error, "screenshot capture")
+}
+```
+
+For synchronous operations, use `errors.trySync` and always throw errors when bubbling up:
+
+```typescript
+const result = errors.trySync(() => someOperation())
+if (result.error) {
+	throw errors.wrap(result.error, "synchronous operation")
+}
+```
+
+NEVER use `console.log`, `console.debug`, or `console.error` in any files. Use the structured logging library from `@superbuilders/slog` instead. Always propagate errors by throwing via `errors.wrap` (for external errors) or `errors.new` (for our own errors) instead of only logging.
+
+#### ⚠️ CRITICAL: Script Error Logging Pattern
+
+For manual scripts that need to log errors before exiting:
+
+```typescript
+import * as logger from "@superbuilders/slog"
+import * as errors from "@superbuilders/errors"
+
+const result = await errors.try(main())
+if (result.error) {
+	logger.error("operation failed", { error: result.error }) // .toString() of error called automatically
+	process.exit(1)
+}
+```
+
+#### Custom Error Constants and Type-Safe Error Checking
+
+For domain-specific error handling, define custom error constants using `errors.new` and use `errors.is` for type-safe error checking. This pattern enables precise error handling with automatic type narrowing.
+
+**1. Define Custom Error Constants**
+
+Create named constants for specific error types in your module:
+
+```typescript
+// ✅ CORRECT: Define custom error constants
+export const ErrUserNotFound = errors.new("user not found")
+export const ErrInvalidPermission = errors.new("invalid permission")
+export const ErrDataCorrupted = errors.new("data corrupted")
+```
+
+**2. Throw Custom Errors with Context**
+
+Use `errors.wrap` with custom error constants to add contextual information while preserving error identity for `errors.is` checks:
+
+```typescript
+// ✅ CORRECT: Throw custom errors with context
+function getUser(id: string): User {
+	if (!id) {
+		throw errors.wrap(ErrUserNotFound, `user id cannot be empty`)
+	}
+	
+	const user = database.findUser(id)
+	if (!user) {
+		throw errors.wrap(ErrUserNotFound, `user with id '${id}' does not exist`)
+	}
+	
+	return user
+}
+```
+
+**3. Handle Operations That Throw Custom Errors**
+
+Use `errors.trySync` to catch custom errors and check for specific types using `errors.is`:
+
+```typescript
+// ✅ CORRECT: Handle custom errors with errors.is
+function processUser(id: string): void {
+	const userResult = errors.trySync(() => getUser(id))
+	if (userResult.error) {
+		if (errors.is(userResult.error, ErrUserNotFound)) {
+			// Handle missing user specifically
+			logger.warn("skipping missing user", { userId: id })
+			return
+		}
+		// Handle other unexpected errors
+		throw userResult.error // Bubble up other errors unchanged
+	}
+	
+	// Type narrowing: userResult.data is automatically typed as User
+	const user = userResult.data
+	// Process user...
+}
+```
+
+**4. Error Bubbling Pattern**
+
+When errors need to bubble up unchanged (preserving the error chain), throw the error directly:
+
+```typescript
+// ✅ CORRECT: Bubble errors without additional wrapping
+const operationResult = errors.trySync(() => riskyOperation())
+if (operationResult.error) {
+	throw operationResult.error // Preserves error chain for errors.is checks
+}
+```
+
+**5. Multiple Error Types in One Function**
+
+Functions can throw different custom errors for different failure modes:
+
+```typescript
+// ✅ CORRECT: Multiple custom error types
+export const ErrArticleRedirect = errors.new("article is a redirect")
+export const ErrArticleNotHtml = errors.new("article is not html")
+export const ErrArticleDataConversion = errors.new("article data conversion failed")
+
+function getArticleContent(entry: Entry): ArticleContent {
+	if (entry.isRedirect) {
+		throw errors.wrap(ErrArticleRedirect, `article at path '${entry.path}' is a redirect`)
+	}
+	
+	if (!entry.mimetype?.startsWith("text/html")) {
+		throw errors.wrap(ErrArticleNotHtml, `article at path '${entry.path}' has mimetype '${entry.mimetype}'`)
+	}
+	
+	const contentResult = errors.trySync(() => extractContent(entry))
+	if (contentResult.error) {
+		throw contentResult.error // Bubble data conversion errors
+	}
+	
+	return contentResult.data
+}
+
+// Consumer can handle each error type specifically
+const articleResult = errors.trySync(() => getArticleContent(entry))
+if (articleResult.error) {
+	if (errors.is(articleResult.error, ErrArticleRedirect)) {
+		// Handle redirect case
+	} else if (errors.is(articleResult.error, ErrArticleNotHtml)) {
+		// Handle non-HTML case  
+	} else if (errors.is(articleResult.error, ErrArticleDataConversion)) {
+		// Handle data conversion failure
+	} else {
+		// Handle unexpected errors
+		throw articleResult.error
+	}
+	return
+}
+
+// Type narrowing: articleResult.data is automatically typed as ArticleContent
+const article = articleResult.data
+```
+
+**Key Benefits:**
+- **Type Safety**: `errors.is` provides automatic type narrowing without manual casting
+- **Error Chain Integrity**: Custom errors maintain pointer equality through the error chain
+- **Explicit Handling**: Each error type can be handled specifically with clear intent
+- **Contextual Information**: `errors.wrap` adds context while preserving error identity
+
+#### Error Message Naming
+
+Follow Go-style error message conventions with terse, context-focused descriptions:
+
+**Guidelines:**
+- Use lowercase, no punctuation or capitalization
+- Omit redundant words like "failed", "error", "unable to"
+- Focus on the operation or context, not the failure
+- Use noun phrases or simple action descriptions
+
+**Examples:**
+
+```typescript
+// ✅ CORRECT: Terse, context-focused
+throw errors.wrap(result.error, "database connection")
+throw errors.wrap(result.error, "user authentication")
+throw errors.wrap(result.error, "file upload")
+throw errors.wrap(result.error, "metadata retrieval")
+throw errors.wrap(result.error, "article processing")
+throw errors.new("invalid configuration")
+throw errors.new("missing required field")
+
+// ❌ WRONG: Verbose, redundant prefixes
+throw errors.wrap(result.error, "Failed to connect to database")
+throw errors.wrap(result.error, "Error during user authentication")
+throw errors.wrap(result.error, "Unable to upload file")
+throw errors.wrap(result.error, "Failed during metadata retrieval")
+throw errors.new("Configuration is invalid")
+throw errors.new("Required field is missing")
+```
+
+**Consistent Naming Patterns:**
+- **Database operations:** `"database connection"`, `"query execution"`, `"transaction commit"`
+- **File operations:** `"file read"`, `"file write"`, `"directory creation"`
+- **Network operations:** `"http request"`, `"api call"`, `"response parsing"`
+- **Data processing:** `"data validation"`, `"content extraction"`, `"format conversion"`
+- **Authentication:** `"user authentication"`, `"token validation"`, `"permission check"`
+
+#### Proper Use of errors.wrap vs errors.new
+
+`errors.wrap` should only be used to wrap errors that originate from external sources or lower-level operations (e.g., database queries, API calls), preserving the error chain for debugging. The first argument to `errors.wrap` must NEVER be a `new Error("some message")` or `errors.new("some message")`. 
+
+For creating your own errors, use `errors.new()` instead of `new Error()` to ensure consistent error handling integration with the errors library.
+
+**✅ CORRECT: Wrapping an External Error**
+
+```typescript
+const result = await errors.try(someExternalOperation())
+if (result.error) {
+	throw errors.wrap(result.error, "external operation")
+}
+```
+
+**✅ CORRECT: Creating Your Own Error**
+
+```typescript
+if (!user) {
+	throw errors.new("user not found")
+}
+```
+
+**❌ WRONG: Wrapping Our Own Error**
+
+```typescript
+// ❌ WRONG: Wrapping an error that we created
+throw errors.wrap(errors.new("some error"), "operation failed")
+throw errors.wrap(new Error("some error"), "operation failed")
+// ✅ CORRECT: Just create the error directly
+throw errors.new("operation: some error")
+```
+
+**❌ WRONG: Using new Error() Instead of errors.new()**
+
+```typescript
+// ❌ WRONG: Using new Error() directly
+throw new Error("invalid configuration")
+// ✅ CORRECT: Use errors.new() for consistent error handling
+throw errors.new("invalid configuration")
+```

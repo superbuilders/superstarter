@@ -1,0 +1,48 @@
+---
+description: 
+globs: src/app/**/*.tsx
+alwaysApply: false
+---
+### React Server Components Data Fetching Patterns
+
+#### ⚠️ CRITICAL: Colocated Queries and Parallel Fetching
+
+ALWAYS colocate Drizzle queries with the server components that use them. Define prepared statements at the top of the file as constants using the `.prepare()` method. Export types derived from query results using the `Awaited<ReturnType<typeof queryName.execute>>[number]` pattern. Pass data as Promise objects directly to child components for parallel data fetching.
+
+**Example**
+
+```typescript
+// 1. Define prepared statements at the top of the file
+const getProjectById = db
+	.select({
+		id: schema.projects.id,
+		name: schema.students.name
+		// other fields...
+	})
+	.from(schema.projects)
+	.innerJoin(schema.students, eq(schema.projects.studentId, schema.students.id))
+	.where(eq(schema.projects.id, sql.placeholder("id")))
+	.limit(1)
+	.prepare("page_get_project_by_id")
+
+// 2. Define derived types from the query results
+export type Project = Awaited<ReturnType<typeof getProjectById.execute>>[number]
+
+// 3. In the component, execute queries and pass promises directly
+export default function MyPage({ params }: ProjectPageProps) {
+	// Execute the prepared statement with parameters
+	const projectPromise = getProjectById
+		.execute({ id: params.id })
+		.then((result) => {
+			if (!result?.[0]) redirect("/")
+			return result[0]
+		})
+
+	// Pass promises directly to child components
+	return (
+		<Suspense>
+			<MyComponent project={projectPromise} />
+		</Suspense>
+	)
+}
+```

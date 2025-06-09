@@ -1,14 +1,15 @@
-import { db } from "@/db"
-import { Errors } from "@/errors"
 import { loadEnvConfig } from "@next/env"
+import * as errors from "@superbuilders/errors"
+import * as logger from "@superbuilders/slog"
 import { sql } from "drizzle-orm"
+import { db } from "@/db"
 
 const projectDir = process.cwd()
 loadEnvConfig(projectDir)
 
 async function dropSchemas(schemaNames: string[]) {
 	if (schemaNames.length === 0) {
-		console.log("No schemas specified to drop.")
+		logger.info("no schemas specified to drop")
 		process.exit(0)
 	}
 
@@ -16,28 +17,24 @@ async function dropSchemas(schemaNames: string[]) {
 
 	for (const schemaName of schemaNames) {
 		if (!schemaName.trim()) {
-			console.warn("Skipping empty schema name.")
+			logger.warn("skipping empty schema name")
 			continue
 		}
 
-		const result = await Errors.try(
-			db.execute(
-				sql`DROP SCHEMA IF EXISTS ${sql.identifier(schemaName)} CASCADE`
-			)
-		)
+		const result = await errors.try(db.execute(sql`DROP SCHEMA IF EXISTS ${sql.identifier(schemaName)} CASCADE`))
 		if (result.error) {
-			console.error(`Error dropping schema ${schemaName}:`, result.error)
+			logger.error("failed to drop schema", { schema: schemaName, error: result.error })
 			success = false
 		} else {
-			console.log(`Successfully dropped schema: ${schemaName}`)
+			logger.info("successfully dropped schema", { schema: schemaName })
 		}
 	}
 
 	if (success) {
-		console.log("All specified schemas dropped successfully.")
+		logger.info("all specified schemas dropped successfully")
 		process.exit(0)
 	} else {
-		console.error("Some schemas failed to drop.")
+		logger.error("some schemas failed to drop")
 		process.exit(1)
 	}
 }

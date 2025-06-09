@@ -1,5 +1,5 @@
 {
-	"name": "best-nextjs-starter",
+	"name": "superstarter",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
@@ -17,32 +17,40 @@
 		"dev:inngest": "inngest-cli dev",
 		"preview": "next build && next start",
 		"start": "next start",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit && bun run check:write",
+		"prepare": "husky"
 	},
 	"dependencies": {
-		"@t3-oss/env-nextjs": "^0.13.4",
+		"@superbuilders/errors": "^2.0.0",
+		"@superbuilders/slog": "^3.0.1",
+		"@t3-oss/env-nextjs": "^0.13.7",
 		"drizzle-orm": "^0.43.1",
-		"inngest": "^3.37.0",
-		"inngest-cli": "^1.6.0",
-		"next": "^15.3.2",
+		"inngest": "^3.39.1",
+		"inngest-cli": "^1.6.4",
+		"next": "^15.3.3",
 		"postgres": "^3.4.7",
 		"react": "^19.1.0",
 		"react-dom": "^19.1.0",
-		"zod": "^3.25.20"
+		"zod": "^3.25.56"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "1.9.4",
-		"@tailwindcss/postcss": "^4.1.7",
-		"@types/node": "^22.15.21",
-		"@types/react": "^19.1.5",
-		"@types/react-dom": "^19.1.5",
+		"@biomejs/biome": "^2.0.0-beta.6",
+		"@tailwindcss/postcss": "^4.1.8",
+		"@types/node": "^22.15.30",
+		"@types/react": "^19.1.6",
+		"@types/react-dom": "^19.1.6",
 		"drizzle-kit": "^0.31.1",
-		"postcss": "^8.5.3",
-		"tailwindcss": "^4.1.7",
+		"husky": "^9.1.7",
+		"postcss": "^8.5.4",
+		"tailwindcss": "^4.1.8",
 		"typescript": "^5.8.3"
 	},
 	"ct3aMetadata": {
 		"initVersion": "7.39.3"
 	},
-	"trustedDependencies": ["@biomejs/biome", "@tailwindcss/oxide", "inngest-cli"]
+	"trustedDependencies": [
+		"@biomejs/biome",
+		"@tailwindcss/oxide",
+		"inngest-cli"
+	]
 }

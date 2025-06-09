@@ -1,0 +1,75 @@
+---
+description: 
+globs: src/inngest/functions/**/*.ts
+alwaysApply: false
+---
+### Inngest Function Invocation
+
+#### ⚠️ CRITICAL: Import Function Objects for Type Safety
+
+When using `step.invoke()` to call other Inngest functions, ALWAYS import the actual function object and pass it directly to `step.invoke()`. This enables automatic TypeScript type inference for return values without requiring type assertions or additional validation.
+
+#### Correct Pattern
+
+```typescript
+// ✅ CORRECT: Import the function object
+import { generateLyricsFromLearningObjective } from "@/inngest/functions/generate-lyrics-from-learning-objective"
+
+const result = await step.invoke("step-id", {
+  function: generateLyricsFromLearningObjective, // Function object
+  data: { input }
+})
+
+// TypeScript automatically infers result type as GenerateLyricsFromLearningObjectiveOutput
+console.log(result.lyrics) // ✅ Fully typed, no assertions needed
+```
+
+#### Prohibited Patterns
+
+```typescript
+// ❌ WRONG: Using function ID string
+const result = await step.invoke("step-id", {
+  function: "generate-lyrics-from-learning-objective", // String - no type inference
+  data: { input }
+})
+// result is type 'unknown', requires unsafe type assertions
+
+// ❌ WRONG: Type assertions
+const result = await step.invoke("step-id", {
+  function: "generate-lyrics-from-learning-objective",
+  data: { input }
+}) as SomeType // Violates type-safety.mdc
+
+// ❌ WRONG: Unnecessary Zod validation
+const result = await step.invoke("step-id", {
+  function: generateFunction,
+  data: { input }
+})
+const validated = SomeSchema.safeParse(result) // Redundant - already typed
+```
+
+#### Rationale
+
+- **Automatic Type Safety**: Function objects provide full TypeScript inference without unsafe assertions
+- **Runtime Safety**: Inngest validates function references at runtime
+- **Code Clarity**: Clear dependency tracking through imports
+- **Maintainability**: Refactoring function names automatically updates all references
+
+#### Required Imports
+
+Always import both the function object (for invocation) and register it in the Inngest route:
+
+```typescript
+// In the calling function
+import { someFunction } from "@/inngest/functions/some-function"
+
+// In src/app/api/inngest/route.ts
+import { someFunction } from "@/inngest/functions/some-function"
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: [
+    // ... other functions
+    someFunction
+  ]
+})
+```

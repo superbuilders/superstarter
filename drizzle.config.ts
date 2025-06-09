@@ -8,5 +8,5 @@ export default {
 	dbCredentials: {
 		url: env.DATABASE_URL
 	},
-	schemaFilter: ["analytics"]
+	schemaFilter: ["core"]
 } satisfies Config

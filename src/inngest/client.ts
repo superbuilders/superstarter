@@ -1,4 +1,19 @@
-import { Inngest } from "inngest"
+import * as logger from "@superbuilders/slog"
+import { EventSchemas, type GetEvents, Inngest } from "inngest"
+import { z } from "zod"
 
-// Create a client to send and receive events
-export const inngest = new Inngest({ id: "my-app" })
+const events = {
+	"test/hello.world": {
+		data: z.object({
+			email: z.string().email()
+		})
+	}
+}
+
+export const inngest = new Inngest({
+	id: "my-app",
+	schemas: new EventSchemas().fromZod(events),
+	logger
+})
+
+export type Events = GetEvents<typeof inngest>

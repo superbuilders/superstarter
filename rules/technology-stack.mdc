@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+### Technology Stack
+
+#### ⚠️ CRITICAL: Required Stack Components
+
+**Runtime**: Bun + Next.js  
+**Package Manager**: Bun  
+**Database ORM**: Drizzle ORM
+
+### Commands
+
+**Setup**: `bun install`  
+**Format/Typecheck**: `bun typecheck`

@@ -1,0 +1,18 @@
+---
+description: 
+globs: *.tsx
+alwaysApply: false
+---
+### React Patterns
+
+#### ⚠️ CRITICAL: React Namespace and State Patterns
+
+ALWAYS import React namespace: `import * as React from "react"` (never use named imports). ALWAYS use the React namespace when using React functions: `React.useState`, `React.useEffect`, etc. ALWAYS prefer `undefined` over `null` when using `React.useState` in UI code:
+
+```typescript
+// ✅ CORRECT
+const [value, setValue] = React.useState<string | undefined>(undefined)
+
+// ❌ WRONG
+const [value, setValue] = React.useState<string | null>(null)
+```

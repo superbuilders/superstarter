@@ -1,0 +1,26 @@
+language js // Applies to JavaScript and TypeScript
+
+// This rule restricts the use of the 'as' keyword for type assertions.
+// It only allows 'as const' for const assertions.
+// Other uses (e.g., `value as string`, `object as MyType`) are disallowed
+// as per the 'Type Safety' guidelines.
+// It encourages runtime validation (e.g., with Zod) or safer type narrowing techniques for other cases.
+
+// We use an 'or' clause to differentiate patterns.
+// 'or' is short-circuited: the first pattern that matches is used.
+or {
+	// Case 1: The allowed 'as const' assertion.
+	// This pattern matches `any_expression as const`.
+	// If this pattern matches, the 'or' clause is satisfied for this code snippet,
+	// and no diagnostic action is taken because none is specified in this branch.
+	`$_ as const`,
+	// Case 2: Any other 'as' type assertion.
+	// This branch is only evaluated if the first pattern (`$_ as const`) does not match.
+	// Therefore, if this second pattern matches, it's an 'as' assertion that is NOT 'as const'.
+	(// Parentheses group this entire case
+	`$_expression as $_target_type` as $as_type_assertion where {
+		// The 'where' clause here now *only* contains the diagnostic action.
+		// This structure (Pattern where { Action }) should be acceptable to the parser.
+		register_diagnostic(span=$as_type_assertion, message="Usage of the 'as' keyword for type assertions (e.g., 'value as string') is disallowed, except for 'as const'. Prefer runtime validation or safer type narrowing techniques for other type assertions. See `rules/type-safety.mdc` for details.", severity="error") // Highlights the entire 'expression as Type'
+	})
+}

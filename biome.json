@@ -1,5 +1,13 @@
 {
-	"$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"plugins": [
+		"./gritql/logger-structured-args.grit",
+		"./gritql/no-as-type-assertion.grit",
+		"./gritql/no-db-select-in-step-run.grit",
+		"./gritql/no-new-error.grit",
+		"./gritql/no-try.grit",
+		"./gritql/prefer-undefined-over-null.grit"
+	],
 	"vcs": {
 		"enabled": false,
 		"clientKind": "git",
@@ -7,32 +15,41 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"ignore": [
-			"node_modules",
-			".next",
-			".expo",
-			"dist",
-			"out",
-			"src/components/ui",
-			"scripts"
+		"includes": [
+			"**",
+			"!**/node_modules",
+			"!**/.next",
+			"!**/.expo",
+			"!**/dist",
+			"!**/out",
+			"!**/src/components/ui",
+			"!**/src/fancy/**",
+			"!**/src/db/index.ts",
+			"!**/src/hooks"
 		],
 		"maxSize": 5000000
 	},
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab",
-		"indentWidth": 2
+		"indentWidth": 2,
+		"lineWidth": 120
 	},
-	"organizeImports": {
-		"enabled": true
-	},
+	"assist": { "actions": { "source": { "organizeImports": "on" } } },
 	"linter": {
 		"enabled": true,
 		"rules": {
 			"suspicious": {
+				"noConsole": {
+					"level": "error",
+					"fix": "unsafe"
+				},
 				"noArrayIndexKey": "off"
 			},
 			"complexity": {
+				"noForEach": {
+					"level": "error"
+				},
 				"useOptionalChain": {
 					"level": "error",
 					"fix": "safe"
@@ -44,19 +61,17 @@
 			},
 			"recommended": true,
 			"correctness": {
-				"noUnusedImports": {
+				"noUnusedImports": "error",
+				"noUnusedVariables": "error",
+				"noUnusedFunctionParameters": "error"
+			},
+			"nursery": {},
+			"style": {
+				"noNonNullAssertion": {
 					"level": "error",
 					"fix": "safe"
 				},
-				"noUnusedFunctionParameters": {
-					"level": "error"
-				}
-			},
-			"nursery": {
-				"noNestedTernary": "error",
-				"noImgElement": "error"
-			},
-			"style": {
+				"useConst": "off",
 				"noUnusedTemplateLiteral": {
 					"level": "error",
 					"fix": "safe"
@@ -68,10 +83,26 @@
 				"noUselessElse": {
 					"level": "error",
 					"fix": "safe"
+				},
+				"noParameterAssign": "error",
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSelfClosingElements": "error",
+				"useSingleVarDeclarator": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"noNestedTernary": "error",
+				"useNodejsImportProtocol": {
+					"level": "error",
+					"fix": "safe"
 				}
 			},
 			"a11y": {
 				"useKeyWithClickEvents": "off"
+			},
+			"performance": {
+				"noImgElement": "error"
 			}
 		}
 	},

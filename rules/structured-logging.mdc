@@ -1,0 +1,173 @@
+---
+description: 
+globs: *.tsx,*.ts
+alwaysApply: false
+---
+### Structured Logging
+
+All logging MUST use the structured logging library from `@superbuilders/slog`. This library provides Go slog-style structured logging with automatic `toString()` processing and consistent formatting.
+
+#### ⚠️ CRITICAL: Inngest Functions Exception
+
+**For Inngest functions, use the `logger` parameter instead of importing slog directly.** Inngest provides its own logger middleware that handles serverless-specific logging issues like incomplete log flushing and duplicated log deliveries.
+
+```typescript
+// ✅ CORRECT: In Inngest functions, use the logger parameter
+export const myInngestFunction = inngest.createFunction(
+	{ id: "my-function" },
+	{ event: "app/some.event" },
+	async ({ event, logger }) => {
+		logger.info("starting function", { eventId: event.id })
+		// Do NOT import slog in Inngest functions
+	}
+)
+
+// ❌ WRONG: Don't import slog in Inngest functions
+import * as logger from "@superbuilders/slog"
+export const myInngestFunction = inngest.createFunction(
+	{ id: "my-function" },
+	{ event: "app/some.event" },
+	async ({ event }) => {
+		logger.info("starting function", { eventId: event.id }) // This can cause issues
+	}
+)
+```
+
+**Why this exception exists:**
+- Serverless functions can terminate before logs are flushed
+- Inngest's memoization can cause log statements outside steps to run multiple times
+- The Inngest logger is configured with our slog library for consistent formatting
+
+**Outside of Inngest functions** (utility functions, database operations, etc.), continue to use slog directly as documented below.
+
+#### ⚠️ CRITICAL: When NOT to Use Logging
+
+**Structured logging is for observability, NOT error handling.** Always use the error handling patterns from [error-handling.mdc](mdc:rules/error-handling.mdc) instead of logging when:
+
+- **Error propagation:** Errors that need to bubble up to callers
+- **Operation failures:** Failed operations that should halt execution  
+- **Validation failures:** Invalid data that prevents further processing
+- **External operation failures:** Failed API calls, database operations, file operations
+
+**Use `Errors.try` and throw errors instead:**
+
+```typescript
+// ✅ CORRECT: Use error handling for failures
+const result = await Errors.try(someOperation())
+if (result.error) {
+	throw Errors.wrap(result.error, "operation failed")
+}
+
+// ❌ WRONG: Don't log errors in application code
+const result = await Errors.try(someOperation())
+if (result.error) {
+	logger.error("operation failed", { error: result.error })
+    throw Errors.wrap(result.error, "operation failed")
+}
+```
+
+#### Import Pattern
+
+Always import the entire slog module as logger:
+
+```typescript
+import * as logger from "@superbuilders/slog"
+```
+
+#### ⚠️ CRITICAL: Automatic toString() Processing
+
+**The logging library automatically calls `toString()` on ALL objects with custom `toString()` methods.** This includes Error objects, Date objects, and custom classes. **NEVER manually call `.toString()`** on objects when logging.
+
+```typescript
+// ✅ CORRECT: Let the logger handle toString() automatically
+logger.error("operation failed", { error: someError })
+logger.info("processing user", { user: userObject, timestamp: new Date() })
+
+// ❌ WRONG: Manual toString() calls are redundant
+logger.error("operation failed", { error: someError.toString() })
+```
+
+#### Operations That Should Be Logged
+
+**Always Log (Info Level):**
+- Function entry/exit for major operations
+- Database transactions and queries
+- File system operations
+- API calls and responses
+- User actions and state changes
+- Background job processing
+
+**Log for Debugging (Debug Level):**
+- Data transformations and parsing
+- Validation steps
+- Configuration loading
+
+#### Go slog Style Guide
+
+Follow Go's slog idiomatic patterns for terse, structured logging:
+
+**1. Terse Messages**
+- Use short, action-oriented verbs: `"starting"`, `"processing"`, `"inserted"`, `"completed"`
+- Keep messages concise and scannable
+
+**2. Key-Value Attributes**
+- Move all contextual data to attributes object
+- Use structured data instead of string interpolation
+
+```typescript
+// ✅ CORRECT: Terse message with structured attributes
+logger.info("starting zim import", { file: outfile, batchSize: 1000 })
+logger.info("processing article batch", { count: articles.length })
+logger.error("failed to drop schema", { schema: name, error: err })
+
+// ❌ WRONG: Verbose messages with embedded data
+logger.info(`Starting ZIM import for ${outfile} with batch size ${1000}`)
+logger.error(`Error dropping schema ${name}: ${err}`)
+```
+
+#### Consistent Attribute Names
+
+Use standardized camelCase attribute names:
+
+- **`count`** - for quantities, batch sizes, totals
+- **`file`** - for file paths and filenames
+- **`articleId`** - for article references
+- **`error`** - for error objects (automatically converted via toString())
+- **`userId`** - for user references
+- **`status`** - for HTTP status codes or operation states
+
+#### Log Levels
+
+- **`logger.info()`** - Major operations, user-facing progress, completion status
+- **`logger.debug()`** - Detailed internal operations, metadata retrieval, processing steps
+- **`logger.error()`** - Failures with error context (only in scripts before `process.exit()`)
+- **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions
+
+#### Integration with Error Handling
+
+**DO NOT** use logging for error propagation. Always throw errors using `Errors.wrap` or `new Error`. Only use `logger.error` in scripts immediately before `process.exit()`:
+
+```typescript
+// ✅ CORRECT: Log error in script before exit
+const result = await Errors.try(main())
+if (result.error) {
+	logger.error("import failed", { error: result.error })
+	process.exit(1)
+}
+
+// ❌ WRONG: Don't log errors in application code
+const result = await Errors.try(someOperation())
+if (result.error) {
+	logger.error("operation failed", { error: result.error })
+	throw Errors.wrap(result.error, "operation failed")
+}
+```
+
+#### Prohibited Patterns
+
+**NEVER use:**
+- `console.log`, `console.error`, `console.debug`, `console.warn`
+- String interpolation in log messages
+- Verbose, explanatory messages
+- Logging for error propagation in application code
+- **Manual `.toString()` calls on objects** (the logger does this automatically)

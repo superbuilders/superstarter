@@ -1,0 +1,21 @@
+---
+description: 
+globs: *.tsx,*.ts
+alwaysApply: false
+---
+### Import Patterns
+
+#### ⚠️ CRITICAL: Module Alias Usage
+
+ALWAYS use the `@/` module alias prefix for imports from the src directory:
+
+```typescript
+// ✅ CORRECT
+import { something } from "@/components/ui/something"
+import { utilFunction } from "@/lib/utils"
+
+// ❌ WRONG
+import { something } from "../../components/ui/something"
+import { utilFunction } from "../lib/utils"
+```
+Only use relative imports when it is absolutely not possible to use the module alias.

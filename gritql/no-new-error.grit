@@ -1,0 +1,9 @@
+language js // Applies to JavaScript and TypeScript
+
+// This rule bans the use of `new Error(...)` in favor of `errors.new(...)`.
+// It enforces consistent error creation patterns as per error-handling guidelines.
+// The `errors.new()` function provides better error handling integration with the errors library.
+
+`new Error($message)` as $new_error_expression where {
+	register_diagnostic(span=$new_error_expression, message="Usage of 'new Error()' is disallowed. Use 'errors.new()' instead for consistent error handling. See `rules/error-handling.mdc` for details.", severity="error")
+}
