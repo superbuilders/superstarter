@@ -5,44 +5,167 @@ alwaysApply: false
 ---
 ### React Server Components Data Fetching Patterns
 
-#### ⚠️ CRITICAL: Colocated Queries and Parallel Fetching
+#### ⚠️ CRITICAL: Server Components Must NOT be `async`
 
-ALWAYS colocate Drizzle queries with the server components that use them. Define prepared statements at the top of the file as constants using the `.prepare()` method. Export types derived from query results using the `Awaited<ReturnType<typeof queryName.execute>>[number]` pattern. Pass data as Promise objects directly to child components for parallel data fetching.
+The fundamental rule for data fetching in React Server Components (RSCs) is that they are **categorically forbidden** from being marked as `async`. An `async` component is a function that returns a `Promise<JSX.Element>`, which completely negates the primary benefits of RSCs: streaming rendering and parallel data fetching. Instead of awaiting data, you must initiate fetches, pass the resulting `Promise` objects to child components, and let React's `<Suspense>` orchestrate the rendering.
 
-**Example**
+### Core Principles
+
+1.  **No `async` Components:** A page or layout server component must never have the `async` keyword.
+
+2.  **Colocate Queries & Export Types:** Drizzle-prepared statements **must** be colocated in the same file as the page or layout component that initiates the fetch. This improves maintainability and clarity. You **must** also export the derived data type for use in child components using the `Awaited<ReturnType<typeof queryName.execute>>[number]` pattern.
+
+3.  **Initiate Fetches & Pass Promises:** The parent server component should initiate all required data fetches. It should **NOT** `await` these fetches. The resulting `Promise` objects must be passed directly as props to the child components that will render the data. This allows data fetching to happen in parallel.
+
+4.  **Handle `params` as Promises:** In Next.js 15+, the `params` and `searchParams` objects passed to page components are themselves `Promise` objects. You cannot access their values directly. To use a route parameter in a query, you must chain off the `params` promise using `.then()`.
+
+5.  **Wrap in `<React.Suspense>`:** Any component that receives a promise as a prop must be wrapped in a `<React.Suspense>` boundary. The boundary will render a `fallback` UI (e.g., a loading skeleton) while the promise is pending, allowing the rest of the page to stream to the client without being blocked.
+
+6.  **Consume Promises with `React.use()`:** Inside the child component (which can be a Server or Client Component), use the `React.use()` hook to read the value from the promise. This hook seamlessly integrates with Suspense, telling React to pause rendering of *only that component* until the data is resolved.
+
+### Comprehensive Example
+
+This example demonstrates fetching a list of conversations for a user. It correctly handles an async-like dependency on `getUserId()`, chains the database fetch, and passes the final promise to a client component for rendering with client-side filtering.
+
+#### `src/app/(dashboard)/conversations/page.tsx` (Parent Server Component)
+
+This component correctly fetches the user ID, chains the data fetch for conversations, and passes the resulting promise to the `<Conversations>` client component.
 
 ```typescript
-// 1. Define prepared statements at the top of the file
-const getProjectById = db
+import * as React from "react"
+import { and, desc, eq, notInArray, sql } from "drizzle-orm"
+import { Conversations } from "@/components/conversations-page"
+import { getUserId } from "@/server/auth"
+import { db } from "@/server/db"
+import * as schema from "@/server/db/schema"
+
+// 1. Drizzle prepared statements are colocated with the page.
+const latestMessage = db
 	.select({
-		id: schema.projects.id,
-		name: schema.students.name
-		// other fields...
+		prospectId: schema.message.prospectId,
+		maxCreatedAt: sql`MAX(${schema.message.createdAt})`.as("max_created_at")
 	})
-	.from(schema.projects)
-	.innerJoin(schema.students, eq(schema.projects.studentId, schema.students.id))
-	.where(eq(schema.projects.id, sql.placeholder("id")))
-	.limit(1)
-	.prepare("page_get_project_by_id")
+	.from(schema.message)
+	.where(and(eq(schema.message.userId, sql.placeholder("userId")), notInArray(schema.message.source, ["ai", "user"])))
+	.groupBy(schema.message.prospectId)
+	.as("latest_message")
 
-// 2. Define derived types from the query results
-export type Project = Awaited<ReturnType<typeof getProjectById.execute>>[number]
+const getConversations = db
+	.select({
+		id: schema.prospect.id,
+		customerName: sql<string>`COALESCE(${schema.prospect.name}, 'Unnamed Customer')`,
+		latestMessage: schema.message.content,
+		timestamp: schema.message.createdAt
+	})
+	.from(schema.prospect)
+	.innerJoin(schema.message, eq(schema.message.prospectId, schema.prospect.id))
+	.innerJoin(
+		latestMessage,
+		and(eq(latestMessage.prospectId, schema.prospect.id), eq(latestMessage.maxCreatedAt, schema.message.createdAt))
+	)
+	.where(and(eq(schema.message.userId, sql.placeholder("userId")), notInArray(schema.message.source, ["ai", "user"])))
+	.orderBy(desc(schema.message.createdAt))
+	.prepare("get_conversations")
 
-// 3. In the component, execute queries and pass promises directly
-export default function MyPage({ params }: ProjectPageProps) {
-	// Execute the prepared statement with parameters
-	const projectPromise = getProjectById
-		.execute({ id: params.id })
-		.then((result) => {
-			if (!result?.[0]) redirect("/")
-			return result[0]
-		})
+// 2. The type is derived from the query and exported for the child component.
+export type Conversation = Awaited<ReturnType<typeof getConversations.execute>>[number]
 
-	// Pass promises directly to child components
+// 3. The page component is NOT async.
+export default function Page() {
+	// 4. A promise for the userId is retrieved.
+	const userIdPromise = getUserId()
+
+	// 5. The database fetch is chained onto the promise that resolves with the userId.
+	// This creates a new promise, `conversationsPromise`, that will resolve with conversation data.
+	const conversationsPromise = userIdPromise.then((userId) => getConversations.execute({ userId }))
+
 	return (
-		<Suspense>
-			<MyComponent project={projectPromise} />
-		</Suspense>
+		// 6. The child component is wrapped in <React.Suspense> to handle the pending state.
+		<React.Suspense fallback={<div>Loading conversations...</div>}>
+			{/* 7. The final 'conversationsPromise' is passed directly to the child component. */}
+			<Conversations conversations={conversationsPromise} />
+		</React.Suspense>
+	)
+}
+```
+
+#### `src/components/conversations-page.tsx` (Child Client Component)
+
+This client component receives the `conversations` promise and uses `React.use()` to resolve it. On the initial server render, `React.use()` suspends until the data is available. The component then hydrates on the client with the fully resolved data.
+
+```typescript
+"use client"
+
+import * as React from "react"
+import { Search } from "lucide-react"
+import Masonry from "react-masonry-css"
+// ✅ Type is imported from the parent server component file.
+import type { Conversation } from "@/app/(dashboard)/conversations/page"
+import { ConversationCard } from "@/components/conversation-card"
+import { SearchBar } from "@/components/search-bar"
+
+const MASONRY_BREAKPOINTS = {
+	default: 4,
+	1536: 4,
+	1280: 3,
+	1024: 3,
+	768: 2,
+	640: 1
+}
+
+export function Conversations(props: { conversations: Promise<Conversation[]> }) {
+	// ✅ `React.use()` unwraps the promise. On the server, this suspends rendering.
+	// The component then hydrates on the client with the `conversations` data already populated.
+	const conversations = React.use(props.conversations)
+	const [searchTerm, setSearchTerm] = React.useState("")
+
+	const filteredConversations = conversations.filter(
+		(conversation) =>
+			conversation.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+			conversation.latestMessage.toLowerCase().includes(searchTerm.toLowerCase())
+	)
+
+	return (
+		<div className="space-y-6">
+			<div className="flex justify-between items-center">
+				<h1 className="text-2xl font-bold">Conversations</h1>
+				<SearchBar
+					placeholder="Search conversations..."
+					value={searchTerm}
+					onChange={setSearchTerm}
+					icon={<Search size={20} />}
+				/>
+			</div>
+			<Masonry breakpointCols={MASONRY_BREAKPOINTS} className="flex w-auto -ml-4" columnClassName="pl-4 bg-clip-padding">
+				{filteredConversations.map((conversation) => (
+					<ConversationCard key={conversation.id} {...conversation} />
+				))}
+			</Masonry>
+		</div>
+	)
+}
+```
+
+### Anti-Patterns to Avoid
+
+#### ❌ WRONG: `async` Server Component with `await`
+
+This pattern is strictly prohibited. It blocks the entire page from rendering until all data is fetched, negates streaming, and prevents parallel data fetching.
+
+```typescript
+// ❌ ANTI-PATTERN: DO NOT DO THIS
+export default async function Page() {
+	// ❌ ILLEGAL: `await`ing the userId blocks rendering and streaming.
+	const userId = await getUserId()
+	// ❌ Second await cannot start until the first one is complete (waterfall).
+	const conversations = await getConversations.execute({ userId })
+
+	// The page cannot be sent to the client until both fetches are done.
+	return (
+		<main>
+			{/* This component receives resolved data, not a promise. */}
+			<ConversationsDisplay conversations={conversations} />
+		</main>
 	)
 }
 ```
