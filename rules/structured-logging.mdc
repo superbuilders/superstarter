@@ -40,29 +40,29 @@ export const myInngestFunction = inngest.createFunction(
 
 **Outside of Inngest functions** (utility functions, database operations, etc.), continue to use slog directly as documented below.
 
-#### ⚠️ CRITICAL: When NOT to Use Logging
+#### ⚠️ CRITICAL: Logging AND Error Handling Together
 
-**Structured logging is for observability, NOT error handling.** Always use the error handling patterns from [error-handling.mdc](mdc:rules/error-handling.mdc) instead of logging when:
+**Structured logging provides observability while error handling ensures proper control flow.** Always use BOTH logging and error handling patterns from [error-handling.mdc](mdc:rules/error-handling.mdc) together for:
 
-- **Error propagation:** Errors that need to bubble up to callers
-- **Operation failures:** Failed operations that should halt execution  
-- **Validation failures:** Invalid data that prevents further processing
-- **External operation failures:** Failed API calls, database operations, file operations
+- **Error propagation:** Log errors for observability before bubbling up to callers
+- **Operation failures:** Log failed operations for debugging while halting execution  
+- **Validation failures:** Log invalid data context before preventing further processing
+- **External operation failures:** Log failed API calls, database operations, file operations with context
 
-**Use `Errors.try` and throw errors instead:**
+**Use `errors.try` and log + throw errors for observability:**
 
 ```typescript
-// ✅ CORRECT: Use error handling for failures
-const result = await Errors.try(someOperation())
-if (result.error) {
-	throw Errors.wrap(result.error, "operation failed")
-}
-
-// ❌ WRONG: Don't log errors in application code
-const result = await Errors.try(someOperation())
+// ✅ CORRECT: Log errors for observability AND throw for proper propagation
+const result = await errors.try(someOperation())
 if (result.error) {
 	logger.error("operation failed", { error: result.error })
-    throw Errors.wrap(result.error, "operation failed")
+    throw errors.wrap(result.error, "operation failed")
+}
+
+// ❌ WRONG: Silent error handling without logging loses observability
+const result = await errors.try(someOperation())
+if (result.error) {
+	throw errors.wrap(result.error, "operation failed")
 }
 ```
 
@@ -140,28 +140,8 @@ Use standardized camelCase attribute names:
 
 - **`logger.info()`** - Major operations, user-facing progress, completion status
 - **`logger.debug()`** - Detailed internal operations, metadata retrieval, processing steps
-- **`logger.error()`** - Failures with error context (only in scripts before `process.exit()`)
+- **`logger.error()`** - Failures with error context (use before throwing errors for observability)
 - **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions
-
-#### Integration with Error Handling
-
-**DO NOT** use logging for error propagation. Always throw errors using `Errors.wrap` or `new Error`. Only use `logger.error` in scripts immediately before `process.exit()`:
-
-```typescript
-// ✅ CORRECT: Log error in script before exit
-const result = await Errors.try(main())
-if (result.error) {
-	logger.error("import failed", { error: result.error })
-	process.exit(1)
-}
-
-// ❌ WRONG: Don't log errors in application code
-const result = await Errors.try(someOperation())
-if (result.error) {
-	logger.error("operation failed", { error: result.error })
-	throw Errors.wrap(result.error, "operation failed")
-}
-```
 
 #### Prohibited Patterns
 
@@ -169,5 +149,5 @@ if (result.error) {
 - `console.log`, `console.error`, `console.debug`, `console.warn`
 - String interpolation in log messages
 - Verbose, explanatory messages
-- Logging for error propagation in application code
+- Silent error handling without logging (always log errors for observability)
 - **Manual `.toString()` calls on objects** (the logger does this automatically)

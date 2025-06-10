@@ -65,34 +65,3 @@ interface UserInput {
 ```
 
 When a value is not present, use an empty string (`""`) instead of `undefined`. This aligns the TypeScript representation with the database schema, creating a seamless data model.
-
-#### No Trim Before Empty String Checks
-
-Since our data model guarantees that optional strings are either well-formed or an empty string (`""`), calling `.trim()` before an empty string check is redundant and computationally wasteful. The `.trim()` operation should not be used immediately before empty string comparisons.
-
-```typescript
-// ✅ CORRECT: Truthiness/falsiness check
-if (!inputValue) {
-  // Handle empty case
-}
-
-if (userInput) {
-  // Process non-empty input
-}
-
-// ❌ WRONG: Unnecessary .trim() before empty check
-if (!inputValue.trim()) {  // Redundant .trim()
-  // Handle empty case
-}
-
-if (userInput.trim()) {  // Redundant .trim()
-  // Process input
-}
-```
-
-**Rationale:**
-- **Performance:** Eliminates unnecessary string manipulation operations
-- **Consistency:** Our data model ensures strings are either clean or empty, making `.trim()` redundant
-- **Clarity:** Direct comparisons are clearer about the exact condition being checked
-
-This pattern is enforced by the `prefer-empty-string.grit` rule.
