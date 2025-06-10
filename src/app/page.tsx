@@ -1,31 +1,94 @@
-import Link from "next/link"
+"use client"
+
+import { useInngestSubscription } from "@inngest/realtime/hooks"
+import { fetchRealtimeSubscriptionToken, triggerHelloWorld } from "./actions"
 
 export default function HomePage() {
+	const { data, latestData, error, state } = useInngestSubscription({
+		refreshToken: fetchRealtimeSubscriptionToken
+	})
+
+	const getStatusIndicator = () => {
+		if (error) return { color: "bg-red-500", text: "error" }
+
+		const stateStr = String(state).toLowerCase()
+		switch (stateStr) {
+			case "active":
+				return { color: "bg-green-500", text: "active" }
+			case "closed":
+			case "error":
+				return { color: "bg-red-500", text: stateStr }
+			case "connecting":
+			case "refresh_token":
+				return { color: "bg-yellow-500", text: stateStr === "refresh_token" ? "refreshing token" : "connecting" }
+			case "closing":
+				return { color: "bg-orange-500", text: "closing" }
+			default:
+				return { color: "bg-gray-500", text: stateStr }
+		}
+	}
+
+	const statusIndicator = getStatusIndicator()
+
 	return (
 		<main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-			<div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-				<h1 className="font-extrabold text-5xl text-white tracking-tight sm:text-[5rem]">
-					Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
-				</h1>
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
-					<Link
-						className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 text-white hover:bg-white/20"
-						href="https://create.t3.gg/en/usage/first-steps"
-						target="_blank"
-					>
-						<h3 className="font-bold text-2xl">First Steps →</h3>
-						<div className="text-lg">
-							Just the basics - Everything you need to know to set up your database and authentication.
+			<div className="container flex w-full max-w-4xl flex-col items-center justify-center gap-8 px-4 py-16">
+				<div className="flex flex-col gap-2 text-center">
+					<h1 className="font-extrabold text-5xl text-white tracking-tight sm:text-[5rem]">
+						Inngest <span className="text-[hsl(280,100%,70%)]">Realtime</span>
+					</h1>
+					<p className="text-lg text-white/80">
+						Click the button to trigger an Inngest function. The function will send a message back here in real-time.
+					</p>
+				</div>
+
+				<button
+					type="button"
+					onClick={() => triggerHelloWorld()}
+					className="rounded-full bg-white/10 px-10 py-3 font-semibold text-white no-underline transition hover:bg-white/20"
+				>
+					Trigger Inngest Function
+				</button>
+
+				<div className="mt-4 w-full rounded-xl bg-white/10 p-4">
+					<div className="flex items-center justify-between">
+						<h2 className="font-bold text-xl">Realtime Log Stream</h2>
+						<div className="flex items-center gap-2">
+							<span className={`h-3 w-3 rounded-full ${statusIndicator.color}`} />
+							<span className="text-sm capitalize text-white/60">{statusIndicator.text}</span>
 						</div>
-					</Link>
-					<Link
-						className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 text-white hover:bg-white/20"
-						href="https://create.t3.gg/en/introduction"
-						target="_blank"
-					>
-						<h3 className="font-bold text-2xl">Documentation →</h3>
-						<div className="text-lg">Learn more about Create T3 App, the libraries it uses, and how to deploy it.</div>
-					</Link>
+					</div>
+
+					{error && (
+						<div className="mt-2 rounded-lg bg-red-500/20 p-3 border border-red-500/30">
+							<p className="text-red-200 text-sm">Connection error: {error.message}</p>
+							<div className="text-red-200/60 text-xs mt-1">
+								If you're having connection issues, make sure you've run{" "}
+								<span className="rounded bg-red-500/20 px-1 py-0.5 font-mono text-xs hover:bg-red-500/30 cursor-pointer min-w-[100px] inline-block">
+									bun dev:inngest
+								</span>{" "}
+								to start the Inngest server!
+							</div>
+						</div>
+					)}
+
+					{latestData && (
+						<div className="mt-2 rounded-lg bg-blue-500/20 p-3 border border-blue-500/30">
+							<p className="text-blue-200 text-sm">
+								Latest: {latestData.kind === "data" ? latestData.data.message : `Stream ${latestData.kind}`}
+							</p>
+						</div>
+					)}
+
+					<div className="mt-4 h-64 w-full overflow-y-auto rounded-lg bg-black/30 p-4 font-mono text-sm">
+						{data.length === 0 && <p className="text-white/40">Waiting for events...</p>}
+						{data.map((message, index) => (
+							<div key={`${message.kind === "data" ? message.createdAt.getTime() : index}`}>
+								<span className="text-green-400">&gt; </span>
+								<span>{message.kind === "data" ? message.data.message : `Stream ${message.kind}`}</span>
+							</div>
+						))}
+					</div>
 				</div>
 			</div>
 		</main>
