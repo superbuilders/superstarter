@@ -62,6 +62,13 @@ export default function HomePage() {
 					{error && (
 						<div className="mt-2 rounded-lg bg-red-500/20 p-3 border border-red-500/30">
 							<p className="text-red-200 text-sm">Connection error: {error.message}</p>
+							<div className="text-red-200/60 text-xs mt-1">
+								If you're having connection issues, make sure you've run{" "}
+								<span className="rounded bg-red-500/20 px-1 py-0.5 font-mono text-xs hover:bg-red-500/30 cursor-pointer min-w-[100px] inline-block">
+									bun dev:inngest
+								</span>{" "}
+								to start the Inngest server!
+							</div>
 						</div>
 					)}
 
