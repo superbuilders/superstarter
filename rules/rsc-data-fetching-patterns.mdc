@@ -25,122 +25,175 @@ The fundamental rule for data fetching in React Server Components (RSCs) is that
 
 ### Comprehensive Example
 
-This example demonstrates fetching a list of conversations for a user. It correctly handles an async-like dependency on `getUserId()`, chains the database fetch, and passes the final promise to a client component for rendering with client-side filtering.
+This example demonstrates fetching conversation history for a specific prospect using route parameters. It correctly handles the `params` promise, chains database fetches, and demonstrates error handling with redirects when data is not found.
 
-#### `src/app/(dashboard)/conversations/page.tsx` (Parent Server Component)
+#### `src/app/(dashboard)/conversations/[prospectId]/page.tsx` (Parent Server Component)
 
-This component correctly fetches the user ID, chains the data fetch for conversations, and passes the resulting promise to the `<Conversations>` client component.
+This component correctly extracts the `prospectId` from the `params` promise, chains multiple database fetches (prospect details and conversation messages), and passes the resulting promises to child components.
 
 ```typescript
 import * as React from "react"
-import { and, desc, eq, notInArray, sql } from "drizzle-orm"
-import { Conversations } from "@/components/conversations-page"
+import { and, desc, eq, sql } from "drizzle-orm"
+import { redirect } from "next/navigation"
+import { ConversationDetail } from "@/components/conversation-detail"
 import { getUserId } from "@/server/auth"
 import { db } from "@/server/db"
 import * as schema from "@/server/db/schema"
 
 // 1. Drizzle prepared statements are colocated with the page.
-const latestMessage = db
-	.select({
-		prospectId: schema.message.prospectId,
-		maxCreatedAt: sql`MAX(${schema.message.createdAt})`.as("max_created_at")
-	})
-	.from(schema.message)
-	.where(and(eq(schema.message.userId, sql.placeholder("userId")), notInArray(schema.message.source, ["ai", "user"])))
-	.groupBy(schema.message.prospectId)
-	.as("latest_message")
-
-const getConversations = db
+const getProspectDetails = db
 	.select({
 		id: schema.prospect.id,
-		customerName: sql<string>`COALESCE(${schema.prospect.name}, 'Unnamed Customer')`,
-		latestMessage: schema.message.content,
-		timestamp: schema.message.createdAt
+		name: sql<string>`COALESCE(${schema.prospect.name}, 'Unnamed Customer')`,
+		email: schema.prospect.email,
+		phone: schema.prospect.phone,
+		createdAt: schema.prospect.createdAt
 	})
 	.from(schema.prospect)
-	.innerJoin(schema.message, eq(schema.message.prospectId, schema.prospect.id))
-	.innerJoin(
-		latestMessage,
-		and(eq(latestMessage.prospectId, schema.prospect.id), eq(latestMessage.maxCreatedAt, schema.message.createdAt))
+	.where(eq(schema.prospect.id, sql.placeholder("prospectId")))
+	.limit(1)
+	.prepare("get_prospect_details")
+
+const getConversationMessages = db
+	.select({
+		id: schema.message.id,
+		content: schema.message.content,
+		source: schema.message.source,
+		createdAt: schema.message.createdAt,
+		userId: schema.message.userId
+	})
+	.from(schema.message)
+	.where(
+		and(
+			eq(schema.message.prospectId, sql.placeholder("prospectId")),
+			eq(schema.message.userId, sql.placeholder("userId"))
+		)
 	)
-	.where(and(eq(schema.message.userId, sql.placeholder("userId")), notInArray(schema.message.source, ["ai", "user"])))
 	.orderBy(desc(schema.message.createdAt))
-	.prepare("get_conversations")
+	.prepare("get_conversation_messages")
 
-// 2. The type is derived from the query and exported for the child component.
-export type Conversation = Awaited<ReturnType<typeof getConversations.execute>>[number]
+// 2. Types are derived from the queries and exported for child components.
+export type ProspectDetails = Awaited<ReturnType<typeof getProspectDetails.execute>>[number]
+export type ConversationMessage = Awaited<ReturnType<typeof getConversationMessages.execute>>[number]
 
-// 3. The page component is NOT async.
-export default function Page() {
-	// 4. A promise for the userId is retrieved.
+// 3. The page component is NOT async and accepts params as a Promise.
+export default function Page({
+	params
+}: {
+	params: Promise<{ prospectId: string }>
+}) {
+	// 4. Extract the prospectId from the params promise.
+	const prospectIdPromise = params.then((params) => params.prospectId)
+	
+	// 5. Get the userId promise.
 	const userIdPromise = getUserId()
 
-	// 5. The database fetch is chained onto the promise that resolves with the userId.
-	// This creates a new promise, `conversationsPromise`, that will resolve with conversation data.
-	const conversationsPromise = userIdPromise.then((userId) => getConversations.execute({ userId }))
+	// 6. Chain the prospect details fetch with error handling for missing prospects.
+	const prospectPromise = prospectIdPromise.then((prospectId) =>
+		getProspectDetails
+			.execute({ prospectId })
+			.then((results) => results[0])
+			.then((prospect) => {
+				if (!prospect) {
+					redirect("/conversations")
+				}
+				return prospect
+			})
+	)
+
+	// 7. Chain the conversation messages fetch using both prospectId and userId.
+	const messagesPromise = Promise.all([prospectIdPromise, userIdPromise]).then(
+		([prospectId, userId]) => getConversationMessages.execute({ prospectId, userId })
+	)
 
 	return (
-		// 6. The child component is wrapped in <React.Suspense> to handle the pending state.
-		<React.Suspense fallback={<div>Loading conversations...</div>}>
-			{/* 7. The final 'conversationsPromise' is passed directly to the child component. */}
-			<Conversations conversations={conversationsPromise} />
+		// 8. Both child components are wrapped in <React.Suspense> to handle pending states.
+		<React.Suspense fallback={<div>Loading conversation...</div>}>
+			{/* 9. Promises are passed directly to child components. */}
+			<ConversationDetail 
+				prospect={prospectPromise} 
+				messages={messagesPromise} 
+			/>
 		</React.Suspense>
 	)
 }
 ```
 
-#### `src/components/conversations-page.tsx` (Child Client Component)
+#### `src/components/conversation-detail.tsx` (Child Client Component)
 
-This client component receives the `conversations` promise and uses `React.use()` to resolve it. On the initial server render, `React.use()` suspends until the data is available. The component then hydrates on the client with the fully resolved data.
+This client component receives both the prospect and messages promises, uses `React.use()` to resolve them, and provides interactive features like message filtering and real-time updates.
 
 ```typescript
 "use client"
 
 import * as React from "react"
-import { Search } from "lucide-react"
-import Masonry from "react-masonry-css"
-// ✅ Type is imported from the parent server component file.
-import type { Conversation } from "@/app/(dashboard)/conversations/page"
-import { ConversationCard } from "@/components/conversation-card"
+import { Search, MessageCircle, Phone, Mail } from "lucide-react"
+// ✅ Types are imported from the parent server component file.
+import type { ProspectDetails, ConversationMessage } from "@/app/(dashboard)/conversations/[prospectId]/page"
 import { SearchBar } from "@/components/search-bar"
 
-const MASONRY_BREAKPOINTS = {
-	default: 4,
-	1536: 4,
-	1280: 3,
-	1024: 3,
-	768: 2,
-	640: 1
-}
-
-export function Conversations(props: { conversations: Promise<Conversation[]> }) {
-	// ✅ `React.use()` unwraps the promise. On the server, this suspends rendering.
-	// The component then hydrates on the client with the `conversations` data already populated.
-	const conversations = React.use(props.conversations)
+export function ConversationDetail(props: { 
+	prospect: Promise<ProspectDetails>
+	messages: Promise<ConversationMessage[]>
+}) {
+	// ✅ `React.use()` unwraps both promises. On the server, this suspends rendering.
+	// The component then hydrates on the client with the data already populated.
+	const prospect = React.use(props.prospect)
+	const messages = React.use(props.messages)
 	const [searchTerm, setSearchTerm] = React.useState("")
 
-	const filteredConversations = conversations.filter(
-		(conversation) =>
-			conversation.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-			conversation.latestMessage.toLowerCase().includes(searchTerm.toLowerCase())
+	const filteredMessages = messages.filter((message) =>
+		message.content.toLowerCase().includes(searchTerm.toLowerCase())
 	)
 
 	return (
 		<div className="space-y-6">
 			<div className="flex justify-between items-center">
-				<h1 className="text-2xl font-bold">Conversations</h1>
+				<div>
+					<h1 className="text-2xl font-bold flex items-center gap-2">
+						<MessageCircle size={24} />
+						Conversation with {prospect.name}
+					</h1>
+					<div className="flex gap-4 text-sm text-muted-foreground mt-2">
+						{prospect.email && (
+							<span className="flex items-center gap-1">
+								<Mail size={16} />
+								{prospect.email}
+							</span>
+						)}
+						{prospect.phone && (
+							<span className="flex items-center gap-1">
+								<Phone size={16} />
+								{prospect.phone}
+							</span>
+						)}
+					</div>
+				</div>
 				<SearchBar
-					placeholder="Search conversations..."
+					placeholder="Search messages..."
 					value={searchTerm}
 					onChange={setSearchTerm}
 					icon={<Search size={20} />}
 				/>
 			</div>
-			<Masonry breakpointCols={MASONRY_BREAKPOINTS} className="flex w-auto -ml-4" columnClassName="pl-4 bg-clip-padding">
-				{filteredConversations.map((conversation) => (
-					<ConversationCard key={conversation.id} {...conversation} />
+			
+			<div className="space-y-4">
+				{filteredMessages.map((message) => (
+					<div 
+						key={message.id} 
+						className={`p-4 rounded-lg ${
+							message.source === 'user' 
+								? 'bg-blue-50 ml-8' 
+								: 'bg-gray-50 mr-8'
+						}`}
+					>
+						<div className="text-sm text-muted-foreground mb-2">
+							{message.source} • {new Date(message.createdAt).toLocaleString()}
+						</div>
+						<div className="text-sm">{message.content}</div>
+					</div>
 				))}
-			</Masonry>
+			</div>
 		</div>
 	)
 }
@@ -154,17 +207,23 @@ This pattern is strictly prohibited. It blocks the entire page from rendering un
 
 ```typescript
 // ❌ ANTI-PATTERN: DO NOT DO THIS
-export default async function Page() {
-	// ❌ ILLEGAL: `await`ing the userId blocks rendering and streaming.
-	const userId = await getUserId()
+export default async function Page({
+	params
+}: {
+	params: Promise<{ prospectId: string }>
+}) {
+	// ❌ ILLEGAL: `await`ing the params blocks rendering and streaming.
+	const { prospectId } = await params
 	// ❌ Second await cannot start until the first one is complete (waterfall).
-	const conversations = await getConversations.execute({ userId })
+	const userId = await getUserId()
+	// ❌ Third await creates a waterfall effect.
+	const prospect = await getProspectDetails.execute({ prospectId })
 
-	// The page cannot be sent to the client until both fetches are done.
+	// The page cannot be sent to the client until all fetches are done.
 	return (
 		<main>
-			{/* This component receives resolved data, not a promise. */}
-			<ConversationsDisplay conversations={conversations} />
+			{/* This component receives resolved data, not promises. */}
+			<ConversationDisplay prospect={prospect} />
 		</main>
 	)
 }
