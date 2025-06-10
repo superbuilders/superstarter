@@ -5,6 +5,16 @@
 import "./src/env.js"
 
 /** @type {import("next").NextConfig} */
-const config = {}
+const config = {
+	webpack: (config) => {
+		config.ignoreWarnings = [
+			{
+				module: /node_modules\/@opentelemetry/,
+				message: /Critical dependency/
+			}
+		]
+		return config
+	}
+}
 
 export default config

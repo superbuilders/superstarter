@@ -10,7 +10,7 @@ export default function HomePage() {
 
 	const getStatusIndicator = () => {
 		if (error) return { color: "bg-red-500", text: "error" }
-		
+
 		const stateStr = String(state).toLowerCase()
 		switch (stateStr) {
 			case "active":
@@ -58,7 +58,7 @@ export default function HomePage() {
 							<span className="text-sm capitalize text-white/60">{statusIndicator.text}</span>
 						</div>
 					</div>
-					
+
 					{error && (
 						<div className="mt-2 rounded-lg bg-red-500/20 p-3 border border-red-500/30">
 							<p className="text-red-200 text-sm">Connection error: {error.message}</p>
@@ -87,4 +87,3 @@ export default function HomePage() {
 		</main>
 	)
 }
-

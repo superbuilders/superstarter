@@ -22,6 +22,7 @@
 	},
 	"dependencies": {
 		"@inngest/realtime": "^0.3.1",
+		"@opentelemetry/winston-transport": "^0.13.0",
 		"@superbuilders/errors": "^2.0.0",
 		"@superbuilders/slog": "^3.0.1",
 		"@t3-oss/env-nextjs": "^0.13.7",
