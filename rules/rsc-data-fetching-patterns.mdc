@@ -21,20 +21,23 @@ The fundamental rule for data fetching in React Server Components (RSCs) is that
 
 5.  **Wrap in `<React.Suspense>`:** Any component that receives a promise as a prop must be wrapped in a `<React.Suspense>` boundary. The boundary will render a `fallback` UI (e.g., a loading skeleton) while the promise is pending, allowing the rest of the page to stream to the client without being blocked.
 
-6.  **Consume Promises with `React.use()`:** Inside the child component (which can be a Server or Client Component), use the `React.use()` hook to read the value from the promise. This hook seamlessly integrates with Suspense, telling React to pause rendering of *only that component* until the data is resolved.
+6.  **⚠️ CRITICAL: Components Using `React.use()` Must Be Client Components:** Any component that directly calls the `React.use()` hook to consume a promise **MUST** be a Client Component, marked with the `"use client"` directive at the top of the file. Although `React.use()` can suspend rendering on the server during the initial RSC pass, the hook itself is only permitted within the client component model. This enforces a clean separation of concerns: Server Components initiate and pass promises, while dedicated child Client Components consume them.
+
+7.  **Consume Promises with `React.use()`:** Inside the child **Client Component**, use the `React.use()` hook to read the value from the promise. This hook seamlessly integrates with Suspense, telling React to pause rendering of *only that component* until the data is resolved.
 
 ### Comprehensive Example
 
-This example demonstrates fetching conversation history for a specific prospect using route parameters. It correctly handles the `params` promise, chains database fetches, and demonstrates error handling with redirects when data is not found.
+This example demonstrates fetching conversation history for a specific prospect. It correctly handles the `params` promise, chains database fetches, and demonstrates the mandatory separation between the parent Server Component and the child Client Component.
 
 #### `src/app/(dashboard)/conversations/[prospectId]/page.tsx` (Parent Server Component)
 
-This component correctly extracts the `prospectId` from the `params` promise, chains multiple database fetches (prospect details and conversation messages), and passes the resulting promises to child components.
+This component correctly extracts the `prospectId` from the `params` promise, chains multiple database fetches, and passes the resulting promises to a child Client Component.
 
 ```typescript
 import * as React from "react"
 import { and, desc, eq, sql } from "drizzle-orm"
 import { redirect } from "next/navigation"
+// Child component is imported. It MUST be a Client Component.
 import { ConversationDetail } from "@/components/conversation-detail"
 import { getUserId } from "@/server/auth"
 import { db } from "@/server/db"
@@ -107,12 +110,12 @@ export default function Page({
 	)
 
 	return (
-		// 8. Both child components are wrapped in <React.Suspense> to handle pending states.
+		// 8. The child Client Component is wrapped in <React.Suspense>.
 		<React.Suspense fallback={<div>Loading conversation...</div>}>
-			{/* 9. Promises are passed directly to child components. */}
+			{/* 9. Promises are passed directly to the child Client Component. */}
 			<ConversationDetail 
-				prospect={prospectPromise} 
-				messages={messagesPromise} 
+				prospectPromise={prospectPromise} 
+				messagesPromise={messagesPromise} 
 			/>
 		</React.Suspense>
 	)
@@ -121,25 +124,28 @@ export default function Page({
 
 #### `src/components/conversation-detail.tsx` (Child Client Component)
 
-This client component receives both the prospect and messages promises, uses `React.use()` to resolve them, and provides interactive features like message filtering and real-time updates.
+This component **must be a Client Component** because it uses the `React.use` hook. It receives the promises, resolves them, and can contain interactive features like state and event handlers.
 
 ```typescript
-"use client"
+"use client" // ⚠️ CRITICAL: This directive is required for React.use()
 
 import * as React from "react"
 import { Search, MessageCircle, Phone, Mail } from "lucide-react"
-// ✅ Types are imported from the parent server component file.
+// ✅ Types are imported from the parent server component's file.
 import type { ProspectDetails, ConversationMessage } from "@/app/(dashboard)/conversations/[prospectId]/page"
 import { SearchBar } from "@/components/search-bar"
 
+// The component accepts props as Promises.
 export function ConversationDetail(props: { 
-	prospect: Promise<ProspectDetails>
-	messages: Promise<ConversationMessage[]>
+	prospectPromise: Promise<ProspectDetails>
+	messagesPromise: Promise<ConversationMessage[]>
 }) {
-	// ✅ `React.use()` unwraps both promises. On the server, this suspends rendering.
-	// The component then hydrates on the client with the data already populated.
-	const prospect = React.use(props.prospect)
-	const messages = React.use(props.messages)
+	// ✅ `React.use()` unwraps both promises. This is what necessitates "use client".
+	// The component's rendering is suspended until the data is resolved.
+	const prospect = React.use(props.prospectPromise)
+	const messages = React.use(props.messagesPromise)
+	
+	// State and event handlers can be used because this is a Client Component.
 	const [searchTerm, setSearchTerm] = React.useState("")
 
 	const filteredMessages = messages.filter((message) =>
@@ -226,5 +232,20 @@ export default async function Page({
 			<ConversationDisplay prospect={prospect} />
 		</main>
 	)
+}
+```
+
+#### ❌ WRONG: Using `React.use()` in a Server Component
+
+This is also prohibited. `React.use()` is only permitted in Client Components.
+
+```typescript
+// ❌ ANTI-PATTERN: DO NOT DO THIS
+// This is a Server Component (no "use client" directive)
+export default function MyServerComponent({ dataPromise }: { dataPromise: Promise<Data> }) {
+    // ❌ ILLEGAL: `React.use` cannot be called in a Server Component.
+    const data = React.use(dataPromise); 
+
+    return <div>{data.name}</div>
 }
 ```
