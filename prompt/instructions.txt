@@ -1,0 +1,21 @@
+Please give me a comprehensive PRD markdown file to implement the above requirements. Be very specific about any modified/new files, with specific changed relevant code sections. When providing code sections, only provide code for relevant changed sections, not the entire file.
+
+Your PRD should be comprehensive with zero room for ambiguitity. My senior software developer should have ZERO questions about what to do. Instruct the implementer to commit the changes with the commit message at the end.
+
+Please follow any style guidelines outlined under `rules` when writing code sections. YOU ARE STRICTLY BANNED FROM VIOLATING ANY RULES UNDER THIS DIRECTORY. YOU ARE NOT TO WRITE ANY CODE THAT VIOLATES ANY OF THE RULES.
+
+The PRD should have the following sections ONLY, with no additional sections:
+
+---
+
+Title, Overview, Goals, Non-Goals:
+
+Files Changed:
+
+>>>> src/foo.ts
+{comprehensive description of code changes with relevant code sections}
+
+>>>> src/bar.ts
+{comprehensive description of code changes with relevant code sections}
+
+---
