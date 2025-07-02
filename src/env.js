@@ -1,11 +1,15 @@
+import * as logger from "@superbuilders/slog"
 import { createEnv } from "@t3-oss/env-nextjs"
 import { z } from "zod"
 
-// Only load environment config if not running in a Next.js environment or browser
 if (!process.env.NEXT_RUNTIME && typeof window === "undefined") {
 	const { loadEnvConfig } = require("@next/env")
 	const projectDir = process.cwd()
 	loadEnvConfig(projectDir)
+}
+
+if (process.env.NODE_ENV === "development" && typeof window === "undefined") {
+	logger.setDefaultLogLevel(logger.DEBUG)
 }
 
 export const env = createEnv({
