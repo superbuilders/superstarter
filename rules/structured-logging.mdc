@@ -87,37 +87,39 @@ logger.info("processing user", { user: userObject, timestamp: new Date() })
 logger.error("operation failed", { error: someError.toString() })
 ```
 
-#### Operations That Should Be Logged
+#### Our Logging Philosophy: Log Everything
+
+To ensure maximum observability, our default approach is to log verbosely. When in doubt, add a log statement. This is especially true for the `debug` level, which is our primary tool for introspection.
 
 **Always Log (Info Level):**
-- Function entry/exit for major operations
-- Database transactions and queries
-- File system operations
-- API calls and responses
-- User actions and state changes
-- Background job processing
+- Function entry/exit for major operations and workflows.
+- Significant state changes (e.g., job status updated to `COMPLETED`).
+- High-level summaries of completed work (e.g., "processed 50 articles").
 
-**Log for Debugging (Debug Level):**
-- Data transformations and parsing
-- Validation steps
-- Configuration loading
+**Always Log (Debug Level):**
+- Detailed inputs and outputs for every function or method.
+- The exact content of API requests and the raw content of API responses.
+- The full prompts sent to AI models.
+- Intermediate data transformations and validation results.
+- Configuration values being used in a function.
+- Every branch in control-flow logic (e.g., if/else statements).
 
 #### Go slog Style Guide
 
 Follow Go's slog idiomatic patterns for terse, structured logging:
 
 **1. Terse Messages**
-- Use short, action-oriented verbs: `"starting"`, `"processing"`, `"inserted"`, `"completed"`
-- Keep messages concise and scannable
+- Use short, action-oriented verbs: `"starting"`, `"processing"`, `"inserted"`, `"completed"`, `"validating"`
+- Keep messages concise and scannable.
 
 **2. Key-Value Attributes**
-- Move all contextual data to attributes object
-- Use structured data instead of string interpolation
+- Move all contextual data to the attributes object.
+- Use structured data instead of string interpolation.
 
 ```typescript
 // ✅ CORRECT: Terse message with structured attributes
 logger.info("starting zim import", { file: outfile, batchSize: 1000 })
-logger.info("processing article batch", { count: articles.length })
+logger.debug("validating lyrics", { validationIssues: result.issues })
 logger.error("failed to drop schema", { schema: name, error: err })
 
 // ❌ WRONG: Verbose messages with embedded data
@@ -138,10 +140,10 @@ Use standardized camelCase attribute names:
 
 #### Log Levels
 
-- **`logger.info()`** - Major operations, user-facing progress, completion status
-- **`logger.debug()`** - Detailed internal operations, metadata retrieval, processing steps
-- **`logger.error()`** - Failures with error context (use before throwing errors for observability)
-- **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions
+- **`logger.info()`** - Major operations, user-facing progress, completion status.
+- **`logger.debug()`** - **THE DEFAULT FOR DEVELOPMENT.** Use for detailed internal operations, data structures, API payloads, prompts, validation steps, etc.
+- **`logger.error()`** - Failures with error context (use before throwing errors for observability).
+- **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions.
 
 #### Prohibited Patterns
 

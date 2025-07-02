@@ -1,0 +1,100 @@
+---
+description: 
+globs: src/inngest/functions/**/*.ts
+alwaysApply: false
+---
+### Strict Ban on Database Operations Inside `step.run()`
+
+#### ⚠️ CRITICAL: `db.*` and `tx.*` are Absolutely Prohibited in `step.run()`
+
+This rule **strictly prohibits** the use of any database operations (e.g., `db.select`, `db.insert`, `tx.execute`, etc.) within the closure of an Inngest `step.run(name, async () => { ... })`.
+
+**Rationale:**
+
+Inngest's `step.run()` is designed for executing self-contained, retriable units of work, often involving external API calls that are risky or can fail. A key feature of `step.run()` is that its output (the return value of the closure) is serialized to JSON and transmitted over HTTP for memoization by the Inngest engine. This memoization is crucial for Inngest's resiliency.
+
+Using database operations within `step.run()` is banned because:
+
+-   **Performance Degradation & Data Blowup:** Serializing, transmitting, and deserializing database records as JSON payloads is slow, resource-intensive, and can easily lead to excessive data transfer if not carefully managed. A step is not the place for this.
+-   **Misaligned Step Philosophy:** `step.run()` is intended for orchestrating discrete work units, like external API interactions. Database failures are an extreme edge case we want to handle in the main function body, not within a memoized step.
+-   **"Spooky" Closure Behavior:** The way Inngest captures and re-executes step closures can lead to unpredictable behavior with database connections or transaction objects (`tx`), which are not designed to be serialized and reused across retries.
+
+**Guideline & Recommended Alternatives:**
+
+1.  **Absolute Prohibition:** Do NOT call `db.*` or `tx.*` methods inside a `step.run()` closure.
+
+2.  **Correct Pattern: Fetch Data *Before* `step.run()`:**
+    If data from the database is needed *by the `step.run()` closure itself* to perform its primary action (e.g., to make an external API call), this data **MUST** be fetched *outside* and *before* the `step.run()` call, in the main body of the Inngest function.
+
+    ```typescript
+    // ✅ CORRECT: Fetch data before step.run, pass only essential small primitive if needed.
+    export const myInngestFunction = inngest.createFunction(
+        { id: "my-function-with-prefetched-data" },
+        { event: "app/some.event.requiring.data" },
+        async ({ event, step, logger }) => {
+            const { entityId } = event.data;
+
+            // Fetch required data OUTSIDE step.run
+            const entityResult = await errors.try(
+                db.select({ externalSystemId: schemas.entities.externalSystemId })
+                  .from(schemas.entities)
+                  .where(eq(schemas.entities.id, entityId))
+                  .limit(1)
+            );
+            if (entityResult.error) {
+                // ... handle error
+            }
+            const entity = entityResult.data[0];
+            if (!entity) {
+                // ... handle not found
+            }
+
+            // The step.run now uses the prefetched data
+            const apiCallSuccessful = await step.run("call-external-system", async () => {
+                const callResult = await errors.try(
+                    makeExternalApiCall(entity.externalSystemId)
+                );
+                if (callResult.error) {
+                    throw callResult.error; // Inngest will retry the step
+                }
+                return callResult.data.success;
+            });
+
+            // Database writes should also happen outside the step, after it completes.
+            if (apiCallSuccessful) {
+                await db.update(schemas.entities)
+                  .set({ status: "processed" })
+                  .where(eq(schemas.entities.id, entityId));
+            }
+        }
+    );
+    ```
+
+3.  **Alternative: Use `step.invoke()` for Complex Data Needs:**
+    If a database query is complex and its result is needed by subsequent steps, encapsulate the query in its own dedicated Inngest function and call it using `step.invoke()`. This keeps the data-fetching logic isolated and managed by Inngest as a distinct step.
+
+**Example of What Is Strictly Banned:**
+
+```typescript
+// ❌ STRICTLY BANNED: Any db or tx operation inside step.run
+const projectsPayload = await step.run("fetch-all-project-details", async () => {
+    // ❌ BANNED: db.select inside the closure
+    const projectsResult = await db.select().from(schemas.projects);
+    return projectsResult;
+});
+
+const insertResult = await step.run("insert-new-record", async () => {
+    // ❌ BANNED: db.insert inside the closure
+    return await db.insert(schemas.items).values({ name: "New Item" });
+});
+
+await db.transaction(async (tx) => {
+    const user = await step.run("get-user-in-tx", async () => {
+        // ❌ BANNED: tx.select inside the closure
+        return await tx.select().from(schemas.users).where(...);
+    });
+    // ...
+});
+```
+
+By strictly adhering to this rule, we ensure `step.run()` is used efficiently and our Inngest workflows remain performant and stable.

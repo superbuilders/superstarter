@@ -1,0 +1,31 @@
+language js // Applies to JavaScript and TypeScript
+
+// This rule bans implicit "select all" queries by requiring explicit column selection
+// in `db.select()` and `.returning()` calls.
+// See `rules/no-implicit-select-all.mdc` for details.
+
+or {
+	// Case 1: db.select() or tx.select() with no arguments
+	or {
+		`db.select()`,
+		`tx.select()`
+	} as $select_all where {
+		register_diagnostic(span=$select_all, message="Implicit `select()` with no arguments is banned. Always specify the columns you need, e.g., `db.select({ id: users.id })`. See `rules/no-implicit-select-all.mdc`.", severity="error")
+	},
+	// Case 2: .returning() with no arguments on common insert, update, or delete chains.
+	or {
+		// Insert statements
+		`db.insert($_).values($_).returning()`,
+		`tx.insert($_).values($_).returning()`,
+		`db.insert($_).values($_).onConflictDoUpdate($_).returning()`,
+		`tx.insert($_).values($_).onConflictDoUpdate($_).returning()`,
+		// Update statements
+		`db.update($_).set($_).where($_).returning()`,
+		`tx.update($_).set($_).where($_).returning()`,
+		// Delete statements
+		`db.delete($_).where($_).returning()`,
+		`tx.delete($_).where($_).returning()`
+	} as $returning_all where {
+		register_diagnostic(span=$returning_all, message="Implicit `.returning()` with no arguments is banned. Always specify the columns to return, e.g., `.returning({ id: users.id })`. See `rules/no-implicit-select-all.mdc`.", severity="error")
+	}
+}

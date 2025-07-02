@@ -5,6 +5,7 @@ language js // Applies to JavaScript and TypeScript
 // Other uses (e.g., `value as string`, `object as MyType`) are disallowed
 // as per the 'Type Safety' guidelines.
 // It encourages runtime validation (e.g., with Zod) or safer type narrowing techniques for other cases.
+// EXCEPTION: This rule does not apply to files marked with "use client" directive.
 
 // We use an 'or' clause to differentiate patterns.
 // 'or' is short-circuited: the first pattern that matches is used.
@@ -17,10 +18,15 @@ or {
 	// Case 2: Any other 'as' type assertion.
 	// This branch is only evaluated if the first pattern (`$_ as const`) does not match.
 	// Therefore, if this second pattern matches, it's an 'as' assertion that is NOT 'as const'.
-	(// Parentheses group this entire case
-	`$_expression as $_target_type` as $as_type_assertion where {
-		// The 'where' clause here now *only* contains the diagnostic action.
-		// This structure (Pattern where { Action }) should be acceptable to the parser.
-		register_diagnostic(span=$as_type_assertion, message="Usage of the 'as' keyword for type assertions (e.g., 'value as string') is disallowed, except for 'as const'. Prefer runtime validation or safer type narrowing techniques for other type assertions. See `rules/type-safety.mdc` for details.", severity="error") // Highlights the entire 'expression as Type'
-	})
+	// We wrap this in sequential to check the entire file context.
+	sequential($all_statements) where {
+		// Only apply this rule if the file does NOT contain "use client" directive.
+		not $all_statements <: contains `"use client"`,
+		
+		// Match the 'as' type assertion within this file context
+		$all_statements <: contains `$_expression as $_target_type` as $as_type_assertion,
+		
+		// Register the diagnostic for this violation
+		register_diagnostic(span=$as_type_assertion, message="Usage of the 'as' keyword for type assertions (e.g., 'value as string') is disallowed, except for 'as const'. Prefer runtime validation or safer type narrowing techniques for other type assertions. See `rules/type-safety.mdc` for details.", severity="error")
+	}
 }

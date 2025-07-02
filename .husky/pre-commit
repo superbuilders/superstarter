@@ -17,9 +17,27 @@ bun typecheck
 # capture the exit code but don't exit yet
 typecheck_exit_code=$?
 
-# restage the original files (including deletions)
-echo "$staged_files" | while IFS=$'\t' read -r status file; do
-	git add "$file"
+# restage the original files based on their status
+echo "$staged_files" | while IFS=$'\t' read -r status file rest; do
+	case "$status" in
+		D)
+			# Deleted file - use git rm
+			git rm --cached "$file" 2>/dev/null || true
+			;;
+		R*)
+			# Renamed file - old name is in $file, new name is in $rest
+			git rm --cached "$file" 2>/dev/null || true
+			git add "$rest" 2>/dev/null || true
+			;;
+		M|A)
+			# Modified or Added file - use git add
+			git add "$file" 2>/dev/null || true
+			;;
+		*)
+			# For any other status, try to add the file
+			git add "$file" 2>/dev/null || true
+			;;
+	esac
 done
 
 # exit with the original typecheck exit code

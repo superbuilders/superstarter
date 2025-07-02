@@ -1,0 +1,135 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+### Simple Naming for Co-located Components
+
+To improve clarity and reduce redundancy in our file structure, components that are co-located with a `page.tsx` file and are primarily used by that page should have simple, meaningful names without redundant prefixes.
+
+**Rationale:**
+
+When a component lives inside a specific route directory (e.g., `src/app/debug/`), the directory structure already provides the necessary context. Prefixing the component's name or filename with the route's context (e.g., `DebugSidebar.tsx`) is redundant and adds unnecessary verbosity. This makes filenames longer, harder to read, and less reusable in concept.
+
+Use simple names that clearly convey the component's purpose:
+- Generic role-based names like `content.tsx`, `form.tsx`, `sidebar.tsx` for components that serve a single, obvious purpose
+- Feature-specific names like `curriculum.tsx`, `faq.tsx`, `pricing.tsx` when components represent distinct features or sections
+
+### Correct Naming Convention
+
+If a component is co-located with a page and serves a primary purpose for that page, use a simple name that clearly conveys its role.
+
+**Example 1: Generic Role-Based Names**
+
+For components that serve a single, obvious structural purpose, or for implementing the RSC data fetching pattern:
+
+```
+src/app/profile/[profileId]/
+├── page.tsx          // The main page (Server Component, handles data fetching)
+├── content.tsx       // The main view (Client Component, uses React.use)
+├── sidebar.tsx       // The sidebar navigation
+└── form.tsx          // The profile edit form
+```
+
+```tsx
+// ✅ CORRECT: Separating data-fetching from view logic
+// in page.tsx
+import * as React from "react"
+import { Content } from "./content"
+
+export default function ProfilePage({ params }) {
+  const dataPromise = fetchData(params.profileId);
+  return (
+    <React.Suspense fallback={<Loading />}>
+      <Content dataPromise={dataPromise} />
+    </React.Suspense>
+  )
+}
+```
+
+```tsx
+// ✅ CORRECT: Generic names for structural components
+import { Content } from "./content"
+import { Sidebar } from "./sidebar"
+import { Form } from "./form"
+
+export default function ProfilePage() {
+	return (
+		<div>
+			<Sidebar />
+			<Content />
+			<Form />
+		</div>
+	)
+}
+```
+
+**Example 2: Feature-Specific Names**
+
+For components that represent distinct features or sections with specific identity:
+
+```
+src/app/(landing)/
+├── page.tsx          // The main landing page
+├── hero.tsx          // Hero section component
+├── curriculum.tsx    // Curriculum showcase section
+├── faq.tsx           // FAQ section
+├── pricing.tsx       // Pricing plans section
+└── footer.tsx        // Site footer
+```
+
+```tsx
+// ✅ CORRECT: Feature-specific names that are self-documenting
+import { Hero } from "./hero"
+import { Curriculum } from "./curriculum"
+import { FAQ } from "./faq"
+import { Pricing } from "./pricing"
+import { Footer } from "./footer"
+
+export default function LandingPage() {
+	return (
+		<main>
+			<Hero />
+			<Curriculum />
+			<Pricing />
+			<FAQ />
+			<Footer />
+		</main>
+	)
+}
+```
+
+### Prohibited Patterns
+
+Avoid prefixing co-located components with the name of the feature or route they belong to.
+
+**Example Directory Structure:** `src/app/lyrics/[id]/`
+
+```
+src/app/lyrics/[id]/
+├── page.tsx
+// ❌ WRONG: Filename is redundant. Should be `content.tsx`.
+└── lyrics-content.tsx
+```
+
+**Inside `lyrics-content.tsx`:**
+
+```tsx
+// ❌ WRONG: Component name is redundant. Should be `Content`.
+export function LyricsContent() {
+	return <div>...</div>
+}
+```
+
+**Inside `page.tsx`:**
+
+```tsx
+// ❌ WRONG: Imports and usage reflect the redundant naming.
+import { LyricsContent } from "./lyrics-content"
+
+export default function LyricsPage() {
+	return <LyricsContent />
+}
+```
+
+By adhering to this convention, we make our codebase easier to navigate and understand, while promoting a consistent organizational scheme.

@@ -8,34 +8,39 @@ alwaysApply: false
 Always import the errors namespace: `import * as errors from "@superbuilders/errors"`. Never use regular try/catch blocks; always use `errors.try` instead. The `if (result.error)` block **MUST** be placed on the line immediately following the operation. No empty newlines are permitted between the line containing `errors.try`/`errors.trySync` and the subsequent `if (result.error)` statement.
 
 ```typescript
+import * as errors from "@superbuilders/errors"
+import * as logger from "@superbuilders/slog"
+
 const result = await errors.try(somePromise)
 if (result.error) {
-	// Handle error case by throwing the error
+	// Handle error case by logging AND throwing the error
+	logger.error("operation failed", { error: result.error })
 	throw errors.wrap(result.error, "operation")
-	// DO NOT use console.error or slog.error here - propagate the error instead
 }
 const data = result.data // Safe to use the data now
 ```
 
-When propagating errors, always use `errors.wrap` with throw for errors from external sources:
+When propagating errors, always log them using `logger.error` AND use `errors.wrap` with throw for errors from external sources:
 
 ```typescript
 const result = await errors.try(somePromise)
 if (result.error) {
+	logger.error("screenshot capture failed", { error: result.error })
 	throw errors.wrap(result.error, "screenshot capture")
 }
 ```
 
-For synchronous operations, use `errors.trySync` and always throw errors when bubbling up:
+For synchronous operations, use `errors.trySync` and always log then throw errors when bubbling up:
 
 ```typescript
 const result = errors.trySync(() => someOperation())
 if (result.error) {
+	logger.error("synchronous operation failed", { error: result.error })
 	throw errors.wrap(result.error, "synchronous operation")
 }
 ```
 
-NEVER use `console.log`, `console.debug`, or `console.error` in any files. Use the structured logging library from `@superbuilders/slog` instead. Always propagate errors by throwing via `errors.wrap` (for external errors) or `errors.new` (for our own errors) instead of only logging.
+NEVER use `console.log`, `console.debug`, or `console.error` in any files. Use the structured logging library from `@superbuilders/slog` instead. When handling errors, always log them using `logger.error` AND propagate them by throwing via `errors.wrap` (for external errors) or `errors.new` (for our own errors). Both logging and propagation are required for proper error handling.
 
 #### ⚠️ CRITICAL: Script Error Logging Pattern
 

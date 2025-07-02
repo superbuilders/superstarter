@@ -205,6 +205,137 @@ export function ConversationDetail(props: {
 }
 ```
 
+### Established Pattern: `page.tsx` + `content.tsx` Structure
+
+Through consistent application, we have established a specific file structure pattern that implements the RSC principles above. This pattern provides clean separation between data fetching and view logic while maintaining excellent performance and type safety.
+
+#### File Structure
+
+```
+src/app/feature/[param]/
+├── page.tsx          // Server Component: data fetching + promise orchestration  
+└── content.tsx       // Client Component: view logic + interactivity
+```
+
+#### `page.tsx` Responsibilities (Server Component)
+
+1. **Colocate Prepared Statements:** All Drizzle queries used by this route
+2. **Export Derived Types:** Type definitions for use in `content.tsx`  
+3. **Chain Promise-Based Fetches:** Transform `params` promise into data promises
+4. **Orchestrate Loading:** Wrap `content.tsx` in `<React.Suspense>`
+5. **Pass Promises as Props:** No `await`ing, just promise passing
+
+```typescript
+import * as React from "react"
+import { eq, sql } from "drizzle-orm"
+import { db } from "@/db"
+import * as schema from "@/db/schemas"
+import { Content } from "./content"
+
+// 1. Colocated prepared statements
+const getUserProfile = db
+	.select({
+		id: schema.users.id,
+		name: schema.users.name,
+		email: schema.users.email
+	})
+	.from(schema.users)
+	.where(eq(schema.users.id, sql.placeholder("userId")))
+	.prepare("src_app_profile_userid_page_get_user_profile")
+
+// 2. Export derived types
+export type UserProfile = Awaited<ReturnType<typeof getUserProfile.execute>>[number]
+
+// 3. Server Component (NOT async)
+export default function Page({ params }: { params: Promise<{ userId: string }> }) {
+	// 4. Chain promise-based fetches
+	const userPromise = params.then((p) => 
+		getUserProfile.execute({ userId: p.userId }).then(results => results[0])
+	)
+
+	// 5. Orchestrate with Suspense + pass promises
+	return (
+		<React.Suspense fallback={<div>Loading profile...</div>}>
+			<Content userPromise={userPromise} paramsPromise={params} />
+		</React.Suspense>
+	)
+}
+```
+
+#### `content.tsx` Responsibilities (Client Component)
+
+1. **Client Component Directive:** Always start with `"use client"`
+2. **Import Types:** Use types exported from `page.tsx`
+3. **Consume Promises:** Use `React.use()` to unwrap promise data
+4. **Handle Interactivity:** All state, event handlers, and user interactions
+5. **Render UI:** Focus purely on presentation and user experience
+
+```typescript
+"use client"
+
+import * as React from "react"
+import { Button } from "@/components/ui/button"
+// Import types from the colocated page.tsx
+import type { UserProfile } from "./page"
+
+export function Content({ 
+	userPromise, 
+	paramsPromise 
+}: { 
+	userPromise: Promise<UserProfile | undefined>
+	paramsPromise: Promise<{ userId: string }>
+}) {
+	// 1. Consume promises with React.use()
+	const user = React.use(userPromise)
+	const params = React.use(paramsPromise)
+	
+	// 2. Client-side state and interactivity
+	const [isEditing, setIsEditing] = React.useState(false)
+	
+	// 3. Handle loading/error states
+	if (!user) {
+		return <div>User not found</div>
+	}
+	
+	// 4. Render UI with full interactivity
+	return (
+		<div className="space-y-4">
+			<h1 className="text-2xl font-bold">{user.name}</h1>
+			<p className="text-muted-foreground">{user.email}</p>
+			<Button 
+				onClick={() => setIsEditing(!isEditing)}
+				variant={isEditing ? "destructive" : "default"}
+			>
+				{isEditing ? "Cancel" : "Edit Profile"}
+			</Button>
+			{isEditing && (
+				<form className="space-y-2">
+					{/* Interactive form elements */}
+				</form>
+			)}
+		</div>
+	)
+}
+```
+
+#### Benefits of This Pattern
+
+- **Performance:** Parallel data fetching + streaming rendering
+- **Type Safety:** Shared types between server and client components
+- **Separation of Concerns:** Data fetching vs. presentation logic clearly separated  
+- **Maintainability:** Predictable file structure across the application
+- **Reusability:** Content components can be easily tested or reused
+- **Progressive Enhancement:** Server-rendered content with client-side interactivity
+
+#### When to Use This Pattern
+
+- **Dynamic routes** with database queries (`[id]`, `[slug]`, etc.)
+- **Pages requiring interactivity** (forms, filters, state management)
+- **Complex data transformations** that benefit from server-side processing
+- **Any route where you need both data fetching and user interactions**
+
+Use this pattern consistently across your application to maintain architectural coherence and leverage the full benefits of React Server Components.
+
 ### Anti-Patterns to Avoid
 
 #### ❌ WRONG: `async` Server Component with `await`

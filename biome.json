@@ -3,10 +3,11 @@
 	"plugins": [
 		"./gritql/logger-structured-args.grit",
 		"./gritql/no-as-type-assertion.grit",
-		"./gritql/no-db-select-in-step-run.grit",
+		"./gritql/no-db-in-step-run.grit",
 		"./gritql/no-new-error.grit",
+		"./gritql/no-slog-in-client-components.grit",
 		"./gritql/no-try.grit",
-		"./gritql/prefer-undefined-over-null.grit"
+		"./gritql/no-implicit-select-all.grit"
 	],
 	"vcs": {
 		"enabled": false,
@@ -22,8 +23,7 @@
 			"!**/.expo",
 			"!**/dist",
 			"!**/out",
-			"!**/src/components/ui",
-			"!**/src/fancy/**",
+			"!**/src/components/ui/**/*.tsx",
 			"!**/src/db/index.ts",
 			"!**/src/hooks"
 		],
@@ -65,7 +65,9 @@
 				"noUnusedVariables": "error",
 				"noUnusedFunctionParameters": "error"
 			},
-			"nursery": {},
+			"nursery": {
+				"useUniqueElementIds": "off"
+			},
 			"style": {
 				"noNonNullAssertion": {
 					"level": "error",

@@ -1,0 +1,53 @@
+---
+description: 
+globs: *.tsx,*.ts
+alwaysApply: false
+---
+### Prepared Statement Naming Convention
+
+To ensure consistency and prevent naming collisions, all Drizzle ORM prepared statements **MUST** follow a strict naming convention. This rule is enforced by the `enforce-prepared-statement-naming.grit` check.
+
+#### ⚠️ CRITICAL: Naming Requirements
+
+The string passed to any `.prepare()` method must adhere to two rules:
+
+1.  **Snake Case:** The entire name must be in `snake_case` (lowercase letters, numbers, and underscores).
+2.  **Filename Prefix:** The name must be prefixed with a `snake_case` version of the file's relative path.
+
+**Rationale:**
+
+-   **Uniqueness:** Using the file path as a prefix guarantees that all prepared statement names are unique across the entire application, preventing accidental overwrites or conflicts in Drizzle's internal cache.
+-   **Discoverability:** The name immediately tells you where the query is defined, making debugging and code navigation significantly easier.
+
+#### How the Prefix is Generated
+
+The linter automatically transforms the file path into the required prefix. For example:
+
+-   `src/app/dashboard/page.tsx` becomes `src_app_dashboard_page_`
+-   `src/app/onboarding/child/[childId]/page.tsx` becomes `src_app_onboarding_child_childid_page_`
+
+#### Correct Usage
+
+```typescript
+// In file: src/app/dashboard/page.tsx
+
+const getProfileForDashboardQuery = db
+  .select({...})
+  .from(...)
+  .where(...)
+  .prepare("src_app_dashboard_page_get_profile");
+```
+
+#### Prohibited Usage
+
+```typescript
+// ❌ WRONG: Not snake_case
+.prepare("getProfile")
+
+// ❌ WRONG: Missing filename prefix
+.prepare("get_profile_for_dashboard")
+
+// ❌ WRONG: Incorrect prefix
+// In file: src/app/dashboard/page.tsx
+.prepare("dashboard_page_get_profile")
+```

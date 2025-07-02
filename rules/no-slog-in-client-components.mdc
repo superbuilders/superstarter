@@ -1,0 +1,53 @@
+---
+description: 
+globs: *.tsx,*.ts
+alwaysApply: false
+---
+### No Server-Side Logging in Client Components
+
+#### ⚠️ CRITICAL: Do Not Import `@superbuilders/slog` in Client Components
+
+The `@superbuilders/slog` library is designed for server-side logging only. Importing it into a file marked with the `"use client"` directive is strictly prohibited.
+
+**Rationale:**
+
+1.  **Server-Only Functionality**: The library relies on Node.js APIs and is not designed to run in a browser environment.
+2.  **Bundle Size**: Including server-side code in client bundles unnecessarily increases their size, negatively impacting performance.
+3.  **Misleading Usage**: Attempting to use a server logger on the client can lead to runtime errors and incorrect assumptions about logging behavior.
+
+#### Correct Usage (Server-Side)
+
+It is correct to use `@superbuilders/slog` in server-side code, such as API routes, server actions, or React Server Components that are **not** marked with `"use client"`.
+
+```typescript
+// ✅ CORRECT: Using slog in a server component or API route (no "use client")
+import * as logger from "@superbuilders/slog"
+import { db } from "@/db"
+
+export async function POST(req: Request) {
+  logger.info("Received request to create user")
+  const result = await db.insert(...)
+  // ...
+}
+```
+
+#### Prohibited Usage (Client-Side)
+
+It is a violation to import `@superbuilders/slog` in any file that will be part of the client bundle. The `"use client"` directive at the top of a file explicitly marks it as such.
+
+```typescript
+"use client" // 👈 This makes the file a Client Component
+
+// ❌ WRONG: Importing a server-only library into a Client Component
+import * as logger from "@superbuilders/slog" 
+import * as React from "react"
+
+export function MyInteractiveComponent() {
+  const handleClick = () => {
+    // This will either fail at build time or throw a runtime error in the browser.
+    logger.info("Button clicked")
+  }
+  
+  return <button onClick={handleClick}>Log Action</button>
+}
+```
