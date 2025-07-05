@@ -1,32 +1,131 @@
 language js // Applies to JavaScript and TypeScript
 
 // This rule restricts the use of the 'as' keyword for type assertions.
-// It only allows 'as const' for const assertions.
+// It only allows:
+// 1. 'as const' for const assertions
+// 2. Assertions to browser/DOM types that are implicitly available in web environments
 // Other uses (e.g., `value as string`, `object as MyType`) are disallowed
 // as per the 'Type Safety' guidelines.
 // It encourages runtime validation (e.g., with Zod) or safer type narrowing techniques for other cases.
-// EXCEPTION: This rule does not apply to files marked with "use client" directive.
 
 // We use an 'or' clause to differentiate patterns.
 // 'or' is short-circuited: the first pattern that matches is used.
 or {
 	// Case 1: The allowed 'as const' assertion.
 	// This pattern matches `any_expression as const`.
-	// If this pattern matches, the 'or' clause is satisfied for this code snippet,
-	// and no diagnostic action is taken because none is specified in this branch.
 	`$_ as const`,
-	// Case 2: Any other 'as' type assertion.
-	// This branch is only evaluated if the first pattern (`$_ as const`) does not match.
-	// Therefore, if this second pattern matches, it's an 'as' assertion that is NOT 'as const'.
-	// We wrap this in sequential to check the entire file context.
-	sequential($all_statements) where {
-		// Only apply this rule if the file does NOT contain "use client" directive.
-		not $all_statements <: contains `"use client"`,
-		
-		// Match the 'as' type assertion within this file context
-		$all_statements <: contains `$_expression as $_target_type` as $as_type_assertion,
-		
-		// Register the diagnostic for this violation
-		register_diagnostic(span=$as_type_assertion, message="Usage of the 'as' keyword for type assertions (e.g., 'value as string') is disallowed, except for 'as const'. Prefer runtime validation or safer type narrowing techniques for other type assertions. See `rules/type-safety.mdc` for details.", severity="error")
+	// Case 2: Allowed browser/DOM type assertions
+	// This pattern matches assertions to whitelisted browser types
+	`$_ as $type` where {
+		$type <: or {
+			// DOM Element types
+			`HTMLElement`,
+			`HTMLInputElement`,
+			`HTMLButtonElement`,
+			`HTMLAnchorElement`,
+			`HTMLDivElement`,
+			`HTMLSpanElement`,
+			`HTMLFormElement`,
+			`HTMLSelectElement`,
+			`HTMLOptionElement`,
+			`HTMLTextAreaElement`,
+			`HTMLImageElement`,
+			`HTMLVideoElement`,
+			`HTMLAudioElement`,
+			`HTMLCanvasElement`,
+			`HTMLIFrameElement`,
+			`HTMLTableElement`,
+			`HTMLTableRowElement`,
+			`HTMLTableCellElement`,
+			`HTMLLIElement`,
+			`HTMLUListElement`,
+			`HTMLOListElement`,
+			`HTMLHeadingElement`,
+			`HTMLParagraphElement`,
+			`HTMLPreElement`,
+			`HTMLLabelElement`,
+			`HTMLFieldSetElement`,
+			`HTMLLegendElement`,
+			`HTMLDetailsElement`,
+			`HTMLDialogElement`,
+			`HTMLProgressElement`,
+			`HTMLMeterElement`,
+			`HTMLScriptElement`,
+			`HTMLStyleElement`,
+			`HTMLLinkElement`,
+			`HTMLMetaElement`,
+			`HTMLBaseElement`,
+			`HTMLTitleElement`,
+			`HTMLBodyElement`,
+			`HTMLHeadElement`,
+			`HTMLHtmlElement`,
+			`SVGElement`,
+			`SVGSVGElement`,
+			// Event types
+			`Event`,
+			`MouseEvent`,
+			`KeyboardEvent`,
+			`TouchEvent`,
+			`PointerEvent`,
+			`WheelEvent`,
+			`DragEvent`,
+			`FocusEvent`,
+			`InputEvent`,
+			`CompositionEvent`,
+			`AnimationEvent`,
+			`TransitionEvent`,
+			`ClipboardEvent`,
+			`StorageEvent`,
+			`HashChangeEvent`,
+			`PopStateEvent`,
+			`BeforeUnloadEvent`,
+			`MessageEvent`,
+			`ErrorEvent`,
+			`ProgressEvent`,
+			`SubmitEvent`,
+			`FormDataEvent`,
+			`CustomEvent`,
+			// Other browser API types
+			`Element`,
+			`Document`,
+			`Window`,
+			`EventTarget`,
+			`Node`,
+			`NodeList`,
+			`HTMLCollection`,
+			`DOMTokenList`,
+			`CSSStyleDeclaration`,
+			`File`,
+			`FileList`,
+			`Blob`,
+			`FormData`,
+			`URLSearchParams`,
+			`Headers`,
+			`Request`,
+			`Response`,
+			`AbortController`,
+			`AbortSignal`,
+			`IntersectionObserver`,
+			`MutationObserver`,
+			`ResizeObserver`,
+			`PerformanceObserver`,
+			`MediaQueryList`,
+			`Selection`,
+			`Range`,
+			`DOMRect`,
+			`DOMRectReadOnly`,
+			`DOMPoint`,
+			`DOMPointReadOnly`,
+			`DOMMatrix`,
+			`DOMMatrixReadOnly`,
+			// Generic versions with type parameters (common patterns)
+			`CustomEvent<$_>`,
+			`MessageEvent<$_>`
+		}
+	},
+	// Case 3: Any other 'as' type assertion (disallowed).
+	// This branch is only evaluated if neither of the above patterns match.
+	`$_expression as $_target_type` as $as_type_assertion where {
+		register_diagnostic(span=$as_type_assertion, message="Usage of the 'as' keyword for type assertions is disallowed, except for 'as const' and assertions to browser/DOM types (e.g., 'as HTMLElement', 'as MouseEvent'). Prefer runtime validation or safer type narrowing techniques for other type assertions. See `rules/type-safety.mdc` for details.", severity="error")
 	}
 }
