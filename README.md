@@ -12,6 +12,7 @@ The philosophy of this starter is simple: **prevent entire classes of bugs at th
 *   **Framework**: [Next.js](https://nextjs.org/) (App Router)
 *   **ORM**: [Drizzle ORM](https://orm.drizzle.team/) (with PostgreSQL)
 *   **Background Jobs**: [Inngest](https://www.inngest.com/)
+*   **Authentication**: [Clerk](https://clerk.com/) (plug-and-play auth)
 *   **Linting & Formatting**: [Biome](https://biomejs.dev/)
 *   **Custom Static Analysis**: [GritQL](https://www.grit.io/)
 *   **Environment Variables**: [T3 Env](https://env.t3.gg/)
@@ -40,13 +41,15 @@ The philosophy of this starter is simple: **prevent entire classes of bugs at th
     ```
 
 3.  **Set up environment variables:**
-    Copy the `src/env.js` file's `server` schema to a new `.env` file and fill in your database connection string.
+    Copy the `.env.example` file to `.env` and fill in your configuration:
     ```bash
     cp .env.example .env
     ```
-    Your `.env` file should look like this:
+    Your `.env` file should include:
     ```.env
     DATABASE_URL="postgresql://user:password@host:port/dbname?schema=public"
+    CLERK_SECRET_KEY="sk_test_..."  # Get from dashboard.clerk.com
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."  # Get from dashboard.clerk.com
     ```
 
 4.  **Push the database schema:**
@@ -61,6 +64,80 @@ The philosophy of this starter is simple: **prevent entire classes of bugs at th
     ```
 
 Your application should now be running at `http://localhost:3000`.
+
+## Authentication with Clerk
+
+This starter includes [Clerk](https://clerk.com/) authentication pre-configured and ready to use. Clerk provides a complete user management solution with minimal setup required.
+
+### What's Included
+
+*   **Authentication Pages**: Pre-built `/login` and `/sso-callback` routes
+*   **Middleware Setup**: Clerk middleware initialized (no protected routes by default)
+*   **Type-Safe Metadata**: Extensible schema for storing custom user data
+*   **Zero Configuration**: Works out of the box with just API keys
+
+### Setting Up Clerk
+
+1.  **Create a Clerk Application**: Sign up at [dashboard.clerk.com](https://dashboard.clerk.com) and create a new application
+2.  **Copy Your API Keys**: Find them in your Clerk dashboard under "API Keys"
+3.  **Enable Authentication Methods**: In your Clerk dashboard, configure:
+    *   Social providers (Google, GitHub, etc.)
+    *   Email/password authentication
+    *   Any other methods you need
+
+### Customizing User Metadata
+
+The starter includes a flexible metadata schema at `src/lib/metadata/clerk.ts`. You can extend it to store custom user data:
+
+```typescript
+// Example: Adding custom fields to the metadata schema
+export const ClerkUserPublicMetadataSchema = z.object({
+    role: z.enum(["user", "admin"]).default("user"),
+    onboardingCompleted: z.boolean().default(false),
+    preferences: z.object({
+        theme: z.enum(["light", "dark"]).default("light"),
+        language: z.string().default("en")
+    }).default({})
+})
+```
+
+### Protecting Routes
+
+By default, all routes are public. To protect specific routes, update the middleware:
+
+```typescript
+// src/middleware.ts
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+
+const isProtectedRoute = createRouteMatcher([
+    "/dashboard(.*)",
+    "/api/protected(.*)"
+])
+
+export default clerkMiddleware((auth, req) => {
+    if (isProtectedRoute(req)) {
+        auth.protect()
+    }
+})
+```
+
+### Accessing User Data
+
+In Server Components:
+```typescript
+import { currentUser } from "@clerk/nextjs/server"
+
+const user = await currentUser()
+// Access built-in fields: user?.firstName, user?.lastName, user?.emailAddresses
+```
+
+In Client Components:
+```typescript
+"use client"
+import { useUser } from "@clerk/nextjs"
+
+const { user, isLoaded, isSignedIn } = useUser()
+```
 
 ## The Superbuilder Ruleset: Enforced Best Practices
 
@@ -271,8 +348,10 @@ The project follows a feature-colocated structure within the Next.js `src/app` d
 └── src/
     ├── app/                 # Next.js App Router
     │   ├── api/             # API routes (e.g., for Inngest)
+    │   ├── login/           # Clerk sign-in page
+    │   ├── sso-callback/    # Clerk SSO callback handler
     │   ├── page.tsx         # Home page component
-    │   └── layout.tsx       # Root layout
+    │   └── layout.tsx       # Root layout with ClerkProvider
     ├── db/                  # Drizzle ORM setup
     │   ├── schemas/         # Database table schemas
     │   ├── scripts/         # Utility scripts (e.g., drop schema)
@@ -280,8 +359,11 @@ The project follows a feature-colocated structure within the Next.js `src/app` d
     ├── inngest/             # Inngest client and functions
     │   ├── functions/       # Inngest function definitions
     │   └── client.ts        # Inngest client initialization
+    ├── lib/                 # Shared utilities
+    │   └── metadata/        # Clerk metadata schema
     ├── styles/              # Global styles
     ├── env.js               # Environment variable validation (T3 Env)
+    ├── middleware.ts        # Clerk middleware for auth
     └── biome.json           # Biome linter and formatter configuration
 ```
 
