@@ -21,6 +21,7 @@
 		"prepare": "husky"
 	},
 	"dependencies": {
+		"@clerk/nextjs": "^6.28.0",
 		"@superbuilders/errors": "^2.0.0",
 		"@superbuilders/slog": "^3.1.0",
 		"@t3-oss/env-nextjs": "^0.13.8",
