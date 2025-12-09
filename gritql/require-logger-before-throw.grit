@@ -1,0 +1,43 @@
+language js
+
+// Enforce that any throw statement is immediately preceded by a logger.* call.
+// References: see `rules/error-handling.mdc` and `rules/structured-logging.mdc`.
+
+`throw $expr` as $throw_stmt where {
+	// Allowed adjacency: previous statement must be a logger.* call
+	not (or {
+		$throw_stmt <: after `logger.$method($...)` where {
+			$method <: or {
+				"error",
+				"warn",
+				"info",
+				"debug"
+			}
+		},
+		$throw_stmt <: after `logger.$method($...);` where {
+			$method <: or {
+				"error",
+				"warn",
+				"info",
+				"debug"
+			}
+		},
+		$throw_stmt <: after `await logger.$method($...)` where {
+			$method <: or {
+				"error",
+				"warn",
+				"info",
+				"debug"
+			}
+		},
+		$throw_stmt <: after `await logger.$method($...);` where {
+			$method <: or {
+				"error",
+				"warn",
+				"info",
+				"debug"
+			}
+		}
+	}),
+	register_diagnostic(span=$throw_stmt, message="Every throw must be immediately preceded by a logger call (logger.error/debug/warn/info). Log context before throwing. See `rules/error-handling.mdc` and `rules/structured-logging.mdc`.", severity="error")
+}

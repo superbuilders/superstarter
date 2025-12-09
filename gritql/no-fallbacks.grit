@@ -1,0 +1,57 @@
+language js
+
+// This rule enforces the "No Fallbacks" policy by banning the use of the
+// logical OR (||) and nullish coalescing (??) operators.
+// Exception: || is allowed strictly within the condition of control flow statements.
+// Reference: `rules/no-fallbacks-save-human-lives.mdc`
+
+or {
+	// 1. Absolutely ban the nullish coalescing operator (??)
+	`$_ ?? $_` as $nullish where {
+		register_diagnostic(span=$nullish, message="The nullish coalescing operator (??) is banned. It hides null/undefined values which can lead to unsafe fallbacks. Validate data explicitly. See `rules/no-fallbacks-save-human-lives.mdc`.", severity="error")
+	},
+	// 2. Ban the logical OR operator (||) with exceptions for conditional contexts
+	`$_ || $_` as $logical_or where {
+		not (or {
+			// Allowed inside 'if' statement condition (block body)
+			and { $logical_or <: within `if ($test) { $body }` , $logical_or <: within $test },
+			// Allowed inside 'if' statement condition (single-statement body)
+			and { $logical_or <: within `if ($test) $body` , $logical_or <: within $test },
+			// Allowed guard clauses that immediately return or throw without braces
+			and { $logical_or <: within `if ($test) return $_` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) return` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) throw $_` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) throw` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) continue` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) continue $_` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) break` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) break $_` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) continue // $_` , $logical_or <: within $test },
+			and { $logical_or <: within `if ($test) break // $_` , $logical_or <: within $test },
+			// Allowed inside 'while' loop condition (block body)
+			and { $logical_or <: within `while ($test) { $body }` , $logical_or <: within $test },
+			// Allowed inside 'while' loop condition (single-statement body)
+			and { $logical_or <: within `while ($test) $body` , $logical_or <: within $test },
+			// Allowed inside 'do...while' loop condition (block body)
+			and { $logical_or <: within `do { $body } while ($test);` , $logical_or <: within $test },
+			// Allowed inside 'do...while' loop condition (single-statement body)
+			and { $logical_or <: within `do $body while ($test);` , $logical_or <: within $test },
+			// Allowed inside 'for' loop condition (block body)
+			and {
+				$logical_or <: within `for ($init; $test; $update) { $body }` ,
+				$logical_or <: within $test
+			},
+			// Allowed inside 'for' loop condition (single-statement body)
+			and {
+				$logical_or <: within `for ($init; $test; $update) $body` ,
+				$logical_or <: within $test
+			},
+			// Allowed inside ternary operator condition (the test part only)
+			and {
+				$logical_or <: within `$test ? $_ : $_` ,
+				or { $logical_or == $test, $logical_or <: within $test }
+			}
+		}),
+		register_diagnostic(span=$logical_or, message="The logical OR operator (||) is banned except strictly within conditional statements (if, while, ternary tests). Do not use it for fallbacks or defaults. See `rules/no-fallbacks-save-human-lives.mdc`.", severity="error")
+	}
+}

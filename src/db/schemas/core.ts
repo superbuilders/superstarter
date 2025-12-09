@@ -33,7 +33,10 @@ const accounts = schema.table(
 		id_token: text("id_token"),
 		session_state: varchar("session_state", { length: 255 })
 	},
-	(table) => [{ primaryKey: [table.provider, table.providerAccountId] }, index("account_user_id_idx").on(table.userId)]
+	(table) => [
+		{ primaryKey: [table.provider, table.providerAccountId] },
+		index("account_user_id_idx").on(table.userId)
+	]
 )
 export { accounts as coreAccounts }
 
@@ -76,9 +79,14 @@ const posts = schema.table(
 		createdById: uuid("created_by_id")
 			.notNull()
 			.references(() => users.id),
-		createdAt: timestamp("created_at", { withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.default(sql`CURRENT_TIMESTAMP`)
+			.notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true })
 	},
-	(table) => [index("post_created_by_id_idx").on(table.createdById), index("post_title_idx").on(table.title)]
+	(table) => [
+		index("post_created_by_id_idx").on(table.createdById),
+		index("post_title_idx").on(table.title)
+	]
 )
 export { posts as corePosts }

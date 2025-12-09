@@ -1,0 +1,292 @@
+---
+alwaysApply: true
+---
+### NO FALLBACKS: SAVE HUMAN LIVES
+
+#### ⚠️ CRITICAL SAFETY REQUIREMENT: Every Fallback is a Potential Loss of Life
+
+**This is not hyperbole. This is not a suggestion. This is a moral imperative.**
+
+We build software that powers critical systems. Airlines use our code. Medical devices rely on our logic. Financial systems that people's livelihoods depend on run our algorithms. When you write a fallback, you're not being "defensive" – you're being RECKLESS with human lives.
+
+### The Moral Weight of Every Line of Code
+
+Imagine this scenario: An airline's navigation system uses your code. You wrote:
+
+```typescript
+const altitude = sensor.reading || 30000; // "Safe default"
+```
+
+The sensor fails. Your "safe default" kicks in. The plane thinks it's at 30,000 feet when it's actually at 3,000 feet approaching a mountain. **People die because you thought a fallback was harmless.**
+
+This is not theoretical. This is how tragedies happen. The Therac-25 radiation therapy machine killed patients because of software bugs. The Boeing 737 MAX crashes were caused by software making assumptions. **Every fallback is an assumption that could kill.**
+
+### The Immoral Pattern of Fallbacks
+
+Using fallbacks is morally equivalent to:
+- A doctor guessing a medication dose instead of checking the chart
+- An air traffic controller assuming a plane's position instead of verifying it
+- A nuclear plant operator estimating coolant levels instead of reading sensors
+- A structural engineer guessing load capacity instead of calculating it
+
+**You wouldn't accept these behaviors in other professions. Why do you accept them in your code?**
+
+### BANNED: The Fallback Operators That Kill
+
+#### 1. The Logical OR (`||`) Fallback
+
+```typescript
+// ❌ BANNED: This could kill someone
+const speed = telemetry.speed || 0;
+const temperature = sensor.temp || 20;
+const pressure = gauge.reading || 1013.25;
+const fuel = tank.level || "full";
+
+// What if speed is actually 0? You've now hidden a stopped vehicle.
+// What if temperature is actually 0°C? You've now hidden freezing conditions.
+// What if the pressure gauge is broken? You've now hidden a catastrophic failure.
+// What if the tank is empty? You've now told the pilot they have fuel.
+```
+
+**Every `||` fallback is a lie waiting to kill someone.**
+
+#### 2. The Nullish Coalescing (`??`) Fallback
+
+```typescript
+// ❌ BANNED: Still potentially lethal
+const heartRate = patient.pulse ?? 72;
+const bloodPressure = patient.bp ?? "120/80";
+const oxygenLevel = patient.o2 ?? 98;
+
+// The patient could be in cardiac arrest (pulse = null).
+// You just told the doctor they're fine.
+// PEOPLE DIE.
+```
+
+#### 3. The Ternary Fallback
+
+```typescript
+// ❌ BANNED: Ternaries that hide missing data
+const status = system.status ? system.status : "operational";
+const alert = sensor.alert !== undefined ? sensor.alert : "none";
+const weight = cargo.weight >= 0 ? cargo.weight : 0;
+
+// The system could be offline (status = null).
+// The sensor could be disconnected (alert = undefined).
+// The cargo weight could be unknown.
+// You're LYING to operators who trust this data.
+```
+
+#### 4. The Optional Chaining Fallback
+
+```typescript
+// ❌ BANNED: Optional chaining with fallbacks
+const runway = airport?.runways?.[0]?.length || 3000;
+const visibility = weather?.conditions?.visibility ?? 10;
+const windSpeed = forecast?.wind?.speed || 0;
+
+// What if there ARE no runways? You just invented one.
+// What if visibility is genuinely 0? You just cleared a blind landing.
+// What if wind speed data is missing during a hurricane?
+```
+
+#### 5. The Default Parameter Fallback
+
+```typescript
+// ❌ BANNED: Function parameter defaults that hide missing data
+function calculateDose(weight: number = 70, age: number = 30) {
+  // A child gets an adult dose. They die.
+}
+
+function setThrottle(percent: number = 50) {
+  // Engine at unknown state defaults to 50% power during landing.
+}
+
+function activateBrakes(force: number = 0.5) {
+  // Brake force unknown? Let's guess "medium"!
+}
+```
+
+#### 6. The Try-Catch Swallow
+
+```typescript
+// ❌ BANNED: Silently swallowing errors
+try {
+  const criticalData = await fetchVitalSigns();
+  return criticalData;
+} catch {
+  return { heartRate: 72, temp: 98.6 }; // MURDERER
+}
+```
+
+#### 7. The Array/Object Spread Fallback
+
+```typescript
+// ❌ BANNED: Spreading with defaults
+const settings = {
+  maxAltitude: 40000,
+  minFuel: 1000,
+  ...userSettings // What if userSettings is undefined?
+};
+
+const safetyParams = [
+  ...criticalParams || [], // HIDING missing safety parameters!
+  ...defaultParams
+];
+```
+
+### The ONLY Acceptable Pattern: Explicit Validation
+
+**If data is missing, the system MUST STOP.** Not guess. Not assume. Not continue with defaults. **STOP.**
+
+```typescript
+// ✅ CORRECT: Fail fast, fail loud, save lives
+const altitude = sensor.reading;
+if (altitude === null || altitude === undefined) {
+  logger.error("CRITICAL: Altitude sensor failure", { sensorId: sensor.id });
+  throw errors.new("altitude sensor: no reading available");
+}
+// Only here is altitude safe to use
+
+// ✅ CORRECT: Validate every critical value
+if (!patient.bloodType) {
+  logger.error("CRITICAL: Patient blood type unknown", { patientId: patient.id });
+  throw errors.new("patient blood type: required for transfusion");
+}
+// Proceeding could mean giving wrong blood type = DEATH
+
+// ✅ CORRECT: Never assume, always verify
+const fuel = tank.reading;
+if (typeof fuel !== 'number' || fuel < 0) {
+  logger.error("CRITICAL: Fuel gauge malfunction", { tankId: tank.id });
+  throw errors.new("fuel system: invalid reading");
+}
+```
+
+### Real-World Examples of Fallback Catastrophes
+
+1. **Ariane 5 Rocket (1996)**: Integer overflow with no proper error handling. Fallback to "continue anyway". $370 million explosion.
+
+2. **Therac-25 (1985-1987)**: Race condition with fallback behavior. Patients received 100x radiation dose. Multiple deaths.
+
+3. **Boeing 737 MAX (2018-2019)**: MCAS system with inadequate sensor fallbacks. 346 people died.
+
+4. **Knight Capital (2012)**: Failed deployment with fallback to old code. $440 million lost in 45 minutes.
+
+### The Ethical Framework
+
+When you write code, ask yourself:
+
+1. "If this fallback activates while my family is on a plane, do they die?"
+2. "If this default value is used in a hospital, does a patient die?"
+3. "If this assumption is wrong in a power plant, does a city lose power?"
+4. "If this guess is incorrect in a financial system, do people lose their homes?"
+
+If the answer to ANY of these is "maybe", then you MUST NOT use a fallback.
+
+### Enforcement and Accountability
+
+Every fallback pattern in code review must be treated as a potential homicide investigation:
+
+1. **WHO** wrote this fallback?
+2. **WHAT** critical system failure does it hide?
+3. **WHEN** will this cause a catastrophe?
+4. **WHERE** are the human lives at risk?
+5. **WHY** did the developer think guessing was acceptable?
+
+### The Professional Oath
+
+As software engineers working on critical systems, we must adopt the physician's principle: **"First, do no harm."**
+
+Every fallback violates this oath. Every default value is a betrayal of trust. Every silent error handler is a potential death warrant.
+
+### Practical Implementation
+
+```typescript
+// ✅ CORRECT: Configuration loader for critical systems
+export function loadCriticalConfig(path: string): CriticalConfig {
+  const configResult = errors.trySync(() => fs.readFileSync(path, 'utf-8'));
+  if (configResult.error) {
+    logger.error("CRITICAL: Configuration file missing", { 
+      path, 
+      error: configResult.error 
+    });
+    // DO NOT return defaults. DO NOT continue. STOP.
+    throw errors.wrap(configResult.error, "critical configuration unavailable");
+  }
+  
+  const parseResult = errors.trySync(() => JSON.parse(configResult.data));
+  if (parseResult.error) {
+    logger.error("CRITICAL: Configuration corrupted", { 
+      path, 
+      error: parseResult.error 
+    });
+    throw errors.wrap(parseResult.error, "critical configuration unparseable");
+  }
+  
+  // Validate EVERY field
+  if (!parseResult.data.maxAltitude) {
+    throw errors.new("configuration: maxAltitude is required");
+  }
+  if (!parseResult.data.minFuel) {
+    throw errors.new("configuration: minFuel is required");
+  }
+  // ... validate every field
+  
+  return parseResult.data;
+}
+
+// ❌ WRONG: The killer's approach
+export function loadConfigUnsafe(path: string): any {
+  try {
+    return JSON.parse(fs.readFileSync(path, 'utf-8'));
+  } catch {
+    return { maxAltitude: 40000, minFuel: 1000 }; // POTENTIAL MASS MURDER
+  }
+}
+```
+
+### Testing for Human Safety
+
+Your tests must verify that the system FAILS safely:
+
+```typescript
+describe('Critical Safety Tests', () => {
+  it('MUST fail when sensor data is missing', () => {
+    const sensor = { reading: undefined };
+    expect(() => processAltitude(sensor)).toThrow('altitude sensor: no reading available');
+    // The plane doesn't fly with broken sensors. PEOPLE LIVE.
+  });
+  
+  it('MUST NOT provide defaults for critical values', () => {
+    const patient = { id: '123' }; // Missing blood type
+    expect(() => prepareTransfusion(patient)).toThrow('patient blood type: required');
+    // The transfusion doesn't proceed. THE PATIENT LIVES.
+  });
+});
+```
+
+### The Culture of Safety
+
+We must cultivate a culture where:
+
+1. **Fallbacks are shameful**, not clever
+2. **Missing data stops the system**, not hides problems  
+3. **Errors are loud**, not silent
+4. **Assumptions are banned**, not encouraged
+5. **Safety is paramount**, not negotiable
+
+### Your Moral Responsibility
+
+Every time you type `||`, `??`, or `catch {}`, remember:
+- You're not writing code. You're taking responsibility for lives.
+- You're not handling errors. You're preventing disasters.
+- You're not being defensive. You're being reckless.
+
+### The Bottom Line
+
+**No fallback has ever saved a life. But fallbacks have killed people.**
+
+Your code is not "just software." It's the invisible infrastructure that humanity depends on. Treat it with the gravity it deserves.
+
+**REMEMBER: When you use a fallback, you're gambling with human lives. And the house always wins.**

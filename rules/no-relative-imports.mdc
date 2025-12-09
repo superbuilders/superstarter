@@ -1,0 +1,66 @@
+---
+alwaysApply: true
+---
+
+### No Relative Imports
+
+#### ⚠️ CRITICAL: Ban All Relative Imports
+
+All imports **MUST** use the absolute `@/` module alias prefix. Relative imports of any kind (e.g., `./something` or `../something`) are strictly prohibited.
+
+**Rationale:**
+
+- **Consistency and Maintainability:** Relative paths create "path hell" where moving files requires updating multiple import statements. Absolute paths with `@/` provide a stable reference point from the src directory.
+- **Readability:** Absolute paths clearly indicate the module's location in the project structure without mental path resolution.
+- **Refactoring Safety:** Tools like IDEs can more reliably refactor code with absolute imports.
+- **Alignment with Alias Configuration:** Our project is configured with `@/` aliases in tsconfig.json, making all relative imports unnecessary and error-prone.
+
+This rule complements the [Import Patterns](import-alias-paths.mdc) guidelines, which mandate `@/` for src directory imports.
+
+#### Permitted Patterns
+
+1. **Absolute Imports with `@/` Prefix:** Use for all imports within the project.
+
+```typescript
+// ✅ CORRECT: Absolute import from src directory
+import { Button } from "@/app/components/ui/button"
+import { getUserId } from "@/server/auth"
+import { db } from "@/server/db"
+
+// ✅ CORRECT: Absolute import for co-located components
+import { Content } from "@/app/(user)/[subject]/[course]/(overview)/[unit]/components/content"
+import { Sidebar } from "@/app/(user)/profile/components/sidebar"
+```
+
+2. **External Module Imports:** Standard node_modules or external packages (no prefix needed).
+
+```typescript
+// ✅ CORRECT: External package imports
+import * as React from "react"
+import { z } from "zod"
+import { and, eq } from "drizzle-orm"
+```
+
+#### Prohibited Patterns
+
+```typescript
+// ❌ WRONG: Relative import traversing parent directory
+import { Button } from "../../components/ui/button"
+import { getUserId } from "../../../server/auth"
+
+// ❌ WRONG: Deep relative traversal
+import { db } from "../../../../server/db"
+
+// ❌ WRONG: Same-directory relative import
+import { Content } from "./content"
+import { Sidebar } from "./sidebar"
+
+// ❌ WRONG: Any relative import
+import { util } from "../lib/utils" // Use "@/shared/ui/utils/cn" instead
+```
+
+#### No Exceptions
+
+There are no exceptions to this rule. All imports within the project must use absolute `@/` paths. Even co-located components in the same directory must use absolute imports.
+
+If you encounter a case where absolute imports seem impossible, reconsider the project structure or consult with the team before introducing relative imports.

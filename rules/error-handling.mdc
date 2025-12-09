@@ -1,6 +1,5 @@
 ---
-description: 
-globs: *.tsx,*.ts
+globs: *.ts
 alwaysApply: false
 ---
 ### Error Handling
@@ -255,6 +254,25 @@ throw errors.new("operation: some error")
 **❌ WRONG: Using new Error() Instead of errors.new()**
 
 ```typescript
+// ❌ WRONG: Using new Error() directly
+throw new Error("invalid configuration")
+// ✅ CORRECT: Use errors.new() for consistent error handling
+throw errors.new("invalid configuration")
+```
+
+#### ⚠️ CRITICAL: Error Handling and Human Safety
+
+Error handling is not just about code correctness – it's about preventing catastrophic failures that could cost human lives. **Every unhandled error is a potential disaster.**
+
+See also: [No Fallbacks: Save Human Lives](no-fallbacks-save-human-lives.mdc)
+
+When handling errors in critical systems:
+1. **NEVER provide fallback values** – missing data must stop the system
+2. **ALWAYS log errors before throwing** – create an audit trail
+3. **NEVER silently swallow errors** – every error must be visible
+4. **ALWAYS fail fast and loud** – better to stop than guess
+
+Remember: In critical systems, an error that stops the system saves lives. An error that's hidden with a fallback kills people.
 // ❌ WRONG: Using new Error() directly
 throw new Error("invalid configuration")
 // ✅ CORRECT: Use errors.new() for consistent error handling

@@ -1,15 +1,18 @@
+// biome-ignore-all lint/style/noProcessEnv: env wrapper needs to be able to access process.env
 import * as logger from "@superbuilders/slog"
 import { createEnv } from "@t3-oss/env-nextjs"
 import { z } from "zod"
 
-if (!process.env.NEXT_RUNTIME && typeof window === "undefined") {
+// always turn on debug logging, even in prod
+logger.setDefaultLogLevel(logger.DEBUG)
+
+const isServerRuntime = typeof window === "undefined"
+
+if (!process.env.NEXT_RUNTIME && isServerRuntime) {
+	/* do not touch this, we do this require to ensure correct env available during build */
 	const { loadEnvConfig } = require("@next/env")
 	const projectDir = process.cwd()
 	loadEnvConfig(projectDir)
-}
-
-if (process.env.NODE_ENV === "development" && typeof window === "undefined") {
-	logger.setDefaultLogLevel(logger.DEBUG)
 }
 
 export const env = createEnv({
@@ -18,7 +21,12 @@ export const env = createEnv({
 	 * isn't built with invalid env vars.
 	 */
 	server: {
-		DATABASE_URL: z.string().url(),
+		DATABASE_URL: z.url(),
+		INNGEST_EVENT_KEY: z.string().optional(),
+		INNGEST_SIGNING_KEY: z.string().optional(),
+		VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
+		VERCEL_GIT_COMMIT_SHA: z.string().optional(),
+		VERCEL_OIDC_TOKEN: z.string().optional(),
 		NODE_ENV: z.enum(["development", "test", "production"]).default("development")
 	},
 
@@ -37,8 +45,12 @@ export const env = createEnv({
 	 */
 	runtimeEnv: {
 		DATABASE_URL: process.env.DATABASE_URL,
+		INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY,
+		INNGEST_SIGNING_KEY: process.env.INNGEST_SIGNING_KEY,
+		VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
+		VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
+		VERCEL_OIDC_TOKEN: process.env.VERCEL_OIDC_TOKEN,
 		NODE_ENV: process.env.NODE_ENV
-		// NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
 	},
 	/**
 	 * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

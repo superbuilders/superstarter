@@ -1,6 +1,5 @@
 ---
-description: 
-globs: *.tsx,*.ts
+globs: *.ts
 alwaysApply: false
 ---
 ### Zod Usage

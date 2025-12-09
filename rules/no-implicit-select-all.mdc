@@ -1,5 +1,5 @@
 ---
-description: 
+description:
 globs: *.tsx,*.ts
 alwaysApply: false
 ---

@@ -1,0 +1,10 @@
+language js // Applies to JavaScript and TypeScript
+
+// This rule bans all relative imports (starting with './' or '../').
+// All imports must use absolute imports with the '@/...' prefix.
+// See `rules/no-relative-imports.mdc` for details and rationale.
+
+`import $specifiers from $path` as $import_stmt where {
+	or { $path <: `"../$_"`, $path <: `"./$_"` },
+	register_diagnostic(span=$import_stmt, message="Relative imports are banned. Use absolute imports with the '@/...' prefix instead. See `rules/no-relative-imports.mdc` for details.", severity="error")
+}

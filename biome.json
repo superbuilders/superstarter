@@ -3,29 +3,35 @@
 	"plugins": [
 		"./gritql/logger-structured-args.grit",
 		"./gritql/no-as-type-assertion.grit",
-		"./gritql/no-db-in-step-run.grit",
+		"./gritql/no-iife.grit",
+		"./gritql/no-fallbacks.grit",
 		"./gritql/no-new-error.grit",
-		"./gritql/no-slog-in-client-components.grit",
+		"./gritql/no-relative-imports.grit",
 		"./gritql/no-try.grit",
+		"./gritql/require-logger-before-throw.grit",
 		"./gritql/no-implicit-select-all.grit"
 	],
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
 	"vcs": {
 		"enabled": false,
 		"clientKind": "git",
-		"useIgnoreFile": false
+		"defaultBranch": "main",
+		"useIgnoreFile": true
 	},
 	"files": {
 		"ignoreUnknown": false,
 		"includes": [
 			"**",
 			"!**/node_modules",
-			"!**/.next",
-			"!**/.expo",
-			"!**/dist",
-			"!**/out",
-			"!**/src/components/ui/**/*.tsx",
-			"!**/src/db/index.ts",
-			"!**/src/hooks"
+			"!**/src/app/components/ui",
+			"!**/src/shared/stimulus",
+			"!**/src/pipelines/templates/factory/prompts/examples",
+			"!!**/.next",
+			"!!**/.vercel"
 		],
 		"maxSize": 5000000
 	},
@@ -33,7 +39,7 @@
 		"enabled": true,
 		"indentStyle": "tab",
 		"indentWidth": 2,
-		"lineWidth": 120
+		"lineWidth": 100
 	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },
 	"linter": {
@@ -44,7 +50,8 @@
 					"level": "error",
 					"fix": "unsafe"
 				},
-				"noArrayIndexKey": "off"
+				"noArrayIndexKey": "off",
+				"noExplicitAny": "error"
 			},
 			"complexity": {
 				"noForEach": {
@@ -62,13 +69,22 @@
 			"recommended": true,
 			"correctness": {
 				"noUnusedImports": "error",
-				"noUnusedVariables": "error",
 				"noUnusedFunctionParameters": "error"
 			},
 			"nursery": {
-				"useUniqueElementIds": "off"
+				"noUnnecessaryConditions": "error",
+				"noReactForwardRef": "error",
+				"noFloatingPromises": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"useSortedClasses": {
+					"level": "error",
+					"fix": "safe"
+				}
 			},
 			"style": {
+				"noProcessEnv": "error",
 				"noNonNullAssertion": {
 					"level": "error",
 					"fix": "safe"
@@ -104,6 +120,7 @@
 				"useKeyWithClickEvents": "off"
 			},
 			"performance": {
+				"noBarrelFile": "error",
 				"noImgElement": "error"
 			}
 		}

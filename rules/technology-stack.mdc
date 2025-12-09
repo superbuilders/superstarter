@@ -1,6 +1,6 @@
 ---
-description: 
-globs: 
+description:
+globs:
 alwaysApply: true
 ---
 
@@ -8,11 +8,11 @@ alwaysApply: true
 
 #### ⚠️ CRITICAL: Required Stack Components
 
-**Runtime**: Bun + Next.js  
-**Package Manager**: Bun  
+**Runtime**: Bun + Next.js
+**Package Manager**: Bun
 **Database ORM**: Drizzle ORM
 
 ### Commands
 
-**Setup**: `bun install`  
-**Format/Typecheck**: `bun typecheck`
+**Setup**: `bun install`
+**Typecheck**: `bun typecheck`

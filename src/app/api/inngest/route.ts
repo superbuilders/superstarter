@@ -1,9 +1,30 @@
 import { serve } from "inngest/next"
-import { inngest } from "@/inngest/client"
-import { helloWorld } from "@/inngest/functions/hello"
+import type { NextRequest } from "next/server"
 
-// Create an API that serves zero functions
-export const { GET, POST, PUT } = serve({
+import { inngest } from "@/inngest/client"
+import { functions } from "@/inngest/functions"
+
+const handlers = serve({
 	client: inngest,
-	functions: [helloWorld]
+	functions
 })
+
+type AppRouteHandler = (
+	request: NextRequest,
+	context: {
+		params: Promise<Record<string, unknown>>
+	}
+) => Response | undefined | Promise<Response | undefined>
+
+const invoke = Function.prototype.apply
+
+const adapt = (handler: typeof handlers.GET): AppRouteHandler => {
+	return (request, context) => {
+		const result = invoke.call(handler, undefined, [request, context])
+		return Promise.resolve(result)
+	}
+}
+
+export const GET = adapt(handlers.GET)
+export const POST = adapt(handlers.POST)
+export const PUT = adapt(handlers.PUT)

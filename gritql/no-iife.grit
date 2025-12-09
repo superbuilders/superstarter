@@ -1,0 +1,90 @@
+language js // Applies to JavaScript and TypeScript
+
+// This rule bans Immediately Invoked Function Expressions (IIFEs), including
+// both synchronous and asynchronous forms, and both function and arrow styles.
+// Prefer defining a named function (or top-level await in modules) and calling it,
+// or restructuring control flow without IIFEs.
+
+or {
+	// Generic: ($callee)() or ($callee)($args) where $callee is a function/arrow function (sync/async)
+	// Bare call
+	`($callee)()` as $iife_call_empty where {
+		$callee <: or {
+			// Arrow
+			`() => { $body }`,
+			`($...) => { $body }`,
+			`() => $_`,
+			`($...) => $_`,
+			// Async arrow
+			`async () => { $body }`,
+			`async ($...) => { $body }`,
+			`async () => $_`,
+			`async ($...) => $_`,
+			// Function expressions
+			`function $_ ($...) { $body }`,
+			`function ($...) { $body }`,
+			// Async function expressions
+			`async function $_ ($...) { $body }`,
+			`async function ($...) { $body }`
+		},
+		register_diagnostic(span=$iife_call_empty, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+	},
+	// Call with args
+	`($callee)($...)` as $iife_call_args where {
+		$callee <: or {
+			// Arrow
+			`() => { $body }`,
+			`($...) => { $body }`,
+			`() => $_`,
+			`($...) => $_`,
+			// Async arrow
+			`async () => { $body }`,
+			`async ($...) => { $body }`,
+			`async () => $_`,
+			`async ($...) => $_`,
+			// Function expressions
+			`function $_ ($...) { $body }`,
+			`function ($...) { $body }`,
+			// Async function expressions
+			`async function $_ ($...) { $body }`,
+			`async function ($...) { $body }`
+		},
+		register_diagnostic(span=$iife_call_args, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+	},
+	// Awaited call: await ($callee)()
+	`await ($callee)()` as $await_iife_call_empty where {
+		$callee <: or {
+			`() => { $body }`,
+			`($...) => { $body }`,
+			`() => $_`,
+			`($...) => $_`,
+			`async () => { $body }`,
+			`async ($...) => { $body }`,
+			`async () => $_`,
+			`async ($...) => $_`,
+			`function $_ ($...) { $body }`,
+			`function ($...) { $body }`,
+			`async function $_ ($...) { $body }`,
+			`async function ($...) { $body }`
+		},
+		register_diagnostic(span=$await_iife_call_empty, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+	},
+	// Awaited call with args: await ($callee)($args)
+	`await ($callee)($...)` as $await_iife_call_args where {
+		$callee <: or {
+			`() => { $body }`,
+			`($...) => { $body }`,
+			`() => $_`,
+			`($...) => $_`,
+			`async () => { $body }`,
+			`async ($...) => { $body }`,
+			`async () => $_`,
+			`async ($...) => $_`,
+			`function $_ ($...) { $body }`,
+			`function ($...) { $body }`,
+			`async function $_ ($...) { $body }`,
+			`async function ($...) { $body }`
+		},
+		register_diagnostic(span=$await_iife_call_args, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+	}
+}

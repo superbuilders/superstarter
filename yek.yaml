@@ -1,7 +1,5 @@
 ignore_patterns:
   - "yek.yaml"
-  - "biome.jsonc"
-  - "tsconfig.json"
   - "components.json"
   - "next.config.js"
   - "postcss.config.js"
@@ -12,8 +10,9 @@ ignore_patterns:
   - "package.json"
   - "public/**"
   - "src/components/ui/**"
+  - "prompt/**"
 priority_rules:
   - score: 99
     pattern: "^rules/"
   - score: 100
-    pattern: "^prompt/"
+    pattern: "^gritql/"

@@ -1,26 +1,108 @@
-language js // Specifies the target language as JavaScript/TypeScript // Added semicolon for consistency
+language js // Specifies the target language as JavaScript/TypeScript
 
 // This rule targets and disallows all forms of 'try' statements:
 // 1. try...catch...finally
 // 2. try...catch (without finally)
 // 3. try...finally (without catch)
-// It encourages refactoring to use the 'Errors.try()' or 'Errors.trySync()' pattern.
+// It encourages refactoring to use the 'errors.try()' or 'errors.trySync()' pattern.
 
 or {
 	// Case 1: try...catch...finally (Most specific, should be checked first)
 	(// Matches: try { ... } catch (anyError) { ... } finally { ... }
 	`try { $_ /* try_body */ } catch ($catch_param_tcf) { $_ /* catch_body */ } finally { $_ /* finally_body */ }` as $try_catch_finally_block where {
-		register_diagnostic(span=$try_catch_finally_block, message="Usage of 'try...catch...finally' is disallowed. Please refactor to use 'Errors.try()' or 'Errors.trySync()' as detailed in `rules/error-handling.mdc`.", severity="error")
+		register_diagnostic(span=$try_catch_finally_block, message="Usage of 'try...catch...finally' is disallowed. Please refactor to use 'errors.try()' or 'errors.trySync()' as detailed in `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// Matches: try { ... } catch { ... } finally { ... }  (catch without parameter)
+	`try { $_ /* try_body */ } catch { $_ /* catch_body */ } finally { $_ /* finally_body */ }` as $try_catch_finally_no_param where {
+		register_diagnostic(span=$try_catch_finally_no_param, message="Usage of 'try...catch...finally' is disallowed. Please refactor to use 'errors.try()' or 'errors.trySync()' as detailed in `rules/error-handling.mdc`.", severity="error")
 	}),
 	// Case 2: try...catch (without a finally block)
 	(// Matches: try { ... } catch (anyError) { ... }
 	// This will now only match if the more specific try...catch...finally did not.
 	`try { $_ /* try_body */ } catch ($catch_param_tc) { $_ /* catch_body */ }` as $try_catch_block where {
-		register_diagnostic(span=$try_catch_block, message="Direct 'try...catch' usage is disallowed. Please refactor to use 'Errors.try()' or 'Errors.trySync()' as detailed in `rules/error-handling.mdc`.", severity="error")
+		register_diagnostic(span=$try_catch_block, message="Direct 'try...catch' usage is disallowed. Please refactor to use 'errors.try()' or 'errors.trySync()' as detailed in `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// Matches: try { ... } catch { ... }  (catch without parameter)
+	`try { $_ /* try_body */ } catch { $_ /* catch_body */ }` as $try_catch_no_param where {
+		register_diagnostic(span=$try_catch_no_param, message="Direct 'try...catch' usage is disallowed. Please refactor to use 'errors.try()' or 'errors.trySync()' as detailed in `rules/error-handling.mdc`.", severity="error")
 	}),
 	// Case 3: try...finally (without a catch block)
 	(// Matches: try { ... } finally { ... }
 	`try { $_ /* try_body */ } finally { $_ /* finally_body */ }` as $try_finally_block where {
 		register_diagnostic(span=$try_finally_block, message="Usage of 'try...finally' is disallowed. Please refactor using the error handling patterns described in `rules/error-handling.mdc`.", severity="error")
+	}),
+	// Case 4: Bare calls to errors.try/errors.trySync without using the result
+	// These patterns catch common cases where the result is not captured or inspected.
+	(// await errors.try(...) used without assignment/return/void
+	`await errors.try($...)` as $bare_try_await where {
+		not ($bare_try_await <: within `const $_ = $_` ),
+		not ($bare_try_await <: within `let $_ = $_` ),
+		not ($bare_try_await <: within `var $_ = $_` ),
+		not ($bare_try_await <: within `$_ = $_` ),
+		not ($bare_try_await <: within `return $_` ),
+		not ($bare_try_await <: within `void $_` ),
+		register_diagnostic(span=$bare_try_await, message="result of errors.try() must be captured and checked; assign to a variable and follow with `if (result.error)` on the next line. See `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// await errors.trySync(...) used without assignment/return/void
+	`await errors.trySync($...)` as $bare_trysync_await where {
+		not ($bare_trysync_await <: within `const $_ = $_` ),
+		not ($bare_trysync_await <: within `let $_ = $_` ),
+		not ($bare_trysync_await <: within `var $_ = $_` ),
+		not ($bare_trysync_await <: within `$_ = $_` ),
+		not ($bare_trysync_await <: within `return $_` ),
+		not ($bare_trysync_await <: within `void $_` ),
+		register_diagnostic(span=$bare_trysync_await, message="result of errors.trySync() must be captured and checked; assign to a variable and follow with `if (result.error)` on the next line. See `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// errors.try(...) used without assignment/return/void (no await)
+	`errors.try($...)` as $bare_try where {
+		not ($bare_try <: within `const $_ = $_` ),
+		not ($bare_try <: within `let $_ = $_` ),
+		not ($bare_try <: within `var $_ = $_` ),
+		not ($bare_try <: within `$_ = $_` ),
+		not ($bare_try <: within `return $_` ),
+		not ($bare_try <: within `void $_` ),
+		register_diagnostic(span=$bare_try, message="result of errors.try() must be captured and checked; assign to a variable and follow with `if (result.error)` on the next line. See `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// errors.trySync(...) used without assignment/return/void (no await)
+	`errors.trySync($...)` as $bare_trysync where {
+		not ($bare_trysync <: within `const $_ = $_` ),
+		not ($bare_trysync <: within `let $_ = $_` ),
+		not ($bare_trysync <: within `var $_ = $_` ),
+		not ($bare_trysync <: within `$_ = $_` ),
+		not ($bare_trysync <: within `return $_` ),
+		not ($bare_trysync <: within `void $_` ),
+		register_diagnostic(span=$bare_trysync, message="result of errors.trySync() must be captured and checked; assign to a variable and follow with `if (result.error)` on the next line. See `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// return await errors.try(...)
+	`return await errors.try($...)` as $return_try_await where {
+		register_diagnostic(span=$return_try_await, message="do not return the result of errors.try() directly; capture into a variable and check `if (result.error)` first as per `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// return await errors.trySync(...)
+	`return await errors.trySync($...)` as $return_trysync_await where {
+		register_diagnostic(span=$return_trysync_await, message="do not return the result of errors.trySync() directly; capture into a variable and check `if (result.error)` first as per `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// return errors.try(...)
+	`return errors.try($...)` as $return_try where {
+		register_diagnostic(span=$return_try, message="do not return the result of errors.try() directly; capture into a variable and check `if (result.error)` first as per `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// return errors.trySync(...)
+	`return errors.trySync($...)` as $return_trysync where {
+		register_diagnostic(span=$return_trysync, message="do not return the result of errors.trySync() directly; capture into a variable and check `if (result.error)` first as per `rules/error-handling.mdc`.", severity="error")
+	}),
+	(// void errors.try(...)
+	`void errors.try($...)` as $void_try where {
+		register_diagnostic(span=$void_try, message="result of errors.try() must be captured and checked; assign to a variable and follow with `if (result.error)`.", severity="error")
+	}),
+	(// void (await errors.try(...))
+	`void (await errors.try($...))` as $void_await_try where {
+		register_diagnostic(span=$void_await_try, message="result of errors.try() must be captured and checked; assign to a variable and follow with `if (result.error)`.", severity="error")
+	}),
+	(// void errors.trySync(...)
+	`void errors.trySync($...)` as $void_trysync where {
+		register_diagnostic(span=$void_trysync, message="result of errors.trySync() must be captured and checked; assign to a variable and follow with `if (result.error)`.", severity="error")
+	}),
+	(// void (await errors.trySync(...))
+	`void (await errors.trySync($...))` as $void_await_trysync where {
+		register_diagnostic(span=$void_await_trysync, message="result of errors.trySync() must be captured and checked; assign to a variable and follow with `if (result.error)`.", severity="error")
 	})
 }

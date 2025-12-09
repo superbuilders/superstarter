@@ -1,11 +1,8 @@
-import { loadEnvConfig } from "@next/env"
+import "@/env"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
 import { sql } from "drizzle-orm"
 import { db } from "@/db"
-
-const projectDir = process.cwd()
-loadEnvConfig(projectDir)
 
 async function dropSchemas(schemaNames: string[]) {
 	if (schemaNames.length === 0) {
@@ -21,9 +18,14 @@ async function dropSchemas(schemaNames: string[]) {
 			continue
 		}
 
-		const result = await errors.try(db.execute(sql`DROP SCHEMA IF EXISTS ${sql.identifier(schemaName)} CASCADE`))
+		const result = await errors.try(
+			db.execute(sql`DROP SCHEMA IF EXISTS ${sql.identifier(schemaName)} CASCADE`)
+		)
 		if (result.error) {
-			logger.error("failed to drop schema", { schema: schemaName, error: result.error })
+			logger.error("failed to drop schema", {
+				schema: schemaName,
+				error: result.error
+			})
 			success = false
 		} else {
 			logger.info("successfully dropped schema", { schema: schemaName })
@@ -40,4 +42,4 @@ async function dropSchemas(schemaNames: string[]) {
 }
 
 const schemaNames = process.argv.slice(2)
-dropSchemas(schemaNames)
+await dropSchemas(schemaNames)

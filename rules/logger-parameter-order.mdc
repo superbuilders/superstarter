@@ -1,0 +1,56 @@
+---
+alwaysApply: true
+---
+
+## Logger Parameter Order
+
+### Non-Negotiable: `logger` Goes First
+
+Every function that accepts a parameter named `logger` **must** list it as the first argument. This keeps our call sites consistent, makes structured logging discoverable, and avoids the silent fallback anti-pattern outlined in `rules/no-fallbacks-save-human-lives.mdc`.
+
+### Why It Matters
+
+- **Consistency** – Inngest actions and helpers pass loggers through multiple layers. A single out-of-order signature breaks the mental model and encourages optional defaults.
+- **Safety** – Optional or trailing logger arguments often become implicit fallbacks. We do not allow fallbacks. If a function needs a logger, it must be explicit and required.
+- **Tooling** – Our linting and grit rules enforce structured logging (`gritql/logger-structured-args.grit`) and throw-ordering (`gritql/require-logger-before-throw.grit`). Uniform parameter order keeps these safeguards reliable.
+
+### Required Pattern
+
+```ts
+export async function performSomething(
+	logger: Logger,
+	request: RequestPayload,
+	context: ExecutionContext
+): Promise<ResponsePayload> {
+	logger.info("perform something", { requestId: request.id })
+	// ...
+}
+```
+
+### Prohibited Patterns
+
+```ts
+// ❌ logger as optional or trailing argument
+async function performSomething(request: RequestPayload, logger: Logger) {
+	// Developers will forget to pass the logger. No fallbacks allowed.
+}
+
+// ❌ default value for logger
+function performSomething(request: RequestPayload, logger: Logger = defaultLogger) {
+	// Hides missing data. Violates no-fallback policy.
+}
+```
+
+### Enforcement
+
+The grit rule `logger-first-parameter.grit` scans all functions (declarations, expressions, arrow functions, methods) and raises an error when a parameter named `logger` is not in position zero.
+
+Fix violations by moving `logger` to the front of the parameter list or renaming the parameter if it is not actually a logger.
+
+### When in Doubt
+
+- If a helper should not receive a logger, remove the parameter entirely.
+- If you must pass additional context, keep `logger` first and follow with named objects (e.g., `{ request, context }`).
+- Never create implicit or default loggers.
+
+Respect this rule. Consistent, explicit logging saves lives.

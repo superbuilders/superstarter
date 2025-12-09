@@ -1,9 +1,7 @@
 ---
-description: 
-globs: *.tsx,*.ts
+globs: *.ts
 alwaysApply: false
 ---
-
 ### Type Safety
 
 #### ⚠️ CRITICAL: Strict Type Safety Requirements
