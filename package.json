@@ -8,7 +8,7 @@
 		"dev:inngest": "bun --bun inngest-cli dev --queue-workers 4000 --poll-interval 1",
 		"build": "bun --bun next build",
 		"start": "bun --bun next start",
-		"lint": "echo 'Linting disabled'",
+		"lint": "bun --bun biome lint --write",
 		"lint:biome": "bun --bun biome lint --write",
 		"format": "bun --bun biome format --write",
 		"typecheck": "bun --bun tsc",
