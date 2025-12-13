@@ -19,7 +19,8 @@ const inngestLogger: Logger = {
 }
 
 export const inngest = new Inngest({
-	id: "forge",
+	id: "superstarter",
+	checkpointing: true,
 	schemas: new EventSchemas().fromSchema(schema),
 	logger: inngestLogger,
 	eventKey: env.INNGEST_EVENT_KEY,
