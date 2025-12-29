@@ -55,7 +55,7 @@ const getProspectDetails = db
 	.from(schema.prospect)
 	.where(eq(schema.prospect.id, sql.placeholder("prospectId")))
 	.limit(1)
-	.prepare("get_prospect_details")
+	.prepare("app_dashboard_conversations_prospectid_page_get_prospect_details")
 
 const getConversationMessages = db
 	.select({
@@ -73,7 +73,7 @@ const getConversationMessages = db
 		)
 	)
 	.orderBy(desc(schema.message.createdAt))
-	.prepare("get_conversation_messages")
+	.prepare("app_dashboard_conversations_prospectid_page_get_conversation_messages")
 
 // 2. Types are derived from the queries and exported for child components.
 export type ProspectDetails = Awaited<ReturnType<typeof getProspectDetails.execute>>[number]
@@ -241,7 +241,7 @@ const getUserProfile = db
 	})
 	.from(schema.users)
 	.where(eq(schema.users.id, sql.placeholder("userId")))
-	.prepare("src_app_profile_userid_page_get_user_profile")
+	.prepare("app_profile_userid_page_get_user_profile")
 
 // 2. Export derived types
 export type UserProfile = Awaited<ReturnType<typeof getUserProfile.execute>>[number]
