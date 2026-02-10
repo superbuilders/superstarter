@@ -1,0 +1,66 @@
+---
+alwaysApply: true
+---
+
+# No Logical OR Fallback
+
+The `||` operator is banned for fallbacks/defaults. It's allowed only in boolean conditionals.
+
+## Why Banned for Fallbacks
+
+`||` treats falsy values (0, "", false, null, undefined) as "missing" and substitutes the fallback. This hides legitimate values:
+
+```typescript
+// ❌ DANGEROUS: Hides legitimate zero
+const count = user.loginCount || 1  // If loginCount is 0, returns 1
+
+// ❌ DANGEROUS: Hides empty string
+const name = user.nickname || "Anonymous"  // Empty string "" becomes "Anonymous"
+
+// ❌ DANGEROUS: Hides false
+const enabled = config.feature || true  // false becomes true
+```
+
+## Allowed: Boolean Conditionals
+
+`||` is allowed in if/while/ternary conditions where you're doing boolean logic, not providing defaults:
+
+```typescript
+// ✅ ALLOWED: Boolean condition in if
+if (!user.email || !user.name) {
+  return null
+}
+
+// ✅ ALLOWED: Boolean condition in while
+while (queue.isEmpty() || isPaused) {
+  await sleep(100)
+}
+
+// ✅ ALLOWED: Boolean condition in ternary test
+const label = isAdmin || isModerator ? "Staff" : "User"
+
+// ✅ ALLOWED: Guard clause
+if (!data || data.length === 0) return
+```
+
+## Banned: Fallback/Default Patterns
+
+```typescript
+// ❌ BANNED: Default value
+const timeout = config.timeout || 5000
+
+// ❌ BANNED: Fallback array
+const items = response.items || []
+
+// ❌ BANNED: Fallback string
+const title = page.title || "Untitled"
+```
+
+## How to Fix
+
+Apply the same upstream fix patterns as nullish coalescing. See `rules/no-nullish-coalescing.mdc` for details:
+
+1. Remove if TypeScript already narrowed
+2. Fix schema if field should be required
+3. Validate and throw if truly required
+4. Align types at boundaries

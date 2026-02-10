@@ -18,7 +18,7 @@ const inngestLogger: Logger = {
 	debug: logger.debug
 }
 
-export const inngest = new Inngest({
+const inngest = new Inngest({
 	id: "superstarter",
 	checkpointing: true,
 	schemas: new EventSchemas().fromSchema(schema),
@@ -26,3 +26,5 @@ export const inngest = new Inngest({
 	eventKey: env.INNGEST_EVENT_KEY,
 	signingKey: env.INNGEST_SIGNING_KEY
 })
+
+export { inngest }

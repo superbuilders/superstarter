@@ -126,6 +126,6 @@ or {
 	// Case 3: Any other 'as' type assertion (disallowed).
 	// This branch is only evaluated if neither of the above patterns match.
 	`$_expression as $_target_type` as $as_type_assertion where {
-		register_diagnostic(span=$as_type_assertion, message="Usage of the 'as' keyword for type assertions is disallowed, except for 'as const' and assertions to browser/DOM types (e.g., 'as HTMLElement', 'as MouseEvent'). Prefer runtime validation or safer type narrowing techniques for other type assertions. See `rules/type-safety.mdc` for details.", severity="error")
+		register_diagnostic(span=$as_type_assertion, message="Usage of the 'as' keyword for type assertions is disallowed, except for 'as const' and assertions to browser/DOM types (e.g., 'as HTMLElement', 'as MouseEvent'). Prefer runtime validation or safer type narrowing techniques for other type assertions. See `rules/no-as-type-assertion.mdc` for details.", severity="error")
 	}
 }

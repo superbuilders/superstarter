@@ -13,7 +13,7 @@ or {
 			"warn",
 			"info"
 		},
-		register_diagnostic(span=$logger_call, message="Logger method calls must have at most 2 arguments: message and optional context object. Found 3 or more arguments. Use structured logging as detailed in `rules/structured-logging.mdc`.", severity="error")
+		register_diagnostic(span=$logger_call, message="Logger method calls must have at most 2 arguments: message and optional context object. Found 3 or more arguments. Use structured logging as detailed in `rules/logger-structured-args.mdc`.", severity="error")
 	},
 	// Case 2: Empty object as second argument
 	`logger.$method($msg, {})` as $logger_call where {
@@ -23,7 +23,7 @@ or {
 			"warn",
 			"info"
 		},
-		register_diagnostic(span=$logger_call, message="Logger second argument must not be an empty object. Add meaningful context fields or omit the second parameter entirely. See `rules/structured-logging.mdc`.", severity="error")
+		register_diagnostic(span=$logger_call, message="Logger second argument must not be an empty object. Add meaningful context fields or omit the second parameter entirely. See `rules/logger-structured-args.mdc`.", severity="error")
 	},
 	// Case 3: String concatenation in first argument
 	`logger.$method($left + $right, $...)` as $logger_call where {
@@ -33,7 +33,7 @@ or {
 			"warn",
 			"info"
 		},
-		register_diagnostic(span=$logger_call, message="Logger first argument must be a simple string literal, not string concatenation. Use structured logging with context object instead. See `rules/structured-logging.mdc`.", severity="error")
+		register_diagnostic(span=$logger_call, message="Logger first argument must be a simple string literal, not string concatenation. Use structured logging with context object instead. See `rules/logger-structured-args.mdc`.", severity="error")
 	},
 	// Case 4: First argument is not a simple string literal
 	`logger.$method($arg, $...)` as $logger_call where {
@@ -44,6 +44,6 @@ or {
 			"info"
 		},
 		not ($arg <: `"$_"`),
-		register_diagnostic(span=$logger_call, message="Logger first argument must be a simple double-quoted string literal (not template literal, variable, or expression). Use structured logging as detailed in `rules/structured-logging.mdc`.", severity="error")
+		register_diagnostic(span=$logger_call, message="Logger first argument must be a simple double-quoted string literal (not template literal, variable, or expression). Use structured logging as detailed in `rules/logger-structured-args.mdc`.", severity="error")
 	}
 }

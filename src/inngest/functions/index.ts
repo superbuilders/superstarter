@@ -1,3 +1,5 @@
 import { helloWorld } from "@/inngest/functions/hello"
 
-export const functions = [helloWorld]
+const functions = [helloWorld]
+
+export { functions }

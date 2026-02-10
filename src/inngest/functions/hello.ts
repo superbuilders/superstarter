@@ -1,6 +1,6 @@
 import { inngest } from "@/inngest/client"
 
-export const helloWorld = inngest.createFunction(
+const helloWorld = inngest.createFunction(
 	{ id: "hello-world" },
 	{ event: "superstarter/hello" },
 	async ({ event, step }) => {
@@ -8,3 +8,5 @@ export const helloWorld = inngest.createFunction(
 		return { message: `Hello ${event.data.message}!` }
 	}
 )
+
+export { helloWorld }

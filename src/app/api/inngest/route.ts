@@ -18,13 +18,15 @@ type AppRouteHandler = (
 
 const invoke = Function.prototype.apply
 
-const adapt = (handler: typeof handlers.GET): AppRouteHandler => {
+function adapt(handler: typeof handlers.GET): AppRouteHandler {
 	return (request, context) => {
 		const result = invoke.call(handler, undefined, [request, context])
 		return Promise.resolve(result)
 	}
 }
 
-export const GET = adapt(handlers.GET)
-export const POST = adapt(handlers.POST)
-export const PUT = adapt(handlers.PUT)
+const GET = adapt(handlers.GET)
+const POST = adapt(handlers.POST)
+const PUT = adapt(handlers.PUT)
+
+export { GET, POST, PUT }

@@ -1,0 +1,10 @@
+language js
+
+// Bans style={{...}} props in JSX.
+// CSS belongs in Tailwind classes, not inline styles.
+// Use [--var:value] arbitrary property syntax for CSS variables.
+// Reference: `rules/no-inline-style.mdc`
+
+`style={$_}` as $style_prop where {
+	register_diagnostic(span=$style_prop, message="Inline styles banned. Use Tailwind classes. For CSS variables, use [--var:value] syntax. See `rules/no-inline-style.mdc`.", severity="error")
+}

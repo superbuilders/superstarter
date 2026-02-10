@@ -27,7 +27,7 @@ or {
 			`async function $_ ($...) { $body }`,
 			`async function ($...) { $body }`
 		},
-		register_diagnostic(span=$iife_call_empty, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+		register_diagnostic(span=$iife_call_empty, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs. See `rules/no-iife.mdc`.", severity="error")
 	},
 	// Call with args
 	`($callee)($...)` as $iife_call_args where {
@@ -49,7 +49,7 @@ or {
 			`async function $_ ($...) { $body }`,
 			`async function ($...) { $body }`
 		},
-		register_diagnostic(span=$iife_call_args, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+		register_diagnostic(span=$iife_call_args, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs. See `rules/no-iife.mdc`.", severity="error")
 	},
 	// Awaited call: await ($callee)()
 	`await ($callee)()` as $await_iife_call_empty where {
@@ -67,7 +67,7 @@ or {
 			`async function $_ ($...) { $body }`,
 			`async function ($...) { $body }`
 		},
-		register_diagnostic(span=$await_iife_call_empty, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+		register_diagnostic(span=$await_iife_call_empty, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs. See `rules/no-iife.mdc`.", severity="error")
 	},
 	// Awaited call with args: await ($callee)($args)
 	`await ($callee)($...)` as $await_iife_call_args where {
@@ -85,6 +85,6 @@ or {
 			`async function $_ ($...) { $body }`,
 			`async function ($...) { $body }`
 		},
-		register_diagnostic(span=$await_iife_call_args, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs.", severity="error")
+		register_diagnostic(span=$await_iife_call_args, message="IIFE usage is disallowed. Define a named function and call it, or restructure control flow without IIFEs. See `rules/no-iife.mdc`.", severity="error")
 	}
 }

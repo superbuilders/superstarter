@@ -1,10 +1,9 @@
 import { sql } from "drizzle-orm"
 import { index, integer, pgSchema, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core"
 
-const schema = pgSchema("core")
-export { schema as coreSchema }
+const coreSchema = pgSchema("core")
 
-const users = schema.table("user", {
+const coreUsers = coreSchema.table("user", {
 	id: uuid("id").defaultRandom().notNull().primaryKey(),
 	name: varchar("name", { length: 255 }).notNull().default(""),
 	email: varchar("email", { length: 255 }).notNull(),
@@ -14,17 +13,18 @@ const users = schema.table("user", {
 	}),
 	image: varchar("image", { length: 255 }).notNull().default("")
 })
-export { users as coreUsers }
 
-const accounts = schema.table(
+const coreAccounts = coreSchema.table(
 	"account",
 	{
 		userId: uuid("user_id")
 			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+			.references(() => coreUsers.id, { onDelete: "cascade" }),
 		type: varchar("type", { length: 255 }).notNull(),
 		provider: varchar("provider", { length: 255 }).notNull(),
-		providerAccountId: varchar("provider_account_id", { length: 255 }).notNull(),
+		providerAccountId: varchar("provider_account_id", {
+			length: 255
+		}).notNull(),
 		refresh_token: text("refresh_token"),
 		access_token: text("access_token"),
 		expires_at: integer("expires_at"),
@@ -38,15 +38,14 @@ const accounts = schema.table(
 		index("account_user_id_idx").on(table.userId)
 	]
 )
-export { accounts as coreAccounts }
 
-const sessions = schema.table(
+const coreSessions = coreSchema.table(
 	"session",
 	{
 		sessionToken: varchar("session_token", { length: 255 }).notNull().primaryKey(),
 		userId: uuid("user_id")
 			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
+			.references(() => coreUsers.id, { onDelete: "cascade" }),
 		expires: timestamp("expires", {
 			mode: "date",
 			withTimezone: true
@@ -54,9 +53,8 @@ const sessions = schema.table(
 	},
 	(table) => [index("session_user_id_idx").on(table.userId)]
 )
-export { sessions as coreSessions }
 
-const verificationTokens = schema.table(
+const coreVerificationTokens = coreSchema.table(
 	"verification_token",
 	{
 		identifier: varchar("identifier", { length: 255 }).notNull(),
@@ -68,9 +66,8 @@ const verificationTokens = schema.table(
 	},
 	(table) => [{ primaryKey: [table.identifier, table.token] }]
 )
-export { verificationTokens as coreVerificationTokens }
 
-const posts = schema.table(
+const corePosts = coreSchema.table(
 	"post",
 	{
 		id: uuid("id").defaultRandom().notNull().primaryKey(),
@@ -78,7 +75,7 @@ const posts = schema.table(
 		content: text("content").notNull().default(""),
 		createdById: uuid("created_by_id")
 			.notNull()
-			.references(() => users.id),
+			.references(() => coreUsers.id),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.default(sql`CURRENT_TIMESTAMP`)
 			.notNull(),
@@ -89,4 +86,5 @@ const posts = schema.table(
 		index("post_title_idx").on(table.title)
 	]
 )
-export { posts as corePosts }
+
+export { coreAccounts, corePosts, coreSchema, coreSessions, coreUsers, coreVerificationTokens }

@@ -1,0 +1,57 @@
+language js
+
+// Bans inline exports (export keyword attached to declarations).
+// All exports must use separate `export { ... }` or `export type { ... }` syntax.
+// Re-exports are banned by Biome's noBarrelFile rule.
+// Reference: `rules/no-inline-export.mdc`
+
+or {
+	// Function declarations
+	`export function $name($...) { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export async function $name($...) { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	// Variable declarations
+	`export const $_ = $_` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export let $_ = $_` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	// Type/Interface (TypeScript)
+	`export type $name = $_` as $e where {
+		register_diagnostic(span=$e, message="Inline type export banned. Define without 'export', then use 'export type { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export interface $name { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline interface export banned. Define without 'export', then use 'export type { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	// Class
+	`export class $name { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export abstract class $name { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	// Enum
+	`export enum $name { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export const enum $name { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline export banned. Define without 'export', then use 'export { name }' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	// Default exports with inline declaration
+	`export default function $name($...) { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline default export banned. Define function, then use 'export default name' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export default function($...) { $... }` as $e where {
+		register_diagnostic(span=$e, message="Anonymous default export banned. Define as named function, then 'export default name'. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export default class $name { $... }` as $e where {
+		register_diagnostic(span=$e, message="Inline default export banned. Define class, then use 'export default name' at end of file. See `rules/no-inline-export.mdc`.", severity="error")
+	},
+	`export default class { $... }` as $e where {
+		register_diagnostic(span=$e, message="Anonymous default export banned. Define as named class, then 'export default name'. See `rules/no-inline-export.mdc`.", severity="error")
+	}
+}

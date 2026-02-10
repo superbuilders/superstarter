@@ -28,7 +28,10 @@
 		"resolvePackageJsonImports": true,
 		"resolvePackageJsonExports": true,
 		"noUnusedLocals": true,
-		"noUnusedParameters": true
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true
 	},
 	"include": [
 		"next-env.d.ts",

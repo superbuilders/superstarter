@@ -3,19 +3,17 @@ import * as logger from "@superbuilders/slog"
 import { createEnv } from "@t3-oss/env-nextjs"
 import { z } from "zod"
 
-// always turn on debug logging, even in prod
 logger.setDefaultLogLevel(logger.DEBUG)
 
 const isServerRuntime = typeof window === "undefined"
 
 if (!process.env.NEXT_RUNTIME && isServerRuntime) {
-	/* do not touch this, we do this require to ensure correct env available during build */
 	const { loadEnvConfig } = require("@next/env")
 	const projectDir = process.cwd()
 	loadEnvConfig(projectDir)
 }
 
-export const env = createEnv({
+const env = createEnv({
 	/**
 	 * Specify your server-side environment variables schema here. This way you can ensure the app
 	 * isn't built with invalid env vars.
@@ -63,3 +61,5 @@ export const env = createEnv({
 	 */
 	emptyStringAsUndefined: true
 })
+
+export { env }

@@ -39,5 +39,5 @@ language js
 			}
 		}
 	}),
-	register_diagnostic(span=$throw_stmt, message="Every throw must be immediately preceded by a logger call (logger.error/debug/warn/info). Log context before throwing. See `rules/error-handling.mdc` and `rules/structured-logging.mdc`.", severity="error")
+	register_diagnostic(span=$throw_stmt, message="Every throw must be immediately preceded by a logger call (logger.error/debug/warn/info). Log context before throwing. See `rules/require-logger-before-throw.mdc`.", severity="error")
 }

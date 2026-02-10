@@ -1,20 +1,8 @@
-import { drizzle } from "drizzle-orm/postgres-js"
-import postgres from "postgres"
+import { drizzle } from "drizzle-orm/bun-sql"
 import * as core from "@/db/schemas/core"
 import { env } from "@/env"
 
-/**
- * Cache the database connection in development. This avoids creating a new connection on every HMR
- * update.
- */
-// biome-ignore lint: Per user instruction, this file is not to be modified. The assertion is used for connection caching in development.
-const globalForDb = globalThis as unknown as {
-	conn: postgres.Sql | undefined
-}
-
-// biome-ignore lint: this is fine for now
-const conn = globalForDb.conn ?? postgres(env.DATABASE_URL)
-if (env.NODE_ENV !== "production") globalForDb.conn = conn
-
 const schema = { ...core }
-export const db = drizzle(conn, { schema })
+const db = drizzle(env.DATABASE_URL, { schema })
+
+export { db }

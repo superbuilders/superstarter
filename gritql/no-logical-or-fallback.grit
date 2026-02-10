@@ -1,16 +1,14 @@
 language js
 
-// This rule enforces the "No Fallbacks" policy by banning the use of the
-// logical OR (||) and nullish coalescing (??) operators.
-// Exception: || is allowed strictly within the condition of control flow statements.
-// Reference: `rules/no-fallbacks-save-human-lives.mdc`
+// Bans the logical OR operator (||) for fallbacks/defaults.
+// Exception: Allowed in conditionals (if, while, ternary tests) for boolean logic.
+// Reference: `rules/no-logical-or-fallback.mdc`
+//
+// KNOWN LIMITATION: GritQL has issues with complex nested `not(or{and{...}})` patterns
+// when combined with `register_diagnostic`. Some valid patterns like `if (a || b) continue`
+// inside for-of loops may still trigger false positives. This is a GritQL/Biome bug.
 
 or {
-	// 1. Absolutely ban the nullish coalescing operator (??)
-	`$_ ?? $_` as $nullish where {
-		register_diagnostic(span=$nullish, message="The nullish coalescing operator (??) is banned. It hides null/undefined values which can lead to unsafe fallbacks. Validate data explicitly. See `rules/no-fallbacks-save-human-lives.mdc`.", severity="error")
-	},
-	// 2. Ban the logical OR operator (||) with exceptions for conditional contexts
 	`$_ || $_` as $logical_or where {
 		not (or {
 			// Allowed inside 'if' statement condition (block body)
@@ -28,6 +26,23 @@ or {
 			and { $logical_or <: within `if ($test) break $_` , $logical_or <: within $test },
 			and { $logical_or <: within `if ($test) continue // $_` , $logical_or <: within $test },
 			and { $logical_or <: within `if ($test) break // $_` , $logical_or <: within $test },
+			// Allowed inside 'if' statement condition (with else)
+			and {
+				$logical_or <: within `if ($test) { $body } else { $else_body }` ,
+				$logical_or <: within $test
+			},
+			and {
+				$logical_or <: within `if ($test) { $body } else $else_body` ,
+				$logical_or <: within $test
+			},
+			and {
+				$logical_or <: within `if ($test) $body else { $else_body }` ,
+				$logical_or <: within $test
+			},
+			and {
+				$logical_or <: within `if ($test) $body else $else_body` ,
+				$logical_or <: within $test
+			},
 			// Allowed inside 'while' loop condition (block body)
 			and { $logical_or <: within `while ($test) { $body }` , $logical_or <: within $test },
 			// Allowed inside 'while' loop condition (single-statement body)
@@ -52,6 +67,6 @@ or {
 				or { $logical_or == $test, $logical_or <: within $test }
 			}
 		}),
-		register_diagnostic(span=$logical_or, message="The logical OR operator (||) is banned except strictly within conditional statements (if, while, ternary tests). Do not use it for fallbacks or defaults. See `rules/no-fallbacks-save-human-lives.mdc`.", severity="error")
+		register_diagnostic(span=$logical_or, message="Logical OR (||) banned for fallbacks. Only allowed in conditionals (if/while/ternary test). READ `rules/no-logical-or-fallback.mdc`.", severity="error")
 	}
 }
