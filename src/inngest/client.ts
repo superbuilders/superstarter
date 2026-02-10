@@ -1,3 +1,4 @@
+import { realtimeMiddleware } from "@inngest/realtime/middleware"
 import * as logger from "@superbuilders/slog"
 import { EventSchemas, Inngest, type Logger } from "inngest"
 import { z } from "zod"
@@ -24,7 +25,8 @@ const inngest = new Inngest({
 	schemas: new EventSchemas().fromSchema(schema),
 	logger: inngestLogger,
 	eventKey: env.INNGEST_EVENT_KEY,
-	signingKey: env.INNGEST_SIGNING_KEY
+	signingKey: env.INNGEST_SIGNING_KEY,
+	middleware: [realtimeMiddleware()]
 })
 
 export { inngest }

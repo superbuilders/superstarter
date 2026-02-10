@@ -12,13 +12,15 @@
 		"lint:all": "bun --bun biome lint --write && bun run scripts/superlint.ts",
 		"format": "bun run scripts/superfumpt.ts --strip-comments --write && bun --bun biome format --write",
 		"typecheck": "bun --bun tsc",
-		"db:generate": "bun --bun run scripts/drizzle-kit-shim.ts generate",
-		"db:migrate": "bun --bun run scripts/drizzle-kit-shim.ts migrate",
-		"db:push": "bun --bun run scripts/drizzle-kit-shim.ts push",
-		"db:studio": "bun --bun run scripts/drizzle-kit-shim.ts studio",
-		"db:drop": "bun --bun run src/db/scripts/drop.ts"
+		"db:generate": "bun --bun drizzle-kit generate",
+		"db:migrate": "bun --bun drizzle-kit migrate",
+		"db:push": "bun --bun drizzle-kit push",
+		"db:studio": "bun --bun drizzle-kit studio",
+		"db:drop": "bun --bun run src/db/scripts/drop-schemas.ts",
+		"db:apply": "bun --bun run src/db/scripts/apply-programs.ts"
 	},
 	"dependencies": {
+		"@inngest/realtime": "^0.4.6",
 		"@superbuilders/errors": "^3.0.2",
 		"@superbuilders/slog": "^4.0.0",
 		"@t3-oss/env-nextjs": "^0.13.10",
