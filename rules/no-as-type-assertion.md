@@ -15,4 +15,4 @@ The `as` keyword for type assertions is disallowed because it bypasses TypeScrip
 - Type guards and type narrowing
 - Proper generic type parameters
 
-See also: [Type Safety](type-safety.mdc)
+See also: [Type Safety](type-safety.md)

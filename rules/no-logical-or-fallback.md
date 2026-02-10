@@ -58,7 +58,7 @@ const title = page.title || "Untitled"
 
 ## How to Fix
 
-Apply the same upstream fix patterns as nullish coalescing. See `rules/no-nullish-coalescing.mdc` for details:
+Apply the same upstream fix patterns as nullish coalescing. See `rules/no-nullish-coalescing.md` for details:
 
 1. Remove if TypeScript already narrowed
 2. Fix schema if field should be required

@@ -2,7 +2,7 @@ language js
 
 // Bans the logical OR operator (||) for fallbacks/defaults.
 // Exception: Allowed in conditionals (if, while, ternary tests) for boolean logic.
-// Reference: `rules/no-logical-or-fallback.mdc`
+// Reference: `rules/no-logical-or-fallback.md`
 //
 // KNOWN LIMITATION: GritQL has issues with complex nested `not(or{and{...}})` patterns
 // when combined with `register_diagnostic`. Some valid patterns like `if (a || b) continue`
@@ -67,6 +67,6 @@ or {
 				or { $logical_or == $test, $logical_or <: within $test }
 			}
 		}),
-		register_diagnostic(span=$logical_or, message="Logical OR (||) banned for fallbacks. Only allowed in conditionals (if/while/ternary test). READ `rules/no-logical-or-fallback.mdc`.", severity="error")
+		register_diagnostic(span=$logical_or, message="Logical OR (||) banned for fallbacks. Only allowed in conditionals (if/while/ternary test). READ `rules/no-logical-or-fallback.md`.", severity="error")
 	}
 }

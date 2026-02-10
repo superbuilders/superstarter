@@ -2,7 +2,7 @@ language js
 
 // Bans ternary expressions that are not directly assigned to const/let.
 // Ternaries as expressions hide branching logic. Extract to named variables.
-// Reference: `rules/no-inline-ternary.mdc`
+// Reference: `rules/no-inline-ternary.md`
 
 `$cond ? $then : $else` as $ternary where {
 	not (or {
@@ -11,5 +11,5 @@ language js
 		// Allowed: let x = cond ? a : b (including nested ternaries)
 		$ternary <: within `let $_ = $_`
 	}),
-	register_diagnostic(span=$ternary, message="Inline ternary banned. Extract to a named variable: `const result = cond ? a : b`. See `rules/no-inline-ternary.mdc`.", severity="error")
+	register_diagnostic(span=$ternary, message="Inline ternary banned. Extract to a named variable: `const result = cond ? a : b`. See `rules/no-inline-ternary.md`.", severity="error")
 }

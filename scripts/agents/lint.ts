@@ -10,11 +10,11 @@
  *   bun run scripts/agents/lint.ts --fix    # fix violations with agents
  */
 
-import { readFile, readdir } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
+import { query } from "@anthropic-ai/claude-agent-sdk"
 import * as errors from "@superbuilders/errors"
 import type { Logger } from "@superbuilders/slog"
-import { query } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod"
 
 /**
@@ -85,7 +85,7 @@ async function loadAllGritRules(): Promise<GritRule[]> {
 }
 
 /**
- * Load ALL .mdc documentation files from the rules directory.
+ * Load ALL .md documentation files from the rules directory.
  */
 async function loadAllMdcDocs(): Promise<MdcDoc[]> {
 	const rulesDir = join(process.cwd(), "rules")
@@ -97,10 +97,10 @@ async function loadAllMdcDocs(): Promise<MdcDoc[]> {
 		throw filesResult.error
 	}
 
-	const mdcFiles = filesResult.data.filter((f) => f.endsWith(".mdc"))
+	const mdcFiles = filesResult.data.filter((f) => f.endsWith(".md"))
 
 	for (const file of mdcFiles) {
-		const docName = file.replace(".mdc", "")
+		const docName = file.replace(".md", "")
 		const mdcPath = join(rulesDir, file)
 
 		const mdcResult = await errors.try(readFile(mdcPath, "utf-8"))
@@ -301,7 +301,7 @@ REMEMBER:
  * Load MDC documentation for a specific super-lint rule if it exists.
  */
 async function loadSuperLintRuleMdc(ruleName: string): Promise<string | undefined> {
-	const mdcPath = join(process.cwd(), "rules", `${ruleName}.mdc`)
+	const mdcPath = join(process.cwd(), "rules", `${ruleName}.md`)
 	const result = await errors.try(readFile(mdcPath, "utf-8"))
 	if (result.error) {
 		return undefined
@@ -411,12 +411,12 @@ type GroupedOutput = {
 
 /**
  * Extract rule name from description.
- * GritQL plugins reference their .mdc file: "READ `rules/no-logical-or-fallback.mdc`"
+ * GritQL plugins reference their .md file: "READ `rules/no-logical-or-fallback.md`"
  * Biome rules use their category path like "lint/style/noNonNullAssertion"
  */
 function extractRuleName(description: string, category: string): string {
 	if (category === "plugin") {
-		const mdcMatch = description.match(/`rules\/([^`]+)\.mdc`/)
+		const mdcMatch = description.match(/`rules\/([^`]+)\.md`/)
 		if (mdcMatch?.[1]) {
 			return mdcMatch[1]
 		}

@@ -12,21 +12,21 @@ language js // Specifies the target language as JavaScript/TypeScript
 or {
 	// Case 1: try...catch...finally - needs both error handling AND cleanup replacement
 	( `try { $_ } catch ($catch_param) { $_ } finally { $_ }` as $try_catch_finally_block where {
-		register_diagnostic(span=$try_catch_finally_block, message="try...catch...finally is disallowed. For error handling, use `const result = await errors.try(fn)` (async) or `const result = errors.trySync(fn)` (sync), then check `if (result.error)`. For cleanup, use `await using stack = new AsyncDisposableStack()` (async) or `using stack = new DisposableStack()` (sync) and register cleanup with `stack.defer(() => cleanup())`. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$try_catch_finally_block, message="try...catch...finally is disallowed. For error handling, use `const result = await errors.try(fn)` (async) or `const result = errors.trySync(fn)` (sync), then check `if (result.error)`. For cleanup, use `await using stack = new AsyncDisposableStack()` (async) or `using stack = new DisposableStack()` (sync) and register cleanup with `stack.defer(() => cleanup())`. See `rules/no-try.md`.", severity="error")
 	}),
 	( `try { $_ } catch { $_ } finally { $_ }` as $try_catch_finally_no_param where {
-		register_diagnostic(span=$try_catch_finally_no_param, message="try...catch...finally is disallowed. For error handling, use `const result = await errors.try(fn)` (async) or `const result = errors.trySync(fn)` (sync), then check `if (result.error)`. For cleanup, use `await using stack = new AsyncDisposableStack()` (async) or `using stack = new DisposableStack()` (sync) and register cleanup with `stack.defer(() => cleanup())`. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$try_catch_finally_no_param, message="try...catch...finally is disallowed. For error handling, use `const result = await errors.try(fn)` (async) or `const result = errors.trySync(fn)` (sync), then check `if (result.error)`. For cleanup, use `await using stack = new AsyncDisposableStack()` (async) or `using stack = new DisposableStack()` (sync) and register cleanup with `stack.defer(() => cleanup())`. See `rules/no-try.md`.", severity="error")
 	}),
 	// Case 2: try...catch (without finally) - needs error handling replacement
 	( `try { $_ } catch ($catch_param) { $_ }` as $try_catch_block where {
-		register_diagnostic(span=$try_catch_block, message="try...catch is disallowed. Use `const result = await errors.try(fn)` for async code or `const result = errors.trySync(fn)` for sync code, then check `if (result.error)` on the next line. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$try_catch_block, message="try...catch is disallowed. Use `const result = await errors.try(fn)` for async code or `const result = errors.trySync(fn)` for sync code, then check `if (result.error)` on the next line. See `rules/no-try.md`.", severity="error")
 	}),
 	( `try { $_ } catch { $_ }` as $try_catch_no_param where {
-		register_diagnostic(span=$try_catch_no_param, message="try...catch is disallowed. Use `const result = await errors.try(fn)` for async code or `const result = errors.trySync(fn)` for sync code, then check `if (result.error)` on the next line. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$try_catch_no_param, message="try...catch is disallowed. Use `const result = await errors.try(fn)` for async code or `const result = errors.trySync(fn)` for sync code, then check `if (result.error)` on the next line. See `rules/no-try.md`.", severity="error")
 	}),
 	// Case 3: try...finally (without catch) - needs cleanup replacement
 	( `try { $_ } finally { $_ }` as $try_finally_block where {
-		register_diagnostic(span=$try_finally_block, message="try...finally is disallowed. Use `await using stack = new AsyncDisposableStack()` for async code or `using stack = new DisposableStack()` for sync code. Register cleanup with `stack.defer(() => cleanup())`. The cleanup runs automatically when the scope exits, even if an error is thrown. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$try_finally_block, message="try...finally is disallowed. Use `await using stack = new AsyncDisposableStack()` for async code or `using stack = new DisposableStack()` for sync code. Register cleanup with `stack.defer(() => cleanup())`. The cleanup runs automatically when the scope exits, even if an error is thrown. See `rules/no-try.md`.", severity="error")
 	}),
 	// Case 4: errors.try() / errors.trySync() must be captured and checked
 	( `await errors.try($...)` as $bare_try_await where {
@@ -36,7 +36,7 @@ or {
 		not ($bare_try_await <: within `$_ = $_` ),
 		not ($bare_try_await <: within `return $_` ),
 		not ($bare_try_await <: within `void $_` ),
-		register_diagnostic(span=$bare_try_await, message="Result of errors.try() must be captured and checked. Assign to a variable with `const result = await errors.try(fn)` and follow with `if (result.error)` on the next line. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$bare_try_await, message="Result of errors.try() must be captured and checked. Assign to a variable with `const result = await errors.try(fn)` and follow with `if (result.error)` on the next line. See `rules/no-try.md`.", severity="error")
 	}),
 	( `errors.trySync($...)` as $bare_trysync where {
 		not ($bare_trysync <: within `const $_ = $_` ),
@@ -45,7 +45,7 @@ or {
 		not ($bare_trysync <: within `$_ = $_` ),
 		not ($bare_trysync <: within `return $_` ),
 		not ($bare_trysync <: within `void $_` ),
-		register_diagnostic(span=$bare_trysync, message="Result of errors.trySync() must be captured and checked. Assign to a variable with `const result = errors.trySync(fn)` and follow with `if (result.error)` on the next line. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$bare_trysync, message="Result of errors.trySync() must be captured and checked. Assign to a variable with `const result = errors.trySync(fn)` and follow with `if (result.error)` on the next line. See `rules/no-try.md`.", severity="error")
 	}),
 	( `errors.try($...)` as $bare_try where {
 		not ($bare_try <: within `const $_ = $_` ),
@@ -55,29 +55,29 @@ or {
 		not ($bare_try <: within `return $_` ),
 		not ($bare_try <: within `void $_` ),
 		not ($bare_try <: within `await $_` ),
-		register_diagnostic(span=$bare_try, message="Result of errors.try() must be captured and checked. Assign to a variable with `const result = await errors.try(fn)` and follow with `if (result.error)` on the next line. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$bare_try, message="Result of errors.try() must be captured and checked. Assign to a variable with `const result = await errors.try(fn)` and follow with `if (result.error)` on the next line. See `rules/no-try.md`.", severity="error")
 	}),
 	// Case 5: Do not return errors.try() / errors.trySync() directly
 	( `return await errors.try($...)` as $return_try_await where {
-		register_diagnostic(span=$return_try_await, message="Do not return errors.try() directly. Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)` before using the result. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$return_try_await, message="Do not return errors.try() directly. Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)` before using the result. See `rules/no-try.md`.", severity="error")
 	}),
 	( `return errors.trySync($...)` as $return_trysync where {
-		register_diagnostic(span=$return_trysync, message="Do not return errors.trySync() directly. Capture into a variable with `const result = errors.trySync(fn)` and check `if (result.error)` before using the result. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$return_trysync, message="Do not return errors.trySync() directly. Capture into a variable with `const result = errors.trySync(fn)` and check `if (result.error)` before using the result. See `rules/no-try.md`.", severity="error")
 	}),
 	( `return errors.try($...)` as $return_try where {
-		register_diagnostic(span=$return_try, message="Do not return errors.try() directly. Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)` before using the result. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$return_try, message="Do not return errors.try() directly. Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)` before using the result. See `rules/no-try.md`.", severity="error")
 	}),
 	// Case 6: Do not void errors.try() / errors.trySync()
 	( `void errors.try($...)` as $void_try where {
-		register_diagnostic(span=$void_try, message="Do not void errors.try(). Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)`. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$void_try, message="Do not void errors.try(). Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)`. See `rules/no-try.md`.", severity="error")
 	}),
 	( `void (await errors.try($...))` as $void_await_try where {
-		register_diagnostic(span=$void_await_try, message="Do not void errors.try(). Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)`. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$void_await_try, message="Do not void errors.try(). Capture into a variable with `const result = await errors.try(fn)` and check `if (result.error)`. See `rules/no-try.md`.", severity="error")
 	}),
 	( `void errors.trySync($...)` as $void_trysync where {
-		register_diagnostic(span=$void_trysync, message="Do not void errors.trySync(). Capture into a variable with `const result = errors.trySync(fn)` and check `if (result.error)`. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$void_trysync, message="Do not void errors.trySync(). Capture into a variable with `const result = errors.trySync(fn)` and check `if (result.error)`. See `rules/no-try.md`.", severity="error")
 	}),
 	( `void (await errors.trySync($...))` as $void_await_trysync where {
-		register_diagnostic(span=$void_await_trysync, message="Do not void errors.trySync(). Capture into a variable with `const result = errors.trySync(fn)` and check `if (result.error)`. See `rules/no-try.mdc`.", severity="error")
+		register_diagnostic(span=$void_await_trysync, message="Do not void errors.trySync(). Capture into a variable with `const result = errors.trySync(fn)` and check `if (result.error)`. See `rules/no-try.md`.", severity="error")
 	})
 }

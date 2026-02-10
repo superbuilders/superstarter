@@ -18,4 +18,4 @@ throw errors.wrap(result.error, "operation")
 
 This ensures all errors are properly logged before propagation, creating an audit trail for debugging.
 
-See also: [Error Handling](error-handling.mdc), [Structured Logging](structured-logging.mdc)
+See also: [Error Handling](error-handling.md), [Structured Logging](structured-logging.md)

@@ -41,7 +41,7 @@ export const myInngestFunction = inngest.createFunction(
 
 #### ⚠️ CRITICAL: Logging AND Error Handling Together
 
-**Structured logging provides observability while error handling ensures proper control flow.** Always use BOTH logging and error handling patterns from [error-handling.mdc](mdc:rules/error-handling.mdc) together for:
+**Structured logging provides observability while error handling ensures proper control flow.** Always use BOTH logging and error handling patterns from [error-handling.md](mdc:rules/error-handling.md) together for:
 
 - **Error propagation:** Log errors for observability before bubbling up to callers
 - **Operation failures:** Log failed operations for debugging while halting execution  
@@ -212,7 +212,7 @@ export const myInngestFunction = inngest.createFunction(
 
 #### ⚠️ CRITICAL: Logging AND Error Handling Together
 
-**Structured logging provides observability while error handling ensures proper control flow.** Always use BOTH logging and error handling patterns from [error-handling.mdc](mdc:rules/error-handling.mdc) together for:
+**Structured logging provides observability while error handling ensures proper control flow.** Always use BOTH logging and error handling patterns from [error-handling.md](mdc:rules/error-handling.md) together for:
 
 - **Error propagation:** Log errors for observability before bubbling up to callers
 - **Operation failures:** Log failed operations for debugging while halting execution  

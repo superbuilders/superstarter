@@ -264,7 +264,7 @@ throw errors.new("invalid configuration")
 
 Error handling is not just about code correctness – it's about preventing catastrophic failures that could cost human lives. **Every unhandled error is a potential disaster.**
 
-See also: [No Fallbacks: Save Human Lives](no-fallbacks-save-human-lives.mdc)
+See also: [No Fallbacks: Save Human Lives](no-fallbacks-save-human-lives.md)
 
 When handling errors in critical systems:
 1. **NEVER provide fallback values** – missing data must stop the system

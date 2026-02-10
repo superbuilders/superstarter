@@ -15,7 +15,7 @@ All imports **MUST** use the absolute `@/` module alias prefix. Relative imports
 - **Refactoring Safety:** Tools like IDEs can more reliably refactor code with absolute imports.
 - **Alignment with Alias Configuration:** Our project is configured with `@/` aliases in tsconfig.json, making all relative imports unnecessary and error-prone.
 
-This rule complements the [Import Patterns](import-alias-paths.mdc) guidelines, which mandate `@/` for src directory imports.
+This rule complements the [Import Patterns](import-alias-paths.md) guidelines, which mandate `@/` for src directory imports.
 
 #### Permitted Patterns
 

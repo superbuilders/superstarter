@@ -23,4 +23,4 @@ logger.info("user logged in", { userId })
 logger.error("operation failed", { error: result.error })
 ```
 
-See also: [Structured Logging](structured-logging.mdc)
+See also: [Structured Logging](structured-logging.md)

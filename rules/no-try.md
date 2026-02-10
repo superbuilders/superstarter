@@ -169,4 +169,4 @@ Safari does not yet support these APIs. If you need Safari support, use a polyfi
 
 ---
 
-See also: [Error Handling](error-handling.mdc)
+See also: [Error Handling](error-handling.md)

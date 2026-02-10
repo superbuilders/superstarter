@@ -180,8 +180,8 @@ export const ErrMissingField = errors.new("missing required field")
 
 ## See Also
 
-- [Error Handling](mdc:rules/error-handling.mdc) - Complete error handling patterns
-- [Structured Logging](mdc:rules/structured-logging.mdc) - Logging errors before throwing
+- [Error Handling](mdc:rules/error-handling.md) - Complete error handling patterns
+- [Structured Logging](mdc:rules/structured-logging.md) - Logging errors before throwing
 
 ## Summary
 

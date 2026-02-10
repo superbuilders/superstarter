@@ -2,8 +2,8 @@ language js
 
 // Bans the nullish coalescing operator (??).
 // Fallbacks hide missing data. Fix the source of optionality instead.
-// Reference: `rules/no-nullish-coalescing.mdc`
+// Reference: `rules/no-nullish-coalescing.md`
 
 `$_ ?? $_` as $nullish where {
-	register_diagnostic(span=$nullish, message="Nullish coalescing (??) banned. Do NOT replace with a ternary—that's the same problem. Investigate WHY this value is nullable and fix the source. READ `rules/no-nullish-coalescing.mdc`.", severity="error")
+	register_diagnostic(span=$nullish, message="Nullish coalescing (??) banned. Do NOT replace with a ternary—that's the same problem. Investigate WHY this value is nullable and fix the source. READ `rules/no-nullish-coalescing.md`.", severity="error")
 }

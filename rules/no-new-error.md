@@ -18,4 +18,4 @@ import * as errors from "@superbuilders/errors"
 throw errors.new("something went wrong")
 ```
 
-See also: [Error Handling](error-handling.mdc)
+See also: [Error Handling](error-handling.md)
