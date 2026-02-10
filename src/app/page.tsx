@@ -1,7 +1,7 @@
-import { ComponentExample } from "@/components/component-example"
+import { RealtimeDemo } from "@/app/realtime-demo"
 
 function Page() {
-	return <ComponentExample />
+	return <RealtimeDemo />
 }
 
 export default Page

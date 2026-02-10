@@ -1,4 +1,11 @@
-type RuleId = "no-invalid-color" | "no-arbitrary-color" | "require-data-slot"
+type RuleId =
+	| "no-invalid-color"
+	| "no-arbitrary-color"
+	| "no-arbitrary-spacing"
+	| "no-arbitrary-radius"
+	| "no-arbitrary-shadow"
+	| "require-data-slot"
+	| "no-duplicate-data-slot"
 
 interface Violation {
 	file: string

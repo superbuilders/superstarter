@@ -1,10 +1,9 @@
 "use client"
 
-import type * as React from "react"
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
-
-import { cn } from "@/lib/utils"
+import type * as React from "react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
 	return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
@@ -28,7 +27,7 @@ function AlertDialogOverlay({
 		<AlertDialogPrimitive.Overlay
 			data-slot="alert-dialog-overlay"
 			className={cn(
-				"data-closed:fade-out-0 data-open:fade-in-0 fixed inset-0 z-50 bg-black/10 duration-100 data-closed:animate-out data-open:animate-in supports-backdrop-filter:backdrop-blur-xs",
+				"data-closed:fade-out-0 data-open:fade-in-0 fixed inset-0 z-50 bg-foreground/10 duration-100 data-closed:animate-out data-open:animate-in supports-backdrop-filter:backdrop-blur-xs",
 				className
 			)}
 			{...props}

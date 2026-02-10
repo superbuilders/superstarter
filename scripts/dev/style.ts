@@ -3,13 +3,17 @@
 /**
  * Style Linter - Design Token Enforcement
  *
- * Enforces Shadcn design tokens by parsing globals.css and validating
- * that color-related Tailwind classes only use allowed theme tokens.
+ * Enforces design tokens by parsing globals.css and validating
+ * that Tailwind classes only use allowed theme tokens.
  *
  * Rules:
  *   - no-invalid-color: Require colors from theme (ban blue-500, gray-700, etc.)
  *   - no-arbitrary-color: Ban arbitrary color values (bg-[#fff], text-[rgb(...)])
+ *   - no-arbitrary-spacing: Ban arbitrary spacing (p-[37px], gap-[18px], etc.)
+ *   - no-arbitrary-radius: Ban arbitrary radius (rounded-[13px], etc.)
+ *   - no-arbitrary-shadow: Ban arbitrary shadows (shadow-[0_4px_12px_...], etc.)
  *   - require-data-slot: Components must have data-slot on top-level element
+ *   - no-duplicate-data-slot: Each data-slot value must be unique across components
  *
  * Usage:
  *   bun scripts/dev/style.ts              # Check all TSX files
@@ -20,6 +24,10 @@
 import { parseTsConfig } from "@scripts/dev/shared/files"
 import { extractClassesFromFile } from "@scripts/dev/style/class-extractor"
 import { loadDesignSystem } from "@scripts/dev/style/design-system"
+import * as noArbitraryRadius from "@scripts/dev/style/rules/no-arbitrary-radius"
+import * as noArbitraryShadow from "@scripts/dev/style/rules/no-arbitrary-shadow"
+import * as noArbitrarySpacing from "@scripts/dev/style/rules/no-arbitrary-spacing"
+import * as noDuplicateDataSlot from "@scripts/dev/style/rules/no-duplicate-data-slot"
 import * as noInvalidColor from "@scripts/dev/style/rules/no-invalid-color"
 import * as requireDataSlot from "@scripts/dev/style/rules/require-data-slot"
 import type { Violation } from "@scripts/dev/style/types"
@@ -103,16 +111,29 @@ async function main(): Promise<void> {
 
 	const allViolations: Violation[] = []
 
+	// Check for duplicate data-slot values across all files
+	const duplicateSlotViolations = noDuplicateDataSlot.check(sourceFiles)
+	allViolations.push(...duplicateSlotViolations)
+
 	for (const sourceFile of sourceFiles) {
 		// Check data-slot requirement
 		const dataSlotViolations = requireDataSlot.check(sourceFile)
 		allViolations.push(...dataSlotViolations)
 
-		// Check color violations
+		// Check class-based violations
 		const classes = extractClassesFromFile(sourceFile)
 		if (classes.length > 0) {
 			const colorViolations = noInvalidColor.check(classes, designSystem, sourceFile.fileName)
 			allViolations.push(...colorViolations)
+
+			const spacingViolations = noArbitrarySpacing.check(classes, designSystem, sourceFile.fileName)
+			allViolations.push(...spacingViolations)
+
+			const radiusViolations = noArbitraryRadius.check(classes, designSystem, sourceFile.fileName)
+			allViolations.push(...radiusViolations)
+
+			const shadowViolations = noArbitraryShadow.check(classes, designSystem, sourceFile.fileName)
+			allViolations.push(...shadowViolations)
 		}
 	}
 

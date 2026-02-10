@@ -1,12 +1,11 @@
 "use client"
 
-import type * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-
-import { cn } from "@/lib/utils"
+import type * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { cn } from "@/lib/utils"
 
 function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 	return (
@@ -87,6 +86,7 @@ function InputGroupButton({
 	VariantProps<typeof inputGroupButtonVariants>) {
 	return (
 		<Button
+			data-slot="input-group-button"
 			type={type}
 			data-size={size}
 			variant={variant}
@@ -99,6 +99,7 @@ function InputGroupButton({
 function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
 	return (
 		<span
+			data-slot="input-group-text"
 			className={cn(
 				"flex items-center gap-2 text-muted-foreground text-sm [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none",
 				className
