@@ -22,7 +22,8 @@
 		"incremental": true,
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["./src/*"]
+			"@/*": ["./src/*"],
+			"@scripts/*": ["./scripts/*"]
 		},
 		"resolveJsonModule": true,
 		"resolvePackageJsonImports": true,
