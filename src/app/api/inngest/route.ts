@@ -1,7 +1,7 @@
 import { serve } from "inngest/next"
 import type { NextRequest } from "next/server"
 
-import { inngest } from "@/inngest/client"
+import { inngest } from "@/inngest"
 import { functions } from "@/inngest/functions"
 
 const handlers = serve({

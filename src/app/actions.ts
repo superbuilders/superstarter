@@ -1,7 +1,7 @@
 "use server"
 
 import { getSubscriptionToken } from "@inngest/realtime"
-import { inngest } from "@/inngest/client"
+import { inngest } from "@/inngest"
 
 async function getRealtimeToken(channel: string) {
 	const token = await getSubscriptionToken(inngest, {

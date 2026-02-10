@@ -1,6 +1,6 @@
 import type { Realtime } from "@inngest/realtime"
 import type { Context } from "inngest/types"
-import { inngest } from "@/inngest/client"
+import { inngest } from "@/inngest"
 
 type RealtimeOverrides = {
 	publish: Realtime.PublishFn
