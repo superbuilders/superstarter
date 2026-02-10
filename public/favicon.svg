@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Cape flowing behind -->
+  <path d="M7 12 C5 14 4 24 6 30 Q16 32 26 30 C28 24 27 14 25 12 C23 14 20 13 16 13 C12 13 9 14 7 12 Z" fill="#dc2626"/>
+  <path d="M7 12 C5 14 4 24 6 30 Q11 31 16 30 L16 13 C12 13 9 14 7 12 Z" fill="#991b1b"/>
+
+  <!-- Lego brick body -->
+  <rect x="6" y="10" width="20" height="14" rx="1" fill="#3b82f6"/>
+  <rect x="6" y="10" width="20" height="14" rx="1" fill="url(#cube-shade)"/>
+
+  <!-- Lego studs on top -->
+  <ellipse cx="11" cy="10" rx="3" ry="1.5" fill="#2563eb"/>
+  <ellipse cx="21" cy="10" rx="3" ry="1.5" fill="#2563eb"/>
+  <ellipse cx="11" cy="8.5" rx="3" ry="1.5" fill="#60a5fa"/>
+  <ellipse cx="21" cy="8.5" rx="3" ry="1.5" fill="#60a5fa"/>
+  <ellipse cx="11" cy="8" rx="2" ry="1" fill="#93c5fd"/>
+  <ellipse cx="21" cy="8" rx="2" ry="1" fill="#93c5fd"/>
+
+  <defs>
+    <linearGradient id="cube-shade" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="white" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="black" stop-opacity="0.15"/>
+    </linearGradient>
+  </defs>
+</svg>
