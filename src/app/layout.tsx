@@ -1,7 +1,10 @@
 import type { Metadata } from "next"
-import { Geist } from "next/font/google"
+import { Geist, Inter } from "next/font/google"
 import type * as React from "react"
 import "@/app/globals.css"
+import { cn } from "@/lib/utils"
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 
 const metadata: Metadata = {
 	title: "Superstarter",
@@ -16,7 +19,7 @@ const geist = Geist({
 
 function RootLayout({ children }: { readonly children: React.ReactNode }) {
 	return (
-		<html lang="en" className={`${geist.variable}`}>
+		<html lang="en" className={cn(geist.variable, inter.variable)}>
 			<body>{children}</body>
 		</html>
 	)

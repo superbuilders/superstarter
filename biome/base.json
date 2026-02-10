@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!!node_modules", "!!.next", "!!.vercel", "!!out"],
+		"includes": ["**", "!**/src/components/ui", "!!node_modules", "!!.next", "!!.vercel", "!!out"],
 		"maxSize": 5000000
 	},
 	"formatter": {
