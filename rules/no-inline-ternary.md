@@ -4,7 +4,7 @@ alwaysApply: true
 
 # No Inline Ternary
 
-Ternary expressions are banned except when directly assigned to a `const` or `let` variable.
+Ternary expressions are banned except when directly assigned to a `const` or `let` variable, or used directly in a `return` statement.
 
 ## Why
 
@@ -27,29 +27,19 @@ className={cn("flex", textColor)}
 
 ## Allowed
 
-Ternaries that immediately assign to a variable:
+Ternaries that immediately assign to a variable or are directly returned:
 
 ```typescript
 const accuracy = totalAnswered > 0 ? (correct / totalAnswered) * 100 : 0
 const statusColor = isCompleted ? "bg-owl" : "bg-hare"
 const icon = passed ? <Trophy /> : <Star />
 let result = condition ? valueA : valueB
+return accuracy >= 80 ? 1 : 0
 ```
 
 ## Banned
 
 Ternaries used as expressions anywhere else:
-
-### Return Statements
-
-```typescript
-// ❌ BANNED
-return accuracy >= 80 ? 1 : 0
-
-// ✅ FIX
-const masteryScore = accuracy >= 80 ? 1 : 0
-return masteryScore
-```
 
 ### JSX Attributes
 
@@ -122,7 +112,7 @@ const x = condition ? a : b
 |---------|----------|
 | `const x = a ? b : c` | ✅ Yes |
 | `let x = a ? b : c` | ✅ Yes |
-| `return a ? b : c` | ❌ No - extract to const |
+| `return a ? b : c` | ✅ Yes |
 | `fn(a ? b : c)` | ❌ No - extract to const |
 | `{ prop: a ? b : c }` | ❌ No - extract to const |
 | `[a ? b : c]` | ❌ No - extract to const |

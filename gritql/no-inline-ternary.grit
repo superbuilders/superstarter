@@ -7,9 +7,11 @@ language js
 `$cond ? $then : $else` as $ternary where {
 	not (or {
 		// Allowed: const x = cond ? a : b (including nested ternaries)
-		$ternary <: within `const $_ = $_` ,
+		$ternary <: within `const $_ = $_`,
 		// Allowed: let x = cond ? a : b (including nested ternaries)
-		$ternary <: within `let $_ = $_`
+		$ternary <: within `let $_ = $_`,
+		// Allowed: return cond ? a : b
+		$ternary <: within `return $_`
 	}),
 	register_diagnostic(span=$ternary, message="Inline ternary banned. Extract to a named variable: `const result = cond ? a : b`. See `rules/no-inline-ternary.md`.", severity="error")
 }
