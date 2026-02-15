@@ -1,122 +1,129 @@
 {
-	"$schema": "../node_modules/@biomejs/biome/configuration_schema.json",
-	"css": {
-		"parser": {
-			"tailwindDirectives": true
-		}
-	},
-	"files": {
-		"ignoreUnknown": false,
-		"includes": ["**", "!**/src/components/ui", "!!node_modules", "!!.next", "!!.vercel", "!!out"],
-		"maxSize": 5000000
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab",
-		"indentWidth": 2,
-		"lineWidth": 100
-	},
-	"assist": { "actions": { "source": { "organizeImports": "on" } } },
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"suspicious": {
-				"noConsole": {
-					"level": "error",
-					"fix": "unsafe"
-				},
-				"noArrayIndexKey": "off",
-				"noExplicitAny": "error",
-				"noEvolvingTypes": "error"
-			},
-			"complexity": {
-				"noForEach": {
-					"level": "error"
-				},
-				"noExcessiveCognitiveComplexity": {
-					"level": "error",
-					"options": {
-						"maxAllowedComplexity": 15
-					}
-				},
-				"useOptionalChain": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"useLiteralKeys": {
-					"level": "error",
-					"fix": "safe"
-				}
-			},
-			"recommended": true,
-			"correctness": {
-				"noUnusedImports": "error",
-				"noUnusedFunctionParameters": "error"
-			},
-			"nursery": {
-				"noReactForwardRef": "error",
-				"useSortedClasses": {
-					"level": "error",
-					"fix": "safe"
-				}
-			},
-			"style": {
-				"useThrowOnlyError": "error",
-				"useExportsLast": "error",
-				"useExplicitLengthCheck": {
-					"level": "error",
-					"fix": "unsafe"
-				},
-				"noProcessEnv": "error",
-				"noNonNullAssertion": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"useConst": "off",
-				"noUnusedTemplateLiteral": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"useTemplate": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"noUselessElse": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"noParameterAssign": "error",
-				"useAsConstAssertion": "error",
-				"useDefaultParameterLast": "error",
-				"useEnumInitializers": "error",
-				"useSelfClosingElements": "error",
-				"useSingleVarDeclarator": "error",
-				"useNumberNamespace": "error",
-				"noInferrableTypes": "error",
-				"useNodejsImportProtocol": {
-					"level": "error",
-					"fix": "safe"
-				}
-			},
-			"a11y": {
-				"useKeyWithClickEvents": "off"
-			},
-			"performance": {
-				"noBarrelFile": "error",
-				"noImgElement": "error"
-			}
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double",
-			"semicolons": "asNeeded",
-			"trailingCommas": "none"
-		}
-	},
-	"json": {
-		"formatter": {
-			"trailingCommas": "none"
-		}
-	}
+  "$schema": "../node_modules/@biomejs/biome/configuration_schema.json",
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!**/src/components/ui",
+      "!!node_modules",
+      "!!.next",
+      "!!.vercel",
+      "!!out"
+    ],
+    "maxSize": 5000000
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "suspicious": {
+        "noConsole": {
+          "level": "error",
+          "fix": "unsafe"
+        },
+        "noArrayIndexKey": "off",
+        "noExplicitAny": "error",
+        "noEvolvingTypes": "error",
+        "noReactForwardRef": "error"
+      },
+      "complexity": {
+        "noForEach": {
+          "level": "error"
+        },
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 15
+          }
+        },
+        "useOptionalChain": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "useLiteralKeys": {
+          "level": "error",
+          "fix": "safe"
+        }
+      },
+      "recommended": true,
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedFunctionParameters": "error"
+      },
+      "nursery": {
+        "useSortedClasses": {
+          "level": "error",
+          "fix": "safe"
+        }
+      },
+      "style": {
+        "useThrowOnlyError": "error",
+        "useExportsLast": "error",
+        "useExplicitLengthCheck": {
+          "level": "error",
+          "fix": "unsafe"
+        },
+        "noProcessEnv": "error",
+        "noNonNullAssertion": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "useConst": "off",
+        "noUnusedTemplateLiteral": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "useTemplate": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "noUselessElse": {
+          "level": "error",
+          "fix": "safe"
+        },
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "useNodejsImportProtocol": {
+          "level": "error",
+          "fix": "safe"
+        }
+      },
+      "a11y": {
+        "useKeyWithClickEvents": "off"
+      },
+      "performance": {
+        "noBarrelFile": "error",
+        "noImgElement": "error"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "none"
+    }
+  },
+  "json": {
+    "formatter": {
+      "trailingCommas": "none"
+    }
+  }
 }
