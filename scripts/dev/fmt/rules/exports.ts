@@ -274,7 +274,23 @@ function analyzeExports(sourceFile: ts.SourceFile): ExportAnalysis {
 	}
 }
 
+// Files where the end-of-file export pattern breaks Next.js parsing
+const SKIP_EXPORT_REORGANIZATION = ["src/proxy.ts"]
+
+function shouldSkipExportReorganization(filePath: string): boolean {
+	for (const skip of SKIP_EXPORT_REORGANIZATION) {
+		if (filePath.endsWith(skip)) {
+			return true
+		}
+	}
+	return false
+}
+
 function findExportViolations(filePath: string, sourceText: string): ExportViolation[] {
+	if (shouldSkipExportReorganization(filePath)) {
+		return []
+	}
+
 	const scriptKind = getScriptKind(filePath)
 	const sourceFile = ts.createSourceFile(
 		filePath,
