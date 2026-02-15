@@ -1,16 +1,9 @@
 ignore_patterns:
   - "yek.yaml"
-  - "components.json"
-  - "next.config.js"
-  - "postcss.config.js"
-  - "prd.md"
-  - "README.md"
   - "patches/*"
   - "bun.lock"
-  - "package.json"
   - "public/**"
   - "src/components/ui/**"
-  - "prompt/**"
 priority_rules:
   - score: 99
     pattern: "^rules/"
