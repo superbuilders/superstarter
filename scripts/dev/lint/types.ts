@@ -6,6 +6,7 @@ type RuleId =
 	| "no-unnecessary-default-case"
 	| "prefer-early-return"
 	| "no-impossible-logical-or"
+	| "no-logical-or-fallback"
 	| "no-optional-array"
 	| "no-arrow-functions"
 	| "no-object-module"

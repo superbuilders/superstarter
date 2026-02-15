@@ -7,7 +7,6 @@
 		"./gritql/no-as-type-assertion.grit",
 		"./gritql/no-iife.grit",
 		"./gritql/no-nullish-coalescing.grit",
-		"./gritql/no-logical-or-fallback.grit",
 		"./gritql/no-new-error.grit",
 		"./gritql/no-relative-imports.grit",
 		"./gritql/no-try.grit",
