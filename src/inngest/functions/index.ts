@@ -1,5 +1,5 @@
-import { helloWorld } from "@/inngest/functions/hello"
+import type { InngestFunction } from "inngest"
 
-const functions = [helloWorld]
+const functions: InngestFunction.Any[] = []
 
 export { functions }

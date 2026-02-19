@@ -13,6 +13,8 @@
 		"style": "bun run scripts/dev/style.ts",
 		"format": "bun run scripts/dev/fmt.ts --strip-comments --write && bun --bun biome format --write",
 		"typecheck": "bun --bun tsc",
+		"precommit": "bun --bun biome check --staged --no-errors-on-unmatched && bun run scripts/dev/lint.ts --staged && bun typecheck",
+		"prepare": "bunx simple-git-hooks",
 		"db:generate": "bun --bun drizzle-kit generate",
 		"db:migrate": "bun --bun drizzle-kit migrate",
 		"db:push": "bun --bun drizzle-kit push",
@@ -51,15 +53,20 @@
 		"drizzle-kit": "^0.31.9",
 		"inngest-cli": "^1.17.0",
 		"postcss": "^8.5.6",
+		"simple-git-hooks": "^2.13.1",
 		"tailwindcss": "^4.1.18",
 		"typescript": "^5.9.3"
 	},
 	"ct3aMetadata": {
 		"initVersion": "7.39.3"
 	},
+	"simple-git-hooks": {
+		"pre-commit": "bun run precommit"
+	},
 	"trustedDependencies": [
 		"@biomejs/biome",
 		"@tailwindcss/oxide",
-		"inngest-cli"
+		"inngest-cli",
+		"simple-git-hooks"
 	]
 }

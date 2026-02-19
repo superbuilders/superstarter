@@ -27,13 +27,13 @@
  *     -p ai/questions
  */
 
-import { parseArgs } from "node:util"
 import * as fs from "node:fs"
 import * as path from "node:path"
 import * as readline from "node:readline"
-import * as ts from "typescript"
+import { parseArgs } from "node:util"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
+import * as ts from "typescript"
 
 const KEBAB_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
 const FUNCTIONS_DIR = "src/inngest/functions"
@@ -72,12 +72,36 @@ function parseCliArgs(): {
 	const subpath = values.path
 	const force = values.force
 
-	if (!functionId || !events || !crons || subpath === undefined || force === undefined) {
+	if (!functionId || !events || !crons) {
 		logger.error("parseArgs returned unexpected undefined despite defaults")
 		process.exit(1)
 	}
 
 	return { functionId, events, crons, subpath, force }
+}
+
+function validateEventNames(events: string[]): void {
+	for (const event of events) {
+		if (!event.includes("/")) {
+			logger.error("event name must contain a slash", { event })
+			process.exit(1)
+		}
+		for (const part of event.split("/")) {
+			if (!KEBAB_RE.test(part)) {
+				logger.error("event name segments must be kebab-case", { event, segment: part })
+				process.exit(1)
+			}
+		}
+	}
+}
+
+function validateKebabSegments(subpath: string): void {
+	for (const seg of subpath.split("/")) {
+		if (!KEBAB_RE.test(seg)) {
+			logger.error("path segments must be kebab-case", { path: subpath, segment: seg })
+			process.exit(1)
+		}
+	}
 }
 
 function validateArgs(args: {
@@ -96,61 +120,50 @@ function validateArgs(args: {
 		process.exit(1)
 	}
 
-	for (const event of args.events) {
-		if (!event.includes("/")) {
-			logger.error("event name must contain a slash", { event })
-			process.exit(1)
-		}
-		const parts = event.split("/")
-		for (const part of parts) {
-			if (!KEBAB_RE.test(part)) {
-				logger.error("event name segments must be kebab-case", { event, segment: part })
-				process.exit(1)
-			}
-		}
-	}
+	validateEventNames(args.events)
 
 	if (args.subpath) {
-		const segments = args.subpath.split("/")
-		for (const seg of segments) {
-			if (!KEBAB_RE.test(seg)) {
-				logger.error("path segments must be kebab-case", { path: args.subpath, segment: seg })
-				process.exit(1)
-			}
-		}
+		validateKebabSegments(args.subpath)
 	}
-}
-
-// --- Name derivation ---
-
-function kebabToCamel(kebab: string): string {
-	return kebab.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase())
 }
 
 // --- AST helpers ---
+
+function extractEventName(prop: ts.ObjectLiteralElementLike): string | undefined {
+	if (!ts.isPropertyAssignment(prop)) {
+		return undefined
+	}
+	if (ts.isStringLiteral(prop.name)) {
+		return prop.name.text
+	}
+	if (ts.isComputedPropertyName(prop.name) && ts.isStringLiteral(prop.name.expression)) {
+		return prop.name.expression.text
+	}
+	return undefined
+}
+
+function isSchemaDeclaration(node: ts.Node): node is ts.VariableDeclaration & {
+	initializer: ts.ObjectLiteralExpression
+} {
+	return (
+		ts.isVariableDeclaration(node) &&
+		ts.isIdentifier(node.name) &&
+		node.name.text === "schema" &&
+		node.initializer !== undefined &&
+		ts.isObjectLiteralExpression(node.initializer)
+	)
+}
 
 function findRegisteredEvents(sourceText: string): string[] {
 	const sourceFile = ts.createSourceFile("index.ts", sourceText, ts.ScriptTarget.Latest, true)
 	const events: string[] = []
 
 	function visit(node: ts.Node): void {
-		if (
-			ts.isVariableDeclaration(node) &&
-			ts.isIdentifier(node.name) &&
-			node.name.text === "schema" &&
-			node.initializer &&
-			ts.isObjectLiteralExpression(node.initializer)
-		) {
+		if (isSchemaDeclaration(node)) {
 			for (const prop of node.initializer.properties) {
-				if (ts.isPropertyAssignment(prop)) {
-					if (ts.isStringLiteral(prop.name)) {
-						events.push(prop.name.text)
-					} else if (ts.isComputedPropertyName(prop.name)) {
-						const expr = prop.name.expression
-						if (ts.isStringLiteral(expr)) {
-							events.push(expr.text)
-						}
-					}
+				const name = extractEventName(prop)
+				if (name) {
+					events.push(name)
 				}
 			}
 		}
@@ -172,25 +185,31 @@ function findSchemaObjectPosition(sourceText: string): {
 	let hasProperties = false
 
 	function visit(node: ts.Node): void {
+		if (!ts.isVariableStatement(node)) {
+			ts.forEachChild(node, visit)
+			return
+		}
+		if (node.declarationList.declarations.length === 0) {
+			ts.forEachChild(node, visit)
+			return
+		}
+		const decl = node.declarationList.declarations[0]
 		if (
-			ts.isVariableStatement(node) &&
-			node.declarationList.declarations.length > 0
+			!decl ||
+			!ts.isIdentifier(decl.name) ||
+			decl.name.text !== "schema" ||
+			!decl.initializer ||
+			!ts.isObjectLiteralExpression(decl.initializer)
 		) {
-			const decl = node.declarationList.declarations[0]
-			if (
-				ts.isIdentifier(decl.name) &&
-				decl.name.text === "schema" &&
-				decl.initializer &&
-				ts.isObjectLiteralExpression(decl.initializer)
-			) {
-				const obj = decl.initializer
-				closingBracePos = obj.getEnd() - 1
-				hasProperties = obj.properties.length > 0
-				if (hasProperties) {
-					const lastProp = obj.properties[obj.properties.length - 1]
-					lastPropertyEnd = lastProp.getEnd()
-				}
-			}
+			ts.forEachChild(node, visit)
+			return
+		}
+		const obj = decl.initializer
+		closingBracePos = obj.getEnd() - 1
+		hasProperties = obj.properties.length > 0
+		const lastProp = obj.properties[obj.properties.length - 1]
+		if (lastProp) {
+			lastPropertyEnd = lastProp.getEnd()
 		}
 		ts.forEachChild(node, visit)
 	}
@@ -226,8 +245,8 @@ function findFunctionsArrayPosition(sourceText: string): {
 			const arr = node.initializer
 			closingBracketPos = arr.getEnd() - 1
 			hasElements = arr.elements.length > 0
-			if (hasElements) {
-				const lastElem = arr.elements[arr.elements.length - 1]
+			const lastElem = arr.elements[arr.elements.length - 1]
+			if (lastElem) {
 				lastElementEnd = lastElem.getEnd()
 			}
 		}
@@ -240,7 +259,10 @@ function findFunctionsArrayPosition(sourceText: string): {
 
 // --- Text insertion ---
 
-function applyInsertions(text: string, insertions: Array<{ pos: number; content: string }>): string {
+function applyInsertions(
+	text: string,
+	insertions: Array<{ pos: number; content: string }>
+): string {
 	const sorted = [...insertions].sort((a, b) => b.pos - a.pos)
 	let result = text
 	for (const ins of sorted) {
@@ -256,8 +278,8 @@ async function promptYesNo(message: string): Promise<boolean> {
 	return new Promise((resolve) => {
 		rl.question(`${message} (Y/n) `, (answer) => {
 			rl.close()
-			const trimmed = answer.trim().toLowerCase()
-			resolve(trimmed === "" || trimmed === "y" || trimmed === "yes")
+			const YES_ANSWERS = new Set(["", "y", "yes"])
+			resolve(YES_ANSWERS.has(answer.trim().toLowerCase()))
 		})
 	})
 }
@@ -273,15 +295,21 @@ function buildTriggerCode(events: string[], crons: string[]): string {
 		triggers.push(`{ cron: "${c}" }`)
 	}
 
-	if (triggers.length === 1) {
-		return triggers[0]
+	const first = triggers[0]
+	if (triggers.length === 1 && first) {
+		return first
 	}
 
 	const inner = triggers.map((t) => `\t\t${t}`).join(",\n")
 	return `[\n${inner}\n\t]`
 }
 
-function buildFunctionFile(functionId: string, camelName: string, events: string[], crons: string[]): string {
+function buildFunctionFile(
+	functionId: string,
+	camelName: string,
+	events: string[],
+	crons: string[]
+): string {
 	const triggerCode = buildTriggerCode(events, crons)
 	const hasEvents = events.length > 0
 
@@ -353,10 +381,10 @@ function updateInngestIndex(missingEvents: string[]): void {
 	}
 
 	if (positions.hasProperties) {
-		const entryBlock = ",\n" + schemaEntries.join(",\n")
+		const entryBlock = `,\n${schemaEntries.join(",\n")}`
 		insertions.push({ pos: positions.lastPropertyEnd, content: entryBlock })
 	} else {
-		const entryBlock = "\n" + schemaEntries.join(",\n") + "\n"
+		const entryBlock = `\n${schemaEntries.join(",\n")}\n`
 		insertions.push({ pos: positions.closingBracePos, content: entryBlock })
 	}
 
@@ -365,16 +393,23 @@ function updateInngestIndex(missingEvents: string[]): void {
 	logger.info("updated inngest index with event schemas", { events: missingEvents })
 }
 
+function findMissingEvents(events: string[]): string[] {
+	if (events.length === 0) {
+		return []
+	}
+	const inngestSource = fs.readFileSync(path.resolve(INNGEST_INDEX), "utf-8")
+	const registered = findRegisteredEvents(inngestSource)
+	return events.filter((e) => !registered.includes(e))
+}
+
 // --- Main ---
 
 async function main(): Promise<void> {
 	const args = parseCliArgs()
 	validateArgs(args)
 
-	const camelName = kebabToCamel(args.functionId)
-	const relDir = args.subpath
-		? path.join(FUNCTIONS_DIR, args.subpath)
-		: FUNCTIONS_DIR
+	const camelName = args.functionId.replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase())
+	const relDir = args.subpath ? path.join(FUNCTIONS_DIR, args.subpath) : FUNCTIONS_DIR
 	const filePath = path.join(relDir, `${args.functionId}.ts`)
 	const importPath = args.subpath
 		? `@/inngest/functions/${args.subpath}/${args.functionId}`
@@ -393,23 +428,17 @@ async function main(): Promise<void> {
 	}
 
 	// Step 1: Check for missing event schemas
-	let missingEvents: string[] = []
-	if (args.events.length > 0) {
-		const inngestSource = fs.readFileSync(path.resolve(INNGEST_INDEX), "utf-8")
-		const registered = findRegisteredEvents(inngestSource)
-		missingEvents = args.events.filter((e) => !registered.includes(e))
-
-		if (missingEvents.length > 0 && !args.force) {
-			logger.info("missing event schemas detected", { missing: missingEvents })
-			process.stdout.write("The following events are missing. Create stubs? (Y/n)\n")
-			for (const e of missingEvents) {
-				process.stdout.write(`    - ${e}\n`)
-			}
-			const confirmed = await promptYesNo("")
-			if (!confirmed) {
-				logger.info("aborted by user")
-				process.exit(0)
-			}
+	const missingEvents = findMissingEvents(args.events)
+	if (missingEvents.length > 0 && !args.force) {
+		logger.info("missing event schemas detected", { missing: missingEvents })
+		process.stdout.write("The following events are missing. Create stubs? (Y/n)\n")
+		for (const e of missingEvents) {
+			process.stdout.write(`    - ${e}\n`)
+		}
+		const confirmed = await promptYesNo("")
+		if (!confirmed) {
+			logger.info("aborted by user")
+			process.exit(0)
 		}
 	}
 
