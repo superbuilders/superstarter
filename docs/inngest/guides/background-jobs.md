@@ -1,0 +1,194 @@
+# Background jobs
+
+This guide will walk you through creating background jobs with retries in a few minutes.
+
+By running background tasks in Inngest:
+
+- You don't need to create queues, workers, or subscriptions.
+- You can run background jobs on serverless functions without setting up infrastructure.
+- You can enqueue jobs to run in the future, similar to a task queue, without any configuration.
+
+## How to create background jobs
+
+Background jobs in Inngest are executed in response to a trigger (an event or cron).
+
+The example below shows a background job that uses an event (here called `app/user.created`) to send an email to new signups. It consists of two parts: creating the function that runs in the background and triggering the function.
+
+👉 To be able to use the code below, remember to first [serve your functions in your Inngest API](/docs-markdown/learn/serving-inngest-functions) to make it available to Inngest.
+
+### 1. Create a function that runs in the background
+
+Let's walk through the code step by step:
+
+1. We [create a new Inngest function](/docs-markdown/reference/functions/create), which will run in the background any time the `app/user.created` event is sent to Inngest.
+2. We send an email reliably using the [`step.run()`](/docs-markdown/reference/functions/step-run) method. Every [Inngest step](/docs-markdown/steps) is automatically retried upon failure.
+3. We pause the execution of the function until a specific date using [`step.sleepUntil()`](/docs-markdown/reference/functions/step-sleep-until). The function will be resumed automatically, across server restarts or serverless functions. You don't have to worry about scale, memory leaks, connections, or restarts.
+4. We resume execution and perform other tasks.
+
+```ts
+import { Inngest } from "inngest";
+const inngest = new Inngest({ id: "signup-flow" });
+
+export const sendSignUpEmail = inngest.createFunction(
+  { id: "send-signup-email" },
+  { event: "app/user.created" },
+  ({ event, step }) => {
+    await step.run("send-the-user-a-signup-email", async () => {
+      await sesclient.clientsendEmail({
+        to: event.data.user_email,
+        subject: "Welcome to Inngest!"
+        message: "...",
+      });
+    });
+    await step.sleepUntil("wait-for-the-future", "2023-02-01T16:30:00");
+
+    await step.run("do-some-work-in-the-future", async () => {
+      // Code here runs in the future automatically.
+    });
+  }
+);
+```
+
+### 2. Trigger the function
+
+Your `sendSignUpEmail` function will be triggered whenever Inngest receives an event called `app/user.created`. is received. You send this event to Inngest like so:
+
+```ts
+await inngest.send({
+  name: "app/user.created", // This matches the event used in `createFunction`
+  data: {
+    email: "test@example.com",
+    // any data you want to send
+  },
+});
+```
+
+Let's walk through the code step by step:
+
+1. We [create a new Inngest function](https://pkg.go.dev/github.com/inngest/inngestgo#CreateFunction), which will run in the background any time the `app/user.created` event is sent to Inngest.
+2. We send an email reliably using the [`step.Run()`](https://pkg.go.dev/github.com/inngest/inngestgo@v0.7.4/step#Run) method. Every [Inngest step](/docs-markdown/steps) is automatically retried upon failure.
+3. We pause the execution of the function for 4 hours using [`step.Sleep()`](https://pkg.go.dev/github.com/inngest/inngestgo@v0.7.4/step#Sleep). The function will be resumed automatically, across server restarts or serverless functions. You don't have to worry about scale, memory leaks, connections, or restarts.
+4. We resume execution and perform other tasks.
+
+```go
+import (
+	"context"
+	"time"
+
+	"github.com/inngest/inngestgo"
+	"github.com/inngest/inngestgo/step"
+)
+
+func loadSendSignUpEmailInngestFn(client inngestgo.Client) (inngestgo.ServableFunction, error) {
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{
+			ID: "send-signup-email",
+		},
+		inngestgo.EventTrigger("app/user.created", nil),
+		func(ctx context.Context, input inngestgo.Input[map[string]any]) (any, error) {
+			// business logic
+			_, err := step.Run(ctx, "send-the-user-a-signup-email", func(ctx context.Context) (any, error) {
+				return SendEmail(SendEmailInput{
+					To:      input.Event.Data["user_email"].(string),
+					Subject: "Welcome to Inngest!",
+					Message: "...",
+				})
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			step.Sleep(ctx, "wait-for-the-future", 4*time.Hour)
+
+			_, err = step.Run(ctx, "do-some-work-in-the-future", func(ctx context.Context) (any, error) {
+				// Code here runs in the future automatically.
+				return nil, nil
+			})
+			return nil, err
+		},
+	)
+}
+```
+
+### 2. Trigger the function
+
+Your `sendSignUpEmail` function will be triggered whenever Inngest receives an event called `app/user.created`. is received. You send this event to Inngest like so:
+
+```go
+_, err := client.Send(context.Background(), inngestgo.Event{
+	Name: "app/user.created", // This matches the event used in `createFunction`
+	Data: map[string]interface{}{
+		"email": "test@example.com",
+		// any data you want to send
+	},
+})
+```
+
+Let's walk through the code step by step:
+
+1. We [create a new Inngest function](/docs-markdown/reference/python/functions/create), which will run in the background any time the `app/user.created` event is sent to Inngest.
+2. We send an email reliably using the [`step.run()`](/docs-markdown/reference/python/steps/run) method. Every [Inngest step](/docs-markdown/steps) is automatically retried upon failure.
+3. We pause the execution of the function until a specific date using [`step.sleep_until()`](/docs-markdown/reference/python/steps/sleep-until). The function will be resumed automatically, across server restarts or serverless functions. You don't have to worry about scale, memory leaks, connections, or restarts.
+4. We resume execution and perform other tasks.
+
+```python
+import inngest
+
+inngest_client = inngest.Inngest(
+    app_id="my-app",
+)
+
+@inngest_client.create_function(
+    fn_id="send-signup-email",
+    trigger=inngest.TriggerEvent(event="app/user.created")
+)
+async def send_signup_email(ctx: inngest.Context):
+    async def send_email():
+        await sesclient.send_email(
+            to=ctx.event.data["user_email"],
+            subject="Welcome to Inngest!",
+            message="..."
+        )
+
+    await ctx.step.run("send-the-user-a-signup-email", send_email)
+
+    await ctx.step.sleep_until("wait-for-the-future", "2023-02-01T16:30:00")
+
+    async def future_work():
+        # Code here runs in the future automatically
+        pass
+
+    await ctx.step.run("do-some-work-in-the-future", future_work)
+```
+
+### 2. Trigger the function
+
+Your `sendSignUpEmail` function will be triggered whenever Inngest receives an event called `app/user.created`. is received. You send this event to Inngest like so:
+
+```python
+from src.inngest.client import inngest_client
+
+await inngest_client.send(
+    name="app/user.created",  # This matches the event used in `create_function`
+    data={
+        "email": "test@example.com",
+        # any data you want to send
+    }
+)
+```
+
+When you send an event to Inngest, it automatically finds any functions that are triggered by the event ID and automatically runs those functions in the background. The entire JSON object you pass in to `inngest.send()` will be available to your functions.
+
+> **Callout:** 💡 Tip: You can create many functions which listen to the same event, and all of them will run in the background. Learn more about this pattern in our "Fan out" guide.
+
+## Further reading
+
+More information on background jobs:
+
+- [Email sequence examples](/docs-markdown/examples/email-sequence) implemented with Inngest.
+- [Customer story: Soundcloud](/customers/soundcloud): building scalable video pipelines with Inngest to streamline dynamic video generation.
+- [Customer story: GitBook](/customers/gitbook): how GitBook scaled background job processing with Inngest.
+- [Customer story: Fey](/customers/fey): how Fey cut execution time and costs by 50x in data-intensive processes.
+- Blog post: [building Truckload](/blog/mux-migrating-video-collections), a tool for heavy video migration between hosting platforms, from Mux.
+- Blog post: building *banger.show*'s [video rendering pipeline](/blog/banger-video-rendering-pipeline).

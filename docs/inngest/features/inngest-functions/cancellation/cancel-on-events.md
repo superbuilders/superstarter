@@ -1,0 +1,199 @@
+# Cancel on Events
+
+As you have learned that you can trigger functions to run using events, you can also cancel active functions by sending an event.
+
+For our example, we'll take a reminder app where a user can schedule to be reminded of something in the future at whatever time they want. The user can also delete the reminder if they change their mind and don't want to receive the reminder anymore.
+
+Delaying code to run for days or weeks is easy with `step.sleepUntil`, but we need a way to be able to stop the function if the user deletes the reminder while our function is "sleeping."
+
+When defining a function, you can also specify the `cancelOn` option which allows you to list one or more events that, when sent to Inngest, will cause the sleep to be terminated and function will be marked as "Canceled."
+
+Here is our schedule reminders function that leverages `cancelOn`:
+
+```ts {{ title: "inngest/syncContacts.ts" }}
+const scheduleReminder = inngest.createFunction(
+  {
+    id: "schedule-reminder",
+    cancelOn: [{
+      event: "tasks/reminder.deleted", // The event name that cancels this function
+      // Ensure the cancellation event (async) and the triggering event (event)'s reminderId are the same:
+      if: "async.data.reminderId == event.data.reminderId",
+    }],
+  }
+  { event: "tasks/reminder.created" },
+  async ({ event, step }) => {
+    await step.sleepUntil('sleep-until-remind-at-time', event.data.remindAt);
+    await step.run('send-reminder-push', async ({}) => {
+      await pushNotificationService.push(event.data.userId, event.data.reminderBody)
+    })
+  }
+  // ...
+);
+```
+
+Let's break down how this works:
+
+1. Whenever the function is triggered, a cancellation listener is created which waits for an `"tasks/reminder.deleted"` event to be received.
+2. The `if` statement tells Inngest that both the triggering event (`"tasks/reminder.created"`) and the cancellation event (`"tasks/reminder.deleted"`) have the same exact value for `data.reminderId` in each event payload. This makes sure that an event does not cancel a different reminder.
+
+For more information on writing events, read our guide [on writing expressions](/docs-markdown/guides/writing-expressions).
+
+Here is an example of these two events which will be matched on the `data.reminderId` field:
+
+```json
+{
+  "name": "tasks/reminder.created",
+  "data": {
+    "userId": "user_123",
+    "reminderId": "reminder_0987654321",
+    "reminderBody": "Pick up Jane from the airport"
+  }
+}
+```
+
+```json
+{
+  "name": "tasks/reminder.deleted",
+  "data": {
+    "userId": "user_123",
+    "reminderId": "reminder_0987654321",
+  }
+}
+```
+
+### Tips
+
+- You can also optionally specify a `timeout` to only enable cancellation for a period of time.
+- You can configure multiple events to cancel a function, up to five.
+- You can write a more complex matching statement using the `if` field.
+
+Learn more in the full [reference](/docs-markdown/reference/typescript/functions/cancel-on).
+
+Delaying code to run for days or weeks is easy with `step.sleep_until`, but we need a way to be able to stop the function if the user deletes the reminder while our function is "sleeping."
+
+When defining a function, you can also specify the `cancel` option which allows you to list one or more events that, when sent to Inngest, will cause the sleep to be terminated and function will be marked as "Canceled."
+
+Here is our schedule reminders function that leverages `cancel`:
+
+```py {{ title: "inngest/schedule_reminder.py" }}
+@inngest_client.create_function(
+    fn_id="schedule-reminder",
+    trigger=inngest.TriggerEvent(event="tasks/reminder.created"),
+    cancel=[inngest.Cancel(
+                event="tasks/reminder.deleted", # The event name that cancels this function
+                # Ensure the cancellation event (async) and the triggering event (event)'s reminderId are the same:
+                if_exp="async.data.reminderId == event.data.reminderId"
+            )],
+)
+async def fn(ctx: inngest.Context) -> None:
+    # Step 1
+    await ctx.step.sleep_until(
+        "sleep-until-remind-at-time",
+         ctx.event.data["remind_at"],
+    )
+
+    # Step 2
+    await ctx.step.run("send-reminder-push", send_reminder_push)
+
+async def send_reminder_push() -> None:
+    pass
+```
+
+Let's break down how this works:
+
+1. Whenever the function is triggered, a cancellation listener is created which waits for an `"tasks/reminder.deleted"` event to be received.
+2. The `if` statement tells Inngest that both the triggering event (`"tasks/reminder.created"`) and the cancellation event (`"tasks/reminder.deleted"`) have the same exact value for `data.reminderId` in each event payload. This makes sure that an event does not cancel a different reminder.
+
+For more information on writing events, read our guide [on writing expressions](/docs-markdown/guides/writing-expressions).
+
+Here is an example of these two events which will be matched on the `data.reminderId` field:
+
+```json
+{
+  "name": "tasks/reminder.created",
+  "data": {
+    "userId": "user_123",
+    "reminderId": "reminder_0987654321",
+    "reminderBody": "Pick up Jane from the airport"
+  }
+}
+```
+
+```json
+{
+  "name": "tasks/reminder.deleted",
+  "data": {
+    "userId": "user_123",
+    "reminderId": "reminder_0987654321",
+  }
+}
+```
+
+Delaying code to run for days or weeks is easy with `step.Sleep()`, but we need a way to be able to stop the function if the user deletes the reminder while our function is "sleeping."
+
+When defining a function, you can also specify the `Cancel` option which allows you to list one or more events that, when sent to Inngest, will cause the sleep to be terminated and function will be marked as "Canceled."
+
+Here is our schedule reminders function that leverages `Cancel`:
+
+```go {{ title: "main.go" }}
+import (
+	"context"
+
+	"github.com/inngest/inngestgo"
+)
+
+func loadScheduleReminderInngestFn(client inngestgo.Client) (inngestgo.ServableFunction, error) {
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{
+			ID:   "schedule-reminder",
+			Name: "Schedule reminder",
+			Cancel: []inngestgo.ConfigCancel{
+				{
+					Event: "tasks/deleted",
+					If:    inngestgo.StrPtr("event.data.id == async.data.id"),
+				},
+			},
+		},
+		// Run on every tasks/reminder.created event.
+		inngestgo.EventTrigger("tasks/reminder.created", nil),
+		ScheduleReminder,
+	)
+}
+
+func ScheduleReminder(ctx context.Context, input inngestgo.Input[ScheduleReminderEvent]) (any, error) {
+	// ...
+	// ...
+	return true, nil
+}
+```
+
+Let's break down how this works:
+
+1. Whenever the function is triggered, a cancellation listener is created which waits for an `"tasks/reminder.deleted"` event to be received.
+2. The `if` statement tells Inngest that both the triggering event (`"tasks/reminder.created"`) and the cancellation event (`"tasks/reminder.deleted"`) have the same exact value for `data.reminderId` in each event payload. This makes sure that an event does not cancel a different reminder.
+
+For more information on writing events, read our guide [on writing expressions](/docs-markdown/guides/writing-expressions).
+
+Here is an example of these two events which will be matched on the `data.reminderId` field:
+
+```json
+{
+  "name": "tasks/reminder.created",
+  "data": {
+    "userId": "user_123",
+    "reminderId": "reminder_0987654321",
+    "reminderBody": "Pick up Jane from the airport"
+  }
+}
+```
+
+```json
+{
+  "name": "tasks/reminder.deleted",
+  "data": {
+    "userId": "user_123",
+    "reminderId": "reminder_0987654321",
+  }
+}
+```

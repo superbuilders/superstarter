@@ -1,0 +1,47 @@
+# Sentry Middleware
+
+Using the Sentry middleware is useful to:
+
+- Capture exceptions for reporting
+- Add tracing to each function run
+- Include useful context for each exception and trace like function ID and event names
+
+## Installation
+
+The `SentryMiddleware` is shipped as part of the `inngest` package:
+
+```py
+import inngest
+from inngest.experimental.sentry_middleware import SentryMiddleware
+
+import sentry_sdk
+
+# Initialize Sentry as usual wherever is appropriate
+sentry_sdk.init(
+    traces_sample_rate=1.0,
+    profiles_sample_rate=1.0,
+)
+
+inngest_client = inngest.Inngest(
+    app_id="my-app",
+    middleware=[SentryMiddleware],
+)
+```
+
+Install the [`@inngest/middleware-sentry` package](https://www.npmjs.com/package/@inngest/middleware-sentry) and configure it as follows:
+
+```ts
+import * as Sentry from "@sentry/node";
+import { Inngest } from "inngest";
+import { sentryMiddleware } from "@inngest/middleware-sentry";
+
+// Initialize Sentry as usual wherever is appropriate
+Sentry.init(...);
+
+const inngest = new Inngest({
+  id: "my-app",
+  middleware: [sentryMiddleware()],
+});
+```
+
+> **Callout:** Requires inngest@>=3.0.0 and @sentry/\*@>=8.0.0\`.

@@ -165,13 +165,11 @@ function findSchemaObjectPosition(sourceText: string): {
 	closingBracePos: number
 	lastPropertyEnd: number
 	hasProperties: boolean
-	schemaVarStart: number
 } {
 	const sourceFile = ts.createSourceFile("index.ts", sourceText, ts.ScriptTarget.Latest, true)
 	let closingBracePos = -1
 	let lastPropertyEnd = -1
 	let hasProperties = false
-	let schemaVarStart = -1
 
 	function visit(node: ts.Node): void {
 		if (
@@ -185,7 +183,6 @@ function findSchemaObjectPosition(sourceText: string): {
 				decl.initializer &&
 				ts.isObjectLiteralExpression(decl.initializer)
 			) {
-				schemaVarStart = node.getStart(sourceFile)
 				const obj = decl.initializer
 				closingBracePos = obj.getEnd() - 1
 				hasProperties = obj.properties.length > 0
@@ -199,7 +196,7 @@ function findSchemaObjectPosition(sourceText: string): {
 	}
 
 	ts.forEachChild(sourceFile, visit)
-	return { closingBracePos, lastPropertyEnd, hasProperties, schemaVarStart }
+	return { closingBracePos, lastPropertyEnd, hasProperties }
 }
 
 function findFunctionsArrayPosition(sourceText: string): {
@@ -338,14 +335,6 @@ function updateFunctionsIndex(camelName: string, importPath: string): void {
 	logger.info("updated functions index", { file: FUNCTIONS_INDEX })
 }
 
-function buildSchemaConstName(eventName: string): string {
-	const afterSlash = eventName.split("/").pop()
-	if (!afterSlash) {
-		return "unknownSchema"
-	}
-	return `${kebabToCamel(afterSlash)}Schema`
-}
-
 function updateInngestIndex(missingEvents: string[]): void {
 	const indexPath = path.resolve(INNGEST_INDEX)
 	const sourceText = fs.readFileSync(indexPath, "utf-8")
@@ -358,17 +347,10 @@ function updateInngestIndex(missingEvents: string[]): void {
 
 	const insertions: Array<{ pos: number; content: string }> = []
 
-	const schemaConsts: string[] = []
 	const schemaEntries: string[] = []
-
 	for (const event of missingEvents) {
-		const constName = buildSchemaConstName(event)
-		schemaConsts.push(`const ${constName} = z.object({\n\t// TODO: define event data schema\n})`)
-		schemaEntries.push(`\t"${event}": ${constName}`)
+		schemaEntries.push(`\t"${event}": z.object({\n\t\t// TODO: define event data schema\n\t})`)
 	}
-
-	const constsBlock = schemaConsts.join("\n\n") + "\n\n"
-	insertions.push({ pos: positions.schemaVarStart, content: constsBlock })
 
 	if (positions.hasProperties) {
 		const entryBlock = ",\n" + schemaEntries.join(",\n")

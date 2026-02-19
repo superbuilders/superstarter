@@ -1,0 +1,17 @@
+[[entries]]
+hash = "8fede48a7d95164e967355e7b5b9b7217cb64829183d47973e6b43108b25660b"
+source = "src/inngest/INNGEST.md"
+symbol = ""
+target = "scripts:inngest/create-inngest-function.ts"
+
+[[entries]]
+hash = "55489806e690cee0e1096f8b89a95f593ea8dc6e16e7b5b267dcf9b5e47cb482"
+source = "src/inngest/INNGEST.md"
+symbol = "FUNCTIONS_INDEX"
+target = "scripts:inngest/create-inngest-function.ts"
+
+[[entries]]
+hash = "932242cd60c6bb8062d97edb0addbeeeb4c8613dac3f779c7bcbf46621b8c423"
+source = "src/inngest/INNGEST.md"
+symbol = "INNGEST_INDEX"
+target = "scripts:inngest/create-inngest-function.ts"

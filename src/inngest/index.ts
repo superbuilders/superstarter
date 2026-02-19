@@ -4,12 +4,10 @@ import { EventSchemas, Inngest, type Logger } from "inngest"
 import { z } from "zod"
 import { env } from "@/env"
 
-const helloWorldSchema = z.object({
-	message: z.string().min(1)
-})
-
 const schema = {
-	"superstarter/hello": helloWorldSchema
+	"superstarter/hello": z.object({
+		message: z.string().min(1)
+	})
 }
 
 const inngestLogger: Logger = {

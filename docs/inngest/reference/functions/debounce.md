@@ -1,0 +1,31 @@
+# Debounce functions&#x20;
+
+Debounce delays a function run for the given `period`, and reschedules functions for the given `period` any time new events are received while the debounce is active.  The function run starts after the specified `period` passes and no new events have been received.  Functions use the last event as their input data.
+
+See the [Debounce guide](/docs-markdown/guides/debounce) for more information about how this feature works.
+
+```ts
+export default inngest.createFunction(
+  {
+    id: "handle-webhook",
+    debounce: {
+      key: "event.data.account_id",
+      period: "5m",
+    },
+  },
+  { event: "intercom/company.updated" },
+  async ({ event, step }) => {
+    // This function will only be scheduled 5m after events have stopped being received with the same
+    // `event.data.account_id` field.
+    //
+    // `event` will be the last event in the series received.
+  }
+);
+```
+
+- `debounce` (object): Options to configure how to debounce function executionThe time delay to delay execution. The period begins when the first matching event is received.Current permitted values are from 1s to 7d (168h).An optional unique key expression to apply the limit to. The expression is evaluated for each triggering event,
+  and allows you to debounce against event data.Expressions are defined using the Common Expression Language (CEL) with the original event accessible using dot-notation. Read our guide to writing expressions for more info. Examples:Rate limit per customer id: 'event.data.customer\_id'Rate limit per account and email address: 'event.data.account\_id + "-" + event.user.email'The maximum time that a debounce can be extended before running.
+
+> **Callout:** Functions will run using the last event received as the input data.
+
+> **Callout:** Debounce cannot be combined with batching.

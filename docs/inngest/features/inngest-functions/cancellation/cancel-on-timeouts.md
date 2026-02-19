@@ -1,0 +1,135 @@
+# Cancel on timeouts
+
+It's possible to force runs to cancel if they take too long to start, or if the runs execute for too long.  The `timeouts` configuration property allows you to automatically cancel functions based off of two timeout properties:
+
+- `timeouts.start`, which controls how long a function can stay "queued" before they start
+- `timeouts.finish`, which controls how long a function can execute once started
+
+In the following examples, we'll explore how to configure the timeout property and how this works.
+
+## `timeouts.start` - Adding timeouts to queued runs (before start)
+
+Runs may stay in the queue waiting to start due to concurrency backlogs, throttling configurations, or other delays. You can automatically cancel these runs if they are queued for too long prior to starting.
+
+The `timeouts.start` configuration property controls this timeout. This example forces runs to cancel if it takes over 10 seconds to successfully start the first step of a run:
+
+```ts {{ title: "inngest/function.ts" }}
+const scheduleReminder = inngest.createFunction(
+  {
+    id: "schedule-reminder",
+    timeouts: {
+      // If the run takes longer than 10s to start, cancel the run.
+      start: "10s",
+    },
+  }
+  { event: "tasks/reminder.created" },
+  async ({ event, step }) => {
+    await step.run('send-reminder-push', async () => {
+      await pushNotificationService.push(event.data.reminder)
+    })
+  }
+  // ...
+);
+```
+
+```go {{ title: "inngest/function.go" }}
+import (
+	"context"
+	"time"
+
+	"github.com/inngest/inngestgo"
+	"github.com/inngest/inngestgo/step"
+)
+
+func loadInngestFnWithStartTimeout(client inngestgo.Client) (inngestgo.ServableFunction, error) {
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{
+			Name: "A function",
+			Timeouts: &inngestgo.ConfigTimeouts{
+				// If the run takes longer than 10s to start, cancel the run.
+				Start: inngestgo.Ptr(10 * time.Second),
+			},
+		},
+		inngestgo.EventTrigger("tasks/reminder.created", nil),
+		func(ctx context.Context, input inngestgo.Input[map[string]any]) (any, error) {
+			return step.Run(ctx, "send-reminder", func(ctx context.Context) (bool, error) {
+				// ...
+				return false, nil
+			})
+		},
+	)
+}
+```
+
+## `timeouts.finish` - Adding timeouts to executing runs
+
+You may want to limit the overall duration of a run after the run starts executing. You can cancel functions automatically if they're executing for too long.
+
+The `timeouts.finish` configuration property controls this timeout. This example forces runs to cancel if it takes over 30 seconds to finish, once started:
+
+```ts {{ title: "inngest/function.ts" }}
+const scheduleReminder = inngest.createFunction(
+  {
+    id: "schedule-reminder",
+    timeouts: {
+      // If the run takes longer than 10s to start, cancel the run.
+      start: "10s",
+      // And if the run takes longer than 30s to finish after starting, cancel the run.
+      finish: "30s",
+    },
+  }
+  { event: "tasks/reminder.created" },
+  async ({ event, step }) => {
+    await step.run('send-reminder-push', async () => {
+      await pushNotificationService.push(event.data.reminder)
+    })
+  }
+  // ...
+);
+```
+
+```go {{ title: "inngest/function.go" }}
+import (
+	"context"
+	"time"
+
+	"github.com/inngest/inngestgo"
+	"github.com/inngest/inngestgo/step"
+)
+
+func loadInngestFnWithStartAndFinishTimeout(client inngestgo.Client) (inngestgo.ServableFunction, error) {
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{
+			Name: "A function",
+			Timeouts: &inngestgo.ConfigTimeouts{
+				// If the run takes longer than 10s to start, cancel the run.
+				Start: inngestgo.Ptr(10 * time.Second),
+				// And if the run takes longer than 30s to finish after starting, cancel the run.
+				Finish: inngestgo.Ptr(30 * time.Second),
+			},
+		},
+		inngestgo.EventTrigger("tasks/reminder.createad", nil),
+		func(ctx context.Context, input inngestgo.Input[map[string]any]) (any, error) {
+			return step.Run(ctx, "send-reminder", func(ctx context.Context) (bool, error) {
+				// ...
+				return false, nil
+			})
+		},
+	)
+}
+```
+
+## Tips
+
+- The `timeouts.start` duration limits how long a run waits in the queue for the first step to start
+- Once the first attempt of a step begins, the `timeouts.start` property no longer applies.  Instead, the `timeouts.finish` duration begins.
+- Once started, the `timeouts.finish` duration limits how long a run can execute
+- Both properties can be stacked to control the overall length of a function run
+- Runs that are cancelled due to a timeout trigger an [`inngest/function.cancelled`](/docs-markdown/reference/system-events/inngest-function-cancelled) event
+
+## Limitations
+
+- Step duration is unaffected by timeouts. For example, a 5 minute timeout will not prematurely cancel a step after 5 minutes.
+- Concurrency can delay timeouts. For example, if a function is configured with a 5 minute timeout but concurrency delays the function run for 10 minutes, then the run will take 10 minutes to cancel.

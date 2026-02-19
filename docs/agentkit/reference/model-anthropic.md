@@ -1,0 +1,80 @@
+# Anthropic Model
+
+> Configure Anthropic as your model provider
+
+The `anthropic` function configures Anthropic's Claude as your model provider.
+
+```ts
+import { createAgent, anthropic } from "@inngest/agent-kit";
+
+const agent = createAgent({
+  name: "Code writer",
+  system: "You are an expert TypeScript programmer.",
+  model: anthropic({
+    model: "claude-3-opus",
+    // Note: max_tokens is required for Anthropic models
+    defaultParameters: { max_tokens: 4096 },
+  }),
+});
+```
+
+## Configuration
+
+The `anthropic` function accepts a model name string or a configuration object:
+
+```ts
+const agent = createAgent({
+  model: anthropic({
+    model: "claude-3-opus",
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    baseUrl: "https://api.anthropic.com/v1/",
+    betaHeaders: ["computer-vision"],
+    defaultParameters: { temperature: 0.5, max_tokens: 4096 },
+  }),
+});
+```
+
+> **Warning:** **Note: `defaultParameters.max_tokens` is required.**
+
+### Options
+
+**model** `string` *(required)*
+  ID of the model to use. See the [model endpoint
+  compatibility](https://docs.anthropic.com/en/docs/about-claude/models) table
+  for details on which models work with the Anthropic API.
+
+  **This option has been moved to the `defaultParameters` option.**
+
+  The maximum number of tokens to generate before stopping.
+
+**apiKey** `string`
+  The Anthropic API key to use for authenticating your request. By default we'll
+  search for and use the `ANTHROPIC_API_KEY` environment variable.
+
+**betaHeaders** `string[]`
+  The beta headers to enable, eg. for computer use, prompt caching, and so on.
+
+  The base URL for the Anthropic API.
+
+**defaultParameters** `object` *(required)*
+  The default parameters to use for the model (ex: `temperature`, `max_tokens`,
+  etc).
+
+  **Note: `defaultParameters.max_tokens` is required.**
+
+### Available Models
+
+```plaintext Anthropic theme={"system"}
+"claude-3-5-haiku-latest"
+"claude-3-5-haiku-20241022"
+"claude-3-5-sonnet-latest"
+"claude-3-5-sonnet-20241022"
+"claude-3-5-sonnet-20240620"
+"claude-3-opus-latest"
+"claude-3-opus-20240229"
+"claude-3-sonnet-20240229"
+"claude-3-haiku-20240307"
+"claude-2.1"
+"claude-2.0"
+"claude-instant-1.2"
+```

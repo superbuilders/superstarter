@@ -1,0 +1,188 @@
+# Usage
+
+Inngest supports OpenTelemetry for distributed tracing and observability across your functions. The `extendedTracesMiddleware` automatically instruments your Inngest functions and integrates with your existing OpenTelemetry providers, giving you deep insights into function execution, step timing, and performance. It includes [automatic instrumentation](#instrumentation) for many popular libraries.
+
+## Basic Usage
+
+> **Callout:** Import and run the extendedTracesMiddleware() before any other code.This ensures that the tracer
+> provider
+> and any
+> instrumentation has
+> time to patch code in order to collect traces and spans from all parts of your
+> application. Loading running extendedTracesMiddleware() after any other code risks not
+> instrumenting it.
+
+For example,
+
+```ts
+// Import this first
+import { extendedTracesMiddleware } from "inngest/experimental";
+const extendedTraces = extendedTracesMiddleware();
+
+// Then everything else
+import { Inngest } from "inngest";
+
+const inngest = new Inngest({
+  id: "my-app",
+  middleware: [extendedTraces],
+});
+```
+
+## Advanced Usage
+
+**'Setup an OpenTelemetry client with Inngest or create custom spans'**: [Follow this guide to learn how to add Inngest Extended Traces to an existing OpenTelemetry configuration or to create custom spans.]("/docs-markdown/examples/open-telemetry")
+
+### Serverless
+
+If you're using serverless, the entrypoint of your app will likely be the file
+for a particular endpoint, for example `/api/inngest`.
+
+If you have your client set up as in the example above, make sure you import
+that first so that the provider has a chance to initialize.
+
+```ts
+// Import the client first
+import { inngest } from "@/inngest";
+
+// Then import everything else
+import { serve } from "inngest/next";
+import { myFn } from "@/inngest/functions";
+
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: [myFn],
+});
+```
+
+### Extending existing providers
+
+A JavaScript process can only have a single OpenTelemetry Provider. Some
+libraries such as Sentry also create their own provider.
+
+`extendedTracesMiddleware()` will first try to *extend* an existing provider and will only
+create one if none has been found. If an existing provider is extended, we won't
+contribute any automatic [instrumentation](#instrumentation).
+
+In the case of Sentry, `extendedTracesMiddleware()` will extend Sentry's provider as long
+as it's run after `Sentry.init()`.
+
+> **Note:** This extension should also work for OpenTelemetry providers that originate
+> within the runtime, like Deno's OpenTelemetry.
+
+This behaviour can be changed:
+
+```ts
+extendedTracesMiddleware({
+  behaviour: "auto",
+});
+```
+
+The options are:
+
+- `"auto"` (default): Attempt to extend a provider if one exists, else create one, fails
+  if neither worked
+- `"extendProvider"`: Only attempt to extend a provider and fails if none exists
+- `"createProvider"`: Only attempt to create a provider and fails if we couldn't
+- `"off"`: Do nothing
+
+If you're intending to only use `extendedTracesMiddleware()` to extend an existing
+provider, you no longer need to ensure that it is called before any other code.
+
+### Manually extend
+
+If you're already manually creating your own trace provider and import ordering
+is an issue, you may want to manually add Inngest's `InngestSpanProcessor` to
+your existing setup.
+
+Add an `InngestSpanExporter` to your provider:
+
+```ts
+// Create your client the same as you would normally
+import { Inngest } from "inngest";
+import { extendedTracesMiddleware } from "inngest/experimental";
+
+export const inngest = new Inngest({
+  id: "my-app",
+  middleware: [
+    extendedTracesMiddleware({
+      // Make sure the middleware doesn't try to automatically instrument
+      behaviour: "off",
+    }),
+  ],
+});
+
+// Then when you create your provider, pass the client to it
+import { inngest } from "@/inngest";
+import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
+import { InngestSpanProcessor } from "inngest/experimental";
+
+const provider = new BasicTracerProvider({
+  // Add the span processor when creating your provider
+  spanProcessors: [new InngestSpanProcessor(inngest)],
+});
+
+// Register the provider globally
+provider.register();
+```
+
+## Instrumentation
+
+`extendedTracesMiddleware()` will automatically instrument common code for you if it's
+used to create your provider.
+
+Here's a list of automatic supported instrumentation:
+
+- [amqplib](https://www.npmjs.com/package/amqplib)
+- [AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/nodejs-handler.html)
+- [AWS SDK for JavaScript v3](https://github.com/aws/aws-sdk-js-v3)
+- [bunyan](https://www.npmjs.com/package/bunyan)
+- [cassandra-driver](https://www.npmjs.com/package/cassandra-driver)
+- [connect](https://github.com/senchalabs/connect)
+- [@cucumber/cucumber](https://www.npmjs.com/package/@cucumber/cucumber)
+- [dataloader](https://www.npmjs.com/package/dataloader)
+- [dns](http://nodejs.org/dist/latest/docs-markdown/api/dns.html)
+- [express](https://github.com/expressjs/express)
+- [fs](http://nodejs.org/dist/latest/docs-markdown/api/fs.html)
+- [generic-pool](https://github.com/coopernurse/node-pool)
+- [graphql](https://www.npmjs.com/package/graphql)
+- [@grpc/grpc-js](https://grpc.io/blog/grpc-js-1.0/)
+- [Hapi framework](https://www.npmjs.com/package/@hapi/hapi)
+- [http](https://nodejs.org/api/http.html) and
+  [https](https://nodejs.org/api/https.html)
+- [ioredis](https://github.com/luin/ioredis)
+- [kafkajs](https://www.npmjs.com/package/kafkajs)
+- [knex](https://github.com/knex/knex)
+- [Koa](https://github.com/koajs/koa)
+- [lru-memoizer](https://github.com/jfromaniello/lru-memoizer)
+- [memcached](https://www.npmjs.com/package/memcached)
+- [mongodb](https://github.com/mongodb/node-mongodb-native)
+- [mongoose](https://github.com/Automattic/mongoose)
+- [mysql](https://www.npmjs.com/package/mysql)
+- [mysql2](https://github.com/sidorares/node-mysql2)
+- [NestJS framework](https://nestjs.com/)
+- [net](http://nodejs.org/dist/latest/docs-markdown/api/net.html)
+- [pg](https://github.com/brianc/node-postgres)
+- [pino](https://www.npmjs.com/package/pino)
+- [redis](https://github.com/NodeRedis/node_redis)
+- [restify](https://github.com/restify/node-restify)
+- [socket.io](https://github.com/socketio/socket.io)
+- [undici](https://undici.nodejs.org/) (Node.js global
+  [fetch](https://nodejs.org/docs-markdown/latest/api/globals.html#fetch) API)
+- [winston](https://www.npmjs.com/package/winston)
+
+### Custom instrumentation
+
+You can add additional custom instrumentations to gain more insight into your
+stack.
+
+For example, here's an example of adding [Prisma
+OpenTelemetry](https://www.prisma.io/docs-markdown/orm/prisma-client/observability-and-logging/opentelemetry-tracing):
+
+```ts
+import { PrismaInstrumentation } from "@prisma/instrumentation";
+import { extendedTracesMiddleware } from "inngest/experimental";
+
+const extendedTraces = extendedTracesMiddleware({
+  instrumentations: [new PrismaInstrumentation()],
+});
+```

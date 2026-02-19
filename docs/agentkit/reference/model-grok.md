@@ -1,0 +1,65 @@
+# Grok Model
+
+> Configure Grok as your model provider
+
+The `grok` function configures Grok as your model provider.
+
+```ts
+import { createAgent, grok } from "@inngest/agent-kit";
+
+const agent = createAgent({
+  name: "Code writer",
+  system: "You are an expert TypeScript programmer.",
+  model: grok({ model: "grok-4-latest" }),
+});
+```
+
+## Configuration
+
+The `grok` function accepts a model name string or a configuration object:
+
+```ts
+const agent = createAgent({
+  model: grok({
+    model: "grok-4-latest",
+    apiKey: process.env.XAI_API_KEY,
+    baseUrl: "https://api.x.ai/v1",
+    defaultParameters: { temperature: 0.5 },
+  }),
+});
+```
+
+### Options
+
+**model** `string` *(required)*
+  ID of the model to use.
+
+  See the [xAI models list](https://docs.x.ai/docs/models).
+
+**apiKey** `string`
+  The xAI API key to use for authenticating your request. By default we'll
+  search for and use the `XAI_API_KEY` environment variable.
+
+  The base URL for the xAI API.
+
+**defaultParameters** `object`
+  The default parameters to use for the model (ex: `temperature`, `max_tokens`,
+  etc).
+
+### Available Models
+
+```plaintext Gemini theme={"system"}
+"grok-2-1212"
+"grok-2"
+"grok-2-latest"
+"grok-3"
+"grok-3-latest"
+"grok-4"
+"grok-4-latest";
+```
+
+For the latest list of available models, see [xAI's Grok model overview](https://docs.x.ai/docs/models).
+
+## Limitations
+
+Grok models do not currently support strict function parameters.
