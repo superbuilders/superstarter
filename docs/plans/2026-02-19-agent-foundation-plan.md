@@ -25,6 +25,41 @@
 - No barrel files — import directly from defining module
 - In Inngest functions, use `logger` parameter, not imported slog
 - AgentKit tool optional parameters use `.nullable()` not `.optional()` (JSON Schema compat)
+- **Known `??` usages in plan code:** Several code blocks below use `??` for brevity. The implementer MUST replace these with proper validation per `rules/no-nullish-coalescing.md` (validate and throw, or fix the source type).
+
+## Testing Philosophy (TDD)
+
+Every tested task follows **vertical slices** — one test, one implementation, repeat. Never write all tests then all code.
+
+**What we test — observable behavior through public interfaces:**
+- "readFile handler returns numbered lines for an existing file"
+- "applyOverrides merges explorer config while preserving others"
+- "createWorktree produces a worktree visible in listWorktrees"
+- "resolveModel output is accepted by createAgent"
+
+**What we DON'T test:**
+- Tool names or property values (structural — the type system handles this)
+- That config keys exist (TypeScript enforces this at compile time)
+- `.toBeDefined()` assertions on opaque objects (meaningless — the value could be garbage)
+
+**Handler export pattern for testability:**
+Tool handlers are extracted as standalone named functions and exported alongside the tool. Tests call handlers directly with real inputs (temp files, real directories). This tests behavior without requiring a full AgentKit network.
+
+```typescript
+// Handler is a standalone function — exported for testing
+async function handleReadFile(params: { path: string }) { ... }
+const readFileTool = createTool({ name: "read_file", handler: handleReadFile, ... })
+export { handleReadFile, readFileTool }
+```
+
+**Test boundaries:**
+| Layer | Strategy | Mock? |
+|-------|----------|-------|
+| Tool handlers | Real temp files/dirs, real shell commands | No |
+| Config | Pure function input/output | No |
+| Workspace | Real git repos in temp dirs | No |
+| Agent factories | Integration with `createAgent` + `createNetwork` | No LLM (factory only) |
+| Onboarding | Unit test prompt builders; integration deferred to smoke test | No |
 
 ---
 
@@ -236,46 +271,32 @@ git commit -m "feat: add agent_preset, judge_personality, and workflow_run DB ta
 
 **Step 1: Write the failing test**
 
+Behaviors to test:
+- `applyOverrides` with empty overrides produces a deep clone
+- `applyOverrides` replaces the targeted agent's config completely
+- `applyOverrides` leaves untouched agents identical to the base
+
+(We do NOT test that `DEFAULT_CONFIG` has certain keys — TypeScript enforces that at compile time via the `WorkflowConfig` type.)
+
 ```typescript
 // src/agents/config.test.ts
 import { describe, expect, test } from "bun:test"
 import {
 	applyOverrides,
 	DEFAULT_CONFIG,
-	type WorkflowConfig,
 } from "@/agents/config"
 
-describe("DEFAULT_CONFIG", () => {
-	test("has all required agent keys", () => {
-		expect(DEFAULT_CONFIG.explorer).toBeDefined()
-		expect(DEFAULT_CONFIG.specialist).toBeDefined()
-		expect(DEFAULT_CONFIG.concept).toBeDefined()
-		expect(DEFAULT_CONFIG.critic).toBeDefined()
-		expect(DEFAULT_CONFIG.reviewer).toBeDefined()
-		expect(DEFAULT_CONFIG.implementer).toBeDefined()
-	})
-
-	test("each agent has model and systemPrompt", () => {
-		for (const key of Object.keys(DEFAULT_CONFIG)) {
-			const agentKey = key as keyof WorkflowConfig
-			const agent = DEFAULT_CONFIG[agentKey]
-			expect(agent.model).toBeDefined()
-			expect(agent.model.provider).toBeDefined()
-			expect(agent.model.model).toBeDefined()
-			expect(typeof agent.systemPrompt).toBe("string")
-			expect(agent.systemPrompt.length).toBeGreaterThan(0)
-		}
-	})
-})
-
 describe("applyOverrides", () => {
-	test("returns clone of base when no overrides", () => {
+	test("empty overrides produce a deep clone of base", () => {
 		const result = applyOverrides(DEFAULT_CONFIG, {})
 		expect(result).toEqual(DEFAULT_CONFIG)
 		expect(result).not.toBe(DEFAULT_CONFIG)
+		// Verify deep clone — mutating result must not affect base
+		result.explorer.systemPrompt = "mutated"
+		expect(DEFAULT_CONFIG.explorer.systemPrompt).not.toBe("mutated")
 	})
 
-	test("overrides a single agent config", () => {
+	test("overriding explorer replaces its model and prompt", () => {
 		const result = applyOverrides(DEFAULT_CONFIG, {
 			explorer: {
 				model: { provider: "openai", model: "gpt-4o" },
@@ -283,10 +304,11 @@ describe("applyOverrides", () => {
 			},
 		})
 		expect(result.explorer.model.provider).toBe("openai")
+		expect(result.explorer.model.model).toBe("gpt-4o")
 		expect(result.explorer.systemPrompt).toBe("custom explorer prompt")
 	})
 
-	test("preserves non-overridden agents", () => {
+	test("non-overridden agents remain identical to base", () => {
 		const result = applyOverrides(DEFAULT_CONFIG, {
 			explorer: {
 				model: { provider: "openai", model: "gpt-4o" },
@@ -295,6 +317,7 @@ describe("applyOverrides", () => {
 		})
 		expect(result.concept).toEqual(DEFAULT_CONFIG.concept)
 		expect(result.reviewer).toEqual(DEFAULT_CONFIG.reviewer)
+		expect(result.implementer).toEqual(DEFAULT_CONFIG.implementer)
 	})
 })
 ```
@@ -414,34 +437,39 @@ The AgentKit model constructors (`anthropic()`, `openai()`, `gemini()`) need to 
 
 **Step 1: Write the failing test**
 
+Behaviors to test:
+- Each provider's adapter is accepted by `createAgent` (integration test — proves the adapter is real, not just non-null)
+- Grok falls through to OpenAI-compatible adapter
+
 Add to `src/agents/config.test.ts`:
 
 ```typescript
+import { createAgent } from "@inngest/agent-kit"
 import { resolveModel } from "@/agents/config"
 
 describe("resolveModel", () => {
-	test("creates anthropic adapter with max_tokens", () => {
-		const adapter = resolveModel({
-			provider: "anthropic",
-			model: "claude-sonnet-4-6",
-		})
-		expect(adapter).toBeDefined()
+	test("anthropic adapter is accepted by createAgent", () => {
+		const adapter = resolveModel({ provider: "anthropic", model: "claude-sonnet-4-6" })
+		const agent = createAgent({ name: "test", model: adapter, system: "test" })
+		expect(agent.name).toBe("test")
 	})
 
-	test("creates openai adapter", () => {
-		const adapter = resolveModel({
-			provider: "openai",
-			model: "gpt-4o",
-		})
-		expect(adapter).toBeDefined()
+	test("openai adapter is accepted by createAgent", () => {
+		const adapter = resolveModel({ provider: "openai", model: "gpt-4o" })
+		const agent = createAgent({ name: "test", model: adapter, system: "test" })
+		expect(agent.name).toBe("test")
 	})
 
-	test("creates gemini adapter", () => {
-		const adapter = resolveModel({
-			provider: "gemini",
-			model: "gemini-1.5-flash",
-		})
-		expect(adapter).toBeDefined()
+	test("gemini adapter is accepted by createAgent", () => {
+		const adapter = resolveModel({ provider: "gemini", model: "gemini-1.5-flash" })
+		const agent = createAgent({ name: "test", model: adapter, system: "test" })
+		expect(agent.name).toBe("test")
+	})
+
+	test("grok uses openai-compatible adapter", () => {
+		const adapter = resolveModel({ provider: "grok", model: "grok-beta" })
+		const agent = createAgent({ name: "test", model: adapter, system: "test" })
+		expect(agent.name).toBe("test")
 	})
 })
 ```
@@ -527,31 +555,79 @@ These tools are read-only, shared across all agents. They wrap Bun APIs and ripg
 
 **Step 1: Write the failing test**
 
+Behaviors to test (through handler functions, with real temp files):
+- `handleReadFile` returns numbered lines for an existing file
+- `handleReadFile` returns error object for a non-existent path
+- `handleListFiles` returns matching file paths in a directory
+- `handleSearchCode` returns matching lines with line numbers
+- `handleReadDirectory` returns file tree up to specified depth
+
 ```typescript
 // src/agents/tools/filesystem.test.ts
-import { describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import {
-	readFileTool,
-	listFilesTool,
-	searchCodeTool,
-	readDirectoryTool,
+	handleReadFile,
+	handleListFiles,
+	handleSearchCode,
+	handleReadDirectory,
 } from "@/agents/tools/filesystem"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
-describe("filesystem tools", () => {
-	test("readFileTool has correct name and parameters", () => {
-		expect(readFileTool.name).toBe("read_file")
+let testDir: string
+
+beforeAll(async () => {
+	testDir = await mkdtemp(join(tmpdir(), "fs-tools-test-"))
+	await Bun.write(join(testDir, "hello.ts"), "const x = 1\nconst y = 2\n")
+	await Bun.write(join(testDir, "world.ts"), "import { z } from \"zod\"\n")
+	const sub = join(testDir, "sub")
+	await Bun.write(join(sub, "nested.ts"), "export {}\n")
+})
+
+afterAll(async () => {
+	await rm(testDir, { recursive: true, force: true })
+})
+
+describe("handleReadFile", () => {
+	test("returns numbered lines for existing file", async () => {
+		const result = await handleReadFile({ path: join(testDir, "hello.ts") })
+		expect(result).toContain("   1  const x = 1")
+		expect(result).toContain("   2  const y = 2")
 	})
 
-	test("listFilesTool has correct name", () => {
-		expect(listFilesTool.name).toBe("list_files")
+	test("returns error for non-existent file", async () => {
+		const result = await handleReadFile({ path: join(testDir, "nope.ts") })
+		expect(result).toEqual({ error: expect.stringContaining("File not found") })
+	})
+})
+
+describe("handleListFiles", () => {
+	test("returns matching files for glob pattern", async () => {
+		const result = await handleListFiles({ glob: "*.ts", path: testDir })
+		expect(result).toContain("hello.ts")
+		expect(result).toContain("world.ts")
+	})
+})
+
+describe("handleSearchCode", () => {
+	test("finds pattern in files", async () => {
+		const result = await handleSearchCode({ pattern: "const", path: testDir, glob: null })
+		expect(result).toContain("hello.ts")
+		expect(result).toContain("const x = 1")
 	})
 
-	test("searchCodeTool has correct name", () => {
-		expect(searchCodeTool.name).toBe("search_code")
+	test("returns no-match message when pattern absent", async () => {
+		const result = await handleSearchCode({ pattern: "ZZZZNOTHERE", path: testDir, glob: null })
+		expect(result).toBe("No matches found.")
 	})
+})
 
-	test("readDirectoryTool has correct name", () => {
-		expect(readDirectoryTool.name).toBe("read_directory")
+describe("handleReadDirectory", () => {
+	test("returns files up to specified depth", async () => {
+		const result = await handleReadDirectory({ path: testDir, depth: 2 })
+		expect(result).toContain("hello.ts")
+		expect(result).toContain("nested.ts")
 	})
 })
 ```
@@ -567,113 +643,129 @@ bun test src/agents/tools/filesystem.test.ts
 ```typescript
 // src/agents/tools/filesystem.ts
 import { createTool } from "@inngest/agent-kit"
-import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
 import { z } from "zod"
 
-const readFileParams = z.object({
-	path: z.string().describe("Absolute path to the file to read"),
-})
+// --- Handlers (exported for direct testing) ---
+
+async function handleReadFile({ path }: { path: string }) {
+	logger.debug("reading file", { path })
+	const file = Bun.file(path)
+	const exists = await file.exists()
+	if (!exists) {
+		return { error: `File not found: ${path}` }
+	}
+	const content = await file.text()
+	const lines = content.split("\n")
+	const numbered = lines
+		.map(function addLineNumber(line, i) {
+			return `${String(i + 1).padStart(4)}  ${line}`
+		})
+		.join("\n")
+	return numbered
+}
+
+async function handleListFiles({ glob: pattern, path }: { glob: string; path: string }) {
+	logger.debug("listing files", { pattern, path })
+	const globber = new Bun.Glob(pattern)
+	const matches: string[] = []
+	for await (const match of globber.scan({ cwd: path, absolute: true })) {
+		matches.push(match)
+	}
+	matches.sort()
+	return matches.join("\n")
+}
+
+async function handleSearchCode({
+	pattern,
+	path,
+	glob: fileGlob,
+}: { pattern: string; path: string; glob: string | null }) {
+	logger.debug("searching code", { pattern, path, fileGlob })
+	const args = ["rg", "--line-number", "--no-heading", pattern, path]
+	if (fileGlob) {
+		args.push("--glob", fileGlob)
+	}
+	const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
+	const stdout = await new Response(proc.stdout).text()
+	const stderr = await new Response(proc.stderr).text()
+	await proc.exited
+	if (proc.exitCode === 1) {
+		return "No matches found."
+	}
+	if (proc.exitCode !== 0) {
+		return { error: `rg failed: ${stderr}` }
+	}
+	return stdout
+}
+
+async function handleReadDirectory({ path, depth }: { path: string; depth: number }) {
+	logger.debug("reading directory", { path, depth })
+	const args = ["fd", "--base-directory", path, "--max-depth", String(depth), "--type", "f"]
+	const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
+	const stdout = await new Response(proc.stdout).text()
+	await proc.exited
+	if (proc.exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text()
+		return { error: `fd failed: ${stderr}` }
+	}
+	const files = stdout.trim().split("\n").filter(Boolean)
+	files.sort()
+	return files.join("\n")
+}
+
+// --- Tool definitions (wrapping handlers for AgentKit) ---
 
 const readFileTool = createTool({
 	name: "read_file",
 	description: "Read file contents. Returns the file content with line numbers.",
-	parameters: readFileParams,
-	handler: async function handleReadFile({ path }) {
-		logger.debug("reading file", { path })
-		const file = Bun.file(path)
-		const exists = await file.exists()
-		if (!exists) {
-			return { error: `File not found: ${path}` }
-		}
-		const content = await file.text()
-		const lines = content.split("\n")
-		const numbered = lines
-			.map(function addLineNumber(line, i) {
-				return `${String(i + 1).padStart(4)}  ${line}`
-			})
-			.join("\n")
-		return numbered
-	},
-})
-
-const listFilesParams = z.object({
-	glob: z.string().describe("Glob pattern to match files (e.g. '**/*.ts')"),
-	path: z.string().describe("Directory to search in (absolute path)"),
+	parameters: z.object({
+		path: z.string().describe("Absolute path to the file to read"),
+	}),
+	handler: handleReadFile,
 })
 
 const listFilesTool = createTool({
 	name: "list_files",
 	description: "List files matching a glob pattern in a directory.",
-	parameters: listFilesParams,
-	handler: async function handleListFiles({ glob: pattern, path }) {
-		logger.debug("listing files", { pattern, path })
-		const globber = new Bun.Glob(pattern)
-		const matches: string[] = []
-		for await (const match of globber.scan({ cwd: path, absolute: true })) {
-			matches.push(match)
-		}
-		matches.sort()
-		return matches.join("\n")
-	},
-})
-
-const searchCodeParams = z.object({
-	pattern: z.string().describe("Regex pattern to search for"),
-	path: z.string().describe("Directory to search in (absolute path)"),
-	glob: z.string().nullable().describe("Optional glob filter (e.g. '*.ts')"),
+	parameters: z.object({
+		glob: z.string().describe("Glob pattern to match files (e.g. '**/*.ts')"),
+		path: z.string().describe("Directory to search in (absolute path)"),
+	}),
+	handler: handleListFiles,
 })
 
 const searchCodeTool = createTool({
 	name: "search_code",
 	description: "Search file contents using ripgrep. Returns matching lines with file paths and line numbers.",
-	parameters: searchCodeParams,
-	handler: async function handleSearchCode({ pattern, path, glob: fileGlob }) {
-		logger.debug("searching code", { pattern, path, fileGlob })
-		const args = ["rg", "--line-number", "--no-heading", pattern, path]
-		if (fileGlob) {
-			args.push("--glob", fileGlob)
-		}
-		const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
-		const stdout = await new Response(proc.stdout).text()
-		const stderr = await new Response(proc.stderr).text()
-		await proc.exited
-		if (proc.exitCode === 1) {
-			return "No matches found."
-		}
-		if (proc.exitCode !== 0) {
-			return { error: `rg failed: ${stderr}` }
-		}
-		return stdout
-	},
-})
-
-const readDirectoryParams = z.object({
-	path: z.string().describe("Directory path (absolute)"),
-	depth: z.number().describe("Max depth to recurse").default(3),
+	parameters: z.object({
+		pattern: z.string().describe("Regex pattern to search for"),
+		path: z.string().describe("Directory to search in (absolute path)"),
+		glob: z.string().nullable().describe("Optional glob filter (e.g. '*.ts')"),
+	}),
+	handler: handleSearchCode,
 })
 
 const readDirectoryTool = createTool({
 	name: "read_directory",
 	description: "List directory tree structure up to a specified depth.",
-	parameters: readDirectoryParams,
-	handler: async function handleReadDirectory({ path, depth }) {
-		logger.debug("reading directory", { path, depth })
-		const args = ["fd", "--base-directory", path, "--max-depth", String(depth), "--type", "f"]
-		const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
-		const stdout = await new Response(proc.stdout).text()
-		await proc.exited
-		if (proc.exitCode !== 0) {
-			const stderr = await new Response(proc.stderr).text()
-			return { error: `fd failed: ${stderr}` }
-		}
-		const files = stdout.trim().split("\n").filter(Boolean)
-		files.sort()
-		return files.join("\n")
-	},
+	parameters: z.object({
+		path: z.string().describe("Directory path (absolute)"),
+		depth: z.number().describe("Max depth to recurse").default(3),
+	}),
+	handler: handleReadDirectory,
 })
 
-export { listFilesTool, readDirectoryTool, readFileTool, searchCodeTool }
+export {
+	handleListFiles,
+	handleReadDirectory,
+	handleReadFile,
+	handleSearchCode,
+	listFilesTool,
+	readDirectoryTool,
+	readFileTool,
+	searchCodeTool,
+}
 ```
 
 **Step 4: Run test to verify it passes**
@@ -695,10 +787,70 @@ git commit -m "feat: add core filesystem tools (readFile, listFiles, searchCode,
 
 **Files:**
 - Create: `src/agents/tools/analysis.ts`
+- Create: `src/agents/tools/analysis.test.ts`
 
-Same pattern as filesystem tools. These wrap shell commands for lint, typecheck, import analysis, symbol usage, and git history.
+Same pattern as filesystem tools. Handlers exported separately. These wrap shell commands for lint, typecheck, import analysis, symbol usage, and git history.
 
-**Step 1: Write the tools**
+**Step 1: Write the failing test**
+
+Behaviors to test (against the current repo — it's a real project with git history and imports):
+- `handleAnalyzeImports` finds import statements in a known file
+- `handleFindUsages` finds references to a known symbol
+- `handleGetGitHistory` returns commits for a tracked file
+
+```typescript
+// src/agents/tools/analysis.test.ts
+import { describe, expect, test } from "bun:test"
+import {
+	handleAnalyzeImports,
+	handleFindUsages,
+	handleGetGitHistory,
+} from "@/agents/tools/analysis"
+
+const REPO_ROOT = process.cwd()
+
+describe("handleAnalyzeImports", () => {
+	test("finds import statements in a known file", async () => {
+		const result = await handleAnalyzeImports({
+			path: `${REPO_ROOT}/src/env.ts`,
+		})
+		expect(result).toContain("import")
+		expect(result).toContain("zod")
+	})
+})
+
+describe("handleFindUsages", () => {
+	test("finds references to a known symbol", async () => {
+		const result = await handleFindUsages({
+			symbol: "DATABASE_URL",
+			path: `${REPO_ROOT}/src`,
+			glob: null,
+		})
+		expect(result).toContain("DATABASE_URL")
+	})
+})
+
+describe("handleGetGitHistory", () => {
+	test("returns commits for a tracked file", async () => {
+		const result = await handleGetGitHistory({
+			path: `${REPO_ROOT}/CLAUDE.md`,
+			count: 3,
+		})
+		expect(result.length).toBeGreaterThan(0)
+		expect(result).not.toBe("No git history found for this file.")
+	})
+})
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+bun test src/agents/tools/analysis.test.ts
+```
+
+Expected: FAIL — handlers not exported.
+
+**Step 3: Write the tools**
 
 ```typescript
 // src/agents/tools/analysis.ts
@@ -706,44 +858,93 @@ import { createTool } from "@inngest/agent-kit"
 import * as logger from "@superbuilders/slog"
 import { z } from "zod"
 
+// --- Handlers (exported for direct testing) ---
+
+async function handleRunLint({ path }: { path: string }) {
+	logger.debug("running lint", { path })
+	const proc = Bun.spawn(["bun", "lint", path], {
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+	const stdout = await new Response(proc.stdout).text()
+	const stderr = await new Response(proc.stderr).text()
+	await proc.exited
+	return proc.exitCode === 0
+		? "No lint violations."
+		: `${stdout}\n${stderr}`.trim()
+}
+
+async function handleRunTypecheck() {
+	logger.debug("running typecheck")
+	const proc = Bun.spawn(["bun", "typecheck"], {
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+	const stdout = await new Response(proc.stdout).text()
+	const stderr = await new Response(proc.stderr).text()
+	await proc.exited
+	return proc.exitCode === 0
+		? "No type errors."
+		: `${stdout}\n${stderr}`.trim()
+}
+
+async function handleAnalyzeImports({ path }: { path: string }) {
+	logger.debug("analyzing imports", { path })
+	const proc = Bun.spawn(
+		["rg", "--no-heading", "--line-number", "^import ", path],
+		{ stdout: "pipe", stderr: "pipe" },
+	)
+	const stdout = await new Response(proc.stdout).text()
+	await proc.exited
+	if (!stdout.trim()) {
+		return "No imports found."
+	}
+	return stdout
+}
+
+async function handleFindUsages({
+	symbol,
+	path,
+	glob: fileGlob,
+}: { symbol: string; path: string; glob: string | null }) {
+	logger.debug("finding usages", { symbol, path, fileGlob })
+	const args = ["rg", "--line-number", "--no-heading", "-w", symbol, path]
+	if (fileGlob) {
+		args.push("--glob", fileGlob)
+	}
+	const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
+	const stdout = await new Response(proc.stdout).text()
+	await proc.exited
+	return stdout.trim() ? stdout : `No usages of '${symbol}' found.`
+}
+
+async function handleGetGitHistory({ path, count }: { path: string; count: number }) {
+	logger.debug("getting git history", { path, count })
+	const proc = Bun.spawn(
+		["git", "log", `--max-count=${count}`, "--oneline", "--", path],
+		{ stdout: "pipe", stderr: "pipe" },
+	)
+	const stdout = await new Response(proc.stdout).text()
+	await proc.exited
+	return stdout.trim() ? stdout : "No git history found for this file."
+}
+
+// --- Tool definitions ---
+
 const runLintTool = createTool({
 	name: "run_lint",
 	description: "Run bun lint on a file or directory. Returns lint violations.",
 	parameters: z.object({
 		path: z.string().describe("File or directory path to lint"),
 	}),
-	handler: async function handleRunLint({ path }) {
-		logger.debug("running lint", { path })
-		const proc = Bun.spawn(["bun", "lint", path], {
-			stdout: "pipe",
-			stderr: "pipe",
-		})
-		const stdout = await new Response(proc.stdout).text()
-		const stderr = await new Response(proc.stderr).text()
-		await proc.exited
-		return proc.exitCode === 0
-			? "No lint violations."
-			: `${stdout}\n${stderr}`.trim()
-	},
+	handler: handleRunLint,
 })
 
 const runTypecheckTool = createTool({
 	name: "run_typecheck",
 	description: "Run TypeScript type checking. Returns type errors if any.",
 	parameters: z.object({}),
-	handler: async function handleRunTypecheck() {
-		logger.debug("running typecheck")
-		const proc = Bun.spawn(["bun", "typecheck"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		})
-		const stdout = await new Response(proc.stdout).text()
-		const stderr = await new Response(proc.stderr).text()
-		await proc.exited
-		return proc.exitCode === 0
-			? "No type errors."
-			: `${stdout}\n${stderr}`.trim()
-	},
+	handler: handleRunTypecheck,
 })
 
 const analyzeImportsTool = createTool({
@@ -752,19 +953,7 @@ const analyzeImportsTool = createTool({
 	parameters: z.object({
 		path: z.string().describe("Absolute path to the file"),
 	}),
-	handler: async function handleAnalyzeImports({ path }) {
-		logger.debug("analyzing imports", { path })
-		const proc = Bun.spawn(
-			["rg", "--no-heading", "--line-number", "^import ", path],
-			{ stdout: "pipe", stderr: "pipe" },
-		)
-		const stdout = await new Response(proc.stdout).text()
-		await proc.exited
-		if (!stdout.trim()) {
-			return "No imports found."
-		}
-		return stdout
-	},
+	handler: handleAnalyzeImports,
 })
 
 const findUsagesTool = createTool({
@@ -775,17 +964,7 @@ const findUsagesTool = createTool({
 		path: z.string().describe("Directory to search in"),
 		glob: z.string().nullable().describe("Optional glob filter"),
 	}),
-	handler: async function handleFindUsages({ symbol, path, glob: fileGlob }) {
-		logger.debug("finding usages", { symbol, path, fileGlob })
-		const args = ["rg", "--line-number", "--no-heading", "-w", symbol, path]
-		if (fileGlob) {
-			args.push("--glob", fileGlob)
-		}
-		const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" })
-		const stdout = await new Response(proc.stdout).text()
-		await proc.exited
-		return stdout.trim() ? stdout : `No usages of '${symbol}' found.`
-	},
+	handler: handleFindUsages,
 })
 
 const getGitHistoryTool = createTool({
@@ -795,37 +974,33 @@ const getGitHistoryTool = createTool({
 		path: z.string().describe("File path to check history for"),
 		count: z.number().describe("Number of commits to show").default(10),
 	}),
-	handler: async function handleGetGitHistory({ path, count }) {
-		logger.debug("getting git history", { path, count })
-		const proc = Bun.spawn(
-			["git", "log", `--max-count=${count}`, "--oneline", "--", path],
-			{ stdout: "pipe", stderr: "pipe" },
-		)
-		const stdout = await new Response(proc.stdout).text()
-		await proc.exited
-		return stdout.trim() ? stdout : "No git history found for this file."
-	},
+	handler: handleGetGitHistory,
 })
 
 export {
 	analyzeImportsTool,
 	findUsagesTool,
 	getGitHistoryTool,
+	handleAnalyzeImports,
+	handleFindUsages,
+	handleGetGitHistory,
+	handleRunLint,
+	handleRunTypecheck,
 	runLintTool,
 	runTypecheckTool,
 }
 ```
 
-**Step 2: Verify typecheck**
+**Step 4: Run test to verify it passes**
 
 ```bash
-bun typecheck
+bun test src/agents/tools/analysis.test.ts
 ```
 
-**Step 3: Commit**
+**Step 5: Commit**
 
 ```bash
-git add src/agents/tools/analysis.ts
+git add src/agents/tools/analysis.ts src/agents/tools/analysis.test.ts
 git commit -m "feat: add analysis tools (lint, typecheck, imports, usages, git history)"
 ```
 
@@ -835,10 +1010,57 @@ git commit -m "feat: add analysis tools (lint, typecheck, imports, usages, git h
 
 **Files:**
 - Create: `src/agents/tools/conventions.ts`
+- Create: `src/agents/tools/conventions.test.ts`
 
 Reads CLAUDE.md and all rules/*.md files so agents know codebase conventions.
 
-**Step 1: Write implementation**
+**Step 1: Write the failing test**
+
+Behavior: given a repo root containing CLAUDE.md and rules/*.md, returns their concatenated contents.
+
+```typescript
+// src/agents/tools/conventions.test.ts
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import { handleReadConventions } from "@/agents/tools/conventions"
+import { mkdtemp, mkdir, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
+let testRepo: string
+
+beforeAll(async () => {
+	testRepo = await mkdtemp(join(tmpdir(), "conventions-test-"))
+	await Bun.write(join(testRepo, "CLAUDE.md"), "# Project Rules\nUse bun.\n")
+	await mkdir(join(testRepo, "rules"), { recursive: true })
+	await Bun.write(join(testRepo, "rules", "no-try.md"), "### No try/catch\nUse errors.try().\n")
+})
+
+afterAll(async () => {
+	await rm(testRepo, { recursive: true, force: true })
+})
+
+describe("handleReadConventions", () => {
+	test("includes CLAUDE.md content", async () => {
+		const result = await handleReadConventions({ repoRoot: testRepo })
+		expect(result).toContain("# Project Rules")
+		expect(result).toContain("Use bun.")
+	})
+
+	test("includes rules/*.md content", async () => {
+		const result = await handleReadConventions({ repoRoot: testRepo })
+		expect(result).toContain("no-try.md")
+		expect(result).toContain("Use errors.try().")
+	})
+})
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+bun test src/agents/tools/conventions.test.ts
+```
+
+**Step 3: Write implementation**
 
 ```typescript
 // src/agents/tools/conventions.ts
@@ -846,40 +1068,48 @@ import { createTool } from "@inngest/agent-kit"
 import * as logger from "@superbuilders/slog"
 import { z } from "zod"
 
+async function handleReadConventions({ repoRoot }: { repoRoot: string }) {
+	logger.debug("reading conventions", { repoRoot })
+	const sections: string[] = []
+
+	const claudeMd = Bun.file(`${repoRoot}/CLAUDE.md`)
+	if (await claudeMd.exists()) {
+		sections.push("# CLAUDE.md\n\n" + await claudeMd.text())
+	}
+
+	const rulesGlob = new Bun.Glob("*.md")
+	const rulesDir = `${repoRoot}/rules`
+	for await (const file of rulesGlob.scan({ cwd: rulesDir, absolute: true })) {
+		const content = await Bun.file(file).text()
+		const name = file.split("/").pop()
+		sections.push(`# rules/${name}\n\n${content}`)
+	}
+
+	return sections.join("\n\n---\n\n")
+}
+
 const readConventionsTool = createTool({
 	name: "read_conventions",
 	description: "Read the codebase conventions (CLAUDE.md + all rules/*.md). Call this before generating or reviewing code to understand the project's enforced patterns.",
 	parameters: z.object({
 		repoRoot: z.string().describe("Absolute path to the repository root"),
 	}),
-	handler: async function handleReadConventions({ repoRoot }) {
-		logger.debug("reading conventions", { repoRoot })
-		const sections: string[] = []
-
-		const claudeMd = Bun.file(`${repoRoot}/CLAUDE.md`)
-		if (await claudeMd.exists()) {
-			sections.push("# CLAUDE.md\n\n" + await claudeMd.text())
-		}
-
-		const rulesGlob = new Bun.Glob("*.md")
-		const rulesDir = `${repoRoot}/rules`
-		for await (const file of rulesGlob.scan({ cwd: rulesDir, absolute: true })) {
-			const content = await Bun.file(file).text()
-			const name = file.split("/").pop()
-			sections.push(`# rules/${name}\n\n${content}`)
-		}
-
-		return sections.join("\n\n---\n\n")
-	},
+	handler: handleReadConventions,
 })
 
-export { readConventionsTool }
+export { handleReadConventions, readConventionsTool }
 ```
 
-**Step 2: Commit**
+**Step 4: Run test to verify it passes**
 
 ```bash
-git add src/agents/tools/conventions.ts
+bun test src/agents/tools/conventions.test.ts
+```
+
+**Step 5: Commit**
+
+```bash
+git add src/agents/tools/conventions.ts src/agents/tools/conventions.test.ts
 git commit -m "feat: add conventions tool (reads CLAUDE.md + rules/*.md)"
 ```
 
@@ -889,16 +1119,52 @@ git commit -m "feat: add conventions tool (reads CLAUDE.md + rules/*.md)"
 
 **Files:**
 - Create: `src/agents/tools/progress.ts`
+- Create: `src/agents/tools/progress.test.ts`
 
 Emits realtime events to the dashboard via Inngest publish. The `publish` function is only available inside Inngest function context, so this tool receives it via network state.
 
-**Step 1: Write implementation**
+**Step 1: Write the failing test**
+
+Behavior: handler returns the stage and detail it was given (confirmation for the caller).
+
+```typescript
+// src/agents/tools/progress.test.ts
+import { describe, expect, test } from "bun:test"
+import { handleEmitProgress } from "@/agents/tools/progress"
+
+describe("handleEmitProgress", () => {
+	test("returns emitted confirmation with stage and detail", async () => {
+		const result = await handleEmitProgress({
+			stage: "onboarding",
+			detail: "exploring data layer",
+		})
+		expect(result).toEqual({
+			emitted: true,
+			stage: "onboarding",
+			detail: "exploring data layer",
+		})
+	})
+})
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+bun test src/agents/tools/progress.test.ts
+```
+
+**Step 3: Write implementation**
 
 ```typescript
 // src/agents/tools/progress.ts
 import { createTool } from "@inngest/agent-kit"
 import * as logger from "@superbuilders/slog"
 import { z } from "zod"
+
+async function handleEmitProgress({ stage, detail }: { stage: string; detail: string }) {
+	logger.info("agent progress", { stage, detail })
+	return { emitted: true, stage, detail }
+}
 
 const emitProgressTool = createTool({
 	name: "emit_progress",
@@ -907,21 +1173,24 @@ const emitProgressTool = createTool({
 		stage: z.string().describe("Current stage or phase name"),
 		detail: z.string().describe("What you are doing right now and why"),
 	}),
-	handler: async function handleEmitProgress({ stage, detail }) {
-		logger.info("agent progress", { stage, detail })
-		return { emitted: true, stage, detail }
-	},
+	handler: handleEmitProgress,
 })
 
-export { emitProgressTool }
+export { emitProgressTool, handleEmitProgress }
 ```
 
 **Note:** Full Inngest Realtime `publish()` integration will be wired in the pipeline task. For now, the tool logs the progress event. The dashboard integration is a separate plan.
 
-**Step 2: Commit**
+**Step 4: Run test to verify it passes**
 
 ```bash
-git add src/agents/tools/progress.ts
+bun test src/agents/tools/progress.test.ts
+```
+
+**Step 5: Commit**
+
+```bash
+git add src/agents/tools/progress.ts src/agents/tools/progress.test.ts
 git commit -m "feat: add progress tool for agent status reporting"
 ```
 
@@ -971,6 +1240,35 @@ describe("listWorktrees", () => {
 	test("returns at least the main worktree", async () => {
 		const result = await listWorktrees(testRepoPath)
 		expect(result.length).toBeGreaterThanOrEqual(1)
+	})
+})
+
+describe("worktree lifecycle", () => {
+	test("create → list → verify → delete → verify gone", async () => {
+		// Create
+		const branch = `test-wt-${Date.now()}`
+		const wtPath = await createWorktree(testRepoPath, branch, "main")
+
+		// List — new worktree appears
+		const after = await listWorktrees(testRepoPath)
+		const found = after.find(function matchBranch(wt) {
+			return wt.branch === branch
+		})
+		expect(found).toBeDefined()
+
+		// Status — should be clean
+		const status = await worktreeStatus(wtPath)
+		expect(status).toContain("(clean)")
+
+		// Delete
+		await deleteWorktree(testRepoPath, wtPath)
+
+		// Verify gone
+		const final = await listWorktrees(testRepoPath)
+		const gone = final.find(function matchBranch(wt) {
+			return wt.branch === branch
+		})
+		expect(gone).toBeUndefined()
 	})
 })
 ```
@@ -1096,10 +1394,49 @@ git commit -m "feat: add git worktree management functions"
 
 **Files:**
 - Create: `src/agents/tools/verification.ts`
+- Create: `src/agents/tools/verification.test.ts`
 
 Tools agents can use to verify their work against reality (Principle 3). Available to ALL agents.
 
-**Step 1: Write implementation**
+**Step 1: Write the failing test**
+
+Behaviors (tested against the current repo since it has real TypeScript and git history):
+- `handleVerifyTypecheck` returns passed:true for a valid project
+- `handleDiffCheck` returns diff or no-changes message
+
+```typescript
+// src/agents/tools/verification.test.ts
+import { describe, expect, test } from "bun:test"
+import {
+	handleVerifyTypecheck,
+	handleDiffCheck,
+} from "@/agents/tools/verification"
+
+const CWD = process.cwd()
+
+describe("handleVerifyTypecheck", () => {
+	test("returns passed:true for a valid project", async () => {
+		const result = await handleVerifyTypecheck({ cwd: CWD })
+		expect(result.passed).toBe(true)
+		expect(result.output).toBe("All type checks passed.")
+	})
+})
+
+describe("handleDiffCheck", () => {
+	test("returns diff output or no-changes message", async () => {
+		const result = await handleDiffCheck({ cwd: CWD, base: "main" })
+		expect(typeof result).toBe("string")
+	})
+})
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+bun test src/agents/tools/verification.test.ts
+```
+
+**Step 3: Write implementation**
 
 ```typescript
 // src/agents/tools/verification.ts
@@ -1107,28 +1444,82 @@ import { createTool } from "@inngest/agent-kit"
 import * as logger from "@superbuilders/slog"
 import { z } from "zod"
 
+// --- Handlers (exported for direct testing) ---
+
+async function handleVerifyTypecheck({ cwd }: { cwd: string }) {
+	logger.debug("verifying typecheck", { cwd })
+	const proc = Bun.spawn(["bun", "typecheck"], {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+	const stdout = await new Response(proc.stdout).text()
+	const stderr = await new Response(proc.stderr).text()
+	await proc.exited
+	const passed = proc.exitCode === 0
+	return {
+		passed,
+		output: passed ? "All type checks passed." : `${stdout}\n${stderr}`.trim(),
+	}
+}
+
+async function handleVerifyLint({ cwd, path }: { cwd: string; path: string | null }) {
+	logger.debug("verifying lint", { cwd, path })
+	const args = path ? ["bun", "lint", path] : ["bun", "lint"]
+	const proc = Bun.spawn(args, {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+	const stdout = await new Response(proc.stdout).text()
+	const stderr = await new Response(proc.stderr).text()
+	await proc.exited
+	const passed = proc.exitCode === 0
+	return {
+		passed,
+		output: passed ? "No lint violations." : `${stdout}\n${stderr}`.trim(),
+	}
+}
+
+async function handleVerifyTests({ cwd, filter }: { cwd: string; filter: string | null }) {
+	logger.debug("verifying tests", { cwd, filter })
+	const args = filter ? ["bun", "test", filter] : ["bun", "test"]
+	const proc = Bun.spawn(args, {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+	const stdout = await new Response(proc.stdout).text()
+	const stderr = await new Response(proc.stderr).text()
+	await proc.exited
+	const passed = proc.exitCode === 0
+	return {
+		passed,
+		output: `${stdout}\n${stderr}`.trim(),
+	}
+}
+
+async function handleDiffCheck({ cwd, base }: { cwd: string; base: string }) {
+	logger.debug("checking diff", { cwd, base })
+	const proc = Bun.spawn(["git", "diff", `${base}...HEAD`], {
+		cwd,
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+	const stdout = await new Response(proc.stdout).text()
+	await proc.exited
+	return stdout.trim() ? stdout : "No changes from base branch."
+}
+
+// --- Tool definitions ---
+
 const verifyTypecheckTool = createTool({
 	name: "verify_typecheck",
 	description: "Run TypeScript typecheck and return exact errors with file:line locations. Use to verify code correctness.",
 	parameters: z.object({
 		cwd: z.string().describe("Working directory to run typecheck in"),
 	}),
-	handler: async function handleVerifyTypecheck({ cwd }) {
-		logger.debug("verifying typecheck", { cwd })
-		const proc = Bun.spawn(["bun", "typecheck"], {
-			cwd,
-			stdout: "pipe",
-			stderr: "pipe",
-		})
-		const stdout = await new Response(proc.stdout).text()
-		const stderr = await new Response(proc.stderr).text()
-		await proc.exited
-		const passed = proc.exitCode === 0
-		return {
-			passed,
-			output: passed ? "All type checks passed." : `${stdout}\n${stderr}`.trim(),
-		}
-	},
+	handler: handleVerifyTypecheck,
 })
 
 const verifyLintTool = createTool({
@@ -1138,23 +1529,7 @@ const verifyLintTool = createTool({
 		cwd: z.string().describe("Working directory"),
 		path: z.string().nullable().describe("Optional specific file/directory to lint"),
 	}),
-	handler: async function handleVerifyLint({ cwd, path }) {
-		logger.debug("verifying lint", { cwd, path })
-		const args = path ? ["bun", "lint", path] : ["bun", "lint"]
-		const proc = Bun.spawn(args, {
-			cwd,
-			stdout: "pipe",
-			stderr: "pipe",
-		})
-		const stdout = await new Response(proc.stdout).text()
-		const stderr = await new Response(proc.stderr).text()
-		await proc.exited
-		const passed = proc.exitCode === 0
-		return {
-			passed,
-			output: passed ? "No lint violations." : `${stdout}\n${stderr}`.trim(),
-		}
-	},
+	handler: handleVerifyLint,
 })
 
 const verifyTestsTool = createTool({
@@ -1164,23 +1539,7 @@ const verifyTestsTool = createTool({
 		cwd: z.string().describe("Working directory"),
 		filter: z.string().nullable().describe("Optional test file or pattern filter"),
 	}),
-	handler: async function handleVerifyTests({ cwd, filter }) {
-		logger.debug("verifying tests", { cwd, filter })
-		const args = filter ? ["bun", "test", filter] : ["bun", "test"]
-		const proc = Bun.spawn(args, {
-			cwd,
-			stdout: "pipe",
-			stderr: "pipe",
-		})
-		const stdout = await new Response(proc.stdout).text()
-		const stderr = await new Response(proc.stderr).text()
-		await proc.exited
-		const passed = proc.exitCode === 0
-		return {
-			passed,
-			output: `${stdout}\n${stderr}`.trim(),
-		}
-	},
+	handler: handleVerifyTests,
 })
 
 const diffCheckTool = createTool({
@@ -1190,26 +1549,31 @@ const diffCheckTool = createTool({
 		cwd: z.string().describe("Working directory (worktree path)"),
 		base: z.string().describe("Base branch to diff against").default("main"),
 	}),
-	handler: async function handleDiffCheck({ cwd, base }) {
-		logger.debug("checking diff", { cwd, base })
-		const proc = Bun.spawn(["git", "diff", `${base}...HEAD`], {
-			cwd,
-			stdout: "pipe",
-			stderr: "pipe",
-		})
-		const stdout = await new Response(proc.stdout).text()
-		await proc.exited
-		return stdout.trim() ? stdout : "No changes from base branch."
-	},
+	handler: handleDiffCheck,
 })
 
-export { diffCheckTool, verifyLintTool, verifyTestsTool, verifyTypecheckTool }
+export {
+	diffCheckTool,
+	handleDiffCheck,
+	handleVerifyLint,
+	handleVerifyTests,
+	handleVerifyTypecheck,
+	verifyLintTool,
+	verifyTestsTool,
+	verifyTypecheckTool,
+}
 ```
 
-**Step 2: Commit**
+**Step 4: Run test to verify it passes**
 
 ```bash
-git add src/agents/tools/verification.ts
+bun test src/agents/tools/verification.test.ts
+```
+
+**Step 5: Commit**
+
+```bash
+git add src/agents/tools/verification.ts src/agents/tools/verification.test.ts
 git commit -m "feat: add verification tools (typecheck, lint, tests, diff)"
 ```
 
@@ -1223,24 +1587,40 @@ git commit -m "feat: add verification tools (typecheck, lint, tests, diff)"
 
 **Step 1: Write the failing test**
 
+Behaviors to test:
+- Factory produces an agent that can be passed to `createNetwork` (integration — proves the agent is valid AgentKit structure)
+- Factory accepts custom config (different provider, different prompt)
+
 ```typescript
 // src/agents/agents/explorer.test.ts
 import { describe, expect, test } from "bun:test"
+import { createNetwork } from "@inngest/agent-kit"
 import { createExplorerAgent } from "@/agents/agents/explorer"
 import { DEFAULT_CONFIG } from "@/agents/config"
 
 describe("createExplorerAgent", () => {
-	test("creates an agent with the correct name", () => {
+	test("produces an agent accepted by createNetwork", () => {
 		const agent = createExplorerAgent(DEFAULT_CONFIG.explorer)
-		expect(agent.name).toBe("Explorer")
+		// The real test: createNetwork accepts this agent without throwing
+		const network = createNetwork({
+			name: "test-explorer",
+			agents: [agent],
+			maxIter: 1,
+		})
+		expect(network.name).toBe("test-explorer")
 	})
 
-	test("accepts custom config", () => {
+	test("accepts custom provider and prompt", () => {
 		const agent = createExplorerAgent({
 			model: { provider: "openai", model: "gpt-4o" },
 			systemPrompt: "Custom explorer prompt.",
 		})
-		expect(agent.name).toBe("Explorer")
+		const network = createNetwork({
+			name: "test-custom",
+			agents: [agent],
+			maxIter: 1,
+		})
+		expect(network.name).toBe("test-custom")
 	})
 })
 ```
@@ -1301,10 +1681,41 @@ git commit -m "feat: add explorer agent factory"
 
 **Files:**
 - Create: `src/agents/agents/specialist.ts`
+- Create: `src/agents/agents/specialist.test.ts`
 
 Same pattern as explorer but with analysis tools included.
 
-**Step 1: Write implementation**
+**Step 1: Write the failing test**
+
+Behavior: factory produces an agent accepted by `createNetwork`.
+
+```typescript
+// src/agents/agents/specialist.test.ts
+import { describe, expect, test } from "bun:test"
+import { createNetwork } from "@inngest/agent-kit"
+import { createSpecialistAgent } from "@/agents/agents/specialist"
+import { DEFAULT_CONFIG } from "@/agents/config"
+
+describe("createSpecialistAgent", () => {
+	test("produces an agent accepted by createNetwork", () => {
+		const agent = createSpecialistAgent(DEFAULT_CONFIG.specialist)
+		const network = createNetwork({
+			name: "test-specialist",
+			agents: [agent],
+			maxIter: 1,
+		})
+		expect(network.name).toBe("test-specialist")
+	})
+})
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+bun test src/agents/agents/specialist.test.ts
+```
+
+**Step 3: Write implementation**
 
 ```typescript
 // src/agents/agents/specialist.ts
@@ -1339,10 +1750,16 @@ function createSpecialistAgent(config: AgentConfig) {
 export { createSpecialistAgent }
 ```
 
-**Step 2: Commit**
+**Step 4: Run test to verify it passes**
 
 ```bash
-git add src/agents/agents/specialist.ts
+bun test src/agents/agents/specialist.test.ts
+```
+
+**Step 5: Commit**
+
+```bash
+git add src/agents/agents/specialist.ts src/agents/agents/specialist.test.ts
 git commit -m "feat: add specialist agent factory"
 ```
 
@@ -1360,33 +1777,47 @@ This is NOT an Inngest function — it's a reusable async function that takes an
 
 **Step 1: Write the types and test**
 
+Behaviors to test:
+- `buildSlicePrompt` includes the target path and slice-specific instructions
+- `buildSlicePrompt` for each valid slice produces a non-empty prompt with instructions
+- `createSliceNetwork` produces a network accepted by AgentKit (integration)
+
 ```typescript
 // src/agents/primitives/onboard.test.ts
 import { describe, expect, test } from "bun:test"
 import {
+	buildSlicePrompt,
+	createSliceNetwork,
 	DEFAULT_SLICES,
-	type CodebaseContext,
-	type OnboardingScope,
 } from "@/agents/primitives/onboard"
+import { DEFAULT_CONFIG } from "@/agents/config"
 
-describe("onboarding types", () => {
-	test("DEFAULT_SLICES has all 6 slices", () => {
-		expect(DEFAULT_SLICES).toHaveLength(6)
-		expect(DEFAULT_SLICES).toContain("structure")
-		expect(DEFAULT_SLICES).toContain("data-layer")
-		expect(DEFAULT_SLICES).toContain("api-layer")
-		expect(DEFAULT_SLICES).toContain("ui-layer")
-		expect(DEFAULT_SLICES).toContain("conventions")
-		expect(DEFAULT_SLICES).toContain("dependencies")
+describe("buildSlicePrompt", () => {
+	test("includes target path and slice-specific instructions", () => {
+		const prompt = buildSlicePrompt("/my/repo", "data-layer")
+		expect(prompt).toContain("/my/repo")
+		expect(prompt).toContain("data-layer")
+		expect(prompt).toContain("database schema")
+	})
+
+	test("produces non-empty prompt for every default slice", () => {
+		for (const slice of DEFAULT_SLICES) {
+			const prompt = buildSlicePrompt("/repo", slice)
+			expect(prompt.length).toBeGreaterThan(100)
+			expect(prompt).toContain(slice)
+			expect(prompt).toContain("save_summary")
+		}
 	})
 })
 
-describe("buildSlicePrompt", () => {
-	test("includes target path and slice name", async () => {
-		const { buildSlicePrompt } = await import("@/agents/primitives/onboard")
-		const prompt = buildSlicePrompt("/path/to/repo", "data-layer")
-		expect(prompt).toContain("/path/to/repo")
-		expect(prompt).toContain("data-layer")
+describe("createSliceNetwork", () => {
+	test("produces a valid network with router", () => {
+		const network = createSliceNetwork(
+			DEFAULT_CONFIG.explorer,
+			"/repo",
+			"structure",
+		)
+		expect(network.name).toBe("explore-structure")
 	})
 })
 ```
@@ -1549,6 +1980,7 @@ async function onboard(
 
 export {
 	buildSlicePrompt,
+	createSliceNetwork,
 	DEFAULT_SLICES,
 	onboard,
 	saveSummaryTool,
