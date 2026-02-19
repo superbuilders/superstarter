@@ -53,3 +53,25 @@ bun scripts/inngest/create-inngest-function.ts generate-questions \
 | `-c <cron>` | at least one `-e` or `-c` | Cron expression for scheduled triggers |
 | `-p <path>` | no | Subdirectory under `src/inngest/functions/` |
 | `--force` | no | Skip confirmation prompts for missing event schemas |
+
+## Event Schemas
+
+Event schemas are defined in the `schema` object in `src/inngest/index.ts`. Each entry maps an event name to its Zod data shape **inline** — never extract the schema into a separate variable.
+
+```typescript
+const schema = {
+	"superstarter/hello": z.object({
+		message: z.string().min(1)
+	}),
+	"superstarter/process-enrollment": z.object({
+		enrollmentId: z.string().uuid(),
+		userId: z.string().uuid()
+	})
+}
+```
+
+### Rules
+
+1. **Inline always** — the `z.object({...})` goes directly as the property value, not referenced from a `const`
+2. **Event names** — `superstarter/<kebab-case-action>` format
+3. **Data shapes** — define only the fields the function needs; use strict Zod types (no `.any()`, no `.passthrough()`)
