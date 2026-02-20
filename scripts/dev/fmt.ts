@@ -39,7 +39,7 @@ import { getFilesToCheck } from "@scripts/dev/shared/files"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
 
-function main() {
+async function main() {
 	const args = process.argv.slice(2)
 	const shouldWrite = args.includes("--write")
 	const stripComments = args.includes("--strip-comments")
@@ -57,7 +57,7 @@ function main() {
 	let totalExports = 0
 	let totalReactImports = 0
 	for (const file of files) {
-		const fileResult = processFile(file, shouldWrite, stripComments)
+		const fileResult = await processFile(file, shouldWrite, stripComments)
 		if (fileResult) {
 			allResults.push(fileResult)
 			totalComments += fileResult.commentViolations.length
@@ -82,10 +82,7 @@ function main() {
 	)
 }
 
-const result = errors.trySync(function runMain() {
-	return main()
-})
-
+const result = await errors.try(main())
 if (result.error) {
 	logger.error("super-fumpt: failed", { error: result.error })
 	process.exit(1)

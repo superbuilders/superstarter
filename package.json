@@ -17,8 +17,8 @@
 		"db:migrate": "bun --bun drizzle-kit migrate",
 		"db:push": "bun --bun drizzle-kit push",
 		"db:studio": "bun --bun drizzle-kit studio",
-		"db:drop": "bun --bun run src/db/scripts/drop-schemas.ts",
-		"db:apply": "bun --bun run src/db/scripts/apply-programs.ts"
+		"db:drop-schemas": "bun --bun run src/db/scripts/drop-schemas.ts",
+		"db:apply-programs": "bun --bun run src/db/scripts/apply-programs.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.2.0",

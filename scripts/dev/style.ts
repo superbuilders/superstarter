@@ -149,9 +149,6 @@ async function main(): Promise<void> {
 
 const result = await errors.try(main())
 if (result.error) {
-	logger.error("failed", {
-		error: String(result.error),
-		stack: result.error.stack
-	})
+	logger.error("failed", { error: result.error })
 	process.exit(1)
 }

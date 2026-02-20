@@ -1,8 +1,6 @@
 import { check as checkArrowFunctions } from "@scripts/dev/lint/rules/arrow-functions"
 import { check as checkImpossibleLogicalOr } from "@scripts/dev/lint/rules/impossible-logical-or"
-import { check as checkInstanceofError } from "@scripts/dev/lint/rules/instanceof-error"
 import { check as checkLogicalOrFallback } from "@scripts/dev/lint/rules/logical-or-fallback"
-import { check as checkNoExtendsError } from "@scripts/dev/lint/rules/no-extends-error"
 import { check as checkNullUndefinedUnion } from "@scripts/dev/lint/rules/null-undefined-union"
 import { check as checkObjectModule } from "@scripts/dev/lint/rules/object-module"
 import { check as checkOptionalArray } from "@scripts/dev/lint/rules/optional-array"
@@ -22,9 +20,7 @@ const rules: LintRule[] = [
 	{ id: "no-optional-array", check: checkOptionalArray },
 	{ id: "no-arrow-functions", check: checkArrowFunctions },
 	{ id: "no-object-module", check: checkObjectModule },
-	{ id: "no-extends-error", check: checkNoExtendsError },
-	{ id: "no-pointless-indirection", check: checkPointlessIndirection },
-	{ id: "no-instanceof-error", check: checkInstanceofError }
+	{ id: "no-pointless-indirection", check: checkPointlessIndirection }
 ]
 
 export { rules }

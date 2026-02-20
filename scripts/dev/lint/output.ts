@@ -1,5 +1,5 @@
-import { logger } from "@scripts/dev/lint/program"
 import type { Violation } from "@scripts/dev/lint/types"
+import * as logger from "@superbuilders/slog"
 
 function outputText(allViolations: Violation[]): void {
 	for (const v of allViolations) {

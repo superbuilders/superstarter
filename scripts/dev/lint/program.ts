@@ -1,5 +1,4 @@
 import { parseTsConfig } from "@scripts/dev/shared/files"
-import * as logger from "@superbuilders/slog"
 import * as ts from "typescript"
 
 function createProgram(): ts.Program {
@@ -7,4 +6,4 @@ function createProgram(): ts.Program {
 	return ts.createProgram(config.fileNames, config.options)
 }
 
-export { createProgram, logger }
+export { createProgram }

@@ -13,6 +13,8 @@
 		"./gritql/require-logger-before-throw.grit",
 		"./gritql/no-implicit-select-all.grit",
 		"./gritql/no-inline-ternary.grit",
-		"./gritql/no-inline-style.grit"
+		"./gritql/no-inline-style.grit",
+		"./gritql/no-extends-error.grit",
+		"./gritql/no-instanceof-error.grit"
 	]
 }

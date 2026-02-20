@@ -1,4 +1,3 @@
-import * as fs from "node:fs"
 import * as path from "node:path"
 import {
 	applyCurlyBraceFixes,
@@ -15,12 +14,12 @@ import {
 import type { ExportViolation, FileResult, ReactImportViolation } from "@scripts/dev/fmt/types"
 import * as logger from "@superbuilders/slog"
 
-function processFile(
+async function processFile(
 	file: string,
 	shouldWrite: boolean,
 	stripComments: boolean
-): FileResult | null {
-	let content = fs.readFileSync(file, "utf-8")
+): Promise<FileResult | null> {
+	let content = await Bun.file(file).text()
 	const relativePath = path.relative(process.cwd(), file)
 	let commentViolations: ReturnType<typeof findViolatingComments> = []
 	if (stripComments) {
@@ -56,7 +55,7 @@ function processFile(
 		return null
 	}
 	if (shouldWrite) {
-		fs.writeFileSync(file, content, "utf-8")
+		await Bun.write(file, content)
 	}
 	return {
 		file: relativePath,

@@ -10,9 +10,7 @@ type RuleId =
 	| "no-optional-array"
 	| "no-arrow-functions"
 	| "no-object-module"
-	| "no-extends-error"
 	| "no-pointless-indirection"
-	| "no-instanceof-error"
 
 interface Violation {
 	file: string

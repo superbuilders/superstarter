@@ -1,43 +1,22 @@
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
-import { file, Glob, SQL } from "bun"
-import { env } from "@/env"
-
-const programsDir = `${import.meta.dir}/../programs`
-
-async function apply(dir: string) {
-	const glob = new Glob("*.sql")
-	const fullPath = `${programsDir}/${dir}`
-	const result = await errors.try(Array.fromAsync(glob.scan({ cwd: fullPath })))
-	if (result.error) {
-		logger.debug("directory does not exist, skipping", { dir })
-		return
-	}
-
-	const sqlFiles = result.data.sort()
-	if (sqlFiles.length === 0) {
-		logger.debug("no sql files found", { dir })
-		return
-	}
-
-	await using stack = new AsyncDisposableStack()
-	const sql = new SQL(env.DATABASE_URL)
-	stack.defer(async () => {
-		await sql.close()
-	})
-
-	for (const f of sqlFiles) {
-		const content = await file(`${fullPath}/${f}`).text()
-		logger.info("applying", { file: `${dir}/${f}` })
-		await sql.unsafe(content)
-	}
-}
+import { db } from "@/db"
+import { programs } from "@/db/programs"
 
 async function main() {
-	logger.info("applying database programs")
-	await apply("functions")
-	await apply("triggers")
+	logger.info("applying database programs", { count: programs.length })
+	for (const program of programs) {
+		const result = await errors.try(db.execute(program))
+		if (result.error) {
+			logger.error("program execution failed", { error: result.error })
+			throw errors.wrap(result.error, "program execution")
+		}
+	}
 	logger.info("done")
 }
 
-main()
+const result = await errors.try(main())
+if (result.error) {
+	logger.error("apply programs failed", { error: result.error })
+	process.exit(1)
+}

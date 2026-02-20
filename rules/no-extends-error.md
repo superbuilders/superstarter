@@ -4,7 +4,7 @@ alwaysApply: true
 
 # No Extends Error
 
-Extending `Error` is banned. Use the `errors.new()` sentinel pattern instead. This is enforced by `super-lint.ts` rule `no-extends-error`.
+Extending `Error` is banned. Use the `errors.new()` sentinel pattern instead. This is enforced by GritQL rule `no-extends-error`.
 
 ## Why
 

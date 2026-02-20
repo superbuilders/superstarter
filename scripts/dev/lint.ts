@@ -15,9 +15,7 @@
  *   - no-optional-array: Arrays should use [] not null/undefined
  *   - no-arrow-functions: Use named function declarations
  *   - no-object-module: Ban object namespaces, object classes, and class definitions - use ESM modules
- *   - no-extends-error: Ban extending Error - use errors.new() sentinel pattern
  *   - no-pointless-indirection: Don't wrap function calls without adding value
- *   - no-instanceof-error: Ban instanceof Error (useThrowOnlyError guarantees Error)
  *
  * Usage:
  *   bun scripts/dev/lint.ts              # Check all files
@@ -26,11 +24,12 @@
  */
 
 import { outputJson, outputText } from "@scripts/dev/lint/output"
-import { createProgram, logger } from "@scripts/dev/lint/program"
+import { createProgram } from "@scripts/dev/lint/program"
 import { rules } from "@scripts/dev/lint/rules"
 import type { Violation } from "@scripts/dev/lint/types"
 import { getStagedFiles, isSkippedPath } from "@scripts/dev/shared/files"
 import * as errors from "@superbuilders/errors"
+import * as logger from "@superbuilders/slog"
 import type * as ts from "typescript"
 
 function main(): void {
@@ -95,9 +94,6 @@ function main(): void {
 
 const result = errors.trySync(main)
 if (result.error) {
-	logger.error("failed", {
-		error: String(result.error),
-		stack: result.error.stack
-	})
+	logger.error("failed", { error: result.error })
 	process.exit(1)
 }

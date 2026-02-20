@@ -3,7 +3,9 @@ import * as ts from "typescript"
 
 /**
  * Bans the logical OR operator (||) for fallbacks/defaults.
- * Exception: Allowed in conditionals (if, while, for, do-while) for boolean logic.
+ * Allowed in:
+ *   - Conditionals (if, while, for, do-while) for boolean logic
+ *   - Return statements (boolean expressions being returned)
  *
  * Ternary expressions are NOT an exception - mixing || with ternaries is confusing.
  *
@@ -11,7 +13,7 @@ import * as ts from "typescript"
  * `not(or{and{...}})` patterns and cannot reliably enumerate all conditional contexts.
  */
 
-function isConditionOfParent(current: ts.Node, parent: ts.Node): boolean {
+function isAllowedParent(current: ts.Node, parent: ts.Node): boolean {
 	if (ts.isIfStatement(parent)) {
 		return parent.expression === current
 	}
@@ -23,6 +25,9 @@ function isConditionOfParent(current: ts.Node, parent: ts.Node): boolean {
 	}
 	if (ts.isForStatement(parent)) {
 		return parent.condition === current
+	}
+	if (ts.isReturnStatement(parent)) {
+		return true
 	}
 	return false
 }
@@ -40,12 +45,12 @@ function shouldContinueUp(parent: ts.Node): boolean {
 	return false
 }
 
-function isInConditionPosition(node: ts.Node): boolean {
+function isInAllowedPosition(node: ts.Node): boolean {
 	let current: ts.Node = node
 	let parent = current.parent
 
 	while (parent) {
-		if (isConditionOfParent(current, parent)) {
+		if (isAllowedParent(current, parent)) {
 			return true
 		}
 
@@ -66,7 +71,7 @@ function check(sourceFile: ts.SourceFile, _checker: ts.TypeChecker): Violation[]
 
 	function walk(node: ts.Node): void {
 		if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
-			if (!isInConditionPosition(node)) {
+			if (!isInAllowedPosition(node)) {
 				const { line, character } = sourceFile.getLineAndCharacterOfPosition(
 					node.operatorToken.getStart(sourceFile)
 				)
@@ -76,7 +81,7 @@ function check(sourceFile: ts.SourceFile, _checker: ts.TypeChecker): Violation[]
 					column: character + 1,
 					rule: "no-logical-or-fallback",
 					message:
-						"Logical OR (||) banned for fallbacks. Only allowed in conditionals (if/while/for test).",
+						"Logical OR (||) banned for fallbacks. Only allowed in conditionals and return statements.",
 					suggestion: "See rules/no-logical-or-fallback.md for fix patterns"
 				})
 			}

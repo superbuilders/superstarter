@@ -64,7 +64,7 @@ async function loadAllGritRules(): Promise<GritRule[]> {
 
 	const filesResult = await errors.try(readdir(gritqlDir))
 	if (filesResult.error) {
-		logger.error("read gritql directory", { error: String(filesResult.error) })
+		logger.error("read gritql directory", { error: filesResult.error })
 		throw filesResult.error
 	}
 
@@ -93,7 +93,7 @@ async function loadAllMdcDocs(): Promise<MdcDoc[]> {
 
 	const filesResult = await errors.try(readdir(rulesDir))
 	if (filesResult.error) {
-		logger.error("read rules directory", { error: String(filesResult.error) })
+		logger.error("read rules directory", { error: filesResult.error })
 		throw filesResult.error
 	}
 
@@ -129,7 +129,7 @@ async function loadBiomeConfig(): Promise<string> {
 
 	const result = await errors.try(readFile(biomePath, "utf-8"))
 	if (result.error) {
-		logger.warn("could not load biome config", { error: String(result.error) })
+		logger.warn("could not load biome config", { error: result.error })
 		return ""
 	}
 
@@ -138,17 +138,17 @@ async function loadBiomeConfig(): Promise<string> {
 }
 
 async function loadSuperLintScript(): Promise<string> {
-	const scriptPath = join(process.cwd(), "scripts/super-lint.ts")
+	const scriptPath = join(process.cwd(), "scripts/dev/lint.ts")
 
 	const result = await errors.try(readFile(scriptPath, "utf-8"))
 	if (result.error) {
 		logger.warn("could not load super-lint script", {
-			error: String(result.error)
+			error: result.error
 		})
 		return ""
 	}
 
-	logger.info("loaded super-lint script", { path: "scripts/super-lint.ts" })
+	logger.info("loaded super-lint script", { path: "scripts/dev/lint.ts" })
 	return result.data
 }
 
@@ -448,7 +448,7 @@ interface SuperLintViolation {
 async function collectSuperLintViolations(): Promise<ViolationGroup[]> {
 	logger.info("running super-lint")
 
-	const proc = Bun.spawn(["bun", "scripts/super-lint.ts", "--json"], {
+	const proc = Bun.spawn(["bun", "scripts/dev/lint.ts", "--json"], {
 		cwd: process.cwd(),
 		stdout: "pipe",
 		stderr: "pipe"
@@ -471,7 +471,7 @@ async function collectSuperLintViolations(): Promise<ViolationGroup[]> {
 	const parseResult = errors.trySync(() => JSON.parse(stdout))
 	if (parseResult.error) {
 		logger.error("parse super-lint output", {
-			error: String(parseResult.error)
+			error: parseResult.error
 		})
 		return []
 	}
@@ -552,7 +552,7 @@ async function collectViolations(): Promise<GroupedOutput> {
 
 	const parseResult = errors.trySync(() => JSON.parse(stdout))
 	if (parseResult.error) {
-		logger.error("parse biome output", { error: String(parseResult.error) })
+		logger.error("parse biome output", { error: parseResult.error })
 		throw errors.wrap(parseResult.error, "parse biome output")
 	}
 
@@ -696,7 +696,7 @@ async function runAgentWithRetry(
 				: await errors.try(buildBiomeTaskPrompt(group))
 	if (taskPromptResult.error) {
 		logger.error("build task prompt", {
-			error: String(taskPromptResult.error),
+			error: taskPromptResult.error,
 			file: group.file
 		})
 		return { success: false, result: "" }
@@ -887,6 +887,6 @@ async function main(): Promise<void> {
 
 const result = await errors.try(main())
 if (result.error) {
-	logger.error("script execution", { error: String(result.error) })
+	logger.error("script execution", { error: result.error })
 	process.exit(1)
 }
