@@ -1,5 +1,5 @@
-import { helloWorld } from "@/inngest/functions/hello"
+import { todoCreated } from "@/inngest/functions/todo-created"
 
-const functions = [helloWorld]
+const functions = [todoCreated]
 
 export { functions }

@@ -4,12 +4,12 @@ import { EventSchemas, Inngest, type Logger } from "inngest"
 import { z } from "zod"
 import { env } from "@/env"
 
-const helloWorldSchema = z.object({
-	message: z.string().min(1)
+const todoCreatedSchema = z.object({
+	todoId: z.string().uuid()
 })
 
 const schema = {
-	"superstarter/hello": helloWorldSchema
+	"superstarter/todo.created": todoCreatedSchema
 }
 
 const inngestLogger: Logger = {

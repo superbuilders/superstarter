@@ -6,7 +6,7 @@ function notifyTrigger(table: Table): SQL[] {
 	const triggerName = sql.identifier(`notify_${name}`)
 	return [
 		sql`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`,
-		sql`CREATE TRIGGER ${triggerName} AFTER INSERT OR UPDATE OR DELETE ON ${table} FOR EACH ROW EXECUTE FUNCTION notify_trigger()`,
+		sql`CREATE TRIGGER ${triggerName} AFTER INSERT OR UPDATE OR DELETE ON ${table} FOR EACH ROW EXECUTE FUNCTION notify_trigger()`
 	]
 }
 

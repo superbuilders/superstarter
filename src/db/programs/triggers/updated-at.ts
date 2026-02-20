@@ -5,7 +5,7 @@ function updatedAtTrigger(table: Table): SQL[] {
 	const triggerName = sql.identifier(`set_${getTableName(table)}_updated_at`)
 	return [
 		sql`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`,
-		sql`CREATE TRIGGER ${triggerName} BEFORE UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION set_updated_at()`,
+		sql`CREATE TRIGGER ${triggerName} BEFORE UPDATE ON ${table} FOR EACH ROW EXECUTE FUNCTION set_updated_at()`
 	]
 }
 

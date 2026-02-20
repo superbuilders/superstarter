@@ -20,6 +20,7 @@ import * as ts from "typescript"
  *   - Type guards (return type is `value is Type`)
  *   - Functions with multiple statements
  *   - Functions that do computation (operators, conditionals, object creation)
+ *   - Functions that construct callbacks (pass arrow/function args to calls)
  */
 function check(sourceFile: ts.SourceFile): Violation[] {
 	const violations: Violation[] = []
@@ -53,9 +54,21 @@ function check(sourceFile: ts.SourceFile): Violation[] {
 			return true
 		}
 		if (ts.isCallExpression(expr)) {
-			return true
+			return isTrivialCall(expr)
 		}
 		return false
+	}
+
+	function isTrivialCall(expr: ts.CallExpression): boolean {
+		for (const arg of expr.arguments) {
+			if (ts.isArrowFunction(arg) || ts.isFunctionExpression(arg)) {
+				return false
+			}
+			if (!isTrivialExpression(arg)) {
+				return false
+			}
+		}
+		return true
 	}
 
 	function isTrivialObjectProperty(prop: ts.ObjectLiteralElementLike): boolean {
@@ -152,7 +165,11 @@ function check(sourceFile: ts.SourceFile): Violation[] {
 			return stmt.expression
 		}
 
-		if (ts.isExpressionStatement(stmt) && ts.isCallExpression(stmt.expression)) {
+		if (
+			ts.isExpressionStatement(stmt) &&
+			ts.isCallExpression(stmt.expression) &&
+			isTrivialCall(stmt.expression)
+		) {
 			return stmt.expression
 		}
 

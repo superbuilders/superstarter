@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
 
-const notifyTriggerFunction: SQL = sql.raw(`CREATE OR REPLACE FUNCTION notify_trigger() RETURNS trigger AS $$
+const notifyTriggerFunction: SQL =
+	sql.raw(`CREATE OR REPLACE FUNCTION notify_trigger() RETURNS trigger AS $$
 BEGIN
   PERFORM pg_notify(TG_TABLE_NAME, json_build_object(
     'op', TG_OP,

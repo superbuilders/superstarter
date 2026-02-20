@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils"
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 
 const metadata: Metadata = {
-	title: "Superstarter",
-	description: "Superstarter template",
+	title: "Todos",
+	description: "A todo list app",
 	icons: [{ rel: "icon", url: "/favicon.svg", type: "image/svg+xml" }]
 }
 
