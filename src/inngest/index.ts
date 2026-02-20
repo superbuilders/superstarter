@@ -7,6 +7,9 @@ import { env } from "@/env"
 const schema = {
 	"superstarter/hello": z.object({
 		message: z.string().min(1)
+	}),
+	"superstarter/file.read": z.object({
+		path: z.string().min(1)
 	})
 }
 
