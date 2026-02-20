@@ -33,17 +33,6 @@ async function createTodo(title: string) {
 		throw errors.new("create todo returned no rows")
 	}
 
-	const sendResult = await errors.try(
-		inngest.send({
-			name: "superstarter/todo.created",
-			data: { todoId: todo.id }
-		})
-	)
-	if (sendResult.error) {
-		logger.error("send todo.created event failed", { error: sendResult.error })
-		throw errors.wrap(sendResult.error, "send todo.created event")
-	}
-
 	revalidatePath("/")
 	return todo.id
 }

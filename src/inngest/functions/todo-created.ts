@@ -15,19 +15,19 @@ const todoCreated = inngest.createFunction(
 		publish
 	}: Context<typeof inngest, "superstarter/todo.created", RealtimeOverrides>) => {
 		await publish({
-			channel: `todo:${event.data.todoId}`,
+			channel: `todo:${event.data.entityId}`,
 			topic: "status",
 			data: { status: "acknowledged" }
 		})
 
 		await step.sleep("process", "1s")
 		await publish({
-			channel: `todo:${event.data.todoId}`,
+			channel: `todo:${event.data.entityId}`,
 			topic: "status",
 			data: { status: "done" }
 		})
 
-		return { todoId: event.data.todoId }
+		return { todoId: event.data.entityId }
 	}
 )
 

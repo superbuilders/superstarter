@@ -1,6 +1,7 @@
 ignore_patterns:
   - "yek.yaml"
   - "patches/*"
+  - "scripts/*"
   - "bun.lock"
   - "public/**"
   - "src/components/ui/**"
