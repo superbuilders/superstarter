@@ -1,0 +1,17 @@
+# AI SDK Docs — getting-started
+
+@generated: 2026-02-06
+@page-count: 9
+
+
+## .
+
+- [Choosing a Provider](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/choosing-a-provider)
+- [Expo Quickstart](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/expo)
+- [Navigating the Library](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/navigating-the-library)
+- [Next.js App Router Quickstart](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/nextjs-app-router)
+- [Next.js Pages Router Quickstart](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/nextjs-pages-router)
+- [Node.js Quickstart](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/nodejs)
+- [Vue.js (Nuxt) Quickstart](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/nuxt)
+- [Svelte Quickstart](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/svelte)
+- [TanStack Start Quickstart](https://ai-sdk.dev/docs/getting-started/./output/ai-sdk/docs/getting-started/tanstack-start)

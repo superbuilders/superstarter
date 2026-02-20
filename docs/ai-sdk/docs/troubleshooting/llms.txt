@@ -1,0 +1,39 @@
+# AI SDK Docs — troubleshooting
+
+@generated: 2026-02-06
+@page-count: 31
+
+
+## .
+
+- [Abort breaks resumable streams](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/abort-breaks-resumable-streams)
+- [Azure OpenAI Slow To Stream](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/azure-stream-slow)
+- ["Only plain objects can be passed from client components" Server Action Error](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/client-stream-error)
+- [High memory usage when processing many images](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/high-memory-usage-with-images)
+- [Jest: cannot find module '@ai-sdk/rsc'](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/jest-cannot-find-module-ai-rsc)
+- [Missing Tool Results Error](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/missing-tool-results-error)
+- [Model is not assignable to type "LanguageModelV1"](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/model-is-not-assignable-to-type)
+- [Object generation failed with OpenAI](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/no-object-generated-content-filter)
+- [Type Error with onToolCall](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/ontoolcall-type-narrowing)
+- [React error "Maximum update depth exceeded"](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/react-maximum-update-depth-exceeded)
+- [Repeated assistant messages in useChat](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/repeated-assistant-messages)
+- [Server Actions in Client Components](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/server-actions-in-client-components)
+- [useChat/useCompletion stream output contains 0:... instead of text](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/strange-stream-output)
+- [onFinish not called when stream is aborted](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/stream-abort-handling)
+- [`streamText` is not working](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/stream-text-not-working)
+- [Streamable UI Component Error](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/streamable-ui-errors)
+- [Streaming Not Working When Deployed](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/streaming-not-working-when-deployed)
+- [Streaming Not Working When Proxied](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/streaming-not-working-when-proxied)
+- [Streaming Status Shows But No Text Appears](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/streaming-status-delay)
+- [Getting Timeouts When Deploying on Vercel](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/timeout-on-vercel)
+- [Tool calling with generateObject and streamObject (structured outputs)](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/tool-calling-with-structured-outputs)
+- [Tool Invocation Missing Result Error](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/tool-invocation-missing-result)
+- [TypeScript error "Cannot find namespace 'JSX'"](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/typescript-cannot-find-namespace-jsx)
+- [TypeScript performance issues with Zod and AI SDK 5](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/typescript-performance-zod)
+- [Unclosed Streams](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/unclosed-streams)
+- [Unsupported model version error](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/unsupported-model-version)
+- [`useChat` "An error occurred"](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/use-chat-an-error-occurred)
+- [Custom headers, body, and credentials not working with useChat](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/use-chat-custom-request-options)
+- [`useChat` "Failed to Parse Stream String" Error](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/use-chat-failed-to-parse-stream)
+- [Stale body values with useChat](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/use-chat-stale-body-data)
+- [`useChat` No Response](https://ai-sdk.dev/docs/troubleshooting/./output/ai-sdk/docs/troubleshooting/use-chat-tools-no-response)

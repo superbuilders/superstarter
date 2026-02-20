@@ -1,0 +1,1211 @@
+# AI SDK Docs — foundations
+
+@generated: 2026-02-06
+@page-count: 5
+
+--------------------------------------------------------------------------------
+title: "Overview"
+source: "https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/overview"
+--------------------------------------------------------------------------------
+
+
+# Overview
+
+<Note>
+  This page is a beginner-friendly introduction to high-level artificial
+  intelligence (AI) concepts. To dive right into implementing the AI SDK, feel
+  free to skip ahead to our [quickstarts](/docs/getting-started) or learn about
+  our [supported models and providers](/docs/foundations/providers-and-models).
+</Note>
+
+The AI SDK standardizes integrating artificial intelligence (AI) models across [supported providers](/docs/foundations/providers-and-models). This enables developers to focus on building great AI applications, not waste time on technical details.
+
+For example, here’s how you can generate text with various models using the AI SDK:
+
+<PreviewSwitchProviders />
+
+To effectively leverage the AI SDK, it helps to familiarize yourself with the following concepts:
+
+## Generative Artificial Intelligence
+
+**Generative artificial intelligence** refers to models that predict and generate various types of outputs (such as text, images, or audio) based on what’s statistically likely, pulling from patterns they’ve learned from their training data. For example:
+
+- Given a photo, a generative model can generate a caption.
+- Given an audio file, a generative model can generate a transcription.
+- Given a text description, a generative model can generate an image.
+
+## Large Language Models
+
+A **large language model (LLM)** is a subset of generative models focused primarily on **text**. An LLM takes a sequence of words as input and aims to predict the most likely sequence to follow. It assigns probabilities to potential next sequences and then selects one. The model continues to generate sequences until it meets a specified stopping criterion.
+
+LLMs learn by training on massive collections of written text, which means they will be better suited to some use cases than others. For example, a model trained on GitHub data would understand the probabilities of sequences in source code particularly well.
+
+However, it's crucial to understand LLMs' limitations. When asked about less known or absent information, like the birthday of a personal relative, LLMs might "hallucinate" or make up information. It's essential to consider how well-represented the information you need is in the model.
+
+## Embedding Models
+
+An **embedding model** is used to convert complex data (like words or images) into a dense vector (a list of numbers) representation, known as an embedding. Unlike generative models, embedding models do not generate new text or data. Instead, they provide representations of semantic and syntactic relationships between entities that can be used as input for other models or other natural language processing tasks.
+
+In the next section, you will learn about the difference between models providers and models, and which ones are available in the AI SDK.
+
+
+## Navigation
+
+- [Overview](/docs/foundations/overview)
+- [Providers and Models](/docs/foundations/providers-and-models)
+- [Prompts](/docs/foundations/prompts)
+- [Tools](/docs/foundations/tools)
+- [Streaming](/docs/foundations/streaming)
+
+
+[Full Sitemap](/sitemap.md)
+
+--------------------------------------------------------------------------------
+title: "Prompts"
+source: "https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/prompts"
+--------------------------------------------------------------------------------
+
+
+# Prompts
+
+Prompts are instructions that you give a [large language model (LLM)](/docs/foundations/overview#large-language-models) to tell it what to do.
+It's like when you ask someone for directions; the clearer your question, the better the directions you'll get.
+
+Many LLM providers offer complex interfaces for specifying prompts. They involve different roles and message types.
+While these interfaces are powerful, they can be hard to use and understand.
+
+In order to simplify prompting, the AI SDK supports text, message, and system prompts.
+
+## Text Prompts
+
+Text prompts are strings.
+They are ideal for simple generation use cases,
+e.g. repeatedly generating content for variants of the same prompt text.
+
+You can set text prompts using the `prompt` property made available by AI SDK functions like [`streamText`](/docs/reference/ai-sdk-core/stream-text) or [`generateObject`](/docs/reference/ai-sdk-core/generate-object).
+You can structure the text in any way and inject variables, e.g. using a template literal.
+
+```ts highlight="3"
+const result = await generateText({
+  model: __MODEL__,
+  prompt: 'Invent a new holiday and describe its traditions.',
+});
+```
+
+You can also use template literals to provide dynamic data to your prompt.
+
+```ts highlight="3-5"
+const result = await generateText({
+  model: __MODEL__,
+  prompt:
+    `I am planning a trip to ${destination} for ${lengthOfStay} days. ` +
+    `Please suggest the best tourist activities for me to do.`,
+});
+```
+
+## System Prompts
+
+System prompts are the initial set of instructions given to models that help guide and constrain the models' behaviors and responses.
+You can set system prompts using the `system` property.
+System prompts work with both the `prompt` and the `messages` properties.
+
+```ts highlight="3-6"
+const result = await generateText({
+  model: __MODEL__,
+  system:
+    `You help planning travel itineraries. ` +
+    `Respond to the users' request with a list ` +
+    `of the best stops to make in their destination.`,
+  prompt:
+    `I am planning a trip to ${destination} for ${lengthOfStay} days. ` +
+    `Please suggest the best tourist activities for me to do.`,
+});
+```
+
+<Note>
+  When you use a message prompt, you can also use system messages instead of a
+  system prompt.
+</Note>
+
+## Message Prompts
+
+A message prompt is an array of user, assistant, and tool messages.
+They are great for chat interfaces and more complex, multi-modal prompts.
+You can use the `messages` property to set message prompts.
+
+Each message has a `role` and a `content` property. The content can either be text (for user and assistant messages), or an array of relevant parts (data) for that message type.
+
+```ts highlight="3-7"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    { role: 'user', content: 'Hi!' },
+    { role: 'assistant', content: 'Hello, how can I help?' },
+    { role: 'user', content: 'Where can I buy the best Currywurst in Berlin?' },
+  ],
+});
+```
+
+Instead of sending a text in the `content` property, you can send an array of parts that includes a mix of text and other content parts.
+
+<Note type="warning">
+  Not all language models support all message and content types. For example,
+  some models might not be capable of handling multi-modal inputs or tool
+  messages. [Learn more about the capabilities of select
+  models](./providers-and-models#model-capabilities).
+</Note>
+
+### Provider Options
+
+You can pass through additional provider-specific metadata to enable provider-specific functionality at 3 levels.
+
+#### Function Call Level
+
+Functions like [`streamText`](/docs/reference/ai-sdk-core/stream-text#provider-options) or [`generateText`](/docs/reference/ai-sdk-core/generate-text#provider-options) accept a `providerOptions` property.
+
+Adding provider options at the function call level should be used when you do not need granular control over where the provider options are applied.
+
+```ts
+const { text } = await generateText({
+  model: azure('your-deployment-name'),
+  providerOptions: {
+    openai: {
+      reasoningEffort: 'low',
+    },
+  },
+});
+```
+
+#### Message Level
+
+For granular control over applying provider options at the message level, you can pass `providerOptions` to the message object:
+
+```ts
+import { ModelMessage } from 'ai';
+
+const messages: ModelMessage[] = [
+  {
+    role: 'system',
+    content: 'Cached system message',
+    providerOptions: {
+      // Sets a cache control breakpoint on the system message
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+    },
+  },
+];
+```
+
+#### Message Part Level
+
+Certain provider-specific options require configuration at the message part level:
+
+```ts
+import { ModelMessage } from 'ai';
+
+const messages: ModelMessage[] = [
+  {
+    role: 'user',
+    content: [
+      {
+        type: 'text',
+        text: 'Describe the image in detail.',
+        providerOptions: {
+          openai: { imageDetail: 'low' },
+        },
+      },
+      {
+        type: 'image',
+        image:
+          'https://github.com/vercel/ai/blob/main/examples/ai-functions/data/comic-cat.png?raw=true',
+        // Sets image detail configuration for image part:
+        providerOptions: {
+          openai: { imageDetail: 'low' },
+        },
+      },
+    ],
+  },
+];
+```
+
+<Note type="warning">
+  AI SDK UI hooks like [`useChat`](/docs/reference/ai-sdk-ui/use-chat) return
+  arrays of `UIMessage` objects, which do not support provider options. We
+  recommend using the
+  [`convertToModelMessages`](/docs/reference/ai-sdk-ui/convert-to-model-messages)
+  function to convert `UIMessage` objects to
+  [`ModelMessage`](/docs/reference/ai-sdk-core/model-message) objects before
+  applying or appending message(s) or message parts with `providerOptions`.
+</Note>
+
+### User Messages
+
+#### Text Parts
+
+Text content is the most common type of content. It is a string that is passed to the model.
+
+If you only need to send text content in a message, the `content` property can be a string,
+but you can also use it to send multiple content parts.
+
+```ts highlight="7-10"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: 'Where can I buy the best Currywurst in Berlin?',
+        },
+      ],
+    },
+  ],
+});
+```
+
+#### Image Parts
+
+User messages can include image parts. An image can be one of the following:
+
+- base64-encoded image:
+  - `string` with base-64 encoded content
+  - data URL `string`, e.g. `data:image/png;base64,...`
+- binary image:
+  - `ArrayBuffer`
+  - `Uint8Array`
+  - `Buffer`
+- URL:
+  - http(s) URL `string`, e.g. `https://example.com/image.png`
+  - `URL` object, e.g. `new URL('https://example.com/image.png')`
+
+##### Example: Binary image (Buffer)
+
+```ts highlight="8-11"
+const result = await generateText({
+  model,
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Describe the image in detail.' },
+        {
+          type: 'image',
+          image: fs.readFileSync('./data/comic-cat.png'),
+        },
+      ],
+    },
+  ],
+});
+```
+
+##### Example: Base-64 encoded image (string)
+
+```ts highlight="8-11"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Describe the image in detail.' },
+        {
+          type: 'image',
+          image: fs.readFileSync('./data/comic-cat.png').toString('base64'),
+        },
+      ],
+    },
+  ],
+});
+```
+
+##### Example: Image URL (string)
+
+```ts highlight="8-12"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Describe the image in detail.' },
+        {
+          type: 'image',
+          image:
+            'https://github.com/vercel/ai/blob/main/examples/ai-functions/data/comic-cat.png?raw=true',
+        },
+      ],
+    },
+  ],
+});
+```
+
+#### File Parts
+
+<Note type="warning">
+  Only a few providers and models currently support file parts: [Google
+  Generative AI](/providers/ai-sdk-providers/google-generative-ai), [Google
+  Vertex AI](/providers/ai-sdk-providers/google-vertex),
+  [OpenAI](/providers/ai-sdk-providers/openai) (for `wav` and `mp3` audio with
+  `gpt-4o-audio-preview`), [Anthropic](/providers/ai-sdk-providers/anthropic),
+  [OpenAI](/providers/ai-sdk-providers/openai) (for `pdf`).
+</Note>
+
+User messages can include file parts. A file can be one of the following:
+
+- base64-encoded file:
+  - `string` with base-64 encoded content
+  - data URL `string`, e.g. `data:image/png;base64,...`
+- binary data:
+  - `ArrayBuffer`
+  - `Uint8Array`
+  - `Buffer`
+- URL:
+  - http(s) URL `string`, e.g. `https://example.com/some.pdf`
+  - `URL` object, e.g. `new URL('https://example.com/some.pdf')`
+
+You need to specify the MIME type of the file you are sending.
+
+##### Example: PDF file from Buffer
+
+```ts highlight="12-15"
+import { google } from '@ai-sdk/google';
+import { generateText } from 'ai';
+
+const result = await generateText({
+  model: google('gemini-1.5-flash'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'What is the file about?' },
+        {
+          type: 'file',
+          mediaType: 'application/pdf',
+          data: fs.readFileSync('./data/example.pdf'),
+          filename: 'example.pdf', // optional, not used by all providers
+        },
+      ],
+    },
+  ],
+});
+```
+
+##### Example: mp3 audio file from Buffer
+
+```ts highlight="12-14"
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+
+const result = await generateText({
+  model: openai('gpt-4o-audio-preview'),
+  messages: [
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'What is the audio saying?' },
+        {
+          type: 'file',
+          mediaType: 'audio/mpeg',
+          data: fs.readFileSync('./data/galileo.mp3'),
+        },
+      ],
+    },
+  ],
+});
+```
+
+#### Custom Download Function (Experimental)
+
+You can use custom download functions to implement throttling, retries, authentication, caching, and more.
+
+The default download implementation automatically downloads files in parallel when they are not supported by the model.
+
+Custom download function can be passed via the `experimental_download` property:
+
+```ts
+const result = await generateText({
+  model: __MODEL__,
+  experimental_download: async (
+    requestedDownloads: Array<{
+      url: URL;
+      isUrlSupportedByModel: boolean;
+    }>,
+  ): PromiseLike<
+    Array<{
+      data: Uint8Array;
+      mediaType: string | undefined;
+    } | null>
+  > => {
+    // ... download the files and return an array with similar order
+  },
+  messages: [
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'file',
+          data: new URL('https://api.company.com/private/document.pdf'),
+          mediaType: 'application/pdf',
+        },
+      ],
+    },
+  ],
+});
+```
+
+<Note>
+  The `experimental_download` option is experimental and may change in future
+  releases.
+</Note>
+
+### Assistant Messages
+
+Assistant messages are messages that have a role of `assistant`.
+They are typically previous responses from the assistant
+and can contain text, reasoning, and tool call parts.
+
+#### Example: Assistant message with text content
+
+```ts highlight="5"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    { role: 'user', content: 'Hi!' },
+    { role: 'assistant', content: 'Hello, how can I help?' },
+  ],
+});
+```
+
+#### Example: Assistant message with text content in array
+
+```ts highlight="7"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    { role: 'user', content: 'Hi!' },
+    {
+      role: 'assistant',
+      content: [{ type: 'text', text: 'Hello, how can I help?' }],
+    },
+  ],
+});
+```
+
+#### Example: Assistant message with tool call content
+
+```ts highlight="7-14"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    { role: 'user', content: 'How many calories are in this block of cheese?' },
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: '12345',
+          toolName: 'get-nutrition-data',
+          input: { cheese: 'Roquefort' },
+        },
+      ],
+    },
+  ],
+});
+```
+
+#### Example: Assistant message with file content
+
+<Note>
+  This content part is for model-generated files. Only a few models support
+  this, and only for file types that they can generate.
+</Note>
+
+```ts highlight="9-11"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    { role: 'user', content: 'Generate an image of a roquefort cheese!' },
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'file',
+          mediaType: 'image/png',
+          data: fs.readFileSync('./data/roquefort.jpg'),
+        },
+      ],
+    },
+  ],
+});
+```
+
+### Tool messages
+
+<Note>
+  [Tools](/docs/foundations/tools) (also known as function calling) are programs
+  that you can provide an LLM to extend its built-in functionality. This can be
+  anything from calling an external API to calling functions within your UI.
+  Learn more about Tools in [the next section](/docs/foundations/tools).
+</Note>
+
+For models that support [tool](/docs/foundations/tools) calls, assistant messages can contain tool call parts, and tool messages can contain tool output parts.
+A single assistant message can call multiple tools, and a single tool message can contain multiple tool results.
+
+```ts highlight="14-42"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: 'How many calories are in this block of cheese?',
+        },
+        { type: 'image', image: fs.readFileSync('./data/roquefort.jpg') },
+      ],
+    },
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call',
+          toolCallId: '12345',
+          toolName: 'get-nutrition-data',
+          input: { cheese: 'Roquefort' },
+        },
+        // there could be more tool calls here (parallel calling)
+      ],
+    },
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: '12345', // needs to match the tool call id
+          toolName: 'get-nutrition-data',
+          output: {
+            type: 'json',
+            value: {
+              name: 'Cheese, roquefort',
+              calories: 369,
+              fat: 31,
+              protein: 22,
+            },
+          },
+        },
+        // there could be more tool results here (parallel calling)
+      ],
+    },
+  ],
+});
+```
+
+#### Multi-modal Tool Results
+
+Tool results can be multi-part and multi-modal, e.g. a text and an image.
+You can use `output: { type: 'content', value: [...] }` to specify multi-part tool results.
+
+```ts highlight="14-27"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    // ...
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: '12345', // needs to match the tool call id
+          toolName: 'get-nutrition-data',
+          // for models that do not support multi-part tool results,
+          // you can include a regular output part:
+          output: {
+            type: 'json',
+            value: {
+              name: 'Cheese, roquefort',
+              calories: 369,
+              fat: 31,
+              protein: 22,
+            },
+          },
+        },
+        {
+          type: 'tool-result',
+          toolCallId: '12345', // needs to match the tool call id
+          toolName: 'get-nutrition-data',
+          // for models that support multi-part tool results,
+          // you can include a multi-part content part:
+          output: {
+            type: 'content',
+            value: [
+              {
+                type: 'text',
+                text: 'Here is the nutrition data for the cheese:',
+              },
+              {
+                type: 'image-data',
+                data: fs
+                  .readFileSync('./data/roquefort-nutrition-data.png')
+                  .toString('base64'),
+                mediaType: 'image/png',
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+});
+```
+
+### System Messages
+
+System messages are messages that are sent to the model before the user messages to guide the assistant's behavior.
+You can alternatively use the `system` property.
+
+```ts highlight="4"
+const result = await generateText({
+  model: __MODEL__,
+  messages: [
+    { role: 'system', content: 'You help planning travel itineraries.' },
+    {
+      role: 'user',
+      content:
+        'I am planning a trip to Berlin for 3 days. Please suggest the best tourist activities for me to do.',
+    },
+  ],
+});
+```
+
+
+## Navigation
+
+- [Overview](/docs/foundations/overview)
+- [Providers and Models](/docs/foundations/providers-and-models)
+- [Prompts](/docs/foundations/prompts)
+- [Tools](/docs/foundations/tools)
+- [Streaming](/docs/foundations/streaming)
+
+
+[Full Sitemap](/sitemap.md)
+
+--------------------------------------------------------------------------------
+title: "Providers and Models"
+source: "https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/providers-and-models"
+--------------------------------------------------------------------------------
+
+
+# Providers and Models
+
+Companies such as OpenAI and Anthropic (providers) offer access to a range of large language models (LLMs) with differing strengths and capabilities through their own APIs.
+
+Each provider typically has its own unique method for interfacing with their models, complicating the process of switching providers and increasing the risk of vendor lock-in.
+
+To solve these challenges, AI SDK Core offers a standardized approach to interacting with LLMs through a [language model specification](https://github.com/vercel/ai/tree/main/packages/provider/src/language-model/v3) that abstracts differences between providers. This unified interface allows you to switch between providers with ease while using the same API for all providers.
+
+Here is an overview of the AI SDK Provider Architecture:
+
+<MDXImage
+  srcLight="/images/ai-sdk-diagram.png"
+  srcDark="/images/ai-sdk-diagram-dark.png"
+  width={800}
+  height={800}
+/>
+
+## AI SDK Providers
+
+The AI SDK comes with a wide range of providers that you can use to interact with different language models:
+
+- [xAI Grok Provider](/providers/ai-sdk-providers/xai) (`@ai-sdk/xai`)
+- [OpenAI Provider](/providers/ai-sdk-providers/openai) (`@ai-sdk/openai`)
+- [Azure OpenAI Provider](/providers/ai-sdk-providers/azure) (`@ai-sdk/azure`)
+- [Anthropic Provider](/providers/ai-sdk-providers/anthropic) (`@ai-sdk/anthropic`)
+- [Amazon Bedrock Provider](/providers/ai-sdk-providers/amazon-bedrock) (`@ai-sdk/amazon-bedrock`)
+- [Google Generative AI Provider](/providers/ai-sdk-providers/google-generative-ai) (`@ai-sdk/google`)
+- [Google Vertex Provider](/providers/ai-sdk-providers/google-vertex) (`@ai-sdk/google-vertex`)
+- [Mistral Provider](/providers/ai-sdk-providers/mistral) (`@ai-sdk/mistral`)
+- [Together.ai Provider](/providers/ai-sdk-providers/togetherai) (`@ai-sdk/togetherai`)
+- [Cohere Provider](/providers/ai-sdk-providers/cohere) (`@ai-sdk/cohere`)
+- [Fireworks Provider](/providers/ai-sdk-providers/fireworks) (`@ai-sdk/fireworks`)
+- [DeepInfra Provider](/providers/ai-sdk-providers/deepinfra) (`@ai-sdk/deepinfra`)
+- [DeepSeek Provider](/providers/ai-sdk-providers/deepseek) (`@ai-sdk/deepseek`)
+- [Cerebras Provider](/providers/ai-sdk-providers/cerebras) (`@ai-sdk/cerebras`)
+- [Groq Provider](/providers/ai-sdk-providers/groq) (`@ai-sdk/groq`)
+- [Perplexity Provider](/providers/ai-sdk-providers/perplexity) (`@ai-sdk/perplexity`)
+- [ElevenLabs Provider](/providers/ai-sdk-providers/elevenlabs) (`@ai-sdk/elevenlabs`)
+- [LMNT Provider](/providers/ai-sdk-providers/lmnt) (`@ai-sdk/lmnt`)
+- [Hume Provider](/providers/ai-sdk-providers/hume) (`@ai-sdk/hume`)
+- [Rev.ai Provider](/providers/ai-sdk-providers/revai) (`@ai-sdk/revai`)
+- [Deepgram Provider](/providers/ai-sdk-providers/deepgram) (`@ai-sdk/deepgram`)
+- [Gladia Provider](/providers/ai-sdk-providers/gladia) (`@ai-sdk/gladia`)
+- [AssemblyAI Provider](/providers/ai-sdk-providers/assemblyai) (`@ai-sdk/assemblyai`)
+- [Baseten Provider](/providers/ai-sdk-providers/baseten) (`@ai-sdk/baseten`)
+
+You can also use the [OpenAI Compatible provider](/providers/openai-compatible-providers) with OpenAI-compatible APIs:
+
+- [LM Studio](/providers/openai-compatible-providers/lmstudio)
+- [Heroku](/providers/openai-compatible-providers/heroku)
+
+Our [language model specification](https://github.com/vercel/ai/tree/main/packages/provider/src/language-model/v3) is published as an open-source package, which you can use to create [custom providers](/providers/community-providers/custom-providers).
+
+The open-source community has created the following providers:
+
+- [Ollama Provider](/providers/community-providers/ollama) (`ollama-ai-provider`)
+- [FriendliAI Provider](/providers/community-providers/friendliai) (`@friendliai/ai-provider`)
+- [Portkey Provider](/providers/community-providers/portkey) (`@portkey-ai/vercel-provider`)
+- [Cloudflare Workers AI Provider](/providers/community-providers/cloudflare-workers-ai) (`workers-ai-provider`)
+- [OpenRouter Provider](/providers/community-providers/openrouter) (`@openrouter/ai-sdk-provider`)
+- [Apertis Provider](/providers/community-providers/apertis) (`@apertis/ai-sdk-provider`)
+- [Aihubmix Provider](/providers/community-providers/aihubmix) (`@aihubmix/ai-sdk-provider`)
+- [Requesty Provider](/providers/community-providers/requesty) (`@requesty/ai-sdk`)
+- [Crosshatch Provider](/providers/community-providers/crosshatch) (`@crosshatch/ai-provider`)
+- [Mixedbread Provider](/providers/community-providers/mixedbread) (`mixedbread-ai-provider`)
+- [Voyage AI Provider](/providers/community-providers/voyage-ai) (`voyage-ai-provider`)
+- [Mem0 Provider](/providers/community-providers/mem0) (`@mem0/vercel-ai-provider`)
+- [Letta Provider](/providers/community-providers/letta) (`@letta-ai/vercel-ai-sdk-provider`)
+- [Supermemory Provider](/providers/community-providers/supermemory) (`@supermemory/tools`)
+- [Spark Provider](/providers/community-providers/spark) (`spark-ai-provider`)
+- [AnthropicVertex Provider](/providers/community-providers/anthropic-vertex-ai) (`anthropic-vertex-ai`)
+- [LangDB Provider](/providers/community-providers/langdb) (`@langdb/vercel-provider`)
+- [Dify Provider](/providers/community-providers/dify) (`dify-ai-provider`)
+- [Sarvam Provider](/providers/community-providers/sarvam) (`sarvam-ai-provider`)
+- [Claude Code Provider](/providers/community-providers/claude-code) (`ai-sdk-provider-claude-code`)
+- [Browser AI Provider](/providers/community-providers/browser-ai) (`browser-ai`)
+- [Gemini CLI Provider](/providers/community-providers/gemini-cli) (`ai-sdk-provider-gemini-cli`)
+- [A2A Provider](/providers/community-providers/a2a) (`a2a-ai-provider`)
+- [SAP-AI Provider](/providers/community-providers/sap-ai) (`@mymediset/sap-ai-provider`)
+- [AI/ML API Provider](/providers/community-providers/aimlapi) (`@ai-ml.api/aimlapi-vercel-ai`)
+- [MCP Sampling Provider](/providers/community-providers/mcp-sampling) (`@mcpc-tech/mcp-sampling-ai-provider`)
+- [ACP Provider](/providers/community-providers/acp) (`@mcpc-tech/acp-ai-provider`)
+- [OpenCode Provider](/providers/community-providers/opencode-sdk) (`ai-sdk-provider-opencode-sdk`)
+- [Codex CLI Provider](/providers/community-providers/codex-cli) (`ai-sdk-provider-codex-cli`)
+- [Soniox Provider](/providers/community-providers/soniox) (`@soniox/vercel-ai-sdk-provider`)
+- [Zhipu (Z.AI) Provider](/providers/community-providers/zhipu) (`zhipu-ai-provider`)
+- [OLLM Provider](/providers/community-providers/ollm) (`@ofoundation/ollm`)
+
+## Self-Hosted Models
+
+You can access self-hosted models with the following providers:
+
+- [Ollama Provider](/providers/community-providers/ollama)
+- [LM Studio](/providers/openai-compatible-providers/lmstudio)
+- [Baseten](/providers/ai-sdk-providers/baseten)
+- [Browser AI](/providers/community-providers/browser-ai)
+
+Additionally, any self-hosted provider that supports the OpenAI specification can be used with the [OpenAI Compatible Provider](/providers/openai-compatible-providers).
+
+## Model Capabilities
+
+The AI providers support different language models with various capabilities.
+Here are the capabilities of popular models:
+
+| Provider                                                                 | Model                                       | Image Input         | Object Generation   | Tool Usage          | Tool Streaming      |
+| ------------------------------------------------------------------------ | ------------------------------------------- | ------------------- | ------------------- | ------------------- | ------------------- |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-4`                                    | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-3`                                    | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-3-fast`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-3-mini`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-3-mini-fast`                          | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-2-1212`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-2-vision-1212`                        | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-beta`                                 | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [xAI Grok](/providers/ai-sdk-providers/xai)                              | `grok-vision-beta`                          | <Check size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| [Vercel](/providers/ai-sdk-providers/vercel)                             | `v0-1.0-md`                                 | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5.2-pro`                               | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5.2-chat-latest`                       | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5.2`                                   | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5`                                     | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5-mini`                                | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5-nano`                                | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5.1-chat-latest`                       | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5.1-codex-mini`                        | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5.1-codex`                             | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5.1`                                   | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5-codex`                               | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [OpenAI](/providers/ai-sdk-providers/openai)                             | `gpt-5-chat-latest`                         | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](/providers/ai-sdk-providers/anthropic)                       | `claude-opus-4-6`                           | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](/providers/ai-sdk-providers/anthropic)                       | `claude-opus-4-5`                           | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](/providers/ai-sdk-providers/anthropic)                       | `claude-opus-4-1`                           | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](/providers/ai-sdk-providers/anthropic)                       | `claude-opus-4-0`                           | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](/providers/ai-sdk-providers/anthropic)                       | `claude-sonnet-4-0`                         | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](/providers/ai-sdk-providers/anthropic)                       | `claude-3-7-sonnet-latest`                  | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Anthropic](/providers/ai-sdk-providers/anthropic)                       | `claude-3-5-haiku-latest`                   | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](/providers/ai-sdk-providers/mistral)                           | `pixtral-large-latest`                      | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](/providers/ai-sdk-providers/mistral)                           | `mistral-large-latest`                      | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](/providers/ai-sdk-providers/mistral)                           | `mistral-medium-latest`                     | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](/providers/ai-sdk-providers/mistral)                           | `mistral-medium-2505`                       | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](/providers/ai-sdk-providers/mistral)                           | `mistral-small-latest`                      | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Mistral](/providers/ai-sdk-providers/mistral)                           | `pixtral-12b-2409`                          | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Generative AI](/providers/ai-sdk-providers/google-generative-ai) | `gemini-2.0-flash-exp`                      | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Generative AI](/providers/ai-sdk-providers/google-generative-ai) | `gemini-1.5-flash`                          | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Generative AI](/providers/ai-sdk-providers/google-generative-ai) | `gemini-1.5-pro`                            | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Vertex](/providers/ai-sdk-providers/google-vertex)               | `gemini-2.0-flash-exp`                      | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Vertex](/providers/ai-sdk-providers/google-vertex)               | `gemini-1.5-flash`                          | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Google Vertex](/providers/ai-sdk-providers/google-vertex)               | `gemini-1.5-pro`                            | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [DeepSeek](/providers/ai-sdk-providers/deepseek)                         | `deepseek-chat`                             | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [DeepSeek](/providers/ai-sdk-providers/deepseek)                         | `deepseek-reasoner`                         | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Cerebras](/providers/ai-sdk-providers/cerebras)                         | `llama3.1-8b`                               | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Cerebras](/providers/ai-sdk-providers/cerebras)                         | `llama3.1-70b`                              | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Cerebras](/providers/ai-sdk-providers/cerebras)                         | `llama3.3-70b`                              | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](/providers/ai-sdk-providers/groq)                                 | `meta-llama/llama-4-scout-17b-16e-instruct` | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](/providers/ai-sdk-providers/groq)                                 | `llama-3.3-70b-versatile`                   | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](/providers/ai-sdk-providers/groq)                                 | `llama-3.1-8b-instant`                      | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](/providers/ai-sdk-providers/groq)                                 | `mixtral-8x7b-32768`                        | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| [Groq](/providers/ai-sdk-providers/groq)                                 | `gemma2-9b-it`                              | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+
+<Note>
+  This table is not exhaustive. Additional models can be found in the provider
+  documentation pages and on the provider websites.
+</Note>
+
+
+## Navigation
+
+- [Overview](/docs/foundations/overview)
+- [Providers and Models](/docs/foundations/providers-and-models)
+- [Prompts](/docs/foundations/prompts)
+- [Tools](/docs/foundations/tools)
+- [Streaming](/docs/foundations/streaming)
+
+
+[Full Sitemap](/sitemap.md)
+
+--------------------------------------------------------------------------------
+title: "Streaming"
+source: "https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/streaming"
+--------------------------------------------------------------------------------
+
+
+# Streaming
+
+Streaming conversational text UIs (like ChatGPT) have gained massive popularity over the past few months. This section explores the benefits and drawbacks of streaming and blocking interfaces.
+
+[Large language models (LLMs)](/docs/foundations/overview#large-language-models) are extremely powerful. However, when generating long outputs, they can be very slow compared to the latency you're likely used to. If you try to build a traditional blocking UI, your users might easily find themselves staring at loading spinners for 5, 10, even up to 40s waiting for the entire LLM response to be generated. This can lead to a poor user experience, especially in conversational applications like chatbots. Streaming UIs can help mitigate this issue by **displaying parts of the response as they become available**.
+
+<div className="grid lg:grid-cols-2 grid-cols-1 gap-4 mt-8">
+  <Card
+    title="Blocking UI"
+    description="Blocking responses wait until the full response is available before displaying it."
+  >
+    <BrowserIllustration highlight blocking />
+  </Card>
+  <Card
+    title="Streaming UI"
+    description="Streaming responses can transmit parts of the response as they become available."
+  >
+    <BrowserIllustration highlight />
+  </Card>
+</div>
+
+## Real-world Examples
+
+Here are 2 examples that illustrate how streaming UIs can improve user experiences in a real-world setting – the first uses a blocking UI, while the second uses a streaming UI.
+
+### Blocking UI
+
+<InlinePrompt
+  initialInput="Come up with the first 200 characters of the first book in the Harry Potter series."
+  blocking
+/>
+
+### Streaming UI
+
+<InlinePrompt initialInput="Come up with the first 200 characters of the first book in the Harry Potter series." />
+
+As you can see, the streaming UI is able to start displaying the response much faster than the blocking UI. This is because the blocking UI has to wait for the entire response to be generated before it can display anything, while the streaming UI can display parts of the response as they become available.
+
+While streaming interfaces can greatly enhance user experiences, especially with larger language models, they aren't always necessary or beneficial. If you can achieve your desired functionality using a smaller, faster model without resorting to streaming, this route can often lead to simpler and more manageable development processes.
+
+However, regardless of the speed of your model, the AI SDK is designed to make implementing streaming UIs as simple as possible. In the example below, we stream text generation from OpenAI's `gpt-4.1` in under 10 lines of code using the SDK's [`streamText`](/docs/reference/ai-sdk-core/stream-text) function:
+
+```ts
+import { streamText } from 'ai';
+__PROVIDER_IMPORT__;
+
+const { textStream } = streamText({
+  model: __MODEL__,
+  prompt: 'Write a poem about embedding models.',
+});
+
+for await (const textPart of textStream) {
+  console.log(textPart);
+}
+```
+
+For an introduction to streaming UIs and the AI SDK, check out our [Getting Started guides](/docs/getting-started).
+
+
+## Navigation
+
+- [Overview](/docs/foundations/overview)
+- [Providers and Models](/docs/foundations/providers-and-models)
+- [Prompts](/docs/foundations/prompts)
+- [Tools](/docs/foundations/tools)
+- [Streaming](/docs/foundations/streaming)
+
+
+[Full Sitemap](/sitemap.md)
+
+--------------------------------------------------------------------------------
+title: "Tools"
+source: "https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/tools"
+--------------------------------------------------------------------------------
+
+
+# Tools
+
+While [large language models (LLMs)](/docs/foundations/overview#large-language-models) have incredible generation capabilities,
+they struggle with discrete tasks (e.g. mathematics) and interacting with the outside world (e.g. getting the weather).
+
+Tools are actions that an LLM can invoke.
+The results of these actions can be reported back to the LLM to be considered in the next response.
+
+For example, when you ask an LLM for the "weather in London", and there is a weather tool available, it could call a tool
+with London as the argument. The tool would then fetch the weather data and return it to the LLM. The LLM can then use this
+information in its response.
+
+## What is a tool?
+
+A tool is an object that can be called by the model to perform a specific task.
+You can use tools with [`generateText`](/docs/reference/ai-sdk-core/generate-text)
+and [`streamText`](/docs/reference/ai-sdk-core/stream-text) by passing one or more tools to the `tools` parameter.
+
+A tool consists of three properties:
+
+- **`description`**: An optional description of the tool that can influence when the tool is picked.
+- **`inputSchema`**: A [Zod schema](/docs/reference/ai-sdk-core/zod-schema) or a [JSON schema](/docs/reference/ai-sdk-core/json-schema) that defines the input required for the tool to run. The schema is consumed by the LLM, and also used to validate the LLM tool calls.
+- **`execute`**: An optional async function that is called with the arguments from the tool call.
+
+<Note>
+  `streamUI` uses UI generator tools with a `generate` function that can return
+  React components.
+</Note>
+
+If the LLM decides to use a tool, it will generate a tool call.
+Tools with an `execute` function are run automatically when these calls are generated.
+The output of the tool calls are returned using tool result objects.
+
+You can automatically pass tool results back to the LLM
+using [multi-step calls](/docs/ai-sdk-core/tools-and-tool-calling#multi-step-calls) with `streamText` and `generateText`.
+
+## Types of Tools
+
+The AI SDK supports three types of tools, each with different trade-offs:
+
+### Custom Tools
+
+Custom tools are tools you define entirely yourself, including the description, input schema, and execute function. They are provider-agnostic and give you full control.
+
+```ts
+import { tool } from 'ai';
+import { z } from 'zod';
+
+const weatherTool = tool({
+  description: 'Get the weather in a location',
+  inputSchema: z.object({
+    location: z.string().describe('The location to get the weather for'),
+  }),
+  execute: async ({ location }) => {
+    // Your implementation
+    return { temperature: 72, conditions: 'sunny' };
+  },
+});
+```
+
+**When to use**: When you need full control, want provider portability, or are implementing application-specific functionality.
+
+### Provider-Defined Tools
+
+Provider-defined tools are tools where the provider specifies the tool's `inputSchema` and `description`, but you provide the `execute` function. These are sometimes called "client tools" because execution happens on your side.
+
+Examples include Anthropic's `bash` and `text_editor` tools. The model has been specifically trained to use these tools effectively, which can result in better performance for supported tasks.
+
+```ts
+import { anthropic } from '@ai-sdk/anthropic';
+import { generateText } from 'ai';
+
+const result = await generateText({
+  model: anthropic('claude-opus-4-5'),
+  tools: {
+    bash: anthropic.tools.bash_20250124({
+      execute: async ({ command }) => {
+        // Your implementation to run the command
+        return runCommand(command);
+      },
+    }),
+  },
+  prompt: 'List files in the current directory',
+});
+```
+
+**When to use**: When the provider offers a tool the model is trained to use well, and you want better performance for that specific task.
+
+### Provider-Executed Tools
+
+Provider-executed tools are tools that run entirely on the provider's servers. You configure them, but the provider handles execution. These are sometimes called "server-side tools".
+
+Examples include OpenAI's web search and Anthropic's code execution. These provide out-of-the-box functionality without requiring you to set up infrastructure.
+
+```ts
+import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
+
+const result = await generateText({
+  model: openai('gpt-5.2'),
+  tools: {
+    web_search: openai.tools.webSearch(),
+  },
+  prompt: 'What happened in the news today?',
+});
+```
+
+**When to use**: When you want powerful functionality (like web search or sandboxed code execution) without managing the infrastructure yourself.
+
+### Comparison
+
+| Aspect             | Custom Tools             | Provider-Defined Tools | Provider-Executed Tools |
+| ------------------ | ------------------------ | ---------------------- | ----------------------- |
+| **Execution**      | Your code                | Your code              | Provider's servers      |
+| **Schema**         | You define               | Provider defines       | Provider defines        |
+| **Portability**    | Works with any provider  | Provider-specific      | Provider-specific       |
+| **Model Training** | General tool use         | Optimized for the tool | Optimized for the tool  |
+| **Setup**          | You implement everything | You implement execute  | Configuration only      |
+
+<Note>
+  Provider-defined and provider-executed tools are documented in each provider's
+  page. See [Anthropic Provider](/providers/ai-sdk-providers/anthropic) and
+  [OpenAI Provider](/providers/ai-sdk-providers/openai) for examples.
+</Note>
+
+## Schemas
+
+Schemas are used to define and validate the [tool input](/docs/ai-sdk-core/tools-and-tool-calling), tools outputs, and structured output generation.
+
+The AI SDK supports the following schemas:
+
+- [Zod](https://zod.dev/) v3 and v4 directly or via [`zodSchema()`](/docs/reference/ai-sdk-core/zod-schema)
+- [Valibot](https://valibot.dev/) via [`valibotSchema()`](/docs/reference/ai-sdk-core/valibot-schema) from `@ai-sdk/valibot`
+- [Standard JSON Schema](https://standardschema.dev/json-schema) compatible schemas
+- Raw JSON schemas via [`jsonSchema()`](/docs/reference/ai-sdk-core/json-schema)
+
+<Note>
+  You can also use schemas for structured output generation with
+  [`generateText`](/docs/reference/ai-sdk-core/generate-text) and
+  [`streamText`](/docs/reference/ai-sdk-core/stream-text) using the `output`
+  setting.
+</Note>
+
+## Tool Packages
+
+Given tools are JavaScript objects, they can be packaged and distributed through npm like any other library. This makes it easy to share reusable tools across projects and with the community.
+
+### Using Ready-Made Tool Packages
+
+Install a tool package and import the tools you need:
+
+```bash
+pnpm add some-tool-package
+```
+
+Then pass them directly to `generateText`, `streamText`, or your agent definition:
+
+```ts highlight="2, 8"
+import { generateText, stepCountIs } from 'ai';
+import { searchTool } from 'some-tool-package';
+
+const { text } = await generateText({
+  model: 'anthropic/claude-haiku-4.5',
+  prompt: 'When was Vercel Ship AI?',
+  tools: {
+    webSearch: searchTool,
+  },
+  stopWhen: stepCountIs(10),
+});
+```
+
+### Publishing Your Own Tools
+
+You can publish your own tool packages to npm for others to use. Simply export your tool objects from your package:
+
+```ts
+// my-tools/index.ts
+export const myTool = {
+  description: 'A helpful tool',
+  inputSchema: z.object({
+    query: z.string(),
+  }),
+  execute: async ({ query }) => {
+    // your tool logic
+    return result;
+  },
+};
+```
+
+Anyone can then install and use your tools by importing them.
+
+To get started, you can use the [AI SDK Tool Package Template](https://github.com/vercel-labs/ai-sdk-tool-as-package-template) which provides a ready-to-use starting point for publishing your own tools.
+
+## Toolsets
+
+When you work with tools, you typically need a mix of application-specific tools and general-purpose tools. The community has created various toolsets and resources to help you build and use tools.
+
+### Ready-to-Use Tool Packages
+
+These packages provide pre-built tools you can install and use immediately:
+
+- **[@exalabs/ai-sdk](https://www.npmjs.com/package/@exalabs/ai-sdk)** - Web search tool that lets AI search the web and get real-time information.
+- **[@parallel-web/ai-sdk-tools](https://www.npmjs.com/package/@parallel-web/ai-sdk-tools)** - Web search and extract tools powered by Parallel Web API for real-time information and content extraction.
+- **[@perplexity-ai/ai-sdk](https://www.npmjs.com/package/@perplexity-ai/ai-sdk)** - Search the web with real-time results and advanced filtering powered by Perplexity's Search API.
+- **[@tavily/ai-sdk](https://www.npmjs.com/package/@tavily/ai-sdk)** - Search, extract, crawl, and map tools for enterprise-grade agents to explore the web in real-time.
+- **[Stripe agent tools](https://docs.stripe.com/agents?framework=vercel)** - Tools for interacting with Stripe.
+- **[StackOne ToolSet](https://docs.stackone.com/agents/typescript/frameworks/vercel-ai-sdk)** - Agentic integrations for hundreds of [enterprise SaaS](https://www.stackone.com/integrations) platforms.
+- **[agentic](https://docs.agentic.so/marketplace/ts-sdks/ai-sdk)** - A collection of 20+ tools that connect to external APIs such as [Exa](https://exa.ai/) or [E2B](https://e2b.dev/).
+- **[Amazon Bedrock AgentCore](https://github.com/aws/bedrock-agentcore-sdk-typescript)** - Fully managed AI agent services including [**Browser**](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/built-in-tools.html) (a fast and secure cloud-based browser runtime to enable agents to interact with web applications, fill forms, navigate websites, and extract information) and [**Code Interpreter**](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/built-in-tools.html) (an isolated sandbox environment for agents to execute code in Python, JavaScript, and TypeScript, enhancing accuracy and expanding ability to solve complex end-to-end tasks).
+- **[@airweave/vercel-ai-sdk](https://www.npmjs.com/package/@airweave/vercel-ai-sdk)** - Unified semantic search across 35+ data sources (Notion, Slack, Google Drive, databases, and more) for AI agents.
+- **[Composio](https://docs.composio.dev/providers/vercel)** - 250+ tools like GitHub, Gmail, Salesforce and [more](https://composio.dev/tools).
+- **[JigsawStack](http://www.jigsawstack.com/docs/integration/vercel)** - Over 30+ small custom fine-tuned models available for specific uses.
+- **[AI Tools Registry](https://ai-tools-registry.vercel.app)** - A Shadcn-compatible tool definitions and components registry for the AI SDK.
+- **[Toolhouse](https://docs.toolhouse.ai/toolhouse/toolhouse-sdk/using-vercel-ai)** - AI function-calling in 3 lines of code for over 25 different actions.
+- **[bash-tool](https://www.npmjs.com/package/bash-tool)** - Provides `bash`, `readFile`, and `writeFile` tools for AI agents. Supports [@vercel/sandbox](https://vercel.com/docs/vercel-sandbox) for full VM isolation.
+
+### MCP Tools
+
+These are pre-built tools available as MCP servers:
+
+- **[Smithery](https://smithery.ai/docs/integrations/vercel_ai_sdk)** - An open marketplace of 6,000+ MCPs, including [Browserbase](https://browserbase.com/) and [Exa](https://exa.ai/).
+- **[Pipedream](https://pipedream.com/docs/connect/mcp/ai-frameworks/vercel-ai-sdk)** - Developer toolkit that lets you easily add 3,000+ integrations to your app or AI agent.
+- **[Apify](https://docs.apify.com/platform/integrations/vercel-ai-sdk)** - Apify provides a [marketplace](https://apify.com/store) of thousands of tools for web scraping, data extraction, and browser automation.
+
+### Tool Building Tutorials
+
+These tutorials and guides help you build your own tools that integrate with specific services:
+
+- **[browserbase](https://docs.browserbase.com/integrations/vercel/introduction#vercel-ai-integration)** - Tutorial for building browser tools that run a headless browser.
+- **[browserless](https://docs.browserless.io/ai-integrations/vercel-ai-sdk)** - Guide for integrating browser automation (self-hosted or cloud-based).
+- **[AI Tool Maker](https://github.com/nihaocami/ai-tool-maker)** - A CLI utility to generate AI SDK tools from OpenAPI specs.
+- **[Interlify](https://www.interlify.com/docs/integrate-with-vercel-ai)** - Guide for converting APIs into tools.
+- **[DeepAgent](https://deepagent.amardeep.space/docs/vercel-ai-sdk)** - A suite of 50+ AI tools and integrations, seamlessly connecting with APIs like Tavily, E2B, Airtable and [more](https://deepagent.amardeep.space/docs).
+
+<Note>
+  Do you have open source tools or tool libraries that are compatible with the
+  AI SDK? Please [file a pull request](https://github.com/vercel/ai/pulls) to
+  add them to this list.
+</Note>
+
+## Learn more
+
+The AI SDK Core [Tool Calling](/docs/ai-sdk-core/tools-and-tool-calling)
+and [Agents](/docs/agents) documentation has more information about tools and tool calling.
+
+
+## Navigation
+
+- [Overview](/docs/foundations/overview)
+- [Providers and Models](/docs/foundations/providers-and-models)
+- [Prompts](/docs/foundations/prompts)
+- [Tools](/docs/foundations/tools)
+- [Streaming](/docs/foundations/streaming)
+
+
+[Full Sitemap](/sitemap.md)

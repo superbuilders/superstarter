@@ -1,0 +1,80 @@
+# AI SDK Elements
+
+@generated: 2026-02-06
+@page-count: 63
+
+
+## components
+
+- [Agent](https://elements.ai-sdk.dev/components/agent)
+- [Artifact](https://elements.ai-sdk.dev/components/artifact)
+- [Attachments](https://elements.ai-sdk.dev/components/attachments)
+- [Audio Player](https://elements.ai-sdk.dev/components/audio-player)
+- [Canvas](https://elements.ai-sdk.dev/components/canvas)
+- [Chain of Thought](https://elements.ai-sdk.dev/components/chain-of-thought)
+- [Checkpoint](https://elements.ai-sdk.dev/components/checkpoint)
+- [Code Block](https://elements.ai-sdk.dev/components/code-block)
+- [Commit](https://elements.ai-sdk.dev/components/commit)
+- [Confirmation](https://elements.ai-sdk.dev/components/confirmation)
+- [Connection](https://elements.ai-sdk.dev/components/connection)
+- [Context](https://elements.ai-sdk.dev/components/context)
+- [Controls](https://elements.ai-sdk.dev/components/controls)
+- [Conversation](https://elements.ai-sdk.dev/components/conversation)
+- [Edge](https://elements.ai-sdk.dev/components/edge)
+- [Environment Variables](https://elements.ai-sdk.dev/components/environment-variables)
+- [File Tree](https://elements.ai-sdk.dev/components/file-tree)
+- [Image](https://elements.ai-sdk.dev/components/image)
+- [Inline Citation](https://elements.ai-sdk.dev/components/inline-citation)
+- [JSX Preview](https://elements.ai-sdk.dev/components/jsx-preview)
+- [Message](https://elements.ai-sdk.dev/components/message)
+- [Mic Selector](https://elements.ai-sdk.dev/components/mic-selector)
+- [Model Selector](https://elements.ai-sdk.dev/components/model-selector)
+- [Node](https://elements.ai-sdk.dev/components/node)
+- [Open In Chat](https://elements.ai-sdk.dev/components/open-in-chat)
+- [Package Info](https://elements.ai-sdk.dev/components/package-info)
+- [Panel](https://elements.ai-sdk.dev/components/panel)
+- [Persona](https://elements.ai-sdk.dev/components/persona)
+- [Plan](https://elements.ai-sdk.dev/components/plan)
+- [Prompt Input](https://elements.ai-sdk.dev/components/prompt-input)
+- [Queue](https://elements.ai-sdk.dev/components/queue)
+- [Reasoning](https://elements.ai-sdk.dev/components/reasoning)
+- [Sandbox](https://elements.ai-sdk.dev/components/sandbox)
+- [Schema Display](https://elements.ai-sdk.dev/components/schema-display)
+- [Shimmer](https://elements.ai-sdk.dev/components/shimmer)
+- [Snippet](https://elements.ai-sdk.dev/components/snippet)
+- [Sources](https://elements.ai-sdk.dev/components/sources)
+- [Speech Input](https://elements.ai-sdk.dev/components/speech-input)
+- [Stack Trace](https://elements.ai-sdk.dev/components/stack-trace)
+- [Suggestion](https://elements.ai-sdk.dev/components/suggestion)
+- [Task](https://elements.ai-sdk.dev/components/task)
+- [Terminal](https://elements.ai-sdk.dev/components/terminal)
+- [Test Results](https://elements.ai-sdk.dev/components/test-results)
+- [Tool](https://elements.ai-sdk.dev/components/tool)
+- [Toolbar](https://elements.ai-sdk.dev/components/toolbar)
+- [Transcription](https://elements.ai-sdk.dev/components/transcription)
+- [Voice Selector](https://elements.ai-sdk.dev/components/voice-selector)
+- [Web Preview](https://elements.ai-sdk.dev/components/web-preview)
+
+## (root)
+
+- [Introduction](https://elements.ai-sdk.dev/docs)
+
+## docs
+
+- [Benefits](https://elements.ai-sdk.dev/docs/benefits)
+- [Community](https://elements.ai-sdk.dev/docs/community)
+- [How to Contribute](https://elements.ai-sdk.dev/docs/how-to-contribute)
+- [New Components](https://elements.ai-sdk.dev/docs/new-components)
+- [Philosophy](https://elements.ai-sdk.dev/docs/philosophy)
+- [Setup](https://elements.ai-sdk.dev/docs/setup)
+- [Skill](https://elements.ai-sdk.dev/docs/skill)
+- [Troubleshooting](https://elements.ai-sdk.dev/docs/troubleshooting)
+- [Usage](https://elements.ai-sdk.dev/docs/usage)
+- [The Vercel AI Frontend Stack](https://elements.ai-sdk.dev/docs/vercel-ai-frontend)
+
+## examples
+
+- [Chatbot](https://elements.ai-sdk.dev/examples/chatbot)
+- [IDE](https://elements.ai-sdk.dev/examples/ide)
+- [v0 clone](https://elements.ai-sdk.dev/examples/v0)
+- [Workflow](https://elements.ai-sdk.dev/examples/workflow)

@@ -1,0 +1,424 @@
+
+# Together.ai Provider
+
+The [Together.ai](https://together.ai) provider contains support for 200+ open-source models through the [Together.ai API](https://docs.together.ai/reference).
+
+## Setup
+
+The Together.ai provider is available via the `@ai-sdk/togetherai` module. You can
+install it with
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab>
+    <Snippet text="pnpm add @ai-sdk/togetherai" dark />
+  </Tab>
+  <Tab>
+    <Snippet text="npm install @ai-sdk/togetherai" dark />
+  </Tab>
+  <Tab>
+    <Snippet text="yarn add @ai-sdk/togetherai" dark />
+  </Tab>
+
+  <Tab>
+    <Snippet text="bun add @ai-sdk/togetherai" dark />
+  </Tab>
+</Tabs>
+
+## Provider Instance
+
+You can import the default provider instance `togetherai` from `@ai-sdk/togetherai`:
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+```
+
+If you need a customized setup, you can import `createTogetherAI` from `@ai-sdk/togetherai`
+and create a provider instance with your settings:
+
+```ts
+import { createTogetherAI } from '@ai-sdk/togetherai';
+
+const togetherai = createTogetherAI({
+  apiKey: process.env.TOGETHER_AI_API_KEY ?? '',
+});
+```
+
+You can use the following optional settings to customize the Together.ai provider instance:
+
+- **baseURL** _string_
+
+  Use a different URL prefix for API calls, e.g. to use proxy servers.
+  The default prefix is `https://api.together.xyz/v1`.
+
+- **apiKey** _string_
+
+  API key that is being sent using the `Authorization` header. It defaults to
+  the `TOGETHER_AI_API_KEY` environment variable.
+
+- **headers** _Record&lt;string,string&gt;_
+
+  Custom headers to include in the requests.
+
+- **fetch** _(input: RequestInfo, init?: RequestInit) => Promise&lt;Response&gt;_
+
+  Custom [fetch](https://developer.mozilla.org/en-US/docs/Web/API/fetch) implementation.
+  Defaults to the global `fetch` function.
+  You can use it as a middleware to intercept requests,
+  or to provide a custom fetch implementation for e.g. testing.
+
+## Language Models
+
+You can create [Together.ai models](https://docs.together.ai/docs/serverless-models) using a provider instance. The first argument is the model id, e.g. `google/gemma-2-9b-it`.
+
+```ts
+const model = togetherai('google/gemma-2-9b-it');
+```
+
+### Reasoning Models
+
+Together.ai exposes the thinking of `deepseek-ai/DeepSeek-R1` in the generated text using the `<think>` tag.
+You can use the `extractReasoningMiddleware` to extract this reasoning and expose it as a `reasoning` property on the result:
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+import { wrapLanguageModel, extractReasoningMiddleware } from 'ai';
+
+const enhancedModel = wrapLanguageModel({
+  model: togetherai('deepseek-ai/DeepSeek-R1'),
+  middleware: extractReasoningMiddleware({ tagName: 'think' }),
+});
+```
+
+You can then use that enhanced model in functions like `generateText` and `streamText`.
+
+### Example
+
+You can use Together.ai language models to generate text with the `generateText` function:
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: togetherai('meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo'),
+  prompt: 'Write a vegetarian lasagna recipe for 4 people.',
+});
+```
+
+Together.ai language models can also be used in the `streamText` function
+(see [AI SDK Core](/docs/ai-sdk-core)).
+
+The Together.ai provider also supports [completion models](https://docs.together.ai/docs/serverless-models#language-models) via (following the above example code) `togetherai.completionModel()` and [embedding models](https://docs.together.ai/docs/serverless-models#embedding-models) via `togetherai.embeddingModel()`.
+
+## Model Capabilities
+
+| Model                                         | Image Input         | Object Generation   | Tool Usage          | Tool Streaming      |
+| --------------------------------------------- | ------------------- | ------------------- | ------------------- | ------------------- |
+| `meta-llama/Llama-3.3-70B-Instruct-Turbo`     | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo` | <Cross size={18} /> | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `mistralai/Mixtral-8x22B-Instruct-v0.1`       | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `mistralai/Mistral-7B-Instruct-v0.3`          | <Cross size={18} /> | <Check size={18} /> | <Check size={18} /> | <Check size={18} /> |
+| `deepseek-ai/DeepSeek-V3`                     | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| `google/gemma-2b-it`                          | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| `Qwen/Qwen2.5-72B-Instruct-Turbo`             | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+| `databricks/dbrx-instruct`                    | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> | <Cross size={18} /> |
+
+<Note>
+  The table above lists popular models. Please see the [Together.ai
+  docs](https://docs.together.ai/docs/serverless-models) for a full list of
+  available models. You can also pass any available provider model ID as a
+  string if needed.
+</Note>
+
+## Image Models
+
+You can create Together.ai image models using the `.image()` factory method.
+For more on image generation with the AI SDK see [generateImage()](/docs/reference/ai-sdk-core/generate-image).
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+import { generateImage } from 'ai';
+
+const { images } = await generateImage({
+  model: togetherai.image('black-forest-labs/FLUX.1-dev'),
+  prompt: 'A delighted resplendent quetzal mid flight amidst raindrops',
+});
+```
+
+You can pass optional provider-specific request parameters using the `providerOptions` argument.
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+import { generateImage } from 'ai';
+
+const { images } = await generateImage({
+  model: togetherai.image('black-forest-labs/FLUX.1-dev'),
+  prompt: 'A delighted resplendent quetzal mid flight amidst raindrops',
+  size: '512x512',
+  // Optional additional provider-specific request parameters
+  providerOptions: {
+    togetherai: {
+      steps: 40,
+    },
+  },
+});
+```
+
+The following provider options are available:
+
+- **steps** _number_
+
+  Number of generation steps. Higher values can improve quality.
+
+- **guidance** _number_
+
+  Guidance scale for image generation.
+
+- **negative_prompt** _string_
+
+  Negative prompt to guide what to avoid.
+
+- **disable_safety_checker** _boolean_
+
+  Disable the safety checker for image generation.
+  When true, the API will not reject images flagged as potentially NSFW.
+  Not available for Flux Schnell Free and Flux Pro models.
+
+### Image Editing
+
+Together AI supports image editing through FLUX Kontext models. Pass input images via `prompt.images` to transform or edit existing images.
+
+<Note>
+  Together AI does not support mask-based inpainting. Instead, use descriptive
+  prompts to specify what you want to change in the image.
+</Note>
+
+#### Basic Image Editing
+
+Transform an existing image using text prompts:
+
+```ts
+const imageBuffer = readFileSync('./input-image.png');
+
+const { images } = await generateImage({
+  model: togetherai.image('black-forest-labs/FLUX.1-kontext-pro'),
+  prompt: {
+    text: 'Turn the cat into a golden retriever dog',
+    images: [imageBuffer],
+  },
+  size: '1024x1024',
+  providerOptions: {
+    togetherai: {
+      steps: 28,
+    },
+  },
+});
+```
+
+#### Editing with URL Reference
+
+You can also pass image URLs directly:
+
+```ts
+const { images } = await generateImage({
+  model: togetherai.image('black-forest-labs/FLUX.1-kontext-pro'),
+  prompt: {
+    text: 'Make the background a lush rainforest',
+    images: ['https://example.com/photo.png'],
+  },
+  size: '1024x1024',
+  providerOptions: {
+    togetherai: {
+      steps: 28,
+    },
+  },
+});
+```
+
+<Note>
+  Input images can be provided as `Buffer`, `ArrayBuffer`, `Uint8Array`,
+  base64-encoded strings, or URLs. Together AI only supports a single input
+  image per request.
+</Note>
+
+#### Supported Image Editing Models
+
+| Model                                  | Description                        |
+| -------------------------------------- | ---------------------------------- |
+| `black-forest-labs/FLUX.1-kontext-pro` | Production quality, balanced speed |
+| `black-forest-labs/FLUX.1-kontext-max` | Maximum image fidelity             |
+| `black-forest-labs/FLUX.1-kontext-dev` | Development and experimentation    |
+
+### Model Capabilities
+
+Together.ai image models support various image dimensions that vary by model. Common sizes include 512x512, 768x768, and 1024x1024, with some models supporting up to 1792x1792. The default size is 1024x1024.
+
+| Available Models                           |
+| ------------------------------------------ |
+| `stabilityai/stable-diffusion-xl-base-1.0` |
+| `black-forest-labs/FLUX.1-dev`             |
+| `black-forest-labs/FLUX.1-dev-lora`        |
+| `black-forest-labs/FLUX.1-schnell`         |
+| `black-forest-labs/FLUX.1-canny`           |
+| `black-forest-labs/FLUX.1-depth`           |
+| `black-forest-labs/FLUX.1-redux`           |
+| `black-forest-labs/FLUX.1.1-pro`           |
+| `black-forest-labs/FLUX.1-pro`             |
+| `black-forest-labs/FLUX.1-schnell-Free`    |
+| `black-forest-labs/FLUX.1-kontext-pro`     |
+| `black-forest-labs/FLUX.1-kontext-max`     |
+| `black-forest-labs/FLUX.1-kontext-dev`     |
+
+<Note>
+  Please see the [Together.ai models
+  page](https://docs.together.ai/docs/serverless-models#image-models) for a full
+  list of available image models and their capabilities.
+</Note>
+
+## Embedding Models
+
+You can create Together.ai embedding models using the `.embeddingModel()` factory method.
+For more on embedding models with the AI SDK see [embed()](/docs/reference/ai-sdk-core/embed).
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+import { embed } from 'ai';
+
+const { embedding } = await embed({
+  model: togetherai.embeddingModel('togethercomputer/m2-bert-80M-2k-retrieval'),
+  value: 'sunny day at the beach',
+});
+```
+
+### Model Capabilities
+
+| Model                                            | Dimensions | Max Tokens |
+| ------------------------------------------------ | ---------- | ---------- |
+| `togethercomputer/m2-bert-80M-2k-retrieval`      | 768        | 2048       |
+| `togethercomputer/m2-bert-80M-8k-retrieval`      | 768        | 8192       |
+| `togethercomputer/m2-bert-80M-32k-retrieval`     | 768        | 32768      |
+| `WhereIsAI/UAE-Large-V1`                         | 1024       | 512        |
+| `BAAI/bge-large-en-v1.5`                         | 1024       | 512        |
+| `BAAI/bge-base-en-v1.5`                          | 768        | 512        |
+| `sentence-transformers/msmarco-bert-base-dot-v5` | 768        | 512        |
+| `bert-base-uncased`                              | 768        | 512        |
+
+<Note>
+  For a complete list of available embedding models, see the [Together.ai models
+  page](https://docs.together.ai/docs/serverless-models#embedding-models).
+</Note>
+
+## Reranking Models
+
+You can create Together.ai reranking models using the `.reranking()` factory method.
+For more on reranking with the AI SDK see [rerank()](/docs/reference/ai-sdk-core/rerank).
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+import { rerank } from 'ai';
+
+const documents = [
+  'sunny day at the beach',
+  'rainy afternoon in the city',
+  'snowy night in the mountains',
+];
+
+const { ranking } = await rerank({
+  model: togetherai.reranking('Salesforce/Llama-Rank-v1'),
+  documents,
+  query: 'talk about rain',
+  topN: 2,
+});
+
+console.log(ranking);
+// [
+//   { originalIndex: 1, score: 0.9, document: 'rainy afternoon in the city' },
+//   { originalIndex: 0, score: 0.3, document: 'sunny day at the beach' }
+// ]
+```
+
+Together.ai reranking models support additional provider options for object documents. You can specify which fields to use for ranking:
+
+```ts
+import { togetherai } from '@ai-sdk/togetherai';
+import { rerank } from 'ai';
+
+const documents = [
+  {
+    from: 'Paul Doe',
+    subject: 'Follow-up',
+    text: 'We are happy to give you a discount of 20%.',
+  },
+  {
+    from: 'John McGill',
+    subject: 'Missing Info',
+    text: 'Here is the pricing from Oracle: $5000/month',
+  },
+];
+
+const { ranking } = await rerank({
+  model: togetherai.reranking('Salesforce/Llama-Rank-v1'),
+  documents,
+  query: 'Which pricing did we get from Oracle?',
+  providerOptions: {
+    togetherai: {
+      rankFields: ['from', 'subject', 'text'], // Specify which fields to rank by
+    },
+  },
+});
+```
+
+The following provider options are available:
+
+- **rankFields** _string[]_
+
+  Array of field names to use for ranking when documents are JSON objects. If not specified, all fields are used.
+
+### Model Capabilities
+
+| Model                                 |
+| ------------------------------------- |
+| `Salesforce/Llama-Rank-v1`            |
+| `mixedbread-ai/Mxbai-Rerank-Large-V2` |
+
+
+## Navigation
+
+- [AI Gateway](/providers/ai-sdk-providers/ai-gateway)
+- [xAI Grok](/providers/ai-sdk-providers/xai)
+- [Vercel](/providers/ai-sdk-providers/vercel)
+- [OpenAI](/providers/ai-sdk-providers/openai)
+- [Azure OpenAI](/providers/ai-sdk-providers/azure)
+- [Anthropic](/providers/ai-sdk-providers/anthropic)
+- [Open Responses](/providers/ai-sdk-providers/open-responses)
+- [Amazon Bedrock](/providers/ai-sdk-providers/amazon-bedrock)
+- [Groq](/providers/ai-sdk-providers/groq)
+- [Fal](/providers/ai-sdk-providers/fal)
+- [AssemblyAI](/providers/ai-sdk-providers/assemblyai)
+- [DeepInfra](/providers/ai-sdk-providers/deepinfra)
+- [Deepgram](/providers/ai-sdk-providers/deepgram)
+- [Black Forest Labs](/providers/ai-sdk-providers/black-forest-labs)
+- [Gladia](/providers/ai-sdk-providers/gladia)
+- [LMNT](/providers/ai-sdk-providers/lmnt)
+- [Google Generative AI](/providers/ai-sdk-providers/google-generative-ai)
+- [Hume](/providers/ai-sdk-providers/hume)
+- [Google Vertex AI](/providers/ai-sdk-providers/google-vertex)
+- [Rev.ai](/providers/ai-sdk-providers/revai)
+- [Baseten](/providers/ai-sdk-providers/baseten)
+- [Hugging Face](/providers/ai-sdk-providers/huggingface)
+- [Mistral AI](/providers/ai-sdk-providers/mistral)
+- [Together.ai](/providers/ai-sdk-providers/togetherai)
+- [Cohere](/providers/ai-sdk-providers/cohere)
+- [Fireworks](/providers/ai-sdk-providers/fireworks)
+- [DeepSeek](/providers/ai-sdk-providers/deepseek)
+- [Moonshot AI](/providers/ai-sdk-providers/moonshotai)
+- [Alibaba](/providers/ai-sdk-providers/alibaba)
+- [Cerebras](/providers/ai-sdk-providers/cerebras)
+- [Replicate](/providers/ai-sdk-providers/replicate)
+- [Prodia](/providers/ai-sdk-providers/prodia)
+- [Perplexity](/providers/ai-sdk-providers/perplexity)
+- [Luma](/providers/ai-sdk-providers/luma)
+- [ElevenLabs](/providers/ai-sdk-providers/elevenlabs)
+
+
+[Full Sitemap](/sitemap.md)

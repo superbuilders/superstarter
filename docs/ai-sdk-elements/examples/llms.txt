@@ -1,0 +1,12 @@
+# AI SDK Elements — examples
+
+@generated: 2026-02-06
+@page-count: 4
+
+
+## .
+
+- [Chatbot](https://elements.ai-sdk.dev/examples/./output/ai-sdk-elements/examples/chatbot)
+- [IDE](https://elements.ai-sdk.dev/examples/./output/ai-sdk-elements/examples/ide)
+- [v0 clone](https://elements.ai-sdk.dev/examples/./output/ai-sdk-elements/examples/v0)
+- [Workflow](https://elements.ai-sdk.dev/examples/./output/ai-sdk-elements/examples/workflow)

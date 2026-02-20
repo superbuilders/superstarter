@@ -1,0 +1,19 @@
+# AI SDK Docs — advanced
+
+@generated: 2026-02-06
+@page-count: 11
+
+
+## .
+
+- [Stream Back-pressure and Cancellation](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/backpressure)
+- [Caching Responses](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/caching)
+- [Generative User Interfaces](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/model-as-router)
+- [Multiple Streams](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/multiple-streamables)
+- [Multistep Interfaces](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/multistep-interfaces)
+- [Prompt Engineering](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/prompt-engineering)
+- [Rate Limiting](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/rate-limiting)
+- [Rendering User Interfaces with Language Models](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/rendering-ui-with-language-models)
+- [Sequential Generations](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/sequential-generations)
+- [Stopping Streams](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/stopping-streams)
+- [Vercel Deployment Guide](https://ai-sdk.dev/docs/advanced/./output/ai-sdk/docs/advanced/vercel-deployment-guide)

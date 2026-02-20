@@ -24,6 +24,7 @@
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.2.0",
+		"@inngest/agent-kit": "^0.13.2",
 		"@inngest/realtime": "^0.4.6",
 		"@superbuilders/errors": "^3.0.2",
 		"@superbuilders/slog": "^4.0.0",

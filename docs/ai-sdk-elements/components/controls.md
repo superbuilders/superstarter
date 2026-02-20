@@ -1,0 +1,43 @@
+# Controls
+
+
+
+The `Controls` component provides interactive zoom and fit view controls for React Flow canvases. It includes a modern, themed design with backdrop blur and card styling.
+
+<Callout>
+  The Controls component is designed to be used with the
+  [Canvas](/components/canvas) component. See the [Workflow](/examples/workflow)
+  demo for a full example.
+</Callout>
+
+## Installation
+
+<ElementsInstaller path="controls" />
+
+## Features
+
+* Zoom in/out controls
+* Fit view button to center and scale content
+* Rounded pill design with backdrop blur
+* Theme-aware card background
+* Subtle drop shadow for depth
+* Full TypeScript support
+* Compatible with all React Flow control features
+
+## Props
+
+### `<Controls />`
+
+<TypeTable
+  type={{
+  className: {
+    description: "Additional CSS classes to apply to the controls.",
+    type: "string",
+  },
+  "...props": {
+    description:
+      "Any other props from @xyflow/react Controls component (showZoom, showFitView, showInteractive, position, etc.).",
+    type: "ComponentProps<typeof Controls>",
+  },
+}}
+/>

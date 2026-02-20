@@ -1,0 +1,18 @@
+# AI SDK Elements — docs
+
+@generated: 2026-02-06
+@page-count: 10
+
+
+## .
+
+- [Benefits](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/benefits)
+- [Community](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/community)
+- [How to Contribute](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/how-to-contribute)
+- [New Components](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/new-components)
+- [Philosophy](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/philosophy)
+- [Setup](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/setup)
+- [Skill](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/skill)
+- [Troubleshooting](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/troubleshooting)
+- [Usage](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/usage)
+- [The Vercel AI Frontend Stack](https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/vercel-ai-frontend)

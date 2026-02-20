@@ -1,0 +1,13 @@
+# AI SDK Docs — foundations
+
+@generated: 2026-02-06
+@page-count: 5
+
+
+## .
+
+- [Overview](https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/overview)
+- [Prompts](https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/prompts)
+- [Providers and Models](https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/providers-and-models)
+- [Streaming](https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/streaming)
+- [Tools](https://ai-sdk.dev/docs/foundations/./output/ai-sdk/docs/foundations/tools)

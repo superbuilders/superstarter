@@ -1,0 +1,14 @@
+# AI SDK Docs — agents
+
+@generated: 2026-02-06
+@page-count: 6
+
+
+## .
+
+- [Building Agents](https://ai-sdk.dev/docs/agents/./output/ai-sdk/docs/agents/building-agents)
+- [Configuring Call Options](https://ai-sdk.dev/docs/agents/./output/ai-sdk/docs/agents/configuring-call-options)
+- [Loop Control](https://ai-sdk.dev/docs/agents/./output/ai-sdk/docs/agents/loop-control)
+- [Agents](https://ai-sdk.dev/docs/agents/./output/ai-sdk/docs/agents/overview)
+- [Subagents](https://ai-sdk.dev/docs/agents/./output/ai-sdk/docs/agents/subagents)
+- [Workflow Patterns](https://ai-sdk.dev/docs/agents/./output/ai-sdk/docs/agents/workflows)

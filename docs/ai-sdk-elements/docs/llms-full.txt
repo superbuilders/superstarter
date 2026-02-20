@@ -1,0 +1,1048 @@
+# AI SDK Elements — docs
+
+@generated: 2026-02-06
+@page-count: 10
+
+--------------------------------------------------------------------------------
+title: "Benefits"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/benefits"
+--------------------------------------------------------------------------------
+
+# Benefits
+
+
+
+AI Elements provides a purpose-built component library for AI applications. Here's why you should use it.
+
+## Fully Composable
+
+Every component is designed as a building block. Compose `Message`, `MessageContent`, and `MessageResponse` together to create exactly the chat UI you need. No rigid structures or forced layouts.
+
+```tsx title="example.tsx"
+<Message from="assistant">
+  <MessageContent>
+    <MessageResponse>{text}</MessageResponse>
+  </MessageContent>
+</Message>
+```
+
+## More Than Just Styled Components
+
+AI Elements integrates deeply with the [AI SDK](https://ai-sdk.dev/). Components understand streaming responses, handle loading states, and work seamlessly with hooks like `useChat` and `useCompletion`.
+
+* **Streaming support** - Components like `MessageResponse` handle partial markdown gracefully
+* **Status awareness** - UI adapts to pending, streaming, and complete states
+* **Type safety** - Props align with AI SDK types like `UIMessage`
+
+## Intuitive & Developer-Friendly
+
+If you know React and TypeScript, you already know AI Elements. Components follow familiar patterns:
+
+* Standard React props with TypeScript types
+* Sensible defaults that work out of the box
+* Full control when you need it
+
+## Accessible & Themeable
+
+Built on [shadcn/ui](https://ui.shadcn.com/), AI Elements inherits:
+
+* **WCAG 2.1 AA** accessibility baseline
+* **CSS variables** for easy theming
+* **Dark mode** support built-in
+* **Semantic HTML** throughout
+
+Your existing shadcn/ui theme applies automatically.
+
+## Fast, Flexible Installation
+
+Install only what you need. The CLI adds components directly to your codebase:
+
+<CodeBlockTabs defaultValue="npm">
+  <CodeBlockTabsList>
+    <CodeBlockTabsTrigger value="npm">
+      npm
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="pnpm">
+      pnpm
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="yarn">
+      yarn
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="bun">
+      bun
+    </CodeBlockTabsTrigger>
+  </CodeBlockTabsList>
+
+  <CodeBlockTab value="npm">
+    ```bash
+    npx ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="pnpm">
+    ```bash
+    pnpm dlx ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="yarn">
+    ```bash
+    yarn dlx ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="bun">
+    ```bash
+    bun x ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+</CodeBlockTabs>
+
+* No hidden dependencies
+* Full source code access
+* Modify components freely
+* Tree-shaking friendly
+
+--------------------------------------------------------------------------------
+title: "Community"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/community"
+--------------------------------------------------------------------------------
+
+# Community
+
+
+
+AI Elements is an open-source project built by and for developers creating AI applications. Your contributions, feedback, and participation make it better for everyone.
+
+## Our Values
+
+### Inclusivity
+
+Everyone is welcome regardless of experience level, background, or identity. Ask questions, share ideas, and learn together.
+
+### Respectful Collaboration
+
+Treat others with kindness and professionalism. Disagree constructively. Help newcomers get started.
+
+### Quality Over Quantity
+
+Focus on meaningful contributions. A well-documented bug report is more valuable than a rushed PR.
+
+## Get Involved
+
+### Report Issues
+
+Found a bug or have a feature request? [Open an issue](https://github.com/vercel/ai-elements/issues) on GitHub.
+
+### Contribute Code
+
+Ready to contribute? Check out the [contribution guide](/docs/how-to-contribute) to get started.
+
+### Share Your Work
+
+Built something with AI Elements? Share it with the community. Tag your projects and let others learn from your implementation.
+
+### Help Others
+
+Answer questions in GitHub issues. Review pull requests. Write tutorials or blog posts about your experience.
+
+## Code of Conduct
+
+By participating in this community, you agree to:
+
+* Be respectful and considerate
+* Use welcoming and inclusive language
+* Accept constructive criticism gracefully
+* Focus on what's best for the community
+* Show empathy toward others
+
+Harassment, discrimination, and disruptive behavior are not tolerated.
+
+## Recognition
+
+Contributors are recognized in the project. Significant contributions may be highlighted in release notes. Your work helps developers worldwide build better AI applications.
+
+--------------------------------------------------------------------------------
+title: "How to Contribute"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/how-to-contribute"
+--------------------------------------------------------------------------------
+
+# How to Contribute
+
+
+
+AI Elements welcomes contributions from the community. Here's how you can help.
+
+## Types of Contributions
+
+### Bug Reports
+
+Found something broken? [Open an issue](https://github.com/vercel/ai-elements/issues) with:
+
+* A clear description of the problem
+* Steps to reproduce
+* Expected vs actual behavior
+* Your environment (Node version, framework, etc.)
+
+### Documentation
+
+Help improve the docs by:
+
+* Fixing typos and unclear explanations
+* Adding code examples
+* Improving component documentation
+* Writing tutorials
+
+### Bug Fixes
+
+Fix issues in existing components. Check the [open issues](https://github.com/vercel/ai-elements/issues) for bugs to tackle.
+
+### New Components
+
+Add components that help developers build AI interfaces. See [New Components](/docs/new-components) for requirements.
+
+### Enhancements
+
+Improve existing components with:
+
+* Better accessibility
+* New features
+* Performance improvements
+* Improved TypeScript types
+
+## Getting Started
+
+1. Fork the [repository](https://github.com/vercel/ai-elements)
+2. Clone your fork:
+
+```bash title="Terminal"
+git clone https://github.com/your_username_here/ai-elements.git
+```
+
+3. Install dependencies:
+
+```bash title="Terminal"
+pnpm install
+```
+
+4. Create a branch:
+
+```bash title="Terminal"
+git checkout -b feature/your_feature_name_here
+```
+
+5. Make your changes
+6. Run tests and linting:
+
+```bash title="Terminal"
+pnpm test
+pnpm run check
+```
+
+7. Submit a pull request
+
+## Pull Request Guidelines
+
+* One feature or fix per PR
+* Write a clear description of your changes
+* Include screenshots for visual changes
+* Update documentation if needed
+* Ensure tests pass
+
+See the full [CONTRIBUTING.md](https://github.com/vercel/ai-elements/blob/main/.github/CONTRIBUTING.md) for detailed guidelines.
+
+--------------------------------------------------------------------------------
+title: "New Components"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/new-components"
+--------------------------------------------------------------------------------
+
+# New Components
+
+
+
+Want to add a new component to AI Elements? This guide covers what we look for and how to submit.
+
+## Fit & Scope
+
+Before building, consider whether the component:
+
+### Solves an AI-Specific Need
+
+Components should address challenges unique to AI interfaces:
+
+* Chat and conversation UIs
+* Streaming content display
+* Model status and feedback
+* AI-specific interactions (regenerate, branch, etc.)
+
+### Doesn't Already Exist
+
+Check if shadcn/ui or another library already provides what you need. AI Elements focuses on components that require AI-specific behavior.
+
+### Has Broad Applicability
+
+The component should be useful across different AI applications, not just your specific use case.
+
+## Design Requirements
+
+### Composability
+
+Build components from smaller pieces:
+
+```tsx title="example.tsx"
+// Good: Composable
+<Message from="assistant">
+  <MessageContent>
+    <MessageResponse>{text}</MessageResponse>
+  </MessageContent>
+</Message>
+
+// Avoid: Monolithic
+<Message from="assistant" content={text} />
+```
+
+### Consistency
+
+Follow existing patterns in the library:
+
+* Use `cn()` for class merging
+* Extend HTML primitive attributes
+* Use CSS variables for theming
+* Match naming conventions
+
+### Accessibility
+
+Components must be:
+
+* Keyboard navigable
+* Screen reader friendly
+* WCAG 2.1 AA compliant
+* Properly labeled
+
+## Documentation Requirements
+
+Every component needs:
+
+1. **MDX documentation** with title and description
+2. **Props table** documenting all props
+3. **Usage examples** showing AI SDK integration
+4. **Installation instructions**
+
+## Technical Standards
+
+### TypeScript
+
+* Export all prop types
+* Use proper generics where needed
+* Avoid `any` types
+
+### Testing
+
+* Add unit tests for component logic
+* Test accessibility with automated tools
+* Verify behavior with AI SDK hooks
+
+### Code Style
+
+* Follow the project's Biome configuration
+* Run `pnpm run check` before submitting
+* Match existing component patterns
+
+## Submission Process
+
+1. **Open an issue first** - Describe the component and its use case. Get feedback before building.
+
+2. **Build the component** - Follow the patterns in `packages/elements/src/`.
+
+3. **Add examples** - Create examples in `packages/examples/src/`.
+
+4. **Write documentation** - Add MDX docs in `apps/docs/content/components/`.
+
+5. **Submit a PR** - Reference the original issue. Include screenshots or videos of the component in action.
+
+## Review Process
+
+Maintainers will review for:
+
+* Alignment with library goals
+* Code quality and patterns
+* Documentation completeness
+* Accessibility compliance
+* AI SDK integration
+
+Expect feedback and iteration. Quality components take time to get right.
+
+--------------------------------------------------------------------------------
+title: "Philosophy"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/philosophy"
+--------------------------------------------------------------------------------
+
+# Philosophy
+
+
+
+AI Elements is built on core principles that shape every component and decision.
+
+## Composability
+
+Components are building blocks, not black boxes. You combine small, focused pieces to create exactly what you need.
+
+```tsx title="example.tsx"
+<Message from="assistant">
+  <MessageContent>
+    <MessageResponse>{text}</MessageResponse>
+  </MessageContent>
+  <MessageActions>
+    <MessageAction label="Copy" onClick={handleCopy}>
+      <CopyIcon />
+    </MessageAction>
+  </MessageActions>
+</Message>
+```
+
+This approach gives you:
+
+* **Flexibility** - Add, remove, or rearrange pieces
+* **Control** - Style and configure each part independently
+* **Clarity** - Understand exactly what renders
+
+## Simplicity
+
+Do one thing well. Components have a clear purpose and minimal API surface. We avoid:
+
+* Unnecessary props and options
+* Complex configuration objects
+* Hidden behavior
+
+When in doubt, we leave it out. You can always extend components in your codebase.
+
+## Accessibility
+
+Every component follows accessibility best practices:
+
+* Semantic HTML elements
+* Proper ARIA attributes
+* Keyboard navigation
+* Screen reader support
+* Sufficient color contrast
+
+Accessibility isn't an afterthought—it's built into component architecture from the start.
+
+## Performance
+
+Components are optimized for real-world AI applications:
+
+* Minimal re-renders during streaming
+* Efficient DOM updates
+* Tree-shakeable exports
+* No runtime CSS-in-JS
+
+## Developer Experience
+
+Building AI interfaces should feel natural:
+
+* **Familiar patterns** - Standard React props and hooks
+* **TypeScript first** - Full type safety and autocomplete
+* **Good defaults** - Works out of the box
+* **Full control** - Customize when needed
+
+## AI SDK Alignment
+
+Components integrate deeply with the [AI SDK](https://ai-sdk.dev/):
+
+* Props match AI SDK types
+* Hooks work seamlessly
+* Streaming behavior is handled correctly
+* Status states are built-in
+
+## shadcn/ui Foundation
+
+AI Elements builds on [shadcn/ui](https://ui.shadcn.com/) conventions:
+
+* Components live in your codebase
+* CSS variables for theming
+* Tailwind CSS for styling
+* Copy-paste friendly
+
+Your existing shadcn/ui setup and theme apply automatically.
+
+## Open Source
+
+AI Elements is open source and community-driven:
+
+* Transparent development
+* Community contributions welcome
+* No vendor lock-in
+* Apache 2.0 license
+
+--------------------------------------------------------------------------------
+title: "Setup"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/setup"
+--------------------------------------------------------------------------------
+
+# Setup
+
+
+
+This guide walks you through setting up AI Elements in your project.
+
+## Prerequisites
+
+Before installing AI Elements, ensure your environment meets these requirements:
+
+* **Node.js** 18 or later
+* **React** 19
+* **Next.js** 14+ (App Router recommended)
+* **AI SDK** installed and configured
+* **shadcn/ui** initialized in your project
+* **Tailwind CSS** 4
+
+<Callout>
+  If you don't have shadcn/ui installed, running any AI Elements install command
+  will automatically set it up for you.
+</Callout>
+
+## AI Gateway (Recommended)
+
+We recommend using [AI Gateway](https://vercel.com/docs/ai-gateway) for model access as it offers a single API key for multiple model providers, built-in fallback support, unified billing and more.
+
+Add `AI_GATEWAY_API_KEY` to your `.env.local` file. [Get your API key here](https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%2Fapi-keys\&title=Get%20your%20AI%20Gateway%20key).
+
+## Installing Components
+
+Use the AI Elements CLI to add components:
+
+<CodeBlockTabs defaultValue="npm">
+  <CodeBlockTabsList>
+    <CodeBlockTabsTrigger value="npm">
+      npm
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="pnpm">
+      pnpm
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="yarn">
+      yarn
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="bun">
+      bun
+    </CodeBlockTabsTrigger>
+  </CodeBlockTabsList>
+
+  <CodeBlockTab value="npm">
+    ```bash
+    npx ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="pnpm">
+    ```bash
+    pnpm dlx ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="yarn">
+    ```bash
+    yarn dlx ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="bun">
+    ```bash
+    bun x ai-elements@latest add message
+    ```
+  </CodeBlockTab>
+</CodeBlockTabs>
+
+Or use the shadcn CLI:
+
+<CodeBlockTabs defaultValue="npm">
+  <CodeBlockTabsList>
+    <CodeBlockTabsTrigger value="npm">
+      npm
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="pnpm">
+      pnpm
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="yarn">
+      yarn
+    </CodeBlockTabsTrigger>
+
+    <CodeBlockTabsTrigger value="bun">
+      bun
+    </CodeBlockTabsTrigger>
+  </CodeBlockTabsList>
+
+  <CodeBlockTab value="npm">
+    ```bash
+    npx shadcn@latest add @ai-elements/message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="pnpm">
+    ```bash
+    pnpm dlx shadcn@latest add @ai-elements/message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="yarn">
+    ```bash
+    yarn dlx shadcn@latest add @ai-elements/message
+    ```
+  </CodeBlockTab>
+
+  <CodeBlockTab value="bun">
+    ```bash
+    bun x shadcn@latest add @ai-elements/message
+    ```
+  </CodeBlockTab>
+</CodeBlockTabs>
+
+Components are added to `@/components/ai-elements/` by default.
+
+## Verify Installation
+
+After installing a component, verify it works:
+
+1. Check that the component file exists in your components directory
+2. Import and use it in a page:
+
+```tsx title="app/page.tsx"
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+
+export default function Page() {
+  return (
+    <Message from="assistant">
+      <MessageContent>
+        <MessageResponse>Hello, world!</MessageResponse>
+      </MessageContent>
+    </Message>
+  );
+}
+```
+
+3. Run your development server and confirm the component renders
+
+## Next Steps
+
+* Learn how to [use components](/docs/usage) in your application
+* Browse available [components](/components) to find what you need
+* Check [troubleshooting](/docs/troubleshooting) if you run into issues
+
+--------------------------------------------------------------------------------
+title: "Skill"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/skill"
+--------------------------------------------------------------------------------
+
+# Skill
+
+
+
+We maintain a [skill](https://skills.sh/) that gives your AI coding agent procedural knowledge about how to use AI Elements.
+
+## What is a Skill?
+
+Skills are curated knowledge packages that enhance AI coding agents. When you install a skill, your agent gains context about specific libraries, patterns, and best practices—so it can help you more effectively.
+
+## Installation
+
+Install the AI Elements skill with:
+
+```bash title="Terminal"
+npx skills add vercel/ai-elements
+```
+
+Once installed, your agent understands:
+
+* How to install and use AI Elements components
+* Composable component patterns
+* AI SDK integration conventions
+* shadcn/ui theming and styling
+* Troubleshooting common issues
+
+## Browse More Skills
+
+Visit [skills.sh](https://skills.sh/) to discover skills for other libraries and frameworks.
+
+--------------------------------------------------------------------------------
+title: "Troubleshooting"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/troubleshooting"
+--------------------------------------------------------------------------------
+
+# Troubleshooting
+
+
+
+## Why are my components not styled?
+
+Make sure your project is configured correctly for shadcn/ui in Tailwind 4 - this means having a `globals.css` file that imports Tailwind and includes the shadcn/ui base styles.
+
+## I ran the AI Elements CLI but nothing was added to my project
+
+Double-check that:
+
+* Your current working directory is the root of your project (where `package.json` lives).
+* Your components.json file (if using shadcn-style config) is set up correctly.
+* You’re using the latest version of the AI Elements CLI:
+
+```bash title="Terminal"
+npx ai-elements@latest
+```
+
+If all else fails, feel free to open an [issue on GitHub](https://github.com/vercel/ai-elements/issues).
+
+## Theme switching doesn’t work — my app stays in light mode
+
+Ensure your app is using the same data-theme system that shadcn/ui and AI Elements expect. The default implementation toggles a data-theme attribute on the `<html>` element. Make sure your tailwind.config.js is using class or data- selectors accordingly:
+
+## The component imports fail with “module not found”
+
+Check the file exists. If it does, make sure your `tsconfig.json` has a proper paths alias for `@/` i.e.
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
+  }
+}
+```
+
+## My AI coding assistant can't access AI Elements components
+
+1. Verify your config file syntax is valid JSON.
+2. Check that the file path is correct for your AI tool.
+3. Restart your coding assistant after making changes.
+4. Ensure you have a stable internet connection.
+
+## Still stuck?
+
+If none of these answers help, open an [issue on GitHub](https://github.com/vercel/ai-elements/issues) and someone will be happy to assist.
+
+--------------------------------------------------------------------------------
+title: "Usage"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/usage"
+--------------------------------------------------------------------------------
+
+# Usage
+
+
+
+Once an AI Elements component is installed, you can import it and use it in your application like any other React component. The components are added as part of your codebase (not hidden in a library), so the usage feels very natural.
+
+## Example
+
+After installing AI Elements components, you can use them in your application like any other React component. For example:
+
+```tsx title="conversation.tsx"
+"use client";
+
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import { useChat } from "@ai-sdk/react";
+
+const Example = () => {
+  const { messages } = useChat();
+
+  return (
+    <>
+      {messages.map(({ role, parts }, index) => (
+        <Message from={role} key={index}>
+          <MessageContent>
+            {parts.map((part, i) => {
+              switch (part.type) {
+                case "text":
+                  return (
+                    <MessageResponse key={`${role}-${i}`}>
+                      {part.text}
+                    </MessageResponse>
+                  );
+              }
+            })}
+          </MessageContent>
+        </Message>
+      ))}
+    </>
+  );
+};
+
+export default Example;
+```
+
+In the example above, we import the `Message` component from our AI Elements directory and include it in our JSX. Then, we compose the component with the `MessageContent` and `MessageResponse` subcomponents. You can style or configure the component just as you would if you wrote it yourself – since the code lives in your project, you can even open the component file to see how it works or make custom modifications.
+
+## Extensibility
+
+All AI Elements components take as many primitive attributes as possible. For example, the `Message` component extends `HTMLAttributes<HTMLDivElement>`, so you can pass any props that a `div` supports. This makes it easy to extend the component with your own styles or functionality.
+
+## Customization
+
+<Callout>
+  If you re-install AI Elements by rerunning `npx ai-elements@latest`, the CLI
+  will ask before overwriting the file so you can save any custom changes you
+  made.
+</Callout>
+
+After installation, no additional setup is needed. The component’s styles (Tailwind CSS classes) and scripts are already integrated. You can start interacting with the component in your app immediately.
+
+For example, if you'd like to remove the rounding on `Message`, you can go to `components/ai-elements/message.tsx` and remove `rounded-lg` as follows:
+
+```tsx title="components/ai-elements/message.tsx" highlight="8"
+export const MessageContent = ({
+  children,
+  className,
+  ...props
+}: MessageContentProps) => (
+  <div
+    className={cn(
+      "flex flex-col gap-2 text-sm text-foreground",
+      "group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground group-[.is-user]:px-4 group-[.is-user]:py-3",
+      className
+    )}
+    {...props}
+  >
+    <div className="is-user:dark">{children}</div>
+  </div>
+);
+```
+
+--------------------------------------------------------------------------------
+title: "The Vercel AI Frontend Stack"
+source: "https://elements.ai-sdk.dev/docs/./output/ai-sdk-elements/docs/vercel-ai-frontend"
+--------------------------------------------------------------------------------
+
+# The Vercel AI Frontend Stack
+
+
+
+Vercel provides a complete stack for building AI-powered applications. Here's how the pieces fit together.
+
+## The Stack
+
+<Mermaid
+  chart="graph TB
+    subgraph &#x22;Your Application&#x22;
+        UI[AI Elements Components]
+        Hooks[AI SDK React Hooks]
+    end
+
+    subgraph &#x22;Backend&#x22;
+        Routes[AI SDK Core / Next.js Routes]
+    end
+
+    subgraph &#x22;Vercel Infrastructure&#x22;
+        Gateway[AI Gateway]
+    end
+
+    subgraph &#x22;Model Providers&#x22;
+        OpenAI[OpenAI]
+        Anthropic[Anthropic]
+        Google[Google]
+        Others[Others...]
+    end
+
+    UI --> Hooks
+    Hooks --> Routes
+    Routes --> Gateway
+    Gateway --> OpenAI
+    Gateway --> Anthropic
+    Gateway --> Google
+    Gateway --> Others"
+/>
+
+## AI Gateway
+
+[AI Gateway](https://vercel.com/docs/ai-gateway) is your single point of access to AI models.
+
+### What It Does
+
+* **Unified API** - One API key for OpenAI, Anthropic, Google, and more
+* **Caching** - Reduce costs by caching identical requests
+* **Rate limiting** - Protect your application from abuse
+* **Observability** - Monitor usage, latency, and costs
+* **Fallbacks** - Automatically retry with backup models
+
+### Setup
+
+Add `AI_GATEWAY_API_KEY` to your environment:
+
+```bash title=".env.local"
+AI_GATEWAY_API_KEY=your_api_key_here
+```
+
+Then use it with the AI SDK by specifying a model string e.g. `anthropic/claude-sonnet-4.5`.
+
+## AI SDK
+
+The [AI SDK](https://ai-sdk.dev/) provides the foundation for AI interactions.
+
+### Core Features
+
+* **Streaming** - Stream responses from any model
+* **Tool calling** - Let models call functions
+* **Structured output** - Get typed responses
+* **Multi-modal** - Handle text, images, and files
+
+### React Hooks
+
+```tsx title="example.tsx"
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+
+function Chat() {
+  const [text, setText] = useState("");
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+    }),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendMessage({ text: text });
+    setText("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {messages.map((m) => (
+        <div key={m.id}>{m.content}</div>
+      ))}
+      <input value={text} onChange={(e) => setText(e.target.value)} />
+    </form>
+  );
+}
+```
+
+### Server Integration
+
+```ts title="app/api/chat/route.ts"
+import { streamText } from "ai";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const result = streamText({
+    model: "anthropic/claude-sonnet-4.5",
+    system: "You are a helpful assistant.",
+    messages: await convertToModelMessages(messages),
+  });
+
+  return result.toUIMessageStreamResponse();
+}
+```
+
+## AI Elements
+
+AI Elements provides the UI layer on top of the AI SDK.
+
+### What It Adds
+
+* **Pre-built components** - Message, Conversation, PromptInput, and more
+* **Streaming support** - Components handle partial content gracefully
+* **Composable design** - Build exactly the UI you need
+* **Theme integration** - Works with your existing shadcn/ui setup
+
+### Integration Example
+
+```tsx title="app/chat/page.tsx"
+"use client";
+
+import { useChat } from "@ai-sdk/react";
+import {
+  Conversation,
+  ConversationContent,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputProvider,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
+
+export default function ChatPage() {
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+    }),
+  });
+
+  const handleSubmit = (message: { text: string }) => {
+    sendMessage({ text: message.text });
+  };
+
+  return (
+    <div className="h-screen flex flex-col">
+      <Conversation className="flex-1">
+        <ConversationContent>
+          {messages.map((message) => (
+            <Message key={message.id} from={message.role}>
+              <MessageContent>
+                {message.parts.map((part, i) =>
+                  part.type === "text" ? (
+                    <MessageResponse key={i}>{part.text}</MessageResponse>
+                  ) : null,
+                )}
+              </MessageContent>
+            </Message>
+          ))}
+        </ConversationContent>
+      </Conversation>
+
+      <PromptInputProvider>
+        <PromptInput onSubmit={handleSubmit} className="p-4">
+          <PromptInputBody>
+            <PromptInputTextarea placeholder="Type a message..." />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputSubmit status={status} />
+          </PromptInputFooter>
+        </PromptInput>
+      </PromptInputProvider>
+    </div>
+  );
+}
+```
+
+## Putting It Together
+
+The full flow:
+
+1. **User types** in an AI Elements `PromptInput`
+2. **React hook** (`useChat`) sends the message to your API route
+3. **AI SDK** streams the response from the model via AI Gateway
+4. **AI Elements** renders the streaming response in `MessageResponse`
+
+Each layer handles its responsibility:
+
+| Layer       | Responsibility                        |
+| ----------- | ------------------------------------- |
+| AI Gateway  | Model access, caching, observability  |
+| AI SDK      | Streaming, hooks, server integration  |
+| AI Elements | UI components, theming, accessibility |
+
+This separation means you can swap any layer independently. Use a different model provider, build custom hooks, or create your own components—the stack remains flexible.
