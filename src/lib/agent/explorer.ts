@@ -1,6 +1,6 @@
 import { anthropic } from "@ai-sdk/anthropic"
-import { ToolLoopAgent, stepCountIs } from "ai"
-import { readTool, globTool, grepTool } from "@/lib/agent/fs/tools"
+import { stepCountIs, ToolLoopAgent } from "ai"
+import { globTool, grepTool, readTool } from "@/lib/agent/fs/tools"
 
 const MAX_STEPS = 20 as const
 
