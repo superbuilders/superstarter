@@ -8,5 +8,9 @@ export default {
 	dbCredentials: {
 		url: env.DATABASE_URL
 	},
-	schemaFilter: ["core"]
+	schemaFilter: ["core"],
+	migrations: {
+		table: "__drizzle_migrations",
+		schema: "core"
+	}
 } satisfies Config

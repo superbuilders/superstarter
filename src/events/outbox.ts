@@ -1,83 +1,62 @@
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
+import { asc, inArray } from "drizzle-orm"
 import { Inngest } from "inngest"
-import { Client, Pool } from "pg"
+import { Client } from "pg"
+import { db } from "@/db"
+import { coreEventOutbox } from "@/db/schemas/core"
 import { env } from "@/env"
 
 const relay = new Inngest({ id: "superstarter-outbox-relay", eventKey: env.INNGEST_EVENT_KEY })
 
-const pool = new Pool({
-	connectionString: env.DATABASE_URL,
-	keepAlive: true,
-	keepAliveInitialDelayMillis: 30_000,
-	idle_in_transaction_session_timeout: 30_000
-})
-
 const DRAIN_BATCH_SIZE = 100
 
 async function drain(): Promise<number> {
-	const client = await pool.connect()
-	using stack = new DisposableStack()
-	stack.defer(function releaseClient() {
-		client.release()
-	})
+	return db.transaction(async function drainTransaction(tx) {
+		const lockSubquery = tx
+			.select({ id: coreEventOutbox.id })
+			.from(coreEventOutbox)
+			.orderBy(asc(coreEventOutbox.createdAt))
+			.limit(DRAIN_BATCH_SIZE)
+			.for("update", { skipLocked: true })
 
-	const beginResult = await errors.try(client.query("BEGIN"))
-	if (beginResult.error) {
-		logger.error("outbox drain begin failed", { error: beginResult.error })
-		throw errors.wrap(beginResult.error, "outbox drain begin")
-	}
-
-	const deleteResult = await errors.try(
-		client.query(
-			`DELETE FROM core.event_outbox
-			 WHERE id IN (
-			   SELECT id FROM core.event_outbox
-			   ORDER BY created_at ASC
-			   LIMIT $1
-			   FOR UPDATE SKIP LOCKED
-			 )
-			 RETURNING id, event_name, entity_id, created_at`,
-			[DRAIN_BATCH_SIZE]
+		const deleteResult = await errors.try(
+			tx.delete(coreEventOutbox).where(inArray(coreEventOutbox.id, lockSubquery)).returning({
+				id: coreEventOutbox.id,
+				eventName: coreEventOutbox.eventName,
+				entityId: coreEventOutbox.entityId
+			})
 		)
-	)
-	if (deleteResult.error) {
-		await rollback(client)
-		logger.error("outbox drain delete failed", { error: deleteResult.error })
-		throw errors.wrap(deleteResult.error, "outbox drain delete")
-	}
-
-	const rows = deleteResult.data.rows
-	if (rows.length === 0) {
-		await commit(client)
-		logger.debug("outbox empty")
-		return 0
-	}
-
-	const events = rows.map(function mapOutboxRow(row: {
-		id: string
-		event_name: string
-		entity_id: string
-	}) {
-		return {
-			id: row.id,
-			name: row.event_name,
-			data: {
-				entityId: row.entity_id
-			}
+		if (deleteResult.error) {
+			logger.error("outbox drain delete failed", { error: deleteResult.error })
+			throw errors.wrap(deleteResult.error, "outbox drain delete")
 		}
+
+		const rows = deleteResult.data
+		if (rows.length === 0) {
+			logger.debug("outbox empty")
+			return 0
+		}
+
+		const events = rows.map(function mapOutboxRow(row) {
+			return {
+				id: row.id,
+				name: row.eventName,
+				data: {
+					entityId: row.entityId
+				}
+			}
+		})
+
+		const sendResult = await errors.try(relay.send(events))
+		if (sendResult.error) {
+			logger.error("outbox drain send failed", { error: sendResult.error })
+			throw errors.wrap(sendResult.error, "outbox drain send")
+		}
+
+		logger.info("outbox drained", { count: rows.length })
+		return rows.length
 	})
-
-	const sendResult = await errors.try(relay.send(events))
-	if (sendResult.error) {
-		await rollback(client)
-		logger.error("outbox drain send failed", { error: sendResult.error })
-		throw errors.wrap(sendResult.error, "outbox drain send")
-	}
-
-	await commit(client)
-	logger.info("outbox drained", { count: rows.length })
-	return rows.length
 }
 
 async function drainAll(): Promise<number> {
@@ -164,21 +143,6 @@ async function ensureListening(): Promise<void> {
 	listener = client
 	connecting = false
 	logger.info("listening on events channel")
-}
-
-async function rollback(client: { query: (text: string) => Promise<unknown> }): Promise<void> {
-	const result = await errors.try(client.query("ROLLBACK"))
-	if (result.error) {
-		logger.error("outbox rollback failed", { error: result.error })
-	}
-}
-
-async function commit(client: { query: (text: string) => Promise<unknown> }): Promise<void> {
-	const result = await errors.try(client.query("COMMIT"))
-	if (result.error) {
-		logger.error("outbox commit failed", { error: result.error })
-		throw errors.wrap(result.error, "outbox commit")
-	}
 }
 
 export { drain, drainAll, ensureListening }
