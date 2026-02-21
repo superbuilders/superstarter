@@ -37,7 +37,7 @@ async function drain(): Promise<number> {
 			   LIMIT $1
 			   FOR UPDATE SKIP LOCKED
 			 )
-			 RETURNING id, event_name, entity_id, payload, created_at`,
+			 RETURNING id, event_name, entity_id, created_at`,
 			[DRAIN_BATCH_SIZE]
 		)
 	)
@@ -58,14 +58,12 @@ async function drain(): Promise<number> {
 		id: string
 		event_name: string
 		entity_id: string
-		payload: Record<string, unknown>
 	}) {
 		return {
 			id: row.id,
 			name: row.event_name,
 			data: {
-				entityId: row.entity_id,
-				...row.payload
+				entityId: row.entity_id
 			}
 		}
 	})
@@ -94,6 +92,31 @@ async function drainAll(): Promise<number> {
 
 let listener: Client | null = null
 let connecting = false
+let draining = false
+let pendingDrain = false
+
+function scheduleDrain(): void {
+	if (draining) {
+		pendingDrain = true
+		return
+	}
+	draining = true
+	runDrainLoop()
+}
+
+async function runDrainLoop(): Promise<void> {
+	while (true) {
+		const result = await errors.try(drainAll())
+		if (result.error) {
+			logger.error("drain after notification failed", { error: result.error })
+		}
+		if (!pendingDrain) {
+			break
+		}
+		pendingDrain = false
+	}
+	draining = false
+}
 
 async function ensureListening(): Promise<void> {
 	if (listener !== null || connecting) {
@@ -125,9 +148,7 @@ async function ensureListening(): Promise<void> {
 
 	client.on("notification", function handleNotification() {
 		logger.debug("received outbox notification")
-		drain().catch(function handleDrainError(err: unknown) {
-			logger.error("drain after notification failed", { error: err })
-		})
+		scheduleDrain()
 	})
 
 	client.on("error", function handleListenerError(err: unknown) {

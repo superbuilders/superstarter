@@ -8,15 +8,17 @@ import { coreTodos } from "@/db/schemas/core"
 
 const programs: SQL[] = [
 	pgcrypto,
-
 	updatedAtFunction,
 	emitEventFunction,
-
 	...updatedAtTrigger(coreTodos),
 	...emitEventTriggers(coreTodos, [
-		{ operation: "INSERT", eventName: "superstarter/todo.created" },
-		{ operation: "UPDATE", eventName: "superstarter/todo.toggled" },
-		{ operation: "DELETE", eventName: "superstarter/todo.deleted" }
+		{ operation: "INSERT", eventName: "superstarter/todo.created", columns: [] },
+		{
+			operation: "UPDATE",
+			eventName: "superstarter/todo.completed",
+			columns: [coreTodos.completed]
+		},
+		{ operation: "DELETE", eventName: "superstarter/todo.deleted", columns: [] }
 	])
 ]
 

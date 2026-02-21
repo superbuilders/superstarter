@@ -5,17 +5,12 @@ import { z } from "zod"
 import { env } from "@/env"
 
 const todoEventPayload = z.object({
-	entityId: z.string().uuid(),
-	id: z.string().uuid(),
-	title: z.string(),
-	completed: z.boolean(),
-	created_at: z.string(),
-	updated_at: z.string().nullable()
+	entityId: z.string().uuid()
 })
 
 const schema = {
 	"superstarter/todo.created": todoEventPayload,
-	"superstarter/todo.toggled": todoEventPayload,
+	"superstarter/todo.completed": todoEventPayload,
 	"superstarter/todo.deleted": todoEventPayload
 }
 
