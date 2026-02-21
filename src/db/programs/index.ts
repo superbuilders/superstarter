@@ -4,18 +4,18 @@ import { emitEventFunction } from "@/db/programs/functions/emit-event"
 import { updatedAtFunction } from "@/db/programs/functions/updated-at"
 import { emitEventTriggers } from "@/db/programs/triggers/emit-event"
 import { updatedAtTrigger } from "@/db/programs/triggers/updated-at"
-import { coreTodos } from "@/db/schemas/core"
+import { coreSchema, coreTodos } from "@/db/schemas/core"
 
 const programs: SQL[] = [
 	pgcrypto,
-	updatedAtFunction,
-	emitEventFunction,
-	...updatedAtTrigger(coreTodos),
-	...emitEventTriggers(coreTodos, [
+	updatedAtFunction(coreSchema),
+	emitEventFunction(coreSchema),
+	...updatedAtTrigger(coreSchema, coreTodos),
+	...emitEventTriggers(coreSchema, coreTodos, [
 		{ operation: "INSERT", eventName: "superstarter/todo.created", columns: [] },
 		{
 			operation: "UPDATE",
-			eventName: "superstarter/todo.completed",
+			eventName: "superstarter/todo.toggled",
 			columns: [coreTodos.completed]
 		},
 		{ operation: "DELETE", eventName: "superstarter/todo.deleted", columns: [] }

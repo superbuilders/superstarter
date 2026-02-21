@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
+import type { PgSchema } from "drizzle-orm/pg-core"
 
-const emitEventFunction: SQL = sql`CREATE OR REPLACE FUNCTION emit_event() RETURNS trigger AS $$
+function emitEventFunction(schema: PgSchema): SQL {
+	return sql`CREATE OR REPLACE FUNCTION ${schema}.emit_event() RETURNS trigger AS $$
 DECLARE
   eid uuid;
   entity_id uuid;
@@ -12,7 +14,7 @@ BEGIN
     entity_id := NEW.id;
   END IF;
 
-  INSERT INTO core.event_outbox (event_name, entity_id)
+  INSERT INTO ${schema}.event_outbox (event_name, entity_id)
   VALUES (TG_ARGV[0], entity_id)
   RETURNING id INTO eid;
 
@@ -21,5 +23,6 @@ BEGIN
   RETURN COALESCE(NEW, OLD);
 END;
 $$ LANGUAGE plpgsql;`
+}
 
 export { emitEventFunction }

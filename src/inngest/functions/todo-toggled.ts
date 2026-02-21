@@ -9,23 +9,23 @@ type RealtimeOverrides = {
 	logger: Logger
 }
 
-const todoCreated = inngest.createFunction(
-	{ id: "todo-created" },
-	{ event: "superstarter/todo.created" },
+const todoToggled = inngest.createFunction(
+	{ id: "todo-toggled" },
+	{ event: "superstarter/todo.toggled" },
 	async ({
 		event,
 		logger,
 		publish
-	}: Context<typeof inngest, "superstarter/todo.created", RealtimeOverrides>) => {
-		logger.info("todo created", { entityId: event.data.entityId })
+	}: Context<typeof inngest, "superstarter/todo.toggled", RealtimeOverrides>) => {
+		logger.info("todo toggled", { entityId: event.data.entityId })
 		revalidateTag("todos", "max")
 		await publish({
 			channel: "todos",
 			topic: "refresh",
-			data: { event: "created", entityId: event.data.entityId }
+			data: { event: "toggled", entityId: event.data.entityId }
 		})
-		return { todoId: event.data.entityId }
+		return { entityId: event.data.entityId }
 	}
 )
 
-export { todoCreated }
+export { todoToggled }

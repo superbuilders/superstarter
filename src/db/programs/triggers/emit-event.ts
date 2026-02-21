@@ -1,5 +1,6 @@
 import { getTableName, sql } from "drizzle-orm"
 import type { Column, SQL, Table } from "drizzle-orm"
+import type { PgSchema } from "drizzle-orm/pg-core"
 
 type EventTriggerConfig = {
 	operation: "INSERT" | "UPDATE" | "DELETE"
@@ -8,7 +9,7 @@ type EventTriggerConfig = {
 	when?: SQL
 }
 
-function emitEventTriggers(table: Table, configs: EventTriggerConfig[]): SQL[] {
+function emitEventTriggers(schema: PgSchema, table: Table, configs: EventTriggerConfig[]): SQL[] {
 	const tableName = getTableName(table)
 	const statements: SQL[] = []
 
@@ -31,7 +32,7 @@ function emitEventTriggers(table: Table, configs: EventTriggerConfig[]): SQL[] {
 
 		statements.push(
 			sql`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`,
-			sql`CREATE TRIGGER ${triggerName} AFTER ${sql.raw(config.operation)}${columnClause} ON ${table} FOR EACH ROW${whenClause} EXECUTE FUNCTION emit_event(${sql.raw(`'${config.eventName}'`)})`
+			sql`CREATE TRIGGER ${triggerName} AFTER ${sql.raw(config.operation)}${columnClause} ON ${table} FOR EACH ROW${whenClause} EXECUTE FUNCTION ${schema}.emit_event(${sql.raw(`'${config.eventName}'`)})`
 		)
 	}
 

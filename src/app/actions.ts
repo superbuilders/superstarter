@@ -9,10 +9,10 @@ import { db } from "@/db"
 import { coreTodos } from "@/db/schemas/core"
 import { inngest } from "@/inngest"
 
-async function getRealtimeToken(channel: string) {
+async function getTodosRealtimeToken() {
 	const token = await getSubscriptionToken(inngest, {
-		channel,
-		topics: ["status"]
+		channel: "todos",
+		topics: ["refresh"]
 	})
 	return token
 }
@@ -67,4 +67,4 @@ async function deleteTodo(id: string) {
 	revalidateTag("todos", "max")
 }
 
-export { createTodo, deleteTodo, getRealtimeToken, toggleTodo }
+export { createTodo, deleteTodo, getTodosRealtimeToken, toggleTodo }

@@ -10,7 +10,7 @@ const todoEventPayload = z.object({
 
 const schema = {
 	"superstarter/todo.created": todoEventPayload,
-	"superstarter/todo.completed": todoEventPayload,
+	"superstarter/todo.toggled": todoEventPayload,
 	"superstarter/todo.deleted": todoEventPayload
 }
 

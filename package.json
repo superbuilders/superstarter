@@ -15,10 +15,11 @@
 		"typecheck": "bun --bun tsc",
 		"db:generate": "bun --bun drizzle-kit generate",
 		"db:migrate": "bun --bun drizzle-kit migrate",
-		"db:push": "bun --bun drizzle-kit push",
+		"db:push": "bun run db:push:schema && bun run db:push:programs",
+		"db:push:schema": "bun --bun drizzle-kit push",
+		"db:push:programs": "bun --bun run src/db/scripts/push-programs.ts",
 		"db:studio": "bun --bun drizzle-kit studio",
-		"db:drop-schemas": "bun --bun run src/db/scripts/drop-schemas.ts",
-		"db:apply-programs": "bun --bun run src/db/scripts/apply-programs.ts"
+		"db:drop:schema": "bun --bun run src/db/scripts/drop-schema.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.2.0",

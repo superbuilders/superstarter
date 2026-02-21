@@ -1,10 +1,10 @@
 "use client"
 
-import type { Realtime } from "@inngest/realtime"
 import { useInngestSubscription } from "@inngest/realtime/hooks"
 import { Trash2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import * as React from "react"
-import { createTodo, deleteTodo, getRealtimeToken, toggleTodo } from "@/app/actions"
+import { createTodo, deleteTodo, getTodosRealtimeToken, toggleTodo } from "@/app/actions"
 import type { Todo } from "@/app/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,23 +12,23 @@ import { Input } from "@/components/ui/input"
 
 function Content({ todosPromise }: { todosPromise: Promise<Todo[]> }) {
 	const todos = React.use(todosPromise)
+	const router = useRouter()
 	const [title, setTitle] = React.useState("")
 	const [isPending, startTransition] = React.useTransition()
-	const [lastCreatedId, setLastCreatedId] = React.useState<string | null>(null)
-
-	const refreshToken = React.useCallback(async (): Promise<Realtime.Subscribe.Token | null> => {
-		if (!lastCreatedId) {
-			return null
-		}
-		return getRealtimeToken(`todo:${lastCreatedId}`)
-	}, [lastCreatedId])
 
 	const { latestData } = useInngestSubscription({
-		enabled: Boolean(lastCreatedId),
-		refreshToken
+		enabled: true,
+		refreshToken: getTodosRealtimeToken
 	})
 
-	const realtimeStatus = latestData?.data?.status
+	React.useEffect(
+		function refreshOnRealtimeMessage() {
+			if (latestData) {
+				router.refresh()
+			}
+		},
+		[latestData, router]
+	)
 
 	function handleCreate(formData: FormData) {
 		const value = formData.get("title")
@@ -41,8 +41,7 @@ function Content({ todosPromise }: { todosPromise: Promise<Todo[]> }) {
 		}
 		setTitle("")
 		startTransition(async () => {
-			const id = await createTodo(trimmed)
-			setLastCreatedId(id)
+			await createTodo(trimmed)
 		})
 	}
 
@@ -77,14 +76,11 @@ function Content({ todosPromise }: { todosPromise: Promise<Todo[]> }) {
 							Add
 						</Button>
 					</form>
-					{realtimeStatus && (
-						<p className="text-muted-foreground text-xs">Background: {String(realtimeStatus)}</p>
-					)}
 					{todos.length === 0 && (
 						<p className="text-center text-muted-foreground text-sm">No todos yet</p>
 					)}
 					<ul className="flex flex-col gap-1">
-						{todos.map((todo) => {
+						{todos.map(function renderTodo(todo) {
 							const textClass = todo.completed ? "line-through text-muted-foreground" : ""
 							return (
 								<li key={todo.id} className="flex items-center gap-2 rounded-md px-2 py-1">

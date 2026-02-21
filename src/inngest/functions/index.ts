@@ -1,7 +1,7 @@
 import { todoCreated } from "@/inngest/functions/todo-created"
 import { todoDeleted } from "@/inngest/functions/todo-deleted"
-import { todoCompleted } from "@/inngest/functions/todo-completed"
+import { todoToggled } from "@/inngest/functions/todo-toggled"
 
-const functions = [todoCreated, todoDeleted, todoCompleted]
+const functions = [todoCreated, todoDeleted, todoToggled]
 
 export { functions }
