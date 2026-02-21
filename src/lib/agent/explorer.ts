@@ -1,9 +1,9 @@
-import { anthropic } from "@ai-sdk/anthropic"
+import { openai } from "@ai-sdk/openai"
 import { globTool, grepTool, readTool } from "@/lib/agent/fs/tools"
 
 const MAX_STEPS = 20 as const
 
-const model = anthropic("claude-haiku-4-5-20251001")
+const model = openai("gpt-5-nano")
 
 const tools = {
 	read: readTool,
