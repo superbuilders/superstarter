@@ -44,7 +44,8 @@ const exploreFunction = inngest.createFunction(
 		logger.info("starting explore", { prompt: event.data.prompt })
 
 		let responseMessages: ModelMessage[] = []
-		const steps: ExplorerStepResult[] = []
+		let lastStepText = ""
+		let stepCount = 0
 		let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
 
 		for (let i = 0; i < MAX_STEPS; i++) {
@@ -85,7 +86,8 @@ const exploreFunction = inngest.createFunction(
 				totalTokens: totalUsage.totalTokens + (stepTotalTokens ? stepTotalTokens : 0)
 			}
 
-			steps.push(stepResult.step)
+			lastStepText = stepResult.step.text
+			stepCount++
 
 			await step.sendEvent(`echo-${i}`, [
 				{
@@ -109,16 +111,13 @@ const exploreFunction = inngest.createFunction(
 		}
 
 		logger.info("explore complete", {
-			stepCount: steps.length,
+			stepCount,
 			totalUsage
 		})
 
-		const lastStep = steps.at(-1)
-		const text = lastStep ? lastStep.text : ""
-
 		return {
-			text,
-			steps,
+			text: lastStepText,
+			stepCount,
 			totalUsage
 		}
 	}
