@@ -19,6 +19,7 @@ const env = createEnv({
 	 * isn't built with invalid env vars.
 	 */
 	server: {
+		ANTHROPIC_API_KEY: z.string().optional(),
 		DATABASE_URL: z.url(),
 		INNGEST_EVENT_KEY: z.string().optional(),
 		INNGEST_SIGNING_KEY: z.string().optional(),
@@ -42,6 +43,7 @@ const env = createEnv({
 	 * middlewares) or client-side so we need to destruct manually.
 	 */
 	runtimeEnv: {
+		ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
 		DATABASE_URL: process.env.DATABASE_URL,
 		INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY,
 		INNGEST_SIGNING_KEY: process.env.INNGEST_SIGNING_KEY,
