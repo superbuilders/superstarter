@@ -28,4 +28,4 @@ const explorer = new ToolLoopAgent({
 	stopWhen: stepCountIs(MAX_STEPS)
 })
 
-export { explorer, MAX_STEPS }
+export { MAX_STEPS, explorer }

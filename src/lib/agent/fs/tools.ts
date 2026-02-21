@@ -4,10 +4,6 @@ import { tool } from "ai"
 import { z } from "zod"
 import { edit, glob, grep, read, write } from "@/lib/agent/fs/operations"
 
-// ---------------------------------------------------------------------------
-// read
-// ---------------------------------------------------------------------------
-
 async function executeRead({ path }: { path: string }) {
 	const result = await errors.try(read(path))
 	if (result.error) {
@@ -32,10 +28,6 @@ const readTool = tool({
 	execute: executeRead
 })
 
-// ---------------------------------------------------------------------------
-// glob
-// ---------------------------------------------------------------------------
-
 async function executeGlob({ dirPath, pattern }: { dirPath: string; pattern: string }) {
 	const result = await errors.try(glob(dirPath, pattern))
 	if (result.error) {
@@ -59,10 +51,6 @@ const globTool = tool({
 	strict: true,
 	execute: executeGlob
 })
-
-// ---------------------------------------------------------------------------
-// grep
-// ---------------------------------------------------------------------------
 
 async function executeGrep({
 	dirPath,
@@ -101,10 +89,6 @@ const grepTool = tool({
 	execute: executeGrep
 })
 
-// ---------------------------------------------------------------------------
-// write
-// ---------------------------------------------------------------------------
-
 async function executeWrite({ path, content }: { path: string; content: string }) {
 	const result = await errors.try(write(path, content))
 	if (result.error) {
@@ -128,10 +112,6 @@ const writeTool = tool({
 	strict: true,
 	execute: executeWrite
 })
-
-// ---------------------------------------------------------------------------
-// edit
-// ---------------------------------------------------------------------------
 
 async function executeEdit({
 	path,
@@ -170,4 +150,4 @@ const editTool = tool({
 	execute: executeEdit
 })
 
-export { readTool, globTool, grepTool, writeTool, editTool }
+export { editTool, globTool, grepTool, readTool, writeTool }

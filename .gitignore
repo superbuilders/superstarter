@@ -50,3 +50,6 @@ prd.md
 
 # worktrees
 .worktrees/
+
+# secrets
+.secrets

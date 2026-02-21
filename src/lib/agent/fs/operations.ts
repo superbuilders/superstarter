@@ -3,17 +3,9 @@ import { relative, resolve } from "node:path"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const MAX_FILE_SIZE = 100 * 1024
 const MAX_GLOB_RESULTS = 1000
 const MAX_GREP_RESULTS = 100
-
-// ---------------------------------------------------------------------------
-// Error sentinels
-// ---------------------------------------------------------------------------
 
 const ErrNotFound = errors.new("not found")
 const ErrNotAFile = errors.new("path is not a file")
@@ -24,10 +16,6 @@ const ErrInvalidPattern = errors.new("invalid regex pattern")
 const ErrWriteFailed = errors.new("write failed")
 const ErrNoMatch = errors.new("old string not found in file")
 const ErrAmbiguousMatch = errors.new("old string found multiple times without replaceAll")
-
-// ---------------------------------------------------------------------------
-// Shared helpers (unexported)
-// ---------------------------------------------------------------------------
 
 async function* walkDirectoryFromBase(
 	basePath: string,
@@ -47,11 +35,21 @@ async function* walkDirectoryFromBase(
 }
 
 function convertGlobChar(char: string): string {
-	if (char === "?") return "[^/]"
-	if (char === ".") return "\\."
-	if (char === "{") return "("
-	if (char === "}") return ")"
-	if (char === ",") return "|"
+	if (char === "?") {
+		return "[^/]"
+	}
+	if (char === ".") {
+		return "\\."
+	}
+	if (char === "{") {
+		return "("
+	}
+	if (char === "}") {
+		return ")"
+	}
+	if (char === ",") {
+		return "|"
+	}
 	return char
 }
 
@@ -63,7 +61,9 @@ function globToRegex(pattern: string): RegExp {
 		if (char === "*" && pattern.charAt(i + 1) === "*") {
 			regex += ".*"
 			i += 2
-			if (pattern.charAt(i) === "/") i++
+			if (pattern.charAt(i) === "/") {
+				i++
+			}
 		} else if (char === "*") {
 			regex += "[^/]*"
 			i++
@@ -74,10 +74,6 @@ function globToRegex(pattern: string): RegExp {
 	}
 	return new RegExp(`^${regex}$`)
 }
-
-// ---------------------------------------------------------------------------
-// read
-// ---------------------------------------------------------------------------
 
 interface ReadResult {
 	content: string
@@ -121,10 +117,6 @@ async function read(filePath: string): Promise<ReadResult> {
 
 	return { content, path: filePath, size: statResult.data.size, lineCount }
 }
-
-// ---------------------------------------------------------------------------
-// glob
-// ---------------------------------------------------------------------------
 
 interface GlobMatch {
 	path: string
@@ -177,10 +169,6 @@ async function glob(dirPath: string, pattern: string): Promise<GlobResult> {
 	return { pattern, basePath: dirPath, matches }
 }
 
-// ---------------------------------------------------------------------------
-// grep
-// ---------------------------------------------------------------------------
-
 interface GrepMatch {
 	path: string
 	lineNumber: number
@@ -207,10 +195,14 @@ function searchFileLines(
 	const lines = content.split("\n")
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i]
-		if (line === undefined) continue
+		if (line === undefined) {
+			continue
+		}
 		if (regex.test(line)) {
 			matches.push({ path: filePath, lineNumber: i + 1, lineContent: line })
-			if (matches.length >= limit) return true
+			if (matches.length >= limit) {
+				return true
+			}
 		}
 	}
 	return false
@@ -250,24 +242,30 @@ async function grep(dirPath: string, pattern: string, options?: GrepOptions): Pr
 	const matches: GrepMatch[] = []
 
 	for await (const entry of walkDirectoryFromBase(dirPath, dirPath)) {
-		if (globRegex && !globRegex.test(entry.relativePath)) continue
-		if (entry.size > MAX_FILE_SIZE) continue
+		if (globRegex && !globRegex.test(entry.relativePath)) {
+			continue
+		}
+		if (entry.size > MAX_FILE_SIZE) {
+			continue
+		}
 
 		const readResult = await errors.try(fsReadFile(entry.absolutePath, "utf-8"))
-		if (readResult.error) continue
+		if (readResult.error) {
+			continue
+		}
 
-		if (readResult.data.slice(0, 512).includes("\0")) continue
+		if (readResult.data.slice(0, 512).includes("\0")) {
+			continue
+		}
 
 		const limitReached = searchFileLines(readResult.data, entry.absolutePath, regex, matches, limit)
-		if (limitReached) return { pattern, matches }
+		if (limitReached) {
+			return { pattern, matches }
+		}
 	}
 
 	return { pattern, matches }
 }
-
-// ---------------------------------------------------------------------------
-// write
-// ---------------------------------------------------------------------------
 
 interface WriteResult {
 	path: string
@@ -276,11 +274,9 @@ interface WriteResult {
 }
 
 async function write(filePath: string, content: string): Promise<WriteResult> {
-	// Check if file already exists
 	const existsResult = await errors.try(stat(filePath))
 	const created = existsResult.error !== undefined
 
-	// Ensure parent directories exist
 	const dir = filePath.substring(0, filePath.lastIndexOf("/"))
 	if (dir) {
 		const mkdirResult = await errors.try(mkdir(dir, { recursive: true }))
@@ -299,10 +295,6 @@ async function write(filePath: string, content: string): Promise<WriteResult> {
 	const size = Buffer.byteLength(content, "utf-8")
 	return { path: filePath, size, created }
 }
-
-// ---------------------------------------------------------------------------
-// edit
-// ---------------------------------------------------------------------------
 
 interface EditResult {
 	path: string
@@ -334,12 +326,13 @@ async function edit(
 
 	const content = readResult.data
 
-	// Count occurrences
 	let count = 0
 	let searchFrom = 0
 	while (true) {
 		const idx = content.indexOf(oldString, searchFrom)
-		if (idx === -1) break
+		if (idx === -1) {
+			break
+		}
 		count++
 		searchFrom = idx + oldString.length
 	}
@@ -373,37 +366,32 @@ async function edit(
 	return { path: filePath, replacements }
 }
 
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
-
 export {
-	read,
-	glob,
-	grep,
-	write,
-	edit,
-	ErrNotFound,
-	ErrNotAFile,
+	ErrAmbiguousMatch,
+	ErrInvalidPattern,
+	ErrNoMatch,
 	ErrNotADirectory,
+	ErrNotAFile,
+	ErrNotFound,
 	ErrTooLarge,
 	ErrTooManyResults,
-	ErrInvalidPattern,
 	ErrWriteFailed,
-	ErrNoMatch,
-	ErrAmbiguousMatch,
 	MAX_FILE_SIZE,
 	MAX_GLOB_RESULTS,
-	MAX_GREP_RESULTS
+	MAX_GREP_RESULTS,
+	edit,
+	glob,
+	grep,
+	read,
+	write
 }
-
 export type {
-	ReadResult,
+	EditResult,
 	GlobMatch,
 	GlobResult,
 	GrepMatch,
 	GrepOptions,
 	GrepResult,
-	WriteResult,
-	EditResult
+	ReadResult,
+	WriteResult
 }
