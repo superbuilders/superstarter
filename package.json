@@ -23,6 +23,7 @@
 		"db:apply": "bun --bun run src/db/scripts/apply-programs.ts"
 	},
 	"dependencies": {
+		"@ai-sdk/anthropic": "^3.0.46",
 		"@base-ui/react": "^1.2.0",
 		"@inngest/agent-kit": "^0.13.2",
 		"@inngest/realtime": "^0.4.6",
