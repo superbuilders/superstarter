@@ -1,6 +1,9 @@
-import type { InngestFunction } from "inngest"
-import { readFileFunction } from "@/inngest/functions/agents/fs/read-file"
+import { editFunction } from "@/inngest/functions/agents/fs/edit"
+import { globFunction } from "@/inngest/functions/agents/fs/glob"
+import { grepFunction } from "@/inngest/functions/agents/fs/grep"
+import { readFunction } from "@/inngest/functions/agents/fs/read"
+import { writeFunction } from "@/inngest/functions/agents/fs/write"
 
-const functions: InngestFunction.Any[] = [readFileFunction]
+const functions = [readFunction, globFunction, grepFunction, writeFunction, editFunction]
 
 export { functions }
