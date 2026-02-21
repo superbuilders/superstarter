@@ -1,5 +1,6 @@
 import type { Realtime } from "@inngest/realtime"
 import type { Context } from "inngest/types"
+import { revalidateTag } from "next/cache"
 import { inngest } from "@/inngest"
 
 type RealtimeOverrides = {
@@ -27,6 +28,7 @@ const todoCreated = inngest.createFunction(
 			data: { status: "done" }
 		})
 
+		revalidateTag("todos", "max")
 		return { todoId: event.data.entityId }
 	}
 )
