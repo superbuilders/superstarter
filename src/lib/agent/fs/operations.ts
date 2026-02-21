@@ -385,6 +385,7 @@ export {
 	read,
 	write
 }
+
 export type {
 	EditResult,
 	GlobMatch,

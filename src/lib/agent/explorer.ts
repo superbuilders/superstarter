@@ -1,8 +1,9 @@
 import { anthropic } from "@ai-sdk/anthropic"
-import { stepCountIs, ToolLoopAgent } from "ai"
 import { globTool, grepTool, readTool } from "@/lib/agent/fs/tools"
 
 const MAX_STEPS = 20 as const
+
+const model = anthropic("claude-haiku-4-5-20251001")
 
 const tools = {
 	read: readTool,
@@ -20,12 +21,38 @@ const instructions = [
 	"Provide a clear, structured answer with file paths and relevant code excerpts."
 ].join("\n")
 
-const explorer = new ToolLoopAgent({
-	id: "paul/explorer",
-	model: anthropic("claude-haiku-4-5-20251001"),
-	instructions,
-	tools,
-	stopWhen: stepCountIs(MAX_STEPS)
-})
+type ExplorerTools = typeof tools
 
-export { MAX_STEPS, explorer }
+type ExplorerStepResult = {
+	stepNumber: number
+	model: { provider: string; modelId: string }
+	functionId?: string
+	metadata?: Record<string, unknown>
+	experimental_context?: unknown
+	content: unknown[]
+	text: string
+	reasoning: unknown[]
+	reasoningText?: string
+	files: unknown[]
+	sources: unknown[]
+	toolCalls: unknown[]
+	staticToolCalls: unknown[]
+	dynamicToolCalls: unknown[]
+	toolResults: unknown[]
+	staticToolResults: unknown[]
+	dynamicToolResults: unknown[]
+	finishReason: string
+	rawFinishReason?: string
+	usage: {
+		inputTokens?: number
+		outputTokens?: number
+		totalTokens?: number
+	}
+	warnings: unknown[]
+	request: unknown
+	response: unknown
+	providerMetadata?: unknown
+}
+
+export { MAX_STEPS, instructions, model, tools }
+export type { ExplorerStepResult, ExplorerTools }
