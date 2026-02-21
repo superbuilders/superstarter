@@ -69,80 +69,97 @@ async function drainAll(): Promise<number> {
 	return total
 }
 
-let listener: Client | null = null
-let connecting = false
-let draining = false
-let pendingDrain = false
+function waitForNotifications(client: Client, deadlineMs: number): Promise<void> {
+	return new Promise(function executor(resolve) {
+		const timer = setTimeout(function onDeadline() {
+			logger.debug("listener deadline reached")
+			cleanup()
+			resolve()
+		}, deadlineMs)
 
-function scheduleDrain(): void {
-	if (draining) {
-		pendingDrain = true
-		return
-	}
-	draining = true
-	runDrainLoop()
+		function cleanup(): void {
+			client.removeListener("notification", handleNotification)
+			client.removeListener("error", handleError)
+			client.removeListener("end", handleEnd)
+			clearTimeout(timer)
+		}
+
+		function handleNotification(): void {
+			logger.debug("received outbox notification")
+			drainAll().then(
+				function onDrainComplete(count) {
+					logger.debug("notification drain complete", { count })
+				},
+				function onDrainError(err: unknown) {
+					logger.error("notification drain failed", { error: err })
+				}
+			)
+		}
+
+		function handleError(err: unknown): void {
+			logger.error("listener connection error", { error: err })
+			cleanup()
+			resolve()
+		}
+
+		function handleEnd(): void {
+			logger.info("listener connection ended")
+			cleanup()
+			resolve()
+		}
+
+		client.on("notification", handleNotification)
+		client.on("error", handleError)
+		client.on("end", handleEnd)
+	})
 }
 
-async function runDrainLoop(): Promise<void> {
-	while (true) {
-		const result = await errors.try(drainAll())
-		if (result.error) {
-			logger.error("drain after notification failed", { error: result.error })
+const MAX_BACKOFF_MS = 30_000
+
+async function listenAndDrain(deadlineMs: number): Promise<void> {
+	const deadline = Date.now() + deadlineMs
+	let attempt = 0
+
+	while (Date.now() < deadline) {
+		await using stack = new AsyncDisposableStack()
+
+		const client = new Client({
+			connectionString: env.DATABASE_DIRECT_URL,
+			connectionTimeoutMillis: 10_000
+		})
+
+		stack.defer(async function cleanupClient() {
+			const endResult = await errors.try(client.end())
+			if (endResult.error) {
+				logger.warn("listener client close failed", { error: endResult.error })
+			}
+		})
+
+		const connectResult = await errors.try(client.connect())
+		if (connectResult.error) {
+			attempt++
+			const backoff = Math.min(1_000 * 2 ** attempt, MAX_BACKOFF_MS)
+			logger.warn("listener connect retry", { attempt, backoff, error: connectResult.error })
+			await Bun.sleep(backoff)
+			continue
 		}
-		if (!pendingDrain) {
+
+		const listenResult = await errors.try(client.query("LISTEN events"))
+		if (listenResult.error) {
+			logger.error("listener setup failed", { error: listenResult.error })
+			continue
+		}
+
+		attempt = 0
+		const remaining = deadline - Date.now()
+		if (remaining <= 0) {
 			break
 		}
-		pendingDrain = false
+
+		logger.info("listener started", { remainingMs: remaining })
+		await waitForNotifications(client, remaining)
+		logger.info("listener stopped")
 	}
-	draining = false
 }
 
-async function ensureListening(): Promise<void> {
-	if (listener !== null || connecting) {
-		return
-	}
-
-	connecting = true
-	const client = new Client({
-		connectionString: env.DATABASE_URL,
-		keepAlive: true,
-		keepAliveInitialDelayMillis: 30_000,
-		connectionTimeoutMillis: 10_000
-	})
-
-	const connectResult = await errors.try(client.connect())
-	if (connectResult.error) {
-		connecting = false
-		logger.error("listen connect failed", { error: connectResult.error })
-		return
-	}
-
-	const listenResult = await errors.try(client.query("LISTEN events"))
-	if (listenResult.error) {
-		connecting = false
-		await client.end()
-		logger.error("listen setup failed", { error: listenResult.error })
-		return
-	}
-
-	client.on("notification", function handleNotification() {
-		logger.debug("received outbox notification")
-		scheduleDrain()
-	})
-
-	client.on("error", function handleListenerError(err: unknown) {
-		logger.error("listener connection error", { error: err })
-		listener = null
-	})
-
-	client.on("end", function handleListenerEnd() {
-		logger.info("listener connection ended")
-		listener = null
-	})
-
-	listener = client
-	connecting = false
-	logger.info("listening on events channel")
-}
-
-export { drain, drainAll, ensureListening }
+export { drain, drainAll, listenAndDrain }

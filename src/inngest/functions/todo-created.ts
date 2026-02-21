@@ -1,7 +1,7 @@
 import type { Realtime } from "@inngest/realtime"
 import type { Logger } from "inngest"
 import type { Context } from "inngest/types"
-import { revalidateTag } from "next/cache"
+
 import { inngest } from "@/inngest"
 
 type RealtimeOverrides = {
@@ -18,7 +18,6 @@ const todoCreated = inngest.createFunction(
 		publish
 	}: Context<typeof inngest, "superstarter/todo.created", RealtimeOverrides>) => {
 		logger.info("todo created", { entityId: event.data.entityId })
-		revalidateTag("todos", "max")
 		await publish({
 			channel: "todos",
 			topic: "refresh",

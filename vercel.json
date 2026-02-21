@@ -1,5 +1,10 @@
 {
 	"bunVersion": "1.x",
 	"regions": ["iad1"],
-	"crons": [{ "path": "/api/heartbeat", "schedule": "* * * * *" }]
+	"functions": {
+		"src/app/api/heartbeat/route.ts": {
+			"maxDuration": 800
+		}
+	},
+	"crons": [{ "path": "/api/heartbeat", "schedule": "*/6 * * * *" }]
 }

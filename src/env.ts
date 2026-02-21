@@ -20,6 +20,7 @@ const env = createEnv({
 	 */
 	server: {
 		DATABASE_URL: z.url(),
+		DATABASE_DIRECT_URL: z.url(),
 		INNGEST_EVENT_KEY: z.string().optional(),
 		INNGEST_SIGNING_KEY: z.string().optional(),
 		VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
@@ -43,6 +44,7 @@ const env = createEnv({
 	 */
 	runtimeEnv: {
 		DATABASE_URL: process.env.DATABASE_URL,
+		DATABASE_DIRECT_URL: process.env.DATABASE_DIRECT_URL,
 		INNGEST_EVENT_KEY: process.env.INNGEST_EVENT_KEY,
 		INNGEST_SIGNING_KEY: process.env.INNGEST_SIGNING_KEY,
 		VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,

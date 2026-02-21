@@ -2,9 +2,9 @@
 
 import { eq, not } from "drizzle-orm"
 import { getSubscriptionToken } from "@inngest/realtime"
+import { revalidatePath } from "next/cache"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
-import { revalidateTag } from "next/cache"
 import { db } from "@/db"
 import { coreTodos } from "@/db/schemas/core"
 import { inngest } from "@/inngest"
@@ -33,7 +33,7 @@ async function createTodo(title: string) {
 		throw errors.new("create todo returned no rows")
 	}
 
-	revalidateTag("todos", "max")
+	revalidatePath("/")
 	return todo.id
 }
 
@@ -51,7 +51,7 @@ async function toggleTodo(id: string) {
 		throw errors.wrap(result.error, "toggle todo")
 	}
 
-	revalidateTag("todos", "max")
+	revalidatePath("/")
 }
 
 async function deleteTodo(id: string) {
@@ -64,7 +64,7 @@ async function deleteTodo(id: string) {
 		throw errors.wrap(result.error, "delete todo")
 	}
 
-	revalidateTag("todos", "max")
+	revalidatePath("/")
 }
 
 export { createTodo, deleteTodo, getTodosRealtimeToken, toggleTodo }

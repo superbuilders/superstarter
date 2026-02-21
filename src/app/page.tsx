@@ -1,6 +1,5 @@
 import * as React from "react"
 import { desc } from "drizzle-orm"
-import { cacheTag } from "next/cache"
 import { db } from "@/db"
 import { coreTodos } from "@/db/schemas/core"
 import { Content } from "@/app/content"
@@ -18,14 +17,8 @@ const getTodos = db
 
 type Todo = Awaited<ReturnType<typeof getTodos.execute>>[number]
 
-async function getCachedTodos() {
-	"use cache"
-	cacheTag("todos")
-	return getTodos.execute()
-}
-
 function Page() {
-	const todosPromise = getCachedTodos()
+	const todosPromise = getTodos.execute()
 	return (
 		<React.Suspense fallback={<div className="p-8 text-muted-foreground">Loading...</div>}>
 			<Content todosPromise={todosPromise} />

@@ -1,10 +1,10 @@
 import { after } from "next/server"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
-import { drainAll, ensureListening } from "@/events/outbox"
+import { drainAll, listenAndDrain } from "@/events/outbox"
 
-/** Maximum function duration in seconds. Enterprise plan allows up to 800s. */
-const maxDuration = 800
+/** Must match the maxDuration in vercel.json for this route. */
+const MAX_DURATION_S = 800
 
 async function GET(): Promise<Response> {
 	const drainResult = await errors.try(drainAll())
@@ -15,11 +15,13 @@ async function GET(): Promise<Response> {
 
 	logger.info("heartbeat drain complete", { count: drainResult.data })
 
-	after(function backgroundEnsureListening() {
-		ensureListening()
+	const listenDurationMs = (MAX_DURATION_S / 2) * 1_000
+
+	after(function backgroundListener() {
+		return listenAndDrain(listenDurationMs)
 	})
 
 	return new Response("ok", { status: 200 })
 }
 
-export { GET, maxDuration }
+export { GET }
