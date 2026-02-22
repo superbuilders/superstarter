@@ -1,12 +1,11 @@
 import { serve } from "inngest/next"
 import type { NextRequest } from "next/server"
 
-import { inngest } from "@/inngest"
-import { functions } from "@/inngest/functions"
+import { inngest, todosSubscription } from "@/inngest"
 
 const handlers = serve({
 	client: inngest,
-	functions
+	functions: [...todosSubscription.createFunctions(inngest)]
 })
 
 type AppRouteHandler = (

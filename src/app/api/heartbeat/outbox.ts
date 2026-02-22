@@ -23,8 +23,10 @@ async function drain(): Promise<number> {
 		const deleteResult = await errors.try(
 			tx.delete(coreEventOutbox).where(inArray(coreEventOutbox.id, lockSubquery)).returning({
 				id: coreEventOutbox.id,
-				eventName: coreEventOutbox.eventName,
-				entityId: coreEventOutbox.entityId
+				appId: coreEventOutbox.appId,
+				label: coreEventOutbox.label,
+				entityId: coreEventOutbox.entityId,
+				tableName: coreEventOutbox.tableName
 			})
 		)
 		if (deleteResult.error) {
@@ -41,9 +43,10 @@ async function drain(): Promise<number> {
 		const events = rows.map(function mapOutboxRow(row) {
 			return {
 				id: row.id,
-				name: row.eventName,
+				name: `${row.appId}/${row.tableName}.${row.label}`,
 				data: {
-					entityId: row.entityId
+					id: row.entityId,
+					tableName: row.tableName
 				}
 			}
 		})

@@ -12,7 +12,6 @@
  *   - no-unnecessary-default-case: Flag unreachable default in exhaustive switch
  *   - prefer-early-return: Enforce early return pattern
  *   - no-impossible-logical-or: Flag || where left is always truthy
- *   - no-optional-array: Arrays should use [] not null/undefined
  *   - no-arrow-functions: Use named function declarations
  *   - no-object-module: Ban object namespaces, object classes, and class definitions - use ESM modules
  *   - no-pointless-indirection: Don't wrap function calls without adding value

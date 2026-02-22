@@ -1,20 +1,14 @@
 "use server"
 
 import { eq, not } from "drizzle-orm"
-import { getSubscriptionToken } from "@inngest/realtime"
-import { revalidatePath } from "next/cache"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
 import { db } from "@/db"
 import { coreTodos } from "@/db/schemas/core"
-import { inngest } from "@/inngest"
+import { inngest, todosSubscription } from "@/inngest"
 
-async function getTodosRealtimeToken() {
-	const token = await getSubscriptionToken(inngest, {
-		channel: "todos",
-		topics: ["refresh"]
-	})
-	return token
+async function getRealtimeToken() {
+	return todosSubscription.getToken(inngest)
 }
 
 async function createTodo(title: string) {
@@ -33,7 +27,6 @@ async function createTodo(title: string) {
 		throw errors.new("create todo returned no rows")
 	}
 
-	revalidatePath("/")
 	return todo.id
 }
 
@@ -50,8 +43,6 @@ async function toggleTodo(id: string) {
 		logger.error("toggle todo failed", { error: result.error })
 		throw errors.wrap(result.error, "toggle todo")
 	}
-
-	revalidatePath("/")
 }
 
 async function deleteTodo(id: string) {
@@ -63,8 +54,6 @@ async function deleteTodo(id: string) {
 		logger.error("delete todo failed", { error: result.error })
 		throw errors.wrap(result.error, "delete todo")
 	}
-
-	revalidatePath("/")
 }
 
-export { createTodo, deleteTodo, getTodosRealtimeToken, toggleTodo }
+export { createTodo, deleteTodo, getRealtimeToken, toggleTodo }

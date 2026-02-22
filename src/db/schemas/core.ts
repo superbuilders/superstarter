@@ -12,7 +12,9 @@ const coreTodos = coreSchema.table(
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.default(sql`CURRENT_TIMESTAMP`)
 			.notNull(),
-		updatedAt: timestamp("updated_at", { withTimezone: true })
+		updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(function now() {
+			return new Date()
+		})
 	},
 	(table) => [
 		index("todo_completed_idx").on(table.completed),
@@ -24,8 +26,10 @@ const coreEventOutbox = coreSchema.table(
 	"event_outbox",
 	{
 		id: uuid("id").defaultRandom().notNull().primaryKey(),
-		eventName: varchar("event_name", { length: 256 }).notNull(),
+		appId: varchar("app_id", { length: 256 }).notNull(),
+		label: varchar("label", { length: 256 }).notNull(),
 		entityId: uuid("entity_id").notNull(),
+		tableName: varchar("table_name", { length: 256 }).notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.default(sql`CURRENT_TIMESTAMP`)
 			.notNull()

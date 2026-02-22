@@ -1,7 +1,7 @@
 import { after } from "next/server"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
-import { drainAll, listenAndDrain } from "@/events/outbox"
+import { drainAll, listenAndDrain } from "@/app/api/heartbeat/outbox"
 
 /** Must match the maxDuration in vercel.json for this route. */
 const MAX_DURATION_S = 800

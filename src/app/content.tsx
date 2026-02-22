@@ -2,32 +2,68 @@
 
 import { useInngestSubscription } from "@inngest/realtime/hooks"
 import { Trash2 } from "lucide-react"
-import { useRouter } from "next/navigation"
 import * as React from "react"
-import { createTodo, deleteTodo, getTodosRealtimeToken, toggleTodo } from "@/app/actions"
+import { createTodo, deleteTodo, getRealtimeToken, toggleTodo } from "@/app/actions"
 import type { Todo } from "@/app/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
 function Content({ todosPromise }: { todosPromise: Promise<Todo[]> }) {
-	const todos = React.use(todosPromise)
-	const router = useRouter()
+	const initialTodos = React.use(todosPromise)
+	const [todos, setTodos] = React.useState(initialTodos)
 	const [title, setTitle] = React.useState("")
 	const [isPending, startTransition] = React.useTransition()
 
 	const { latestData } = useInngestSubscription({
 		enabled: true,
-		refreshToken: getTodosRealtimeToken
+		refreshToken: getRealtimeToken
 	})
 
 	React.useEffect(
-		function refreshOnRealtimeMessage() {
-			if (latestData) {
-				router.refresh()
+		function applyRealtimeMessage() {
+			if (!latestData) {
+				return
+			}
+
+			const { topic, data } = latestData
+
+			if (topic === "deleted") {
+				setTodos(function removeDeleted(prev) {
+					return prev.filter(function keep(t) {
+						return t.id !== data.id
+					})
+				})
+				return
+			}
+
+			if (topic === "created" && "data" in data) {
+				const todo = data.data
+				setTodos(function addCreated(prev) {
+					const exists = prev.some(function match(t) {
+						return t.id === todo.id
+					})
+					if (exists) {
+						return prev
+					}
+					return [todo, ...prev]
+				})
+				return
+			}
+
+			if (topic === "updated" && "data" in data) {
+				const todo = data.data
+				setTodos(function applyUpdate(prev) {
+					return prev.map(function update(t) {
+						if (t.id !== todo.id) {
+							return t
+						}
+						return todo
+					})
+				})
 			}
 		},
-		[latestData, router]
+		[latestData]
 	)
 
 	function handleCreate(formData: FormData) {

@@ -4,8 +4,9 @@ import type { PgSchema } from "drizzle-orm/pg-core"
 
 type EventTriggerConfig = {
 	operation: "INSERT" | "UPDATE" | "DELETE"
-	eventName: string
-	columns: Column[]
+	appId: string
+	label: string
+	columns?: Column[]
 	when?: SQL
 }
 
@@ -14,25 +15,22 @@ function emitEventTriggers(schema: PgSchema, table: Table, configs: EventTrigger
 	const statements: SQL[] = []
 
 	for (const config of configs) {
-		const opSuffix = config.operation.toLowerCase()
-		const triggerName = sql.identifier(`emit_${tableName}_${opSuffix}`)
-
-		const columnClause =
-			config.columns.length > 0
-				? sql.raw(
-						` OF ${config.columns
-							.map(function getColName(col) {
-								return col.name
-							})
-							.join(", ")}`
-					)
-				: sql.raw("")
+		const triggerName = sql.identifier(`emit_${tableName}_${config.label}`)
+		const columnClause = config.columns
+			? sql.raw(
+					` OF ${config.columns
+						.map(function getColName(col) {
+							return col.name
+						})
+						.join(", ")}`
+				)
+			: sql.raw("")
 
 		const whenClause = config.when ? sql` WHEN (${config.when})` : sql.raw("")
 
 		statements.push(
 			sql`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`,
-			sql`CREATE TRIGGER ${triggerName} AFTER ${sql.raw(config.operation)}${columnClause} ON ${table} FOR EACH ROW${whenClause} EXECUTE FUNCTION ${schema}.emit_event(${sql.raw(`'${config.eventName}'`)})`
+			sql`CREATE TRIGGER ${triggerName} AFTER ${sql.raw(config.operation)}${columnClause} ON ${table} FOR EACH ROW${whenClause} EXECUTE FUNCTION ${schema}.emit_event(${sql.raw(`'${config.appId}'`)}, ${sql.raw(`'${config.label}'`)})`
 		)
 	}
 
