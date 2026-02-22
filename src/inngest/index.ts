@@ -34,6 +34,9 @@ const schema = {
 	"paul/agents/explore": z.object({
 		prompt: z.string().min(1)
 	}),
+	"paul/agents/code": z.object({
+		prompt: z.string().min(1)
+	}),
 	"paul/debug/echo": z.object({
 		source: z.string().min(1),
 		payload: z.record(z.string(), z.unknown())
