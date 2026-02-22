@@ -5,7 +5,8 @@ import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
 import { db } from "@/db"
 import { coreTodos } from "@/db/schemas/core"
-import { inngest, todosSubscription } from "@/inngest"
+import { todosSubscription } from "@/db/programs/subscriptions/todos"
+import { inngest } from "@/inngest"
 
 async function getRealtimeToken() {
 	return todosSubscription.getToken(inngest)

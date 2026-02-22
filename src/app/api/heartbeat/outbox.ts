@@ -9,7 +9,8 @@ import { env } from "@/env"
 
 const relay = new Inngest({ id: "superstarter-outbox-relay", eventKey: env.INNGEST_EVENT_KEY })
 
-const DRAIN_BATCH_SIZE = 100
+const DRAIN_BATCH_SIZE = 1000
+const MAX_BACKOFF_MS = 30_000
 
 async function drain(): Promise<number> {
 	return db.transaction(async function drainTransaction(tx) {
@@ -64,63 +65,79 @@ async function drain(): Promise<number> {
 
 async function drainAll(): Promise<number> {
 	let total = 0
-	let batch = await drain()
-	while (batch > 0) {
-		total += batch
-		batch = await drain()
+	const inflight = new Set<Promise<void>>()
+	const { promise: done, resolve } = Promise.withResolvers<void>()
+
+	function spawn(): void {
+		const p = drain().then(function onDrain(count) {
+			inflight.delete(p)
+			total += count
+			if (count > 0) {
+				spawn()
+			}
+			if (inflight.size === 0) {
+				resolve()
+			}
+		})
+		inflight.add(p)
 	}
+
+	spawn()
+	await done
+
 	return total
 }
 
-function waitForNotifications(client: Client, deadlineMs: number): Promise<void> {
-	return new Promise(function executor(resolve) {
-		const timer = setTimeout(function onDeadline() {
-			logger.debug("listener deadline reached")
-			cleanup()
-			resolve()
-		}, deadlineMs)
+async function waitForNotifications(client: Client, deadlineMs: number): Promise<void> {
+	using cleanup = new DisposableStack()
 
-		function cleanup(): void {
-			client.removeListener("notification", handleNotification)
-			client.removeListener("error", handleError)
-			client.removeListener("end", handleEnd)
-			clearTimeout(timer)
-		}
+	const { promise: stopped, resolve: stop } = Promise.withResolvers<void>()
 
-		function handleNotification(): void {
-			logger.debug("received outbox notification")
-			drainAll().then(
-				function onDrainComplete(count) {
-					logger.debug("notification drain complete", { count })
-				},
-				function onDrainError(err: unknown) {
-					logger.error("notification drain failed", { error: err })
-				}
-			)
-		}
-
-		function handleError(err: unknown): void {
-			logger.error("listener connection error", { error: err })
-			cleanup()
-			resolve()
-		}
-
-		function handleEnd(): void {
-			logger.info("listener connection ended")
-			cleanup()
-			resolve()
-		}
-
-		client.on("notification", handleNotification)
-		client.on("error", handleError)
-		client.on("end", handleEnd)
+	const timer = setTimeout(function onDeadline() {
+		logger.debug("listener deadline reached")
+		stop()
+	}, deadlineMs)
+	cleanup.defer(function clearDeadline() {
+		clearTimeout(timer)
 	})
-}
 
-const MAX_BACKOFF_MS = 30_000
+	function handleNotification(): void {
+		logger.debug("received outbox notification")
+		drainAll().then(
+			function onDrainComplete(count) {
+				logger.debug("notification drain complete", { count })
+			},
+			function onDrainError(err: unknown) {
+				logger.error("notification drain failed", { error: err })
+			}
+		)
+	}
+
+	function handleError(err: unknown): void {
+		logger.error("listener connection error", { error: err })
+		stop()
+	}
+
+	function handleEnd(): void {
+		logger.info("listener connection ended")
+		stop()
+	}
+
+	client.on("notification", handleNotification)
+	client.on("error", handleError)
+	client.on("end", handleEnd)
+	cleanup.defer(function removeListeners() {
+		client.removeListener("notification", handleNotification)
+		client.removeListener("error", handleError)
+		client.removeListener("end", handleEnd)
+	})
+
+	await stopped
+}
 
 async function listenAndDrain(deadlineMs: number): Promise<void> {
 	const deadline = Date.now() + deadlineMs
+	const sessionTimeoutMs = deadlineMs
 	let attempt = 0
 
 	while (Date.now() < deadline) {
@@ -145,6 +162,13 @@ async function listenAndDrain(deadlineMs: number): Promise<void> {
 			logger.warn("listener connect retry", { attempt, backoff, error: connectResult.error })
 			await Bun.sleep(backoff)
 			continue
+		}
+
+		const setupResult = await errors.try(
+			client.query(`SET idle_session_timeout = ${sessionTimeoutMs}`)
+		)
+		if (setupResult.error) {
+			logger.warn("listener idle timeout set failed", { error: setupResult.error })
 		}
 
 		const listenResult = await errors.try(client.query("LISTEN events"))

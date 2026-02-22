@@ -1,7 +1,8 @@
 import { serve } from "inngest/next"
 import type { NextRequest } from "next/server"
 
-import { inngest, todosSubscription } from "@/inngest"
+import { todosSubscription } from "@/db/programs/subscriptions/todos"
+import { inngest } from "@/inngest"
 
 const handlers = serve({
 	client: inngest,

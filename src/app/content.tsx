@@ -37,7 +37,7 @@ function Content({ todosPromise }: { todosPromise: Promise<Todo[]> }) {
 				return
 			}
 
-			if (topic === "created" && "data" in data) {
+			if (topic === "created") {
 				const todo = data.data
 				setTodos(function addCreated(prev) {
 					const exists = prev.some(function match(t) {
@@ -51,7 +51,7 @@ function Content({ todosPromise }: { todosPromise: Promise<Todo[]> }) {
 				return
 			}
 
-			if (topic === "updated" && "data" in data) {
+			if (topic === "updated") {
 				const todo = data.data
 				setTodos(function applyUpdate(prev) {
 					return prev.map(function update(t) {

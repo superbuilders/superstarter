@@ -1,17 +1,12 @@
 import { eq } from "drizzle-orm"
 import { db } from "@/db"
+import { todosEventSource } from "@/db/programs/events/todos"
 import { coreTodos } from "@/db/schemas/core"
-import { createSubscription } from "@/subscriptions"
+import { createRealtimeSubscription } from "@/subscriptions"
 
-const todosSubscription = createSubscription({
-	appId: "superstarter",
+const todosSubscription = createRealtimeSubscription({
+	source: todosEventSource,
 	channelName: "todos",
-	table: coreTodos,
-	triggers: [
-		{ operation: "INSERT", label: "created" },
-		{ operation: "UPDATE", label: "updated", columns: [coreTodos.completed] },
-		{ operation: "DELETE", label: "deleted" }
-	],
 	query: function queryTodo(id) {
 		return db
 			.select({

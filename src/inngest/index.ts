@@ -1,11 +1,11 @@
 import { realtimeMiddleware } from "@inngest/realtime/middleware"
 import * as logger from "@superbuilders/slog"
 import { EventSchemas, Inngest, type Logger } from "inngest"
-import { todosSubscription } from "@/db/programs/subscriptions"
+import type { todosEventSource } from "@/db/programs/events/todos"
 import { env } from "@/env"
-import type { InferEventSchemas } from "@/subscriptions"
+import type { InferEventSchemas } from "@/event-source"
 
-type Schemas = InferEventSchemas<typeof todosSubscription>
+type Schemas = InferEventSchemas<typeof todosEventSource>
 
 const inngestLogger: Logger = {
 	info: logger.info,
@@ -24,4 +24,4 @@ const inngest = new Inngest({
 	middleware: [realtimeMiddleware()]
 })
 
-export { inngest, todosSubscription }
+export { inngest }

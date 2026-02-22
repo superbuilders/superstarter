@@ -17,13 +17,12 @@ function emitEventTriggers(schema: PgSchema, table: Table, configs: EventTrigger
 	for (const config of configs) {
 		const triggerName = sql.identifier(`emit_${tableName}_${config.label}`)
 		const columnClause = config.columns
-			? sql.raw(
-					` OF ${config.columns
-						.map(function getColName(col) {
-							return col.name
-						})
-						.join(", ")}`
-				)
+			? sql` OF ${sql.join(
+					config.columns.map(function toIdentifier(col) {
+						return sql.identifier(col.name)
+					}),
+					sql.raw(", ")
+				)}`
 			: sql.raw("")
 
 		const whenClause = config.when ? sql` WHEN (${config.when})` : sql.raw("")
