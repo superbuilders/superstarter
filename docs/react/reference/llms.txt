@@ -1,0 +1,164 @@
+# React API Reference
+
+@generated: 2026-02-06
+@page-count: 126
+
+
+## dev-tools
+
+- [React Performance tracks](https://react.dev/reference/dev-tools/react-performance-tracks): React Performance tracks are specialized custom entries that appear on the Performance panel's timeline in your browser developer tools.
+
+## (root)
+
+- [eslint-plugin-react-hooks](https://react.dev/reference/eslint-plugin-react-hooks): eslint-plugin-react-hooks provides ESLint rules to enforce the \1.
+
+## eslint-plugin-react-hooks
+
+- [component-hook-factories](https://react.dev/reference/eslint-plugin-react-hooks/lints/component-hook-factories): Validates against higher order functions defining nested components or hooks. Components and hooks should be defined at the module level.
+- [config](https://react.dev/reference/eslint-plugin-react-hooks/lints/config): Validates the compiler \1.
+- [error-boundaries](https://react.dev/reference/eslint-plugin-react-hooks/lints/error-boundaries): Validates usage of Error Boundaries instead of try/catch for errors in child components.
+- [exhaustive-deps](https://react.dev/reference/eslint-plugin-react-hooks/lints/exhaustive-deps): Validates that dependency arrays for React hooks contain all necessary dependencies.
+- [gating](https://react.dev/reference/eslint-plugin-react-hooks/lints/gating): Validates configuration of \1.
+- [globals](https://react.dev/reference/eslint-plugin-react-hooks/lints/globals): Validates against assignment/mutation of globals during render, part of ensuring that \1.
+- [immutability](https://react.dev/reference/eslint-plugin-react-hooks/lints/immutability): Validates against mutating props, state, and other values that \1.
+- [incompatible-library](https://react.dev/reference/eslint-plugin-react-hooks/lints/incompatible-library): Validates against usage of libraries which are incompatible with memoization (manual or automatic).
+- [preserve-manual-memoization](https://react.dev/reference/eslint-plugin-react-hooks/lints/preserve-manual-memoization): Validates that existing manual memoization is preserved by the compiler. React Compiler will only compile components and hooks if its inference \1.
+- [purity](https://react.dev/reference/eslint-plugin-react-hooks/lints/purity): Validates that \1 by checking that they do not call known-impure functions.
+- [refs](https://react.dev/reference/eslint-plugin-react-hooks/lints/refs): Validates correct usage of refs, not reading/writing during render. See the "pitfalls" section in \1.
+- [rules-of-hooks](https://react.dev/reference/eslint-plugin-react-hooks/lints/rules-of-hooks): Validates that components and hooks follow the \1.
+- [set-state-in-effect](https://react.dev/reference/eslint-plugin-react-hooks/lints/set-state-in-effect): Validates against calling setState synchronously in an effect, which can lead to re-renders that degrade performance.
+- [set-state-in-render](https://react.dev/reference/eslint-plugin-react-hooks/lints/set-state-in-render): Validates against unconditionally setting state during render, which can trigger additional renders and potential infinite render loops.
+- [static-components](https://react.dev/reference/eslint-plugin-react-hooks/lints/static-components): Validates that components are static, not recreated every render. Components that are recreated dynamically can reset state and trigger excessive re-rendering.
+- [unsupported-syntax](https://react.dev/reference/eslint-plugin-react-hooks/lints/unsupported-syntax): Validates against syntax that React Compiler does not support. If you need to, you can still use this syntax outside of React, such as in a standalone utilit...
+- [use-memo](https://react.dev/reference/eslint-plugin-react-hooks/lints/use-memo): Validates that the useMemo hook is used with a return value. See \1 for more information.
+
+## react-compiler
+
+- [compilationMode](https://react.dev/reference/react-compiler/compilationMode): The compilationMode option controls how the React Compiler selects which functions to compile.
+- [Compiling Libraries](https://react.dev/reference/react-compiler/compiling-libraries): This guide helps library authors understand how to use React Compiler to ship optimized library code to their users.
+- [Configuration](https://react.dev/reference/react-compiler/configuration): This page lists all configuration options available in React Compiler.
+- [Directives](https://react.dev/reference/react-compiler/directives): React Compiler directives are special string literals that control whether specific functions are compiled.
+- [use memo](https://react.dev/reference/react-compiler/directives/use-memo): "use memo" marks a function for React Compiler optimization.
+- [use no memo](https://react.dev/reference/react-compiler/directives/use-no-memo): "use no memo" prevents a function from being optimized by React Compiler.
+- [gating](https://react.dev/reference/react-compiler/gating): The gating option enables conditional compilation, allowing you to control when optimized code is used at runtime.
+- [logger](https://react.dev/reference/react-compiler/logger): The logger option provides custom logging for React Compiler events during compilation.
+- [panicThreshold](https://react.dev/reference/react-compiler/panicThreshold): The panicThreshold option controls how the React Compiler handles errors during compilation.
+- [target](https://react.dev/reference/react-compiler/target): The target option specifies which React version the compiler should generate code for.
+
+## (root)
+
+- [React DOM APIs](https://react.dev/reference/react-dom): The react-dom package contains methods that are only supported for the web applications (which run in the browser DOM environment). They are not supported fo...
+
+## react-dom
+
+- [Client React DOM APIs](https://react.dev/reference/react-dom/client): The react-dom/client APIs let you render React components on the client (in the browser). These APIs are typically used at the top level of your app to initi...
+- [createRoot](https://react.dev/reference/react-dom/client/createRoot): createRoot lets you create a root to display React components inside a browser DOM node.
+- [hydrateRoot](https://react.dev/reference/react-dom/client/hydrateRoot): hydrateRoot lets you display React components inside a browser DOM node whose HTML content was previously generated by \1
+- [React DOM Components](https://react.dev/reference/react-dom/components): React supports all of the browser built-in \1 and \1 components.
+- [Common components (e.g. <div>)](https://react.dev/reference/react-dom/components/common): All built-in browser components, such as \1, support some common props and events.
+- [<form>](https://react.dev/reference/react-dom/components/form): The \1 lets you create interactive controls for submitting information.
+- [<input>](https://react.dev/reference/react-dom/components/input): The \1 lets you render different kinds of form inputs.
+- [<link>](https://react.dev/reference/react-dom/components/link): The \1 lets you use external resources such as stylesheets or annotate the document with link metadata.
+- [<meta>](https://react.dev/reference/react-dom/components/meta): The \1 lets you add metadata to the document.
+- [<option>](https://react.dev/reference/react-dom/components/option): The \1 lets you render an option inside a \1 box.
+- [<progress>](https://react.dev/reference/react-dom/components/progress): The \1 lets you render a progress indicator.
+- [<script>](https://react.dev/reference/react-dom/components/script): The \1 lets you add a script to your document.
+- [<select>](https://react.dev/reference/react-dom/components/select): The \1 lets you render a select box with options.
+- [<style>](https://react.dev/reference/react-dom/components/style): The \1 lets you add inline CSS stylesheets to your document.
+- [<textarea>](https://react.dev/reference/react-dom/components/textarea): The \1 lets you render a multiline text input.
+- [<title>](https://react.dev/reference/react-dom/components/title): The \1 lets you specify the title of the document.
+- [createPortal](https://react.dev/reference/react-dom/createPortal): createPortal lets you render some children into a different part of the DOM.
+- [flushSync](https://react.dev/reference/react-dom/flushSync): Using flushSync is uncommon and can hurt the performance of your app.
+- [Built-in React DOM Hooks](https://react.dev/reference/react-dom/hooks): The react-dom package contains Hooks that are only supported for web applications (which run in the browser DOM environment). These Hooks are not supported i...
+- [useFormStatus](https://react.dev/reference/react-dom/hooks/useFormStatus): useFormStatus is a Hook that gives you status information of the last form submission.
+- [preconnect](https://react.dev/reference/react-dom/preconnect): preconnect lets you eagerly connect to a server that you expect to load resources from.
+- [prefetchDNS](https://react.dev/reference/react-dom/prefetchDNS): prefetchDNS lets you eagerly look up the IP of a server that you expect to load resources from.
+- [preinit](https://react.dev/reference/react-dom/preinit): \1 frequently handle resource loading for you, so you might not have to call this API yourself. Consult your framework's documentation for details.
+- [preinitModule](https://react.dev/reference/react-dom/preinitModule): \1 frequently handle resource loading for you, so you might not have to call this API yourself. Consult your framework's documentation for details.
+- [preload](https://react.dev/reference/react-dom/preload): \1 frequently handle resource loading for you, so you might not have to call this API yourself. Consult your framework's documentation for details.
+- [preloadModule](https://react.dev/reference/react-dom/preloadModule): \1 frequently handle resource loading for you, so you might not have to call this API yourself. Consult your framework's documentation for details.
+- [Server React DOM APIs](https://react.dev/reference/react-dom/server): The react-dom/server APIs let you server-side render React components to HTML. These APIs are only used on the server at the top level of your app to generat...
+- [renderToPipeableStream](https://react.dev/reference/react-dom/server/renderToPipeableStream): renderToPipeableStream renders a React tree to a pipeable \1
+- [renderToReadableStream](https://react.dev/reference/react-dom/server/renderToReadableStream): renderToReadableStream renders a React tree to a \1
+- [renderToStaticMarkup](https://react.dev/reference/react-dom/server/renderToStaticMarkup): renderToStaticMarkup renders a non-interactive React tree to an HTML string.
+- [renderToString](https://react.dev/reference/react-dom/server/renderToString): renderToString does not support streaming or waiting for data. \1
+- [resume](https://react.dev/reference/react-dom/server/resume): resume streams a pre-rendered React tree to a \1
+- [resumeToPipeableStream](https://react.dev/reference/react-dom/server/resumeToPipeableStream): resumeToPipeableStream streams a pre-rendered React tree  to a pipeable \1
+- [Static React DOM APIs](https://react.dev/reference/react-dom/static): The react-dom/static APIs let you generate static HTML for React components. They have limited functionality compared to the streaming APIs. A \1 may call th...
+- [prerender](https://react.dev/reference/react-dom/static/prerender): prerender renders a React tree to a static HTML string using a \1.
+- [prerenderToNodeStream](https://react.dev/reference/react-dom/static/prerenderToNodeStream): prerenderToNodeStream renders a React tree to a static HTML string using a \1
+- [resumeAndPrerender](https://react.dev/reference/react-dom/static/resumeAndPrerender): resumeAndPrerender continues a prerendered React tree to a static HTML string using a \1.
+- [resumeAndPrerenderToNodeStream](https://react.dev/reference/react-dom/static/resumeAndPrerenderToNodeStream): resumeAndPrerenderToNodeStream continues a prerendered React tree to a static HTML string using a a \1.
+
+## (root)
+
+- [React Reference Overview](https://react.dev/reference/react): This section provides detailed reference documentation for working with React. For an introduction to React, please visit the \1 section.
+
+## react
+
+- [act](https://react.dev/reference/react/act): act is a test helper to apply pending React updates before making assertions.
+- [<Activity>](https://react.dev/reference/react/Activity): <Activity> lets you hide and restore the UI and internal state of its children.
+- [addTransitionType](https://react.dev/reference/react/addTransitionType): The addTransitionType API is currently only available in React’s Canary and Experimental channels. 
+- [Built-in React APIs](https://react.dev/reference/react/apis): In addition to \1 and \1, the react package exports a few other APIs that are useful for defining components. This page lists all the remaining modern React ...
+- [cache](https://react.dev/reference/react/cache): cache is only for use with \1.
+- [cacheSignal](https://react.dev/reference/react/cacheSignal): cacheSignal is currently only used with \1.
+- [captureOwnerStack](https://react.dev/reference/react/captureOwnerStack): captureOwnerStack reads the current Owner Stack in development and returns it as a string if available.
+- [Children](https://react.dev/reference/react/Children): Using Children is uncommon and can lead to fragile code. \1
+- [cloneElement](https://react.dev/reference/react/cloneElement): Using cloneElement is uncommon and can lead to fragile code. \1
+- [Component](https://react.dev/reference/react/Component): We recommend defining components as functions instead of classes. \1
+- [Built-in React Components](https://react.dev/reference/react/components): React exposes a few built-in components that you can use in your JSX.
+- [createContext](https://react.dev/reference/react/createContext): createContext lets you create a \1 that components can provide or read.
+- [createElement](https://react.dev/reference/react/createElement): createElement lets you create a React element. It serves as an alternative to writing \1
+- [createRef](https://react.dev/reference/react/createRef): createRef is mostly used for \1 Function components typically rely on \1 instead.
+- [experimental_taintObjectReference](https://react.dev/reference/react/experimental_taintObjectReference): This API is experimental and is not available in a stable version of React yet.
+- [experimental_taintUniqueValue](https://react.dev/reference/react/experimental_taintUniqueValue): This API is experimental and is not available in a stable version of React yet.
+- [forwardRef](https://react.dev/reference/react/forwardRef): In React 19, forwardRef is no longer necessary. Pass ref as a prop instead.
+- [<Fragment> (<>...</>)](https://react.dev/reference/react/Fragment): <Fragment>, often used via <>...</> syntax, lets you group elements without a wrapper node. 
+- [Built-in React Hooks](https://react.dev/reference/react/hooks): Hooks let you use different React features from your components. You can either use the built-in Hooks or combine them to build your own. This page lists all...
+- [isValidElement](https://react.dev/reference/react/isValidElement): isValidElement checks whether a value is a React element.
+- [lazy](https://react.dev/reference/react/lazy): lazy lets you defer loading component's code until it is rendered for the first time.
+- [Legacy React APIs](https://react.dev/reference/react/legacy): These APIs are exported from the react package, but they are not recommended for use in newly written code. See the linked individual API pages for the sugge...
+- [memo](https://react.dev/reference/react/memo): memo lets you skip re-rendering a component when its props are unchanged.
+- [<Profiler>](https://react.dev/reference/react/Profiler): <Profiler> lets you measure rendering performance of a React tree programmatically.
+- [PureComponent](https://react.dev/reference/react/PureComponent): We recommend defining components as functions instead of classes. \1
+- [startTransition](https://react.dev/reference/react/startTransition): startTransition lets you render a part of the UI in the background.
+- [<StrictMode>](https://react.dev/reference/react/StrictMode): <StrictMode> lets you find common bugs in your components early during development.
+- [<Suspense>](https://react.dev/reference/react/Suspense): <Suspense> lets you display a fallback until its children have finished loading.
+- [use](https://react.dev/reference/react/use): use is a React API that lets you read the value of a resource like a \1 or \1.
+- [useActionState](https://react.dev/reference/react/useActionState): useActionState is a Hook that allows you to update state based on the result of a form action.
+- [useCallback](https://react.dev/reference/react/useCallback): useCallback is a React Hook that lets you cache a function definition between re-renders.
+- [useContext](https://react.dev/reference/react/useContext): useContext is a React Hook that lets you read and subscribe to \1 from your component.
+- [useDebugValue](https://react.dev/reference/react/useDebugValue): useDebugValue is a React Hook that lets you add a label to a custom Hook in \1
+- [useDeferredValue](https://react.dev/reference/react/useDeferredValue): useDeferredValue is a React Hook that lets you defer updating a part of the UI.
+- [useEffect](https://react.dev/reference/react/useEffect): useEffect is a React Hook that lets you \1
+- [useEffectEvent](https://react.dev/reference/react/useEffectEvent): useEffectEvent is a React Hook that lets you separate events from Effects.
+- [useId](https://react.dev/reference/react/useId): useId is a React Hook for generating unique IDs that can be passed to accessibility attributes.
+- [useImperativeHandle](https://react.dev/reference/react/useImperativeHandle): useImperativeHandle is a React Hook that lets you customize the handle exposed as a \1
+- [useInsertionEffect](https://react.dev/reference/react/useInsertionEffect): useInsertionEffect is for CSS-in-JS library authors. Unless you are working on a CSS-in-JS library and need a place to inject the styles, you probably want \...
+- [useLayoutEffect](https://react.dev/reference/react/useLayoutEffect): useLayoutEffect can hurt performance. Prefer \1 when possible.
+- [useMemo](https://react.dev/reference/react/useMemo): useMemo is a React Hook that lets you cache the result of a calculation between re-renders.
+- [useOptimistic](https://react.dev/reference/react/useOptimistic): useOptimistic is a React Hook that lets you optimistically update the UI.
+- [useReducer](https://react.dev/reference/react/useReducer): useReducer is a React Hook that lets you add a \1 to your component.
+- [useRef](https://react.dev/reference/react/useRef): useRef is a React Hook that lets you reference a value that's not needed for rendering.
+- [useState](https://react.dev/reference/react/useState): useState is a React Hook that lets you add a \1 to your component.
+- [useSyncExternalStore](https://react.dev/reference/react/useSyncExternalStore): useSyncExternalStore is a React Hook that lets you subscribe to an external store.
+- [useTransition](https://react.dev/reference/react/useTransition): useTransition is a React Hook that lets you render a part of the UI in the background.
+- [<ViewTransition>](https://react.dev/reference/react/ViewTransition): The <ViewTransition /> API is currently only available in React’s Canary and Experimental channels. 
+
+## rsc
+
+- [Directives](https://react.dev/reference/rsc/directives): Directives are for use in \1.
+- [Server Components](https://react.dev/reference/rsc/server-components): Server Components are a new type of Component that renders ahead of time, before bundling, in an environment separate from your client app or SSR server.
+- [Server Functions](https://react.dev/reference/rsc/server-functions): Server Functions are for use in \1.
+- ['use client'](https://react.dev/reference/rsc/use-client): 'use client' is for use with \1.
+- ['use server'](https://react.dev/reference/rsc/use-server): 'use server' is for use with \1.
+
+## (root)
+
+- [Rules of React](https://react.dev/reference/rules): Just as different programming languages have their own ways of expressing concepts, React has its own idioms — or rules — for how to express patterns in ...
+
+## rules
+
+- [Components and Hooks must be pure](https://react.dev/reference/rules/components-and-hooks-must-be-pure): Pure functions only perform a calculation and nothing more. It makes your code easier to understand, debug, and allows React to automatically optimize your c...
+- [React calls Components and Hooks](https://react.dev/reference/rules/react-calls-components-and-hooks): React is responsible for rendering components and Hooks when necessary to optimize the user experience. It is declarative: you tell React what to render in y...
+- [Rules of Hooks](https://react.dev/reference/rules/rules-of-hooks): Hooks are defined using JavaScript functions, but they represent a special type of reusable UI logic with restrictions on where they can be called.
