@@ -1,6 +1,7 @@
 import * as errors from "@superbuilders/errors"
 import { Sandbox } from "@vercel/sandbox"
 import { NonRetriableError } from "inngest"
+import { env } from "@/env"
 import { inngest } from "@/inngest"
 
 function buildCreateParams(
@@ -11,7 +12,8 @@ function buildCreateParams(
 		return { runtime }
 	}
 
-	const { repoUrl, branch, token } = github
+	const { repoUrl, branch } = github
+	const token = github.token ? github.token : env.GITHUB_PAT_TOKEN
 
 	if (token) {
 		return {

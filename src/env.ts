@@ -26,7 +26,8 @@ const env = createEnv({
 		VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
 		VERCEL_GIT_COMMIT_SHA: z.string().optional(),
 		VERCEL_OIDC_TOKEN: z.string().optional(),
-		NODE_ENV: z.enum(["development", "test", "production"]).default("development")
+		NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+		GITHUB_PAT_TOKEN: z.string().optional()
 	},
 
 	/**
@@ -50,7 +51,8 @@ const env = createEnv({
 		VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
 		VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
 		VERCEL_OIDC_TOKEN: process.env.VERCEL_OIDC_TOKEN,
-		NODE_ENV: process.env.NODE_ENV
+		NODE_ENV: process.env.NODE_ENV,
+		GITHUB_PAT_TOKEN: process.env.GITHUB_PAT_TOKEN
 	},
 	/**
 	 * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
