@@ -14,149 +14,10 @@
 
 **Files:**
 - Create: `src/lib/agent/cta.ts`
-- Test: `src/lib/agent/cta.test.ts`
 
-**Step 1: Write failing tests for CTA schemas**
+**Step 1: Implement CTA schemas, types, and tool**
 
-Note: Both `CtaRequestEventSchema` and `CtaResponseEventSchema` use `z.discriminatedUnion("kind", [...])` so that each kind carries only its relevant fields — no optional sprawl.
-
-```typescript
-// src/lib/agent/cta.test.ts
-import { describe, expect, test } from "bun:test"
-import {
-    CtaRequestEventSchema,
-    CtaResponseEventSchema
-} from "@/lib/agent/cta"
-
-describe("CtaRequestEventSchema", () => {
-    test("parses valid approval request", () => {
-        const result = CtaRequestEventSchema.safeParse({
-            ctaId: "abc-123",
-            runId: "run-456",
-            kind: "approval",
-            message: "Deploy to production?"
-        })
-        expect(result.success).toBe(true)
-    })
-
-    test("parses valid text request", () => {
-        const result = CtaRequestEventSchema.safeParse({
-            ctaId: "abc-123",
-            runId: "run-456",
-            kind: "text",
-            prompt: "What should the error message say?",
-            placeholder: "Enter message..."
-        })
-        expect(result.success).toBe(true)
-    })
-
-    test("parses valid choice request", () => {
-        const result = CtaRequestEventSchema.safeParse({
-            ctaId: "abc-123",
-            runId: "run-456",
-            kind: "choice",
-            prompt: "Which database?",
-            options: [
-                { id: "pg", label: "PostgreSQL" },
-                { id: "mysql", label: "MySQL" }
-            ]
-        })
-        expect(result.success).toBe(true)
-    })
-
-    test("rejects missing ctaId", () => {
-        const result = CtaRequestEventSchema.safeParse({
-            runId: "run-456",
-            kind: "approval",
-            message: "Deploy?"
-        })
-        expect(result.success).toBe(false)
-    })
-
-    test("rejects invalid kind", () => {
-        const result = CtaRequestEventSchema.safeParse({
-            ctaId: "abc-123",
-            runId: "run-456",
-            kind: "invalid"
-        })
-        expect(result.success).toBe(false)
-    })
-
-    test("rejects approval request with choice-only fields", () => {
-        const result = CtaRequestEventSchema.safeParse({
-            ctaId: "abc-123",
-            runId: "run-456",
-            kind: "approval",
-            message: "Deploy?",
-            options: [{ id: "a", label: "A" }]
-        })
-        expect(result.success).toBe(false)
-    })
-
-    test("rejects choice request missing options", () => {
-        const result = CtaRequestEventSchema.safeParse({
-            ctaId: "abc-123",
-            runId: "run-456",
-            kind: "choice",
-            prompt: "Pick one"
-        })
-        expect(result.success).toBe(false)
-    })
-})
-
-describe("CtaResponseEventSchema", () => {
-    test("parses valid approval response", () => {
-        const result = CtaResponseEventSchema.safeParse({
-            ctaId: "abc-123",
-            kind: "approval",
-            approved: true,
-            reason: "Looks good"
-        })
-        expect(result.success).toBe(true)
-    })
-
-    test("parses valid text response", () => {
-        const result = CtaResponseEventSchema.safeParse({
-            ctaId: "abc-123",
-            kind: "text",
-            text: "Use a friendly error message"
-        })
-        expect(result.success).toBe(true)
-    })
-
-    test("parses valid choice response", () => {
-        const result = CtaResponseEventSchema.safeParse({
-            ctaId: "abc-123",
-            kind: "choice",
-            selectedId: "pg"
-        })
-        expect(result.success).toBe(true)
-    })
-
-    test("rejects approval response without approved field", () => {
-        const result = CtaResponseEventSchema.safeParse({
-            ctaId: "abc-123",
-            kind: "approval"
-        })
-        expect(result.success).toBe(false)
-    })
-
-    test("rejects text response without text field", () => {
-        const result = CtaResponseEventSchema.safeParse({
-            ctaId: "abc-123",
-            kind: "text"
-        })
-        expect(result.success).toBe(false)
-    })
-})
-```
-
-**Step 2: Run test to verify it fails**
-
-Run: `bun test src/lib/agent/cta.test.ts`
-Expected: FAIL — cannot resolve `@/lib/agent/cta`
-
-**Step 3: Implement CTA schemas, types, and tool**
+Both `CtaRequestEventSchema` and `CtaResponseEventSchema` use `z.discriminatedUnion("kind", [...])` so each kind carries only its relevant fields.
 
 ```typescript
 // src/lib/agent/cta.ts
@@ -268,19 +129,14 @@ export {
 export type { CtaKind, CtaRequestEvent, CtaResponseEvent }
 ```
 
-**Step 4: Run test to verify it passes**
-
-Run: `bun test src/lib/agent/cta.test.ts`
-Expected: PASS — all 7 tests pass
-
-**Step 5: Run typecheck + lint**
+**Step 2: Run typecheck + lint**
 
 Run: `bun typecheck && bun scripts/dev/lint.ts src/lib/agent/cta.ts`
 
-**Step 6: Commit**
+**Step 3: Commit**
 
 ```bash
-git add src/lib/agent/cta.ts src/lib/agent/cta.test.ts
+git add src/lib/agent/cta.ts
 git commit -m "feat: add CTA types, schemas, and tool definition"
 ```
 
