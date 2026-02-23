@@ -1,44 +1,13 @@
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
-import { Sandbox } from "@vercel/sandbox"
-import type { ModelMessage, StepResult } from "ai"
-import { generateText, modelMessageSchema } from "ai"
+import type { ModelMessage } from "ai"
+import { generateText } from "ai"
 import { NonRetriableError } from "inngest"
-import { z } from "zod"
 import { inngest } from "@/inngest"
-import type { CoderStepResult, CoderTools } from "@/lib/agent/coder"
 import { instructions, MAX_STEPS, model, tools } from "@/lib/agent/coder"
 import { ErrSandboxContext } from "@/lib/agent/fs/context"
-
-const messagesSchema = z.array(modelMessageSchema)
-
-function parseMessages(raw: unknown): ModelMessage[] {
-	const parsed = messagesSchema.safeParse(raw)
-	if (!parsed.success) {
-		logger.error("response messages failed validation", { error: parsed.error })
-		throw errors.new("response messages failed validation")
-	}
-	return parsed.data
-}
-
-function materializeStep(step: StepResult<CoderTools>): CoderStepResult {
-	const own = { ...step }
-	return {
-		...own,
-		text: step.text,
-		reasoning: step.reasoning,
-		reasoningText: step.reasoningText,
-		files: step.files,
-		sources: step.sources,
-		toolCalls: step.toolCalls,
-		staticToolCalls: step.staticToolCalls,
-		dynamicToolCalls: step.dynamicToolCalls,
-		toolResults: step.toolResults,
-		staticToolResults: step.staticToolResults,
-		dynamicToolResults: step.dynamicToolResults,
-		warnings: step.warnings ? step.warnings : []
-	}
-}
+import { connectSandbox } from "@/lib/agent/sandbox"
+import type { TokenUsage } from "@/lib/agent/step"
+import { accumulateUsage, materializeStep, parseMessages } from "@/lib/agent/step"
 
 const codeFunction = inngest.createFunction(
 	{ id: "paul/agents/code" },
@@ -49,21 +18,12 @@ const codeFunction = inngest.createFunction(
 			sandboxId: event.data.sandboxId
 		})
 
-		const sbxResult = await errors.try(Sandbox.get({ sandboxId: event.data.sandboxId }))
-		if (sbxResult.error) {
-			logger.error("sandbox connection failed", {
-				error: sbxResult.error,
-				sandboxId: event.data.sandboxId
-			})
-			throw new NonRetriableError(`sandbox connection failed: ${String(sbxResult.error)}`)
-		}
-		const sbx = sbxResult.data
-		logger.info("sandbox connected", { sandboxId: sbx.sandboxId })
+		const sbx = await connectSandbox(event.data.sandboxId, logger)
 
 		let responseMessages: ModelMessage[] = []
 		let lastStepText = ""
 		let stepCount = 0
-		let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+		let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
 
 		for (let i = 0; i < MAX_STEPS; i++) {
 			const stepResult = await step.run(`llm-${i}`, async () => {
@@ -98,16 +58,7 @@ const codeFunction = inngest.createFunction(
 			})
 
 			responseMessages = [...responseMessages, ...parseMessages(stepResult.responseMessages)]
-
-			const inputTokens = stepResult.step.usage.inputTokens
-			const outputTokens = stepResult.step.usage.outputTokens
-			const stepTotalTokens = stepResult.step.usage.totalTokens
-			totalUsage = {
-				inputTokens: totalUsage.inputTokens + (inputTokens ? inputTokens : 0),
-				outputTokens: totalUsage.outputTokens + (outputTokens ? outputTokens : 0),
-				totalTokens: totalUsage.totalTokens + (stepTotalTokens ? stepTotalTokens : 0)
-			}
-
+			totalUsage = accumulateUsage(totalUsage, stepResult.step)
 			lastStepText = stepResult.step.text
 			stepCount++
 
@@ -132,16 +83,9 @@ const codeFunction = inngest.createFunction(
 			}
 		}
 
-		logger.info("code complete", {
-			stepCount,
-			totalUsage
-		})
+		logger.info("code complete", { stepCount, totalUsage })
 
-		return {
-			text: lastStepText,
-			stepCount,
-			totalUsage
-		}
+		return { text: lastStepText, stepCount, totalUsage }
 	}
 )
 

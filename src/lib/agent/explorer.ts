@@ -1,5 +1,6 @@
 import { openai } from "@ai-sdk/openai"
 import { globTool, grepTool, readTool } from "@/lib/agent/fs/tools"
+import type { AgentStepResult } from "@/lib/agent/step"
 
 const MAX_STEPS = 20 as const
 
@@ -23,36 +24,7 @@ const instructions = [
 
 type ExplorerTools = typeof tools
 
-type ExplorerStepResult = {
-	stepNumber: number
-	model: { provider: string; modelId: string }
-	functionId?: string
-	metadata?: Record<string, unknown>
-	experimental_context?: unknown
-	content: unknown[]
-	text: string
-	reasoning: unknown[]
-	reasoningText?: string
-	files: unknown[]
-	sources: unknown[]
-	toolCalls: unknown[]
-	staticToolCalls: unknown[]
-	dynamicToolCalls: unknown[]
-	toolResults: unknown[]
-	staticToolResults: unknown[]
-	dynamicToolResults: unknown[]
-	finishReason: string
-	rawFinishReason?: string
-	usage: {
-		inputTokens?: number
-		outputTokens?: number
-		totalTokens?: number
-	}
-	warnings: unknown[]
-	request: unknown
-	response: unknown
-	providerMetadata?: unknown
-}
+type ExplorerStepResult = AgentStepResult
 
 export { MAX_STEPS, instructions, model, tools }
 export type { ExplorerStepResult, ExplorerTools }
