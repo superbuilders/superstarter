@@ -86,34 +86,25 @@ Three kinds, each with typed request and response schemas:
 | `text` | `{ prompt: string, placeholder?: string }` | `{ text: string }` |
 | `choice` | `{ prompt: string, options: { id: string, label: string }[] }` | `{ selectedId: string }` |
 
-### Events
+### Events (Discriminated Unions on `kind`)
 
-**Request** (orchestrator → UI):
-
-```
-"paul/cta/request": {
-  ctaId: string           // correlation key
-  runId: string           // Inngest run ID for tracing
-  kind: "approval" | "text" | "choice"
-  message?: string        // approval
-  prompt?: string         // text, choice
-  placeholder?: string    // text
-  options?: { id: string, label: string }[]  // choice
-}
-```
-
-**Response** (UI → orchestrator):
+**Request** (orchestrator → UI) — `z.discriminatedUnion("kind", [...])`:
 
 ```
-"paul/cta/response": {
-  ctaId: string
-  kind: "approval" | "text" | "choice"
-  approved?: boolean      // approval
-  reason?: string         // approval
-  text?: string           // text
-  selectedId?: string     // choice
-}
+kind: "approval" → { ctaId, runId, kind, message: string }
+kind: "text"     → { ctaId, runId, kind, prompt: string, placeholder?: string }
+kind: "choice"   → { ctaId, runId, kind, prompt: string, options: { id, label }[] }
 ```
+
+**Response** (UI → orchestrator) — `z.discriminatedUnion("kind", [...])`:
+
+```
+kind: "approval" → { ctaId, kind, approved: boolean, reason?: string }
+kind: "text"     → { ctaId, kind, text: string }
+kind: "choice"   → { ctaId, kind, selectedId: string }
+```
+
+Each kind carries only its relevant fields — no optional sprawl. TypeScript narrows automatically when you check `kind`.
 
 ### CTA Flow
 

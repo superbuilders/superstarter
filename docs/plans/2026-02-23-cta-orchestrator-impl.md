@@ -18,6 +18,8 @@
 
 **Step 1: Write failing tests for CTA schemas**
 
+Note: Both `CtaRequestEventSchema` and `CtaResponseEventSchema` use `z.discriminatedUnion("kind", [...])` so that each kind carries only its relevant fields — no optional sprawl.
+
 ```typescript
 // src/lib/agent/cta.test.ts
 import { describe, expect, test } from "bun:test"
@@ -79,6 +81,27 @@ describe("CtaRequestEventSchema", () => {
         })
         expect(result.success).toBe(false)
     })
+
+    test("rejects approval request with choice-only fields", () => {
+        const result = CtaRequestEventSchema.safeParse({
+            ctaId: "abc-123",
+            runId: "run-456",
+            kind: "approval",
+            message: "Deploy?",
+            options: [{ id: "a", label: "A" }]
+        })
+        expect(result.success).toBe(false)
+    })
+
+    test("rejects choice request missing options", () => {
+        const result = CtaRequestEventSchema.safeParse({
+            ctaId: "abc-123",
+            runId: "run-456",
+            kind: "choice",
+            prompt: "Pick one"
+        })
+        expect(result.success).toBe(false)
+    })
 })
 
 describe("CtaResponseEventSchema", () => {
@@ -109,6 +132,22 @@ describe("CtaResponseEventSchema", () => {
         })
         expect(result.success).toBe(true)
     })
+
+    test("rejects approval response without approved field", () => {
+        const result = CtaResponseEventSchema.safeParse({
+            ctaId: "abc-123",
+            kind: "approval"
+        })
+        expect(result.success).toBe(false)
+    })
+
+    test("rejects text response without text field", () => {
+        const result = CtaResponseEventSchema.safeParse({
+            ctaId: "abc-123",
+            kind: "text"
+        })
+        expect(result.success).toBe(false)
+    })
 })
 ```
 
@@ -124,7 +163,7 @@ Expected: FAIL — cannot resolve `@/lib/agent/cta`
 import { tool } from "ai"
 import { z } from "zod"
 
-// --- CTA Kind Schemas ---
+// --- Shared Schemas ---
 
 const CtaKindSchema = z.enum(["approval", "text", "choice"])
 
@@ -133,35 +172,52 @@ const ChoiceOptionSchema = z.object({
     label: z.string().min(1)
 })
 
-// --- Request Event Schema ---
+// --- Request Event Schema (discriminated union on kind) ---
 
-const CtaRequestEventSchema = z.object({
-    ctaId: z.string().min(1),
-    runId: z.string().min(1),
-    kind: CtaKindSchema,
-    // approval
-    message: z.string().optional(),
-    // text, choice
-    prompt: z.string().optional(),
-    // text
-    placeholder: z.string().optional(),
-    // choice
-    options: z.array(ChoiceOptionSchema).optional()
-})
+const CtaRequestBase = { ctaId: z.string().min(1), runId: z.string().min(1) }
 
-// --- Response Event Schema ---
+const CtaRequestEventSchema = z.discriminatedUnion("kind", [
+    z.object({
+        ...CtaRequestBase,
+        kind: z.literal("approval"),
+        message: z.string().min(1)
+    }),
+    z.object({
+        ...CtaRequestBase,
+        kind: z.literal("text"),
+        prompt: z.string().min(1),
+        placeholder: z.string().optional()
+    }),
+    z.object({
+        ...CtaRequestBase,
+        kind: z.literal("choice"),
+        prompt: z.string().min(1),
+        options: z.array(ChoiceOptionSchema).min(2)
+    })
+])
 
-const CtaResponseEventSchema = z.object({
-    ctaId: z.string().min(1),
-    kind: CtaKindSchema,
-    // approval
-    approved: z.boolean().optional(),
-    reason: z.string().optional(),
-    // text
-    text: z.string().optional(),
-    // choice
-    selectedId: z.string().optional()
-})
+// --- Response Event Schema (discriminated union on kind) ---
+
+const CtaResponseBase = { ctaId: z.string().min(1) }
+
+const CtaResponseEventSchema = z.discriminatedUnion("kind", [
+    z.object({
+        ...CtaResponseBase,
+        kind: z.literal("approval"),
+        approved: z.boolean(),
+        reason: z.string().optional()
+    }),
+    z.object({
+        ...CtaResponseBase,
+        kind: z.literal("text"),
+        text: z.string().min(1)
+    }),
+    z.object({
+        ...CtaResponseBase,
+        kind: z.literal("choice"),
+        selectedId: z.string().min(1)
+    })
+])
 
 // --- Types ---
 
@@ -169,7 +225,9 @@ type CtaKind = z.infer<typeof CtaKindSchema>
 type CtaRequestEvent = z.infer<typeof CtaRequestEventSchema>
 type CtaResponseEvent = z.infer<typeof CtaResponseEventSchema>
 
-// --- Tool Definition (no execute) ---
+// --- Tool Definition (no execute — loop-intercepted) ---
+// NOTE: Tool input stays flat for LLM compatibility.
+// The orchestrator transforms flat args → discriminated event data.
 
 const requestHumanFeedbackTool = tool({
     description: [
@@ -327,37 +385,24 @@ git commit -m "feat: add orchestrator agent config with spawn and CTA tools"
 
 **Step 1: Add three new event schemas**
 
-Add to the `schema` object in `src/inngest/index.ts`:
+Add to the `schema` object in `src/inngest/index.ts`. Import `CtaRequestEventSchema` and `CtaResponseEventSchema` from `@/lib/agent/cta` to avoid duplicating the discriminated unions:
 
 ```typescript
+import {
+    CtaRequestEventSchema,
+    CtaResponseEventSchema
+} from "@/lib/agent/cta"
+
+// Add to schema object:
 "paul/agents/orchestrate": z.object({
     prompt: z.string().min(1),
     sandboxId: z.string().min(1)
 }),
-"paul/cta/request": z.object({
-    ctaId: z.string().min(1),
-    runId: z.string().min(1),
-    kind: z.enum(["approval", "text", "choice"]),
-    message: z.string().optional(),
-    prompt: z.string().optional(),
-    placeholder: z.string().optional(),
-    options: z
-        .array(
-            z.object({
-                id: z.string().min(1),
-                label: z.string().min(1)
-            })
-        )
-        .optional()
-}),
-"paul/cta/response": z.object({
-    ctaId: z.string().min(1),
-    kind: z.enum(["approval", "text", "choice"]),
-    approved: z.boolean().optional(),
-    reason: z.string().optional(),
-    text: z.string().optional(),
-    selectedId: z.string().optional()
-})
+"paul/cta/request": CtaRequestEventSchema,
+"paul/cta/response": CtaResponseEventSchema
+```
+
+Note: If Inngest's `fromSchema` doesn't accept `z.discriminatedUnion()` (it expects `z.object()`), fall back to a `z.union()` or keep the flat schema for the event registration only, and use the discriminated union for internal validation in the orchestrator function.
 ```
 
 **Step 2: Run typecheck**
@@ -394,6 +439,7 @@ import { inngest } from "@/inngest"
 import { exploreFunction } from "@/inngest/functions/agents/explore"
 import { codeFunction } from "@/inngest/functions/agents/code"
 import { CtaResponseEventSchema } from "@/lib/agent/cta"
+import type { CtaRequestEvent } from "@/lib/agent/cta"
 import { MAX_STEPS, instructions, model, tools } from "@/lib/agent/orchestrator"
 
 const CTA_TIMEOUT = "30d" as const
@@ -510,17 +556,39 @@ const orchestrateFunction = inngest.createFunction(
                     const args = toolCall.args
                     const ctaId = crypto.randomUUID()
 
+                    // Transform flat tool args → discriminated event data
+                    function buildCtaRequestData(
+                        flatArgs: typeof args
+                    ): CtaRequestEvent {
+                        const base = { ctaId, runId: event.id }
+                        if (flatArgs.kind === "approval") {
+                            return {
+                                ...base,
+                                kind: "approval" as const,
+                                message: flatArgs.message ?? "Approval requested"
+                            }
+                        }
+                        if (flatArgs.kind === "text") {
+                            return {
+                                ...base,
+                                kind: "text" as const,
+                                prompt: flatArgs.prompt ?? "Input requested",
+                                placeholder: flatArgs.placeholder
+                            }
+                        }
+                        return {
+                            ...base,
+                            kind: "choice" as const,
+                            prompt: flatArgs.prompt ?? "Choice requested",
+                            options: flatArgs.options ?? []
+                        }
+                    }
+
+                    const ctaData = buildCtaRequestData(args)
+
                     await step.sendEvent(`cta-emit-${i}`, {
                         name: "paul/cta/request" as const,
-                        data: {
-                            ctaId,
-                            runId: event.id,
-                            kind: args.kind,
-                            message: args.message,
-                            prompt: args.prompt,
-                            placeholder: args.placeholder,
-                            options: args.options
-                        }
+                        data: ctaData
                     })
 
                     logger.info("cta emitted, suspending", { ctaId, kind: args.kind })
