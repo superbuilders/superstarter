@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai"
-import { editTool, globTool, grepTool, readTool, writeTool } from "@/lib/agent/fs/tools"
+import { bashTool, editTool, globTool, grepTool, readTool, writeTool } from "@/lib/agent/fs/tools"
 import type { AgentStepResult } from "@/lib/agent/step"
 
 const MAX_STEPS = 20 as const
@@ -11,7 +11,8 @@ const tools = {
 	glob: globTool,
 	grep: grepTool,
 	write: writeTool,
-	edit: editTool
+	edit: editTool,
+	bash: bashTool
 } as const
 
 const instructions = [
@@ -21,6 +22,8 @@ const instructions = [
 	"- Read relevant files first to understand existing patterns and conventions",
 	"- Use glob and grep to find files you need to understand or modify",
 	"- Use write to create new files and edit to modify existing files",
+	"- Use bash for running tests, installing dependencies, build commands, git operations, and any task requiring shell execution",
+	"- Prefer structured tools (read, write, edit, glob, grep) for file operations — they provide better error handling and structured output",
 	"- Make only the changes described in your instructions — no extra refactoring or improvements",
 	"- Match the style and conventions of the existing codebase",
 	"When finished, provide a brief summary of what you changed and why."

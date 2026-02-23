@@ -3,7 +3,7 @@ import * as logger from "@superbuilders/slog"
 import { tool } from "ai"
 import { z } from "zod"
 import { extractSandbox } from "@/lib/agent/fs/context"
-import { edit, glob, grep, read, write } from "@/lib/agent/fs/operations"
+import { bash, edit, glob, grep, read, write } from "@/lib/agent/fs/operations"
 
 async function executeRead(
 	{ path }: { path: string },
@@ -171,4 +171,31 @@ const editTool = tool({
 	execute: executeEdit
 })
 
-export { editTool, globTool, grepTool, readTool, writeTool }
+async function executeBash(
+	{ command }: { command: string },
+	{ experimental_context }: { experimental_context?: unknown }
+) {
+	const sandbox = extractSandbox(experimental_context)
+	const result = await errors.try(bash(sandbox, command))
+	if (result.error) {
+		logger.warn("bash tool failed", { error: result.error, command: command.slice(0, 80) })
+		return { error: String(result.error) }
+	}
+	return {
+		stdout: result.data.stdout,
+		stderr: result.data.stderr,
+		exitCode: result.data.exitCode
+	}
+}
+
+const bashTool = tool({
+	description:
+		"Execute a bash command in the sandbox. Returns stdout, stderr, and exit code. Use for running tests, installing dependencies, build commands, git operations, and any task requiring shell execution. Prefer structured tools (read, write, edit, glob, grep) for file operations.",
+	inputSchema: z.object({
+		command: z.string().min(1).describe("The bash command to execute")
+	}),
+	strict: true,
+	execute: executeBash
+})
+
+export { bashTool, editTool, globTool, grepTool, readTool, writeTool }

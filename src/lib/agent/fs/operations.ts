@@ -5,6 +5,7 @@ import type { Sandbox } from "@vercel/sandbox"
 const MAX_FILE_SIZE = 100 * 1024
 const MAX_GLOB_RESULTS = 1000
 const MAX_GREP_RESULTS = 100
+const MAX_OUTPUT_LENGTH = 30_000
 
 const ErrNotFound = errors.new("not found")
 const ErrNotAFile = errors.new("path is not a file")
@@ -335,6 +336,60 @@ async function edit(
 	return { path: filePath, replacements }
 }
 
+interface BashResult {
+	stdout: string
+	stderr: string
+	exitCode: number
+}
+
+async function bash(sandbox: Sandbox, command: string): Promise<BashResult> {
+	const cmdResult = await errors.try(sandbox.runCommand("bash", ["-c", command]))
+	if (cmdResult.error) {
+		logger.error("bash command failed", { error: cmdResult.error, command: command.slice(0, 80) })
+		throw errors.wrap(cmdResult.error, `bash '${command.slice(0, 80)}'`)
+	}
+
+	const cmd = cmdResult.data
+
+	const stdoutResult = await errors.try(cmd.stdout())
+	if (stdoutResult.error) {
+		logger.error("bash stdout failed", { error: stdoutResult.error })
+		throw errors.wrap(stdoutResult.error, "bash stdout")
+	}
+
+	const stderrResult = await errors.try(cmd.stderr())
+	if (stderrResult.error) {
+		logger.error("bash stderr failed", { error: stderrResult.error })
+		throw errors.wrap(stderrResult.error, "bash stderr")
+	}
+
+	const truncatedStdout =
+		stdoutResult.data.length > MAX_OUTPUT_LENGTH
+			? `${stdoutResult.data.slice(0, MAX_OUTPUT_LENGTH)}\n[truncated]`
+			: stdoutResult.data
+
+	const truncatedStderr =
+		stderrResult.data.length > MAX_OUTPUT_LENGTH
+			? `${stderrResult.data.slice(0, MAX_OUTPUT_LENGTH)}\n[truncated]`
+			: stderrResult.data
+
+	logger.debug("bash complete", {
+		cmdId: cmd.cmdId,
+		cwd: cmd.cwd,
+		startedAt: cmd.startedAt,
+		command: command.slice(0, 80),
+		exitCode: cmd.exitCode,
+		stdoutLength: stdoutResult.data.length,
+		stderrLength: stderrResult.data.length
+	})
+
+	return {
+		stdout: truncatedStdout,
+		stderr: truncatedStderr,
+		exitCode: cmd.exitCode
+	}
+}
+
 export {
 	ErrAmbiguousMatch,
 	ErrInvalidPattern,
@@ -348,6 +403,8 @@ export {
 	MAX_FILE_SIZE,
 	MAX_GLOB_RESULTS,
 	MAX_GREP_RESULTS,
+	MAX_OUTPUT_LENGTH,
+	bash,
 	edit,
 	glob,
 	grep,
@@ -356,6 +413,7 @@ export {
 }
 
 export type {
+	BashResult,
 	EditResult,
 	GlobMatch,
 	GlobResult,
