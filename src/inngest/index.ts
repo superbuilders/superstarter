@@ -3,6 +3,7 @@ import * as logger from "@superbuilders/slog"
 import { EventSchemas, Inngest, type Logger } from "inngest"
 import { z } from "zod"
 import { env } from "@/env"
+import { CtaRequestEventSchema, CtaResponseEventSchema } from "@/lib/agent/cta"
 
 const schema = {
 	"superstarter/hello": z.object({
@@ -41,6 +42,12 @@ const schema = {
 	"paul/sandbox/stop": z.object({
 		sandboxId: z.string().min(1)
 	}),
+	"paul/agents/orchestrate": z.object({
+		prompt: z.string().min(1),
+		sandboxId: z.string().min(1)
+	}),
+	"paul/cta/request": CtaRequestEventSchema,
+	"paul/cta/response": CtaResponseEventSchema,
 	"paul/debug/echo": z.object({
 		source: z.string().min(1),
 		payload: z.record(z.string(), z.unknown())
