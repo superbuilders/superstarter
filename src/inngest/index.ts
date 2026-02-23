@@ -10,11 +10,23 @@ const schema = {
 	}),
 	"paul/agents/explore": z.object({
 		prompt: z.string().min(1),
-		sandboxId: z.string().min(1)
+		sandboxId: z.string().min(1),
+		github: z
+			.object({
+				repoUrl: z.string().url(),
+				branch: z.string().min(1)
+			})
+			.optional()
 	}),
 	"paul/agents/code": z.object({
 		prompt: z.string().min(1),
-		sandboxId: z.string().min(1)
+		sandboxId: z.string().min(1),
+		github: z
+			.object({
+				repoUrl: z.string().url(),
+				branch: z.string().min(1)
+			})
+			.optional()
 	}),
 	"paul/sandbox/create": z.object({
 		runtime: z.enum(["node24", "node22", "python3.13"]).default("node24"),

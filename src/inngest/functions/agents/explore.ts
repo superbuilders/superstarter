@@ -20,6 +20,11 @@ const exploreFunction = inngest.createFunction(
 
 		const sbx = await connectSandbox(event.data.sandboxId, logger)
 
+		const github = event.data.github
+		const systemPrompt = github
+			? `${instructions}\n\nYou are working on branch '${github.branch}' of ${github.repoUrl}`
+			: instructions
+
 		let responseMessages: ModelMessage[] = []
 		let lastStepText = ""
 		let stepCount = 0
@@ -30,7 +35,7 @@ const exploreFunction = inngest.createFunction(
 				const result = await errors.try(
 					generateText({
 						model,
-						system: instructions,
+						system: systemPrompt,
 						messages: [{ role: "user" as const, content: event.data.prompt }, ...responseMessages],
 						tools,
 						experimental_context: { sandbox: sbx }
