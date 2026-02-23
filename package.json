@@ -31,6 +31,7 @@
 		"@superbuilders/errors": "^3.0.2",
 		"@superbuilders/slog": "^4.0.0",
 		"@t3-oss/env-nextjs": "^0.13.10",
+		"@vercel/sandbox": "^1.6.0",
 		"ai": "^6.0.97",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
@@ -43,6 +44,7 @@
 		"react-dom": "^19.2.4",
 		"shadcn": "^3.8.4",
 		"tailwind-merge": "^3.4.1",
+		"tldraw": "^4.4.0",
 		"tw-animate-css": "^1.4.0",
 		"zod": "^4.3.6"
 	},
