@@ -1,7 +1,6 @@
-import { readFile as fsReadFile, mkdir, readdir, stat, writeFile } from "node:fs/promises"
-import { relative, resolve } from "node:path"
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
+import type { Sandbox } from "@vercel/sandbox"
 
 const MAX_FILE_SIZE = 100 * 1024
 const MAX_GLOB_RESULTS = 1000
@@ -17,64 +16,6 @@ const ErrWriteFailed = errors.new("write failed")
 const ErrNoMatch = errors.new("old string not found in file")
 const ErrAmbiguousMatch = errors.new("old string found multiple times without replaceAll")
 
-async function* walkDirectoryFromBase(
-	basePath: string,
-	currentPath: string
-): AsyncGenerator<{ relativePath: string; absolutePath: string; size: number }> {
-	const entries = await readdir(currentPath, { withFileTypes: true })
-	for (const entry of entries) {
-		const absolutePath = resolve(currentPath, entry.name)
-		const relPath = relative(basePath, absolutePath)
-		if (entry.isDirectory()) {
-			yield* walkDirectoryFromBase(basePath, absolutePath)
-		} else if (entry.isFile()) {
-			const fileStat = await stat(absolutePath)
-			yield { relativePath: relPath, absolutePath, size: fileStat.size }
-		}
-	}
-}
-
-function convertGlobChar(char: string): string {
-	if (char === "?") {
-		return "[^/]"
-	}
-	if (char === ".") {
-		return "\\."
-	}
-	if (char === "{") {
-		return "("
-	}
-	if (char === "}") {
-		return ")"
-	}
-	if (char === ",") {
-		return "|"
-	}
-	return char
-}
-
-function globToRegex(pattern: string): RegExp {
-	let regex = ""
-	let i = 0
-	while (i < pattern.length) {
-		const char = pattern.charAt(i)
-		if (char === "*" && pattern.charAt(i + 1) === "*") {
-			regex += ".*"
-			i += 2
-			if (pattern.charAt(i) === "/") {
-				i++
-			}
-		} else if (char === "*") {
-			regex += "[^/]*"
-			i++
-		} else {
-			regex += convertGlobChar(char)
-			i++
-		}
-	}
-	return new RegExp(`^${regex}$`)
-}
-
 interface ReadResult {
 	content: string
 	path: string
@@ -82,40 +23,31 @@ interface ReadResult {
 	lineCount: number
 }
 
-async function read(filePath: string): Promise<ReadResult> {
-	const statResult = await errors.try(stat(filePath))
-	if (statResult.error) {
-		logger.error("file not found", { error: statResult.error, path: filePath })
+async function read(sandbox: Sandbox, filePath: string): Promise<ReadResult> {
+	const bufResult = await errors.try(sandbox.readFileToBuffer({ path: filePath }))
+	if (bufResult.error) {
+		logger.error("file read failed", { error: bufResult.error, path: filePath })
+		throw errors.wrap(bufResult.error, `read '${filePath}'`)
+	}
+
+	if (bufResult.data === null) {
+		logger.error("file not found", { path: filePath })
 		throw errors.wrap(ErrNotFound, filePath)
 	}
 
-	if (!statResult.data.isFile()) {
-		logger.error("path is not a file", { path: filePath })
-		throw errors.wrap(ErrNotAFile, filePath)
+	const buf = bufResult.data
+
+	if (buf.length > MAX_FILE_SIZE) {
+		logger.error("file too large", { path: filePath, size: buf.length, maxSize: MAX_FILE_SIZE })
+		throw errors.wrap(ErrTooLarge, `${filePath} (${buf.length} bytes, max ${MAX_FILE_SIZE})`)
 	}
 
-	if (statResult.data.size > MAX_FILE_SIZE) {
-		logger.error("file too large", {
-			path: filePath,
-			size: statResult.data.size,
-			maxSize: MAX_FILE_SIZE
-		})
-		throw errors.wrap(
-			ErrTooLarge,
-			`${filePath} (${statResult.data.size} bytes, max ${MAX_FILE_SIZE})`
-		)
-	}
-
-	const readResult = await errors.try(fsReadFile(filePath, "utf-8"))
-	if (readResult.error) {
-		logger.error("file read failed", { error: readResult.error, path: filePath })
-		throw errors.wrap(readResult.error, `read '${filePath}'`)
-	}
-
-	const content = readResult.data
+	const content = buf.toString("utf-8")
 	const lineCount = content.length === 0 ? 0 : content.split("\n").length
 
-	return { content, path: filePath, size: statResult.data.size, lineCount }
+	logger.debug("read complete", { path: filePath, size: buf.length, lineCount })
+
+	return { content, path: filePath, size: buf.length, lineCount }
 }
 
 interface GlobMatch {
@@ -130,41 +62,89 @@ interface GlobResult {
 	matches: GlobMatch[]
 }
 
-async function glob(dirPath: string, pattern: string): Promise<GlobResult> {
-	const statResult = await errors.try(stat(dirPath))
-	if (statResult.error) {
-		logger.error("directory not found", { error: statResult.error, path: dirPath })
-		throw errors.wrap(ErrNotFound, dirPath)
+function buildFindArgs(dirPath: string, pattern: string): string[] {
+	if (pattern.startsWith("**/")) {
+		const namePattern = pattern.slice(3)
+		return [dirPath, "-type", "f", "-name", namePattern, "-printf", "%p\\t%s\\n"]
+	}
+	if (pattern.includes("/")) {
+		logger.error("unsupported glob pattern", { pattern, dirPath })
+		throw errors.wrap(
+			ErrInvalidPattern,
+			`pattern '${pattern}' contains '/'; use dirPath to scope instead`
+		)
+	}
+	return [dirPath, "-maxdepth", "1", "-type", "f", "-name", pattern, "-printf", "%p\\t%s\\n"]
+}
+
+function parseGlobLine(line: string, basePath: string): GlobMatch {
+	const tabIndex = line.lastIndexOf("\t")
+	if (tabIndex === -1) {
+		return { path: line, name: line, size: 0 }
+	}
+	const filePath = line.slice(0, tabIndex)
+	const size = Number.parseInt(line.slice(tabIndex + 1), 10)
+	const prefix = basePath.endsWith("/") ? basePath : `${basePath}/`
+	const name = filePath.startsWith(prefix) ? filePath.slice(prefix.length) : filePath
+	return { path: filePath, name, size }
+}
+
+async function glob(sandbox: Sandbox, dirPath: string, pattern: string): Promise<GlobResult> {
+	const args = buildFindArgs(dirPath, pattern)
+	const cmdResult = await errors.try(sandbox.runCommand("find", args))
+	if (cmdResult.error) {
+		logger.error("glob command failed", { error: cmdResult.error, dirPath, pattern })
+		throw errors.wrap(cmdResult.error, `glob '${pattern}' in '${dirPath}'`)
 	}
 
-	if (!statResult.data.isDirectory()) {
-		logger.error("path is not a directory", { path: dirPath })
-		throw errors.wrap(ErrNotADirectory, dirPath)
+	const cmd = cmdResult.data
+
+	const stdoutResult = await errors.try(cmd.stdout())
+	if (stdoutResult.error) {
+		logger.error("glob stdout failed", { error: stdoutResult.error })
+		throw errors.wrap(stdoutResult.error, "glob stdout")
 	}
 
-	const regex = globToRegex(pattern)
-	const matches: GlobMatch[] = []
-
-	for await (const entry of walkDirectoryFromBase(dirPath, dirPath)) {
-		if (regex.test(entry.relativePath)) {
-			matches.push({
-				path: entry.absolutePath,
-				name: entry.relativePath,
-				size: entry.size
-			})
-			if (matches.length >= MAX_GLOB_RESULTS) {
-				logger.warn("glob result limit reached", {
-					path: dirPath,
-					pattern,
-					limit: MAX_GLOB_RESULTS
-				})
-				throw errors.wrap(
-					ErrTooManyResults,
-					`pattern '${pattern}' in '${dirPath}' (limit ${MAX_GLOB_RESULTS})`
-				)
-			}
-		}
+	const stderrResult = await errors.try(cmd.stderr())
+	if (stderrResult.error) {
+		logger.error("glob stderr failed", { error: stderrResult.error })
+		throw errors.wrap(stderrResult.error, "glob stderr")
 	}
+
+	logger.debug("glob command complete", {
+		cmdId: cmd.cmdId,
+		cwd: cmd.cwd,
+		startedAt: cmd.startedAt,
+		exitCode: cmd.exitCode,
+		stdoutLength: stdoutResult.data.length,
+		stderr: stderrResult.data
+	})
+
+	if (cmd.exitCode !== 0 && stdoutResult.data.length === 0) {
+		logger.error("glob find returned non-zero", {
+			exitCode: cmd.exitCode,
+			stderr: stderrResult.data,
+			dirPath,
+			pattern
+		})
+		throw errors.wrap(ErrNotFound, `find in '${dirPath}'`)
+	}
+
+	const lines = stdoutResult.data.trim().split("\n").filter(Boolean)
+
+	if (lines.length >= MAX_GLOB_RESULTS) {
+		logger.warn("glob result limit reached", { dirPath, pattern, limit: MAX_GLOB_RESULTS })
+		throw errors.wrap(
+			ErrTooManyResults,
+			`pattern '${pattern}' in '${dirPath}' (limit ${MAX_GLOB_RESULTS})`
+		)
+	}
+
+	const matches = lines.map(function parseMatch(line) {
+		return parseGlobLine(line, dirPath)
+	})
+
+	logger.debug("glob complete", { dirPath, pattern, matchCount: matches.length })
 
 	return { pattern, basePath: dirPath, matches }
 }
@@ -185,84 +165,79 @@ interface GrepResult {
 	matches: GrepMatch[]
 }
 
-function searchFileLines(
-	content: string,
-	filePath: string,
-	regex: RegExp,
-	matches: GrepMatch[],
-	limit: number
-): boolean {
-	const lines = content.split("\n")
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i]
-		if (line === undefined) {
-			continue
-		}
-		if (regex.test(line)) {
-			matches.push({ path: filePath, lineNumber: i + 1, lineContent: line })
-			if (matches.length >= limit) {
-				return true
-			}
-		}
+function parseGrepLine(line: string): GrepMatch {
+	const nullIndex = line.indexOf("\0")
+	if (nullIndex === -1) {
+		return { path: line, lineNumber: 0, lineContent: line }
 	}
-	return false
+	const path = line.slice(0, nullIndex)
+	const rest = line.slice(nullIndex + 1)
+	const colonIndex = rest.indexOf(":")
+	if (colonIndex === -1) {
+		return { path, lineNumber: 0, lineContent: rest }
+	}
+	const lineNumber = Number.parseInt(rest.slice(0, colonIndex), 10)
+	const lineContent = rest.slice(colonIndex + 1)
+	return { path, lineNumber, lineContent }
 }
 
-function resolveGrepOptions(options?: GrepOptions): {
-	globRegex: RegExp | undefined
-	limit: number
-} {
-	const globRegex = options?.glob ? globToRegex(options.glob) : undefined
-	if (options !== undefined && options.maxResults !== undefined) {
-		return { globRegex, limit: options.maxResults }
-	}
-	return { globRegex, limit: MAX_GREP_RESULTS }
-}
-
-async function grep(dirPath: string, pattern: string, options?: GrepOptions): Promise<GrepResult> {
-	const statResult = await errors.try(stat(dirPath))
-	if (statResult.error) {
-		logger.error("directory not found", { error: statResult.error, path: dirPath })
-		throw errors.wrap(ErrNotFound, dirPath)
+async function grep(
+	sandbox: Sandbox,
+	dirPath: string,
+	pattern: string,
+	options?: GrepOptions
+): Promise<GrepResult> {
+	const limit = options?.maxResults ? options.maxResults : MAX_GREP_RESULTS
+	const args = ["-rnZ", pattern, dirPath]
+	if (options?.glob) {
+		args.push("--include", options.glob)
 	}
 
-	if (!statResult.data.isDirectory()) {
-		logger.error("path is not a directory", { path: dirPath })
-		throw errors.wrap(ErrNotADirectory, dirPath)
+	const cmdResult = await errors.try(sandbox.runCommand("grep", args))
+	if (cmdResult.error) {
+		logger.error("grep command failed", { error: cmdResult.error, dirPath, pattern })
+		throw errors.wrap(cmdResult.error, `grep '${pattern}' in '${dirPath}'`)
 	}
 
-	const patternResult = errors.trySync(() => new RegExp(pattern))
-	if (patternResult.error) {
-		logger.error("invalid regex pattern", { error: patternResult.error, pattern })
+	const cmd = cmdResult.data
+
+	const stdoutResult = await errors.try(cmd.stdout())
+	if (stdoutResult.error) {
+		logger.error("grep stdout failed", { error: stdoutResult.error })
+		throw errors.wrap(stdoutResult.error, "grep stdout")
+	}
+
+	const stderrResult = await errors.try(cmd.stderr())
+	if (stderrResult.error) {
+		logger.error("grep stderr failed", { error: stderrResult.error })
+		throw errors.wrap(stderrResult.error, "grep stderr")
+	}
+
+	logger.debug("grep command complete", {
+		cmdId: cmd.cmdId,
+		cwd: cmd.cwd,
+		startedAt: cmd.startedAt,
+		exitCode: cmd.exitCode,
+		stdoutLength: stdoutResult.data.length,
+		stderr: stderrResult.data
+	})
+
+	if (cmd.exitCode === 2) {
+		logger.error("grep pattern error", { stderr: stderrResult.data, pattern })
 		throw errors.wrap(ErrInvalidPattern, pattern)
 	}
-	const regex = patternResult.data
 
-	const { globRegex, limit } = resolveGrepOptions(options)
-	const matches: GrepMatch[] = []
-
-	for await (const entry of walkDirectoryFromBase(dirPath, dirPath)) {
-		if (globRegex && !globRegex.test(entry.relativePath)) {
-			continue
-		}
-		if (entry.size > MAX_FILE_SIZE) {
-			continue
-		}
-
-		const readResult = await errors.try(fsReadFile(entry.absolutePath, "utf-8"))
-		if (readResult.error) {
-			continue
-		}
-
-		if (readResult.data.slice(0, 512).includes("\0")) {
-			continue
-		}
-
-		const limitReached = searchFileLines(readResult.data, entry.absolutePath, regex, matches, limit)
-		if (limitReached) {
-			return { pattern, matches }
-		}
+	if (cmd.exitCode === 1) {
+		return { pattern, matches: [] }
 	}
+
+	const lines = stdoutResult.data.trim().split("\n").filter(Boolean)
+	const truncated = lines.slice(0, limit)
+	const matches = truncated.map(function parseMatch(line) {
+		return parseGrepLine(line)
+	})
+
+	logger.debug("grep complete", { dirPath, pattern, matchCount: matches.length })
 
 	return { pattern, matches }
 }
@@ -273,27 +248,23 @@ interface WriteResult {
 	created: boolean
 }
 
-async function write(filePath: string, content: string): Promise<WriteResult> {
-	const existsResult = await errors.try(stat(filePath))
-	const created = existsResult.error !== undefined
-
-	const dir = filePath.substring(0, filePath.lastIndexOf("/"))
-	if (dir) {
-		const mkdirResult = await errors.try(mkdir(dir, { recursive: true }))
-		if (mkdirResult.error) {
-			logger.error("mkdir failed", { error: mkdirResult.error, path: dir })
-			throw errors.wrap(ErrWriteFailed, `mkdir '${dir}'`)
-		}
+async function write(sandbox: Sandbox, filePath: string, content: string): Promise<WriteResult> {
+	const testResult = await errors.try(sandbox.runCommand("test", ["-f", filePath]))
+	let created = true
+	if (!testResult.error && testResult.data.exitCode === 0) {
+		created = false
 	}
 
-	const writeResult = await errors.try(writeFile(filePath, content, "utf-8"))
+	const buf = Buffer.from(content, "utf-8")
+	const writeResult = await errors.try(sandbox.writeFiles([{ path: filePath, content: buf }]))
 	if (writeResult.error) {
 		logger.error("write failed", { error: writeResult.error, path: filePath })
 		throw errors.wrap(ErrWriteFailed, filePath)
 	}
 
-	const size = Buffer.byteLength(content, "utf-8")
-	return { path: filePath, size, created }
+	logger.debug("write complete", { path: filePath, size: buf.length, created })
+
+	return { path: filePath, size: buf.length, created }
 }
 
 interface EditResult {
@@ -302,29 +273,24 @@ interface EditResult {
 }
 
 async function edit(
+	sandbox: Sandbox,
 	filePath: string,
 	oldString: string,
 	newString: string,
 	replaceAll?: boolean
 ): Promise<EditResult> {
-	const statResult = await errors.try(stat(filePath))
-	if (statResult.error) {
-		logger.error("file not found", { error: statResult.error, path: filePath })
+	const bufResult = await errors.try(sandbox.readFileToBuffer({ path: filePath }))
+	if (bufResult.error) {
+		logger.error("file read failed", { error: bufResult.error, path: filePath })
+		throw errors.wrap(bufResult.error, `read '${filePath}'`)
+	}
+
+	if (bufResult.data === null) {
+		logger.error("file not found", { path: filePath })
 		throw errors.wrap(ErrNotFound, filePath)
 	}
 
-	if (!statResult.data.isFile()) {
-		logger.error("path is not a file", { path: filePath })
-		throw errors.wrap(ErrNotAFile, filePath)
-	}
-
-	const readResult = await errors.try(fsReadFile(filePath, "utf-8"))
-	if (readResult.error) {
-		logger.error("file read failed", { error: readResult.error, path: filePath })
-		throw errors.wrap(readResult.error, `read '${filePath}'`)
-	}
-
-	const content = readResult.data
+	const content = bufResult.data.toString("utf-8")
 
 	let count = 0
 	let searchFrom = 0
@@ -357,11 +323,14 @@ async function edit(
 		replacements = 1
 	}
 
-	const writeResult = await errors.try(writeFile(filePath, newContent, "utf-8"))
+	const buf = Buffer.from(newContent, "utf-8")
+	const writeResult = await errors.try(sandbox.writeFiles([{ path: filePath, content: buf }]))
 	if (writeResult.error) {
 		logger.error("file write failed", { error: writeResult.error, path: filePath })
 		throw errors.wrap(writeResult.error, `write '${filePath}'`)
 	}
+
+	logger.debug("edit complete", { path: filePath, replacements })
 
 	return { path: filePath, replacements }
 }

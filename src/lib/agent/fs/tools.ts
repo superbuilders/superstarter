@@ -2,10 +2,15 @@ import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
 import { tool } from "ai"
 import { z } from "zod"
+import { extractSandbox } from "@/lib/agent/fs/context"
 import { edit, glob, grep, read, write } from "@/lib/agent/fs/operations"
 
-async function executeRead({ path }: { path: string }) {
-	const result = await errors.try(read(path))
+async function executeRead(
+	{ path }: { path: string },
+	{ experimental_context }: { experimental_context?: unknown }
+) {
+	const sandbox = extractSandbox(experimental_context)
+	const result = await errors.try(read(sandbox, path))
 	if (result.error) {
 		logger.warn("read tool failed", { error: result.error, path })
 		return { error: String(result.error) }
@@ -28,8 +33,12 @@ const readTool = tool({
 	execute: executeRead
 })
 
-async function executeGlob({ dirPath, pattern }: { dirPath: string; pattern: string }) {
-	const result = await errors.try(glob(dirPath, pattern))
+async function executeGlob(
+	{ dirPath, pattern }: { dirPath: string; pattern: string },
+	{ experimental_context }: { experimental_context?: unknown }
+) {
+	const sandbox = extractSandbox(experimental_context)
+	const result = await errors.try(glob(sandbox, dirPath, pattern))
 	if (result.error) {
 		logger.warn("glob tool failed", { error: result.error, dirPath, pattern })
 		return { error: String(result.error) }
@@ -52,18 +61,22 @@ const globTool = tool({
 	execute: executeGlob
 })
 
-async function executeGrep({
-	dirPath,
-	pattern,
-	glob: globFilter,
-	maxResults
-}: {
-	dirPath: string
-	pattern: string
-	glob?: string
-	maxResults?: number
-}) {
-	const result = await errors.try(grep(dirPath, pattern, { glob: globFilter, maxResults }))
+async function executeGrep(
+	{
+		dirPath,
+		pattern,
+		glob: globFilter,
+		maxResults
+	}: {
+		dirPath: string
+		pattern: string
+		glob?: string
+		maxResults?: number
+	},
+	{ experimental_context }: { experimental_context?: unknown }
+) {
+	const sandbox = extractSandbox(experimental_context)
+	const result = await errors.try(grep(sandbox, dirPath, pattern, { glob: globFilter, maxResults }))
 	if (result.error) {
 		logger.warn("grep tool failed", { error: result.error, dirPath, pattern })
 		return { error: String(result.error) }
@@ -89,8 +102,12 @@ const grepTool = tool({
 	execute: executeGrep
 })
 
-async function executeWrite({ path, content }: { path: string; content: string }) {
-	const result = await errors.try(write(path, content))
+async function executeWrite(
+	{ path, content }: { path: string; content: string },
+	{ experimental_context }: { experimental_context?: unknown }
+) {
+	const sandbox = extractSandbox(experimental_context)
+	const result = await errors.try(write(sandbox, path, content))
 	if (result.error) {
 		logger.warn("write tool failed", { error: result.error, path })
 		return { error: String(result.error) }
@@ -113,18 +130,22 @@ const writeTool = tool({
 	execute: executeWrite
 })
 
-async function executeEdit({
-	path,
-	oldString,
-	newString,
-	replaceAll
-}: {
-	path: string
-	oldString: string
-	newString: string
-	replaceAll?: boolean
-}) {
-	const result = await errors.try(edit(path, oldString, newString, replaceAll))
+async function executeEdit(
+	{
+		path,
+		oldString,
+		newString,
+		replaceAll
+	}: {
+		path: string
+		oldString: string
+		newString: string
+		replaceAll?: boolean
+	},
+	{ experimental_context }: { experimental_context?: unknown }
+) {
+	const sandbox = extractSandbox(experimental_context)
+	const result = await errors.try(edit(sandbox, path, oldString, newString, replaceAll))
 	if (result.error) {
 		logger.warn("edit tool failed", { error: result.error, path })
 		return { error: String(result.error) }
