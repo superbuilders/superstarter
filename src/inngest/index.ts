@@ -17,7 +17,14 @@ const schema = {
 		sandboxId: z.string().min(1)
 	}),
 	"paul/sandbox/create": z.object({
-		runtime: z.enum(["node24", "node22", "python3.13"]).default("node24")
+		runtime: z.enum(["node24", "node22", "python3.13"]).default("node24"),
+		github: z
+			.object({
+				repoUrl: z.string().url(),
+				branch: z.string().min(1),
+				token: z.string().min(1).optional()
+			})
+			.optional()
 	}),
 	"paul/sandbox/stop": z.object({
 		sandboxId: z.string().min(1)
