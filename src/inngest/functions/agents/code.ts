@@ -1,11 +1,14 @@
 import * as errors from "@superbuilders/errors"
 import * as logger from "@superbuilders/slog"
+import { Sandbox } from "@vercel/sandbox"
 import type { ModelMessage, StepResult } from "ai"
 import { generateText, modelMessageSchema } from "ai"
+import { NonRetriableError } from "inngest"
 import { z } from "zod"
 import { inngest } from "@/inngest"
 import type { CoderStepResult, CoderTools } from "@/lib/agent/coder"
 import { instructions, MAX_STEPS, model, tools } from "@/lib/agent/coder"
+import { ErrSandboxContext } from "@/lib/agent/fs/context"
 
 const messagesSchema = z.array(modelMessageSchema)
 
@@ -41,7 +44,21 @@ const codeFunction = inngest.createFunction(
 	{ id: "paul/agents/code" },
 	{ event: "paul/agents/code" },
 	async ({ event, logger, step }) => {
-		logger.info("starting code", { prompt: event.data.prompt })
+		logger.info("starting code", {
+			prompt: event.data.prompt,
+			sandboxId: event.data.sandboxId
+		})
+
+		const sbxResult = await errors.try(Sandbox.get({ sandboxId: event.data.sandboxId }))
+		if (sbxResult.error) {
+			logger.error("sandbox connection failed", {
+				error: sbxResult.error,
+				sandboxId: event.data.sandboxId
+			})
+			throw new NonRetriableError(`sandbox connection failed: ${String(sbxResult.error)}`)
+		}
+		const sbx = sbxResult.data
+		logger.info("sandbox connected", { sandboxId: sbx.sandboxId })
 
 		let responseMessages: ModelMessage[] = []
 		let lastStepText = ""
@@ -55,10 +72,15 @@ const codeFunction = inngest.createFunction(
 						model,
 						system: instructions,
 						messages: [{ role: "user" as const, content: event.data.prompt }, ...responseMessages],
-						tools
+						tools,
+						experimental_context: { sandbox: sbx }
 					})
 				)
 				if (result.error) {
+					if (errors.is(result.error, ErrSandboxContext)) {
+						logger.error("sandbox context error", { error: result.error, step: i })
+						throw new NonRetriableError("sandbox missing from tool context")
+					}
 					logger.error("llm call failed", { error: result.error, step: i })
 					throw errors.wrap(result.error, `llm step ${i}`)
 				}
