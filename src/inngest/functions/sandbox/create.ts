@@ -52,10 +52,15 @@ const createFunction = inngest.createFunction(
 
 		const sandboxData = await step.run("create-sandbox", async () => {
 			const params = buildCreateParams(event.data.runtime, event.data.github)
+			logger.info("sandbox create params", { params: JSON.stringify(params) })
 			const result = await errors.try(Sandbox.create(params))
 			if (result.error) {
-				logger.error("sandbox creation failed", { error: result.error })
-				throw new NonRetriableError(String(result.error))
+				const detail = {
+					error: result.error,
+					params: JSON.stringify(params)
+				}
+				logger.error("sandbox creation failed", detail)
+				throw new NonRetriableError(JSON.stringify(detail))
 			}
 
 			const sbx = result.data
