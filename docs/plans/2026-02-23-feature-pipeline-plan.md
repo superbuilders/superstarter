@@ -1,670 +1,780 @@
-# Feature Pipeline — Sub-Plan DAG
+# Feature Development Pipeline Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement each sub-plan.
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Build a multi-agent pipeline that autonomously analyzes codebases, generates approaches, evaluates them through specialist judges, implements the approved approach, and creates a PR — with human-in-the-loop CTAs at every phase boundary.
+
+**Architecture:** Single master Inngest function drives a strict sequential phase pipeline (Analysis → Approaches → Judging → Implementation → PR). Each phase is a separate Inngest function invoked via `step.invoke()`. Full state persistence to PostgreSQL with every SDK field captured.
+
+**Tech Stack:** Inngest (orchestration), Vercel AI SDK (LLM), Vercel Sandbox (code execution), Drizzle ORM (PostgreSQL), Zod (validation), Bun (runtime/test)
 
 **Design Doc:** `docs/plans/2026-02-23-feature-pipeline-design.md`
 
-## DAG Overview
+---
 
+## Implementation Phase 1: Database Schema
+
+**Dependency:** None. This is the foundation.
+
+### Task 1: Drop the core schema and create agent schema file
+
+**Files:**
+- Delete: `src/db/schemas/core.ts`
+- Create: `src/db/schemas/agent.ts`
+- Modify: `src/db/index.ts`
+- Modify: `drizzle.config.ts`
+
+**Step 1: Create the agent schema with all enums and tables**
+
+Create `src/db/schemas/agent.ts` with all 10 tables from the design doc. Use Drizzle's `pgSchema("agent")` for namespace isolation.
+
+Enums to define:
+- `sandboxStatus`: `pending`, `running`, `stopping`, `stopped`, `failed`, `aborted`, `snapshotting`
+- `sandboxSourceType`: `git`, `tarball`, `snapshot`, `empty`
+- `snapshotStatus`: `created`, `deleted`, `failed`
+- `featurePhase`: `analysis`, `approaches`, `judging`, `implementation`, `pr`, `completed`, `failed`
+- `phaseStatus`: `running`, `passed`, `failed`
+- `agentType`: `orchestrator`, `explorer`, `coder`, `judge`, `meta_judge`
+- `finishReason`: `stop`, `length`, `content-filter`, `tool-calls`, `error`, `other`
+- `toolOutputType`: `text`, `json`, `execution-denied`, `error-text`, `error-json`, `content`
+- `memoryKind`: `insight`, `failure`, `decision`, `constraint`
+- `ctaKind`: `approval`, `text`, `choice`
+
+Tables (in dependency order):
+1. `sandboxes` — full Vercel Sandbox metadata
+2. `sandboxSnapshots` — point-in-time sandbox snapshots
+3. `featureRuns` — top-level feature request entity
+4. `phaseResults` — one per phase execution
+5. `agentInvocations` — every LLM call with full detail
+6. `agentSteps` — each step within a multi-step invocation
+7. `toolCalls` — every tool call with full input/output
+8. `memoryRecords` — LLM-generated summaries
+9. `ctaEvents` — CTA request/response pairs
+
+All columns exactly as specified in the design doc. Every timestamp uses `{ mode: "date", withTimezone: true }`. UUIDs use `.defaultRandom()`. Foreign keys use `onDelete: "cascade"` where parent deletion should cascade.
+
+Add indexes on:
+- `featureRuns`: `currentPhase`
+- `phaseResults`: `(runId, phase)`
+- `agentInvocations`: `(phaseResultId, agentType)`
+- `agentSteps`: `(invocationId, stepNumber)`
+- `toolCalls`: `(stepId)`, `(invocationId)`
+- `memoryRecords`: `(runId, phase)`
+- `ctaEvents`: `(runId)`
+
+**Step 2: Update drizzle.config.ts**
+
+Change schema from `"./src/db/schemas/core.ts"` to `"./src/db/schemas/agent.ts"`. Change schemaFilter from `["core"]` to `["agent"]`.
+
+**Step 3: Update src/db/index.ts**
+
+Change the import from `* as core from "@/db/schemas/core"` to `* as agent from "@/db/schemas/agent"`. Update the schema spread.
+
+**Step 4: Remove core.ts**
+
+Delete `src/db/schemas/core.ts`. Remove any remaining references to core schema tables (grep the codebase).
+
+**Step 5: Verify typecheck passes**
+
+Run: `bun typecheck`
+Expected: PASS (no references to removed core tables outside of db layer)
+
+**Step 6: Commit**
+
+```bash
+git add src/db/schemas/agent.ts src/db/index.ts drizzle.config.ts
+git rm src/db/schemas/core.ts
+git commit -m "feat: replace core schema with agent schema for feature pipeline"
 ```
-A: Schema ─────────┐
-                    ├──▶ C: Persistence ─────┐
-B: Event Contract ──┤                        │
-                    │                        ├──▶ H: Analysis Orchestrator ────┐
-D: Memory Tool ─────┤                        │                                │
-                    │                        ├──▶ I: Approaches Orchestrator ──┤
-G: Phase Loop ──────┤                        │                                │
-                    │                        ├──▶ J: Judging Orchestrator ─────┼──▶ M: Master Orchestrator
-E: Judge Configs ───┘──(only J needs this)   │                                │
-                                             ├──▶ K: Implementation Orch. ────┤
-F: Quality Gates ───────(only K needs this)──┘                                │
-                                                                              │
-L: PR Creation ───────────────────────────────────────────────────────────────┘
-```
 
-**Leaf nodes (no dependencies, can be built in any order):**
-A, B, D, E, F, G, L
+**Step 7: Generate and review migration**
 
-**Second tier (need leaf nodes):**
-C (needs A)
+Run: `bun db:generate`
 
-**Third tier (need C + leaf nodes):**
-H, I, J, K (can all be built in parallel)
+This is a HUMAN-REVIEWED step. Inspect the generated migration SQL to verify:
+- All 10 tables are created in the `agent` schema
+- All enums are created
+- All foreign keys and indexes are present
+- The old `core` schema tables are dropped
 
-**Terminal node:**
-M (needs H, I, J, K, L, C)
+**Step 8: Apply migration**
+
+Run: `bun db:push`
 
 ---
 
-## How to Read Each Sub-Plan
+## Implementation Phase 2: Inngest Events & Persistence Layer
 
-Each sub-plan has:
-- **Dependencies** — which sub-plans must be done first
-- **Produces** — what files/modules this creates
-- **Contract** — the non-negotiable interface this sub-plan establishes. Changing these breaks downstream sub-plans.
-- **Internal** — what CAN be changed freely without affecting other sub-plans
-- **Steps** — implementation steps
+**Dependency:** Phase 1 (schema must exist).
+
+### Task 2: Add feature pipeline Inngest events
+
+**Files:**
+- Modify: `src/inngest/index.ts`
+
+**Step 1: Add new event schemas**
+
+Add these events to the `schema` object in `src/inngest/index.ts`:
+
+```typescript
+"paul/pipeline/feature-run": z.object({
+    prompt: z.string().min(1),
+    githubRepoUrl: z.string().url(),
+    githubBranch: z.string().min(1),
+    runtime: z.enum(["node24", "node22", "python3.13"]).default("node24")
+}),
+"paul/pipeline/analysis": z.object({
+    runId: z.string().uuid(),
+    sandboxId: z.string().min(1),
+    prompt: z.string().min(1),
+    githubRepoUrl: z.string().url(),
+    githubBranch: z.string().min(1),
+    memories: z.array(z.object({
+        phase: z.string(),
+        kind: z.string(),
+        content: z.string()
+    }))
+}),
+"paul/pipeline/approaches": z.object({
+    runId: z.string().uuid(),
+    sandboxId: z.string().min(1),
+    prompt: z.string().min(1),
+    githubRepoUrl: z.string().url(),
+    githubBranch: z.string().min(1),
+    analysisOutput: z.unknown(),
+    memories: z.array(z.object({
+        phase: z.string(),
+        kind: z.string(),
+        content: z.string()
+    }))
+}),
+"paul/pipeline/judging": z.object({
+    runId: z.string().uuid(),
+    sandboxId: z.string().min(1),
+    prompt: z.string().min(1),
+    githubRepoUrl: z.string().url(),
+    githubBranch: z.string().min(1),
+    selectedApproach: z.unknown(),
+    analysisOutput: z.unknown(),
+    memories: z.array(z.object({
+        phase: z.string(),
+        kind: z.string(),
+        content: z.string()
+    }))
+}),
+"paul/pipeline/implementation": z.object({
+    runId: z.string().uuid(),
+    sandboxId: z.string().min(1),
+    prompt: z.string().min(1),
+    githubRepoUrl: z.string().url(),
+    githubBranch: z.string().min(1),
+    selectedApproach: z.unknown(),
+    analysisOutput: z.unknown(),
+    judgingOutput: z.unknown(),
+    memories: z.array(z.object({
+        phase: z.string(),
+        kind: z.string(),
+        content: z.string()
+    }))
+})
+```
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/inngest/index.ts
+git commit -m "feat: add feature pipeline Inngest event schemas"
+```
+
+### Task 3: Create persistence layer
+
+**Files:**
+- Create: `src/lib/pipeline/persistence.ts`
+
+**Step 1: Create the persistence module**
+
+This module wraps Drizzle inserts/updates for all agent-schema tables. Every function takes a `db` handle (or transaction) and the data to persist. Functions:
+
+- `createFeatureRun(db, data)` → inserts into `featureRuns`, returns `{ id }`
+- `updateFeatureRunPhase(db, runId, phase)` → updates `currentPhase`
+- `completeFeatureRun(db, runId)` → sets `completedAt` and `currentPhase = 'completed'`
+- `failFeatureRun(db, runId)` → sets `completedAt` and `currentPhase = 'failed'`
+- `createSandboxRecord(db, data)` → inserts into `sandboxes`
+- `updateSandboxStatus(db, sandboxId, status)` → updates sandbox status
+- `createSnapshotRecord(db, data)` → inserts into `sandboxSnapshots`
+- `createPhaseResult(db, data)` → inserts into `phaseResults` with status `running`, returns `{ id }`
+- `passPhaseResult(db, phaseResultId, output)` → sets status `passed`, output, completedAt
+- `failPhaseResult(db, phaseResultId)` → sets status `failed`, completedAt
+- `createAgentInvocation(db, data)` → inserts into `agentInvocations`, returns `{ id }`
+- `completeAgentInvocation(db, invocationId, data)` → updates with all output fields, usage, completedAt
+- `createAgentStep(db, data)` → inserts into `agentSteps`
+- `createToolCall(db, data)` → inserts into `toolCalls`
+- `createMemoryRecord(db, data)` → inserts into `memoryRecords`
+- `getMemoryRecords(db, runId)` → selects all memory records for a run, ordered by createdAt
+- `createCtaEvent(db, data)` → inserts into `ctaEvents`
+- `completeCtaEvent(db, ctaId, responseData)` → updates with response fields, respondedAt
+- `timeoutCtaEvent(db, ctaId)` → sets timedOut = true
+
+Each function uses explicit column selection (no `SELECT *`). Each function returns only `{ id }` from inserts.
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/lib/pipeline/persistence.ts
+git commit -m "feat: add pipeline persistence layer for all agent schema tables"
+```
+
+### Task 4: Create memory record tool and injection
+
+**Files:**
+- Create: `src/lib/agent/memory.ts`
+
+**Step 1: Create the memory tool and injection utilities**
+
+This module provides:
+
+1. `createMemoryTool` — AI SDK tool definition (no execute function, dispatched by orchestrator loop):
+```typescript
+tool({
+    description: "Create a memory record...",
+    inputSchema: z.object({
+        kind: z.enum(["insight", "failure", "decision", "constraint"]),
+        content: z.string().min(1)
+    })
+})
+```
+
+2. `formatMemoriesForPrompt(memories)` — Takes an array of memory records from the DB and formats them as a string block for system prompt injection:
+```
+## Memory Records from Previous Phases
+
+### Insights
+- [analysis] The auth middleware chains through 3 layers...
+
+### Decisions
+- [approaches] Chose approach B because...
+```
+
+Groups by kind, prefixes each with `[phase]`, returns empty string if no memories.
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/lib/agent/memory.ts
+git commit -m "feat: add memory record tool and prompt injection utility"
+```
 
 ---
 
-## Sub-Plan A: Database Schema
+## Implementation Phase 3: Judge Agents
 
-**Dependencies:** None
+**Dependency:** Phase 1 (enums for agentType).
 
-**Produces:** `src/db/schemas/agent.ts`, updated `drizzle.config.ts`, updated `src/db/index.ts`
+### Task 5: Create specialist judge agent configs
 
-### Contract (non-negotiable)
+**Files:**
+- Create: `src/lib/agent/judges/security.ts`
+- Create: `src/lib/agent/judges/bug-hunter.ts`
+- Create: `src/lib/agent/judges/compatibility.ts`
+- Create: `src/lib/agent/judges/performance.ts`
+- Create: `src/lib/agent/judges/quality.ts`
+- Create: `src/lib/agent/judges/meta.ts`
 
-These table and column names are referenced by every downstream sub-plan. Renaming any of them requires updating all consumers.
+**Step 1: Create each judge agent config**
 
-**Enum values:**
+Each judge follows the same pattern as `src/lib/agent/explorer.ts` — a module exporting `model`, `MAX_STEPS`, `tools`, and a `buildInstructions(context)` function.
 
-| Enum | Values |
+All judges use:
+- Model: `anthropic("claude-sonnet-4-6")` (same as orchestrator — judges need good reasoning)
+- MAX_STEPS: 20
+- Tools: `readTool`, `globTool`, `grepTool` (read-only, same as explorer)
+
+Each judge has a specialized system prompt that instructs it to:
+- Evaluate the approach against its specific criterion
+- Return a structured verdict (pass/concern/fail) with findings
+- Produce severity-tagged findings (critical/major/minor)
+
+The meta-judge is different:
+- Receives all judge verdicts as input (not via tools)
+- Synthesizes into overall verdict
+- No sandbox tools needed — pure reasoning
+- Tools: none (just `create_memory`)
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/lib/agent/judges/
+git commit -m "feat: add specialist judge agent configs (security, bugs, compat, perf, quality, meta)"
+```
+
+---
+
+## Implementation Phase 4: Quality Gate Runners
+
+**Dependency:** Phase 1 (schema), existing sandbox/bash infrastructure.
+
+### Task 6: Create quality gate runner utilities
+
+**Files:**
+- Create: `src/lib/pipeline/quality-gates.ts`
+
+**Step 1: Create the quality gate module**
+
+Functions that connect to a sandbox and run quality checks:
+
+- `runTypecheck(sandbox)` → runs `tsc --noEmit` via sandbox bash, returns `{ gate: 'typecheck', status: 'passed' | 'failed', output: string }`
+- `runLint(sandbox)` → runs `bun lint` via sandbox bash
+- `runTests(sandbox)` → runs `bun test` via sandbox bash
+- `runBuild(sandbox)` → runs `bun build` via sandbox bash
+- `runAllGates(sandbox)` → runs all four sequentially, returns array of results. Stops on first failure (no point linting if typecheck fails).
+
+Each function:
+1. Executes the command via `sandbox.runCommand()`
+2. Captures stdout, stderr, exitCode
+3. Returns structured result with the full output
+4. Does NOT throw on failure — returns `status: 'failed'` with the error output
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/lib/pipeline/quality-gates.ts
+git commit -m "feat: add quality gate runners for typecheck, lint, test, build"
+```
+
+---
+
+## Implementation Phase 5: Phase Orchestrator Functions
+
+**Dependency:** Phases 1-4 (schema, events, persistence, judges, gates).
+
+### Task 7: Create shared phase orchestrator utilities
+
+**Files:**
+- Create: `src/lib/pipeline/phase-loop.ts`
+
+**Step 1: Create shared utilities for phase orchestrators**
+
+Extract the patterns from `orchestrate.ts` that all phase orchestrators share:
+
+- `dispatchSubagent(step, targetFunction, input, stepIndex, toolCallId, logger)` → wraps `step.invoke()`, returns `ToolResultPart`
+- `dispatchHumanFeedback(step, input, stepIndex, runId, logger)` → wraps `step.sendEvent()` + `step.waitForEvent()`, returns `ToolResultPart`
+- `dispatchMemoryCreation(step, input, runId, phaseResultId, invocationId, phase, db)` → persists memory record to DB, returns `ToolResultPart`
+- `runAgentLoop(config)` → the generic agent loop pattern:
+  - Takes: `{ model, system, messages, tools, maxSteps, step, logger, onToolCall }`
+  - Runs the think → dispatch → inject loop
+  - Returns: `{ text, stepCount, steps, toolCalls, usage }`
+  - The `onToolCall` callback handles tool-specific dispatch (spawn, CTA, memory)
+
+This is the DRY extraction of the loop in `orchestrate.ts` lines 156-232, parameterized for reuse across all phase orchestrators.
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/lib/pipeline/phase-loop.ts
+git commit -m "feat: add shared phase orchestrator loop utilities"
+```
+
+### Task 8: Create Analysis phase orchestrator
+
+**Files:**
+- Create: `src/inngest/functions/pipeline/analysis.ts`
+
+**Step 1: Create the analysis Inngest function**
+
+This function:
+1. Receives `paul/pipeline/analysis` event
+2. Connects to sandbox via `connectSandbox()`
+3. Builds system prompt: analysis-specific instructions + memory records + feature request
+4. Runs the agent loop with tools: `spawn_subagent` (explorer only), `request_human_feedback`, `create_memory`
+5. The orchestrator explores the codebase, identifies affected systems, constraints, risks
+6. Returns the analysis output (affectedSystems, architecturalConstraints, risks, codebaseMap, feasibilityAssessment)
+
+System prompt instructs the orchestrator to:
+- Break the codebase into logical areas and spawn explorers for each
+- Identify which files, modules, and systems the feature will touch
+- List architectural constraints and risks
+- Produce a feasibility assessment
+- Create memory records for key findings
+- Request CTA if the feature request is ambiguous
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/inngest/functions/pipeline/analysis.ts
+git commit -m "feat: add analysis phase orchestrator"
+```
+
+### Task 9: Create Approaches phase orchestrator
+
+**Files:**
+- Create: `src/inngest/functions/pipeline/approaches.ts`
+
+**Step 1: Create the approaches Inngest function**
+
+This function:
+1. Receives `paul/pipeline/approaches` event (includes analysisOutput)
+2. Connects to sandbox
+3. Builds system prompt: approach generation instructions + analysis context + memories
+4. Runs the agent loop with tools: `spawn_subagent` (explorer only), `request_human_feedback`, `create_memory`
+5. Generates 2+ approaches (or 1 with justification), each with title, summary, rationale, implementation plan, affected files, trade-offs, validated assumptions
+6. Returns the approaches output
+
+System prompt instructs the orchestrator to:
+- Review the analysis output for context
+- Generate distinct approaches (minimum 2 unless justified)
+- For each approach, spawn explorers to validate key technical assumptions
+- Steelman each approach — make the strongest case
+- If generating only 1 approach, explain why alternatives aren't worth exploring
+- Create memory records for key decisions
+- Fire CTA if uncertain about direction
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/inngest/functions/pipeline/approaches.ts
+git commit -m "feat: add approaches phase orchestrator"
+```
+
+### Task 10: Create Judging phase orchestrator
+
+**Files:**
+- Create: `src/inngest/functions/pipeline/judging.ts`
+- Create: `src/inngest/functions/pipeline/judge-runner.ts`
+
+**Step 1: Create the judge runner Inngest function**
+
+A generic Inngest function that runs a single judge agent. Takes the judge's system prompt, tools, and context. Returns the judge's verdict. This is invoked by the judging orchestrator via `step.invoke()` for each specialist.
+
+Event: `paul/pipeline/judge` (add to Inngest events)
+```typescript
+z.object({
+    runId: z.string().uuid(),
+    sandboxId: z.string().min(1),
+    criterion: z.string().min(1),
+    systemPrompt: z.string().min(1),
+    approachContext: z.unknown()
+})
+```
+
+**Step 2: Create the judging orchestrator Inngest function**
+
+This function:
+1. Receives `paul/pipeline/judging` event (includes selectedApproach, analysisOutput)
+2. Connects to sandbox
+3. Spawns 5 specialist judge agents in parallel via `step.invoke()`:
+   - Security Reviewer
+   - Bug Hunter
+   - Backwards Compatibility Checker
+   - Performance Analyst
+   - Code Quality Reviewer
+4. Collects all 5 verdicts
+5. Runs meta-judge (inline, not a subagent) to synthesize verdicts into overall verdict
+6. If any judge has `fail` verdict, overall is `rejected`
+7. If all pass with only minor concerns, overall is `approved`
+8. If major concerns but no failures, overall is `approved_with_conditions`
+9. Returns the judging output
+
+**Step 3: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 4: Commit**
+
+```bash
+git add src/inngest/functions/pipeline/judging.ts src/inngest/functions/pipeline/judge-runner.ts
+git commit -m "feat: add judging phase orchestrator with specialist judge dispatch"
+```
+
+### Task 11: Create Implementation phase orchestrator
+
+**Files:**
+- Create: `src/inngest/functions/pipeline/implementation.ts`
+
+**Step 1: Create the implementation Inngest function**
+
+This function:
+1. Receives `paul/pipeline/implementation` event (includes selectedApproach, analysisOutput, judgingOutput)
+2. Connects to sandbox
+3. Creates a feature branch in the sandbox (`git checkout -b feat/<feature-name>`)
+4. Orchestrator-managed retry loop (max 5 attempts):
+   a. Spawn a fresh coder agent with full context (approach, analysis, judging conditions, previous failure output if retry)
+   b. Coder writes code in the sandbox
+   c. Run quality gates: typecheck → lint → test → build
+   d. If all gates pass: break, success
+   e. If gate fails: capture failure output, continue loop with next fresh coder
+5. If all 5 attempts fail, the phase fails
+6. Returns implementation output (branch, filesChanged, gateResults)
+
+System prompt for each coder attempt includes:
+- The selected approach's implementation plan
+- The analysis codebase map
+- Any judging conditions to address
+- Previous attempt's failure output (if retry): "The previous attempt failed because: [gate output]. Fix these issues."
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/inngest/functions/pipeline/implementation.ts
+git commit -m "feat: add implementation phase orchestrator with coder retry loop"
+```
+
+---
+
+## Implementation Phase 6: Master Orchestrator & PR Creation
+
+**Dependency:** Phase 5 (all phase orchestrators).
+
+### Task 12: Create PR creation utility
+
+**Files:**
+- Create: `src/lib/pipeline/pr-creation.ts`
+
+**Step 1: Create the PR creation module**
+
+Deterministic function (no LLM) that:
+1. Takes: `sandboxId`, `branch`, `githubRepoUrl`, `prompt`, `analysisOutput`, `approachOutput`, `implOutput`
+2. Pushes the feature branch to GitHub via sandbox bash (`git push origin <branch>`)
+   - This is the ONLY place git push is allowed — the sandbox bash ban in `fs/operations.ts` stays for agent tool calls
+   - PR creation runs via `step.run()` in the master orchestrator, not via agent tools
+3. Creates a PR via GitHub CLI (`gh pr create`) or GitHub API
+4. Generates PR title from the feature prompt
+5. Generates PR body with summary of analysis, approach, and implementation
+6. Returns `{ prUrl, prNumber, title, body }`
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/lib/pipeline/pr-creation.ts
+git commit -m "feat: add PR creation utility for feature pipeline"
+```
+
+### Task 13: Create master feature-run orchestrator
+
+**Files:**
+- Create: `src/inngest/functions/pipeline/feature-run.ts`
+
+**Step 1: Create the master Inngest function**
+
+This is the top-level entry point. It:
+
+1. Receives `paul/pipeline/feature-run` event
+2. Creates a `featureRuns` row in PG (status: analysis)
+3. Creates a sandbox via `step.invoke(sandboxCreateFunction, { runtime, github })`
+4. Persists sandbox metadata to `sandboxes` table
+5. Runs the phase loop:
+
+```
+for each phase in [analysis, approaches, judging, implementation]:
+    a. Create phase_result row (status = 'running')
+    b. Fetch memory records from DB
+    c. step.invoke(phaseFunction, { runId, sandboxId, prompt, memories, ...previousOutputs })
+    d. Persist phase output to phase_result (status = 'passed')
+    e. Update feature_runs.currentPhase to next phase
+
+    If phase returns failure:
+        failPhaseResult(phaseResultId)
+        failFeatureRun(runId)
+        Stop sandbox
+        Return { status: 'failed', failedPhase: phase }
+```
+
+6. After implementation passes, run PR creation:
+   a. Create phase_result for 'pr' phase
+   b. `step.run('create-pr', () => createPR(...))`
+   c. Pass phase result
+   d. Update feature_runs to 'completed'
+
+7. Stop the sandbox
+8. Return `{ status: 'completed', prUrl }`
+
+Between phases, the master function fires a CTA asking the user to approve before proceeding. This is built into the phase loop — after each `step.invoke()` returns successfully, the master fires a CTA:
+- After Analysis: "Here's what I found about your codebase. Approve to proceed to approach generation?"
+- After Approaches: "Here are N approaches. Which one should I pursue?" (choice CTA)
+- After Judging: "The approach passed review. Approve to begin implementation?"
+- After Implementation: "Implementation complete, all gates pass. Approve to create PR?"
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/inngest/functions/pipeline/feature-run.ts
+git commit -m "feat: add master feature-run orchestrator with phase loop"
+```
+
+### Task 14: Update Inngest function registry
+
+**Files:**
+- Modify: `src/inngest/functions/index.ts`
+
+**Step 1: Register all new functions**
+
+Add imports and exports for:
+- `featureRunFunction` from `pipeline/feature-run`
+- `analysisFunction` from `pipeline/analysis`
+- `approachesFunction` from `pipeline/approaches`
+- `judgingFunction` from `pipeline/judging`
+- `judgeRunnerFunction` from `pipeline/judge-runner`
+- `implementationFunction` from `pipeline/implementation`
+
+Add all to the exported `functions` array.
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/inngest/functions/index.ts
+git commit -m "feat: register all pipeline functions in Inngest function registry"
+```
+
+---
+
+## Implementation Phase 7: Integration Wiring
+
+### Task 15: Add judge event to Inngest schema
+
+**Files:**
+- Modify: `src/inngest/index.ts`
+
+**Step 1: Add the judge runner event**
+
+```typescript
+"paul/pipeline/judge": z.object({
+    runId: z.string().uuid(),
+    sandboxId: z.string().min(1),
+    criterion: z.string().min(1),
+    systemPrompt: z.string().min(1),
+    approachContext: z.unknown()
+})
+```
+
+**Step 2: Verify typecheck**
+
+Run: `bun typecheck`
+Expected: PASS
+
+**Step 3: Commit**
+
+```bash
+git add src/inngest/index.ts
+git commit -m "feat: add judge runner event to Inngest schema"
+```
+
+### Task 16: End-to-end typecheck and lint
+
+**Step 1: Run full typecheck**
+
+Run: `bun typecheck`
+Expected: PASS — all files compile cleanly
+
+**Step 2: Run full lint**
+
+Run: `bun lint:all`
+Expected: PASS — all files pass Biome + GritQL + super-lint
+
+**Step 3: Fix any issues and commit**
+
+```bash
+git add -A
+git commit -m "fix: resolve any typecheck or lint issues from pipeline integration"
+```
+
+---
+
+## File Summary
+
+### New Files (15)
+
+| File | Purpose |
+|------|---------|
+| `src/db/schemas/agent.ts` | All 10 pipeline tables + enums |
+| `src/lib/pipeline/persistence.ts` | DB persistence helpers |
+| `src/lib/pipeline/quality-gates.ts` | Sandbox quality gate runners |
+| `src/lib/pipeline/phase-loop.ts` | Shared agent loop utilities |
+| `src/lib/pipeline/pr-creation.ts` | PR creation utility |
+| `src/lib/agent/memory.ts` | Memory tool + prompt injection |
+| `src/lib/agent/judges/security.ts` | Security reviewer judge config |
+| `src/lib/agent/judges/bug-hunter.ts` | Bug hunter judge config |
+| `src/lib/agent/judges/compatibility.ts` | Compatibility checker judge config |
+| `src/lib/agent/judges/performance.ts` | Performance analyst judge config |
+| `src/lib/agent/judges/quality.ts` | Code quality reviewer judge config |
+| `src/lib/agent/judges/meta.ts` | Meta-judge synthesizer config |
+| `src/inngest/functions/pipeline/feature-run.ts` | Master orchestrator |
+| `src/inngest/functions/pipeline/analysis.ts` | Analysis phase |
+| `src/inngest/functions/pipeline/approaches.ts` | Approaches phase |
+| `src/inngest/functions/pipeline/judging.ts` | Judging phase |
+| `src/inngest/functions/pipeline/judge-runner.ts` | Individual judge runner |
+| `src/inngest/functions/pipeline/implementation.ts` | Implementation phase |
+
+### Modified Files (3)
+
+| File | Change |
 |------|--------|
-| `sandboxStatus` | `pending`, `running`, `stopping`, `stopped`, `failed`, `aborted`, `snapshotting` |
-| `sandboxSourceType` | `git`, `tarball`, `snapshot`, `empty` |
-| `snapshotStatus` | `created`, `deleted`, `failed` |
-| `featurePhase` | `analysis`, `approaches`, `judging`, `implementation`, `pr`, `completed`, `failed` |
-| `phaseStatus` | `running`, `passed`, `failed` |
-| `agentType` | `orchestrator`, `explorer`, `coder`, `judge`, `meta_judge` |
-| `finishReason` | `stop`, `length`, `content-filter`, `tool-calls`, `error`, `other` |
-| `toolOutputType` | `text`, `json`, `execution-denied`, `error-text`, `error-json`, `content` |
-| `memoryKind` | `insight`, `failure`, `decision`, `constraint` |
-| `ctaKind` | `approval`, `text`, `choice` |
-
-**Table names:** `sandboxes`, `sandboxSnapshots`, `featureRuns`, `phaseResults`, `agentInvocations`, `agentSteps`, `toolCalls`, `memoryRecords`, `ctaEvents`
-
-**Schema namespace:** `agent` (via `pgSchema("agent")`)
-
-All column names and types as specified in the design doc section "Data Model."
-
-### Internal (can change freely)
-
-- Index strategy (which indexes, composite vs single)
-- Cascade behavior on FKs
-- Default values
-- Column ordering within tables
-
-### Steps
-
-1. Create `src/db/schemas/agent.ts` with all enums and 9 tables, columns per design doc
-2. Update `drizzle.config.ts`: schema → `"./src/db/schemas/agent.ts"`, schemaFilter → `["agent"]`
-3. Update `src/db/index.ts`: import `* as agent` instead of `* as core`
-4. Delete `src/db/schemas/core.ts`, grep for stale references
-5. `bun typecheck` — must pass
-6. Commit: `feat: replace core schema with agent schema`
-7. `bun db:generate` — HUMAN REVIEW the migration SQL
-8. `bun db:push` — apply to database
-
----
-
-## Sub-Plan B: Event Contract
-
-**Dependencies:** None
-
-**Produces:** Modified `src/inngest/index.ts` with new event schemas
-
-### Contract (non-negotiable)
-
-These event names and payload shapes are the interface between the master orchestrator and each phase. Every phase orchestrator and the master depend on these exact names and shapes.
-
-| Event Name | Payload Fields |
-|------------|---------------|
-| `paul/pipeline/feature-run` | `prompt: string`, `githubRepoUrl: string`, `githubBranch: string`, `runtime: "node24" \| "node22" \| "python3.13"` |
-| `paul/pipeline/analysis` | `runId: uuid`, `sandboxId: string`, `prompt: string`, `githubRepoUrl: string`, `githubBranch: string`, `memories: MemoryRecord[]` |
-| `paul/pipeline/approaches` | `runId: uuid`, `sandboxId: string`, `prompt: string`, `githubRepoUrl: string`, `githubBranch: string`, `analysisOutput: unknown`, `memories: MemoryRecord[]` |
-| `paul/pipeline/judging` | `runId: uuid`, `sandboxId: string`, `prompt: string`, `githubRepoUrl: string`, `githubBranch: string`, `selectedApproach: unknown`, `analysisOutput: unknown`, `memories: MemoryRecord[]` |
-| `paul/pipeline/implementation` | `runId: uuid`, `sandboxId: string`, `prompt: string`, `githubRepoUrl: string`, `githubBranch: string`, `selectedApproach: unknown`, `analysisOutput: unknown`, `judgingOutput: unknown`, `memories: MemoryRecord[]` |
-| `paul/pipeline/judge` | `runId: uuid`, `sandboxId: string`, `criterion: string`, `systemPrompt: string`, `approachContext: unknown` |
-
-**Shared type:**
-```typescript
-MemoryRecord = { phase: string, kind: string, content: string }
-```
-
-### Internal (can change freely)
-
-- Zod refinements (min lengths, regex patterns)
-- Default values
-- Whether fields use `.url()` vs `.string()`
-- Additional optional fields (adding fields is safe, removing/renaming is not)
-
-### Steps
-
-1. Add all 6 event schemas to `src/inngest/index.ts` schema object
-2. `bun typecheck` — must pass
-3. Commit: `feat: add feature pipeline event schemas`
-
----
-
-## Sub-Plan C: Persistence Layer
-
-**Dependencies:** A (Schema)
-
-**Produces:** `src/lib/pipeline/persistence.ts`
-
-### Contract (non-negotiable)
-
-These function signatures are called by every phase orchestrator and the master. Renaming functions or changing parameter shapes breaks all consumers.
-
-```typescript
-// Feature Runs
-createFeatureRun(db, data) → { id: string }
-updateFeatureRunPhase(db, runId, phase) → void
-completeFeatureRun(db, runId) → void
-failFeatureRun(db, runId) → void
-
-// Sandboxes
-createSandboxRecord(db, data) → void
-updateSandboxStatus(db, sandboxId, status) → void
-createSnapshotRecord(db, data) → void
-
-// Phase Results
-createPhaseResult(db, data) → { id: string }
-passPhaseResult(db, phaseResultId, output) → void
-failPhaseResult(db, phaseResultId) → void
-
-// Agent Invocations
-createAgentInvocation(db, data) → { id: string }
-completeAgentInvocation(db, invocationId, data) → void
-
-// Agent Steps & Tool Calls
-createAgentStep(db, data) → void
-createToolCall(db, data) → void
-
-// Memory Records
-createMemoryRecord(db, data) → void
-getMemoryRecords(db, runId) → { phase: string, kind: string, content: string, createdAt: Date }[]
-
-// CTA Events
-createCtaEvent(db, data) → void
-completeCtaEvent(db, ctaId, responseData) → void
-timeoutCtaEvent(db, ctaId) → void
-```
-
-### Internal (can change freely)
-
-- Internal query implementation (raw SQL vs query builder)
-- Which columns are selected in reads (as long as return type is met)
-- Transaction handling strategy
-- Error handling within functions (as long as they throw on failure)
-
-### Steps
-
-1. Create `src/lib/pipeline/persistence.ts` with all functions above
-2. Each insert function uses explicit column selection (no `returning()` without columns)
-3. Each read function uses explicit `.select({...})` (no implicit `SELECT *`)
-4. `bun typecheck` — must pass
-5. Commit: `feat: add pipeline persistence layer`
-
----
-
-## Sub-Plan D: Memory Tool
-
-**Dependencies:** None
-
-**Produces:** `src/lib/agent/memory.ts`
-
-### Contract (non-negotiable)
-
-The tool name and input schema are what phase orchestrators dispatch against. The prompt format is what all phase system prompts expect.
-
-**Tool name:** `create_memory`
-
-**Tool input schema:**
-```typescript
-{
-    kind: "insight" | "failure" | "decision" | "constraint",
-    content: string
-}
-```
-
-**`formatMemoriesForPrompt(memories)` signature:**
-- Input: `{ phase: string, kind: string, content: string }[]`
-- Output: `string` (formatted markdown block, or empty string if no memories)
-
-### Internal (can change freely)
-
-- Tool description text
-- Markdown formatting style (headers, bullets, ordering)
-- How memories are grouped/sorted
-
-### Steps
-
-1. Create `src/lib/agent/memory.ts` with `createMemoryTool` (AI SDK tool, no execute function) and `formatMemoriesForPrompt`
-2. `bun typecheck` — must pass
-3. Commit: `feat: add memory record tool and prompt injection`
-
----
-
-## Sub-Plan E: Judge Agent Configs
-
-**Dependencies:** None
-
-**Produces:** `src/lib/agent/judges/{security,bug-hunter,compatibility,performance,quality,meta}.ts`
-
-### Contract (non-negotiable)
-
-**Judge output schema** — every judge must return this shape (the judging orchestrator parses it):
-
-```typescript
-{
-    criterion: string
-    verdict: "pass" | "concern" | "fail"
-    findings: {
-        severity: "critical" | "major" | "minor"
-        description: string
-        recommendation: string
-    }[]
-    overallAssessment: string
-}
-```
-
-**Module export pattern** — each judge module exports:
-```typescript
-{ model, MAX_STEPS, tools, buildInstructions(context) }
-```
-
-**Judge identifiers** (used by judging orchestrator to map configs):
-`security`, `bug-hunter`, `compatibility`, `performance`, `quality`
-
-**Meta-judge** has a different signature — no sandbox tools, receives verdicts as input.
-
-### Internal (can change freely)
-
-- Which model each judge uses
-- MAX_STEPS per judge
-- System prompt content (as long as output matches the schema above)
-- Which tools each judge has access to
-- How the meta-judge synthesizes verdicts
-
-### Steps
-
-1. Create 5 specialist judge configs following the `explorer.ts` pattern (model, MAX_STEPS, tools, buildInstructions)
-2. Create meta-judge config (no sandbox tools, receives verdicts, produces synthesized verdict)
-3. `bun typecheck` — must pass
-4. Commit: `feat: add specialist judge agent configs`
-
----
-
-## Sub-Plan F: Quality Gate Runners
-
-**Dependencies:** None
-
-**Produces:** `src/lib/pipeline/quality-gates.ts`
-
-### Contract (non-negotiable)
-
-**Gate result shape** — the implementation orchestrator parses this:
-```typescript
-{
-    gate: "typecheck" | "lint" | "test" | "build"
-    status: "passed" | "failed"
-    output: string
-}
-```
-
-**Function signatures:**
-```typescript
-runTypecheck(sandbox) → GateResult
-runLint(sandbox) → GateResult
-runTests(sandbox) → GateResult
-runBuild(sandbox) → GateResult
-runAllGates(sandbox) → GateResult[]
-```
-
-**`runAllGates` behavior:** Runs gates in order (typecheck → lint → test → build). Stops on first failure. Returns array of results for all gates run.
-
-### Internal (can change freely)
-
-- Exact commands run in sandbox (e.g., `tsc --noEmit` vs `bun typecheck`)
-- Timeout per gate
-- How stdout/stderr are captured and formatted
-- Whether to retry transient failures
-
-### Steps
-
-1. Create `src/lib/pipeline/quality-gates.ts` with all 5 functions
-2. Each uses `sandbox.runCommand()` to execute, captures stdout/stderr/exitCode
-3. Never throws on gate failure — returns `status: 'failed'` with output
-4. `bun typecheck` — must pass
-5. Commit: `feat: add quality gate runners`
-
----
-
-## Sub-Plan G: Phase Loop Utilities
-
-**Dependencies:** None (references existing `orchestrate.ts` patterns but doesn't import from it)
-
-**Produces:** `src/lib/pipeline/phase-loop.ts`
-
-### Contract (non-negotiable)
-
-**`runAgentLoop` config shape:**
-```typescript
-{
-    model: LanguageModel
-    system: string
-    initialMessages: ModelMessage[]
-    tools: ToolSet
-    maxSteps: number
-    step: InngestStep
-    logger: Logger
-    onToolCall: (toolCall: StaticToolCall) → Promise<ToolResultPart>
-}
-```
-
-**`runAgentLoop` return shape:**
-```typescript
-{
-    text: string
-    stepCount: number
-    finishReason: string
-}
-```
-
-**`buildToolResult` signature:**
-```typescript
-buildToolResult(toolCallId: string, toolName: string, value: unknown) → ToolResultPart
-```
-
-### Internal (can change freely)
-
-- Loop implementation details (how messages accumulate, how tool results are injected)
-- Logging within the loop
-- How `onToolCall` errors are handled
-- Step naming convention (`think-${i}` etc.)
-
-### Steps
-
-1. Create `src/lib/pipeline/phase-loop.ts` — extract the generic loop from `orchestrate.ts` lines 156-232 into `runAgentLoop`
-2. Also export `buildToolResult` (already exists in `orchestrate.ts` — DRY extraction)
-3. `bun typecheck` — must pass
-4. Commit: `feat: add shared phase loop utilities`
-
----
-
-## Sub-Plan H: Analysis Orchestrator
-
-**Dependencies:** B (Events), C (Persistence), D (Memory), G (Phase Loop)
-
-**Produces:** `src/inngest/functions/pipeline/analysis.ts`
-
-### Contract (non-negotiable)
-
-**Inngest function ID:** `paul/pipeline/analysis`
-
-**Trigger event:** `paul/pipeline/analysis` (from Sub-Plan B)
-
-**Return shape (the master orchestrator parses this):**
-```typescript
-{
-    affectedSystems: string[]
-    architecturalConstraints: string[]
-    risks: string[]
-    codebaseMap: {
-        path: string
-        purpose: string
-        relevance: string
-    }[]
-    feasibilityAssessment: string
-}
-```
-
-### Internal (can change freely)
-
-- System prompt content
-- Which subagents are spawned and how
-- How many explorers run in parallel
-- When CTAs are fired
-- How the output is assembled from subagent results
-
-### Steps
-
-1. Create `src/inngest/functions/pipeline/analysis.ts`
-2. Inngest function: receives event, connects to sandbox, builds system prompt with memories, runs `runAgentLoop`, persists invocation data via persistence layer, returns structured output
-3. System prompt instructs: break codebase into areas, spawn explorers, identify affected systems, list constraints/risks, create memories
-4. `bun typecheck` — must pass
-5. Commit: `feat: add analysis phase orchestrator`
-
----
-
-## Sub-Plan I: Approaches Orchestrator
-
-**Dependencies:** B (Events), C (Persistence), D (Memory), G (Phase Loop)
-
-**Produces:** `src/inngest/functions/pipeline/approaches.ts`
-
-### Contract (non-negotiable)
-
-**Inngest function ID:** `paul/pipeline/approaches`
-
-**Trigger event:** `paul/pipeline/approaches` (from Sub-Plan B)
-
-**Return shape:**
-```typescript
-{
-    approaches: {
-        id: string
-        title: string
-        summary: string
-        rationale: string
-        implementation: string
-        affectedFiles: string[]
-        tradeoffs: { pros: string[], cons: string[] }
-        assumptions: {
-            claim: string
-            validated: boolean
-            evidence: string
-        }[]
-        estimatedComplexity: "low" | "medium" | "high"
-    }[]
-    recommendation: string
-    singleApproachJustification?: string
-}
-```
-
-### Internal (can change freely)
-
-- System prompt content
-- How approaches are generated (sequential vs parallel explorers)
-- Steelmanning strategy
-- When CTAs are fired
-- Minimum approach count enforcement
-
-### Steps
-
-1. Create `src/inngest/functions/pipeline/approaches.ts`
-2. Receives analysis output in event, builds system prompt with analysis context + memories
-3. Runs `runAgentLoop`, spawns explorers to validate assumptions
-4. System prompt instructs: generate 2+ approaches, steelman each, validate assumptions, create memories
-5. `bun typecheck` — must pass
-6. Commit: `feat: add approaches phase orchestrator`
-
----
-
-## Sub-Plan J: Judging Orchestrator
-
-**Dependencies:** B (Events), C (Persistence), D (Memory), E (Judge Configs), G (Phase Loop)
-
-**Produces:** `src/inngest/functions/pipeline/judging.ts`, `src/inngest/functions/pipeline/judge-runner.ts`
-
-### Contract (non-negotiable)
-
-**Inngest function IDs:** `paul/pipeline/judging`, `paul/pipeline/judge`
-
-**Trigger events:** `paul/pipeline/judging`, `paul/pipeline/judge` (from Sub-Plan B)
-
-**Judging return shape:**
-```typescript
-{
-    selectedApproachId: string
-    judgeVerdicts: JudgeVerdict[]       // From Sub-Plan E contract
-    overallVerdict: "approved" | "approved_with_conditions" | "rejected"
-    conditions: string[]
-    rejectionReason?: string
-    synthesizedRisks: string[]
-}
-```
-
-**Judge runner return shape:** The judge output schema from Sub-Plan E.
-
-### Internal (can change freely)
-
-- How judges are dispatched (parallel vs sequential)
-- Meta-judge implementation (inline LLM call vs separate function)
-- How verdicts are aggregated into overall verdict
-- Thresholds for approved/conditions/rejected
-
-### Steps
-
-1. Create `src/inngest/functions/pipeline/judge-runner.ts` — generic Inngest function that runs one judge agent against the sandbox
-2. Create `src/inngest/functions/pipeline/judging.ts` — spawns 5 judges in parallel via `step.invoke(judgeRunnerFunction)`, collects verdicts, runs meta-judge synthesis
-3. `bun typecheck` — must pass
-4. Commit: `feat: add judging phase orchestrator`
-
----
-
-## Sub-Plan K: Implementation Orchestrator
-
-**Dependencies:** B (Events), C (Persistence), D (Memory), F (Quality Gates), G (Phase Loop)
-
-**Produces:** `src/inngest/functions/pipeline/implementation.ts`
-
-### Contract (non-negotiable)
-
-**Inngest function ID:** `paul/pipeline/implementation`
-
-**Trigger event:** `paul/pipeline/implementation` (from Sub-Plan B)
-
-**Return shape:**
-```typescript
-{
-    branch: string
-    filesChanged: {
-        path: string
-        changeType: "added" | "modified" | "deleted"
-    }[]
-    gateResults: {
-        gate: "typecheck" | "lint" | "test" | "build"
-        status: "passed" | "failed"
-        output: string
-        attempts: number
-    }[]
-    totalCoderAttempts: number
-    conditionsAddressed: string[]
-}
-```
-
-### Internal (can change freely)
-
-- Max coder retry count
-- How failure context is injected into retry prompts
-- Feature branch naming convention
-- How `filesChanged` is detected (git diff parsing, etc.)
-- Coder system prompt content
-
-### Steps
-
-1. Create `src/inngest/functions/pipeline/implementation.ts`
-2. Creates feature branch, runs orchestrator-managed retry loop (fresh coder per attempt)
-3. After each coder, runs `runAllGates()` from Sub-Plan F
-4. On gate failure, spawns fresh coder with failure output
-5. On all gates pass, returns implementation output
-6. `bun typecheck` — must pass
-7. Commit: `feat: add implementation phase orchestrator`
-
----
-
-## Sub-Plan L: PR Creation
-
-**Dependencies:** None
-
-**Produces:** `src/lib/pipeline/pr-creation.ts`
-
-### Contract (non-negotiable)
-
-**Function signature:**
-```typescript
-createPR(sandbox, config: {
-    branch: string
-    githubRepoUrl: string
-    prompt: string
-    analysisOutput: unknown
-    approachOutput: unknown
-    implOutput: unknown
-}) → { prUrl: string, prNumber: number, title: string, body: string }
-```
-
-### Internal (can change freely)
-
-- PR title generation logic
-- PR body format and content
-- Whether git push uses SSH or HTTPS
-- Whether PR is created via `gh` CLI or GitHub API
-- How outputs are summarized into the PR body
-
-### Steps
-
-1. Create `src/lib/pipeline/pr-creation.ts` — deterministic function (no LLM)
-2. Pushes feature branch via sandbox bash (`git push origin <branch>`)
-3. Creates PR via `gh pr create` in sandbox
-4. Generates title from prompt, body from phase outputs
-5. `bun typecheck` — must pass
-6. Commit: `feat: add PR creation utility`
-
----
-
-## Sub-Plan M: Master Orchestrator + Registry
-
-**Dependencies:** B (Events), C (Persistence), H, I, J, K (all phase orchestrators), L (PR Creation)
-
-**Produces:** `src/inngest/functions/pipeline/feature-run.ts`, modified `src/inngest/functions/index.ts`
-
-### Contract (non-negotiable)
-
-**Inngest function ID:** `paul/pipeline/feature-run`
-
-**Trigger event:** `paul/pipeline/feature-run` (from Sub-Plan B)
-
-**Phase sequence:** `analysis → approaches → judging → implementation → pr`
-
-This is the only place that defines the phase ordering. All phase orchestrators are independent — the master decides when to invoke them and what data to pass.
-
-### Internal (can change freely)
-
-- CTA prompts between phases (what messages the user sees)
-- How phase outputs are threaded to the next phase
-- Sandbox lifecycle management (when to create, when to stop)
-- Error handling and failure reporting
-- How the feature_run DB record is updated
-
-### Steps
-
-1. Create `src/inngest/functions/pipeline/feature-run.ts` — master Inngest function
-2. Phase loop: for each phase, create phase_result, fetch memories, `step.invoke(phaseFunction)`, persist output, update currentPhase
-3. Between phases, fire CTA for user approval (after Approaches, use choice CTA for approach selection)
-4. After implementation, run PR creation via `step.run()`
-5. On any phase failure, fail the run and stop sandbox
-6. Update `src/inngest/functions/index.ts` — register all new pipeline functions
-7. `bun typecheck` — must pass
-8. `bun lint:all` — must pass
-9. Commit: `feat: add master feature-run orchestrator and register pipeline functions`
-
----
-
-## Suggested Build Order
-
-Given the DAG, here's one efficient execution order that maximizes parallelism:
-
-**Wave 1 (all leaf nodes, in parallel):**
-A, B, D, E, F, G, L
-
-**Wave 2 (needs A):**
-C
-
-**Wave 3 (needs B, C, D, G + optionally E, F):**
-H, I, J, K (all in parallel)
-
-**Wave 4 (needs everything):**
-M
+| `src/inngest/index.ts` | Add pipeline event schemas |
+| `src/inngest/functions/index.ts` | Register pipeline functions |
+| `src/db/index.ts` | Switch from core to agent schema |
+| `drizzle.config.ts` | Point to agent schema |
+
+### Deleted Files (1)
+
+| File | Reason |
+|------|--------|
+| `src/db/schemas/core.ts` | Replaced by agent schema |
