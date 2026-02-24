@@ -20,7 +20,11 @@ function createRealtimeSubscription<
 >(config: {
 	readonly source: {
 		readonly triggers: T
-		readonly resolved: ReadonlyArray<{ readonly operation: string; readonly label: string; readonly eventName: string }>
+		readonly resolved: ReadonlyArray<{
+			readonly operation: string
+			readonly label: string
+			readonly eventName: string
+		}>
 		readonly eventNames: string[]
 		readonly triggerConfigs: ReadonlyArray<Record<string, unknown>>
 		readonly appId: string

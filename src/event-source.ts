@@ -42,11 +42,7 @@ function createEventSource<
 	const TAppId extends string,
 	TTable extends Table,
 	const T extends readonly [EventSourceTrigger, ...EventSourceTrigger[]]
->(config: {
-	readonly appId: TAppId
-	readonly table: TTable
-	readonly triggers: T
-}) {
+>(config: { readonly appId: TAppId; readonly table: TTable; readonly triggers: T }) {
 	const firstTrigger = config.triggers[0]
 	const tableName = getTableName(config.table)
 	const firstResolved = resolveTrigger(config.appId, tableName, firstTrigger)

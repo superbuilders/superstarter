@@ -3,10 +3,11 @@
 /**
  * Style Linter - Design Token Enforcement
  *
- * Enforces design tokens by parsing globals.css and validating
- * that Tailwind classes only use allowed theme tokens.
+ * Loads the full Tailwind v4 design system (globals + tokens + component CSS)
+ * and validates that TSX classes resolve to actual CSS output.
  *
  * Rules:
+ *   - no-unresolved-class: Every Tailwind class must produce CSS (catches typos + broken @theme)
  *   - no-invalid-color: Require colors from theme (ban blue-500, gray-700, etc.)
  *   - no-arbitrary-color: Ban arbitrary color values (bg-[#fff], text-[rgb(...)])
  *   - no-arbitrary-spacing: Ban arbitrary spacing (p-[37px], gap-[18px], etc.)
@@ -29,6 +30,7 @@ import * as noArbitraryShadow from "@scripts/dev/style/rules/no-arbitrary-shadow
 import * as noArbitrarySpacing from "@scripts/dev/style/rules/no-arbitrary-spacing"
 import * as noDuplicateDataSlot from "@scripts/dev/style/rules/no-duplicate-data-slot"
 import * as noInvalidColor from "@scripts/dev/style/rules/no-invalid-color"
+import * as noUnresolvedClass from "@scripts/dev/style/rules/no-unresolved-class"
 import * as requireDataSlot from "@scripts/dev/style/rules/require-data-slot"
 import type { Violation } from "@scripts/dev/style/types"
 import * as errors from "@superbuilders/errors"
@@ -98,9 +100,16 @@ function outputText(violations: Violation[]): void {
 async function main(): Promise<void> {
 	const { useJsonOutput, specificPaths } = parseArgs()
 
-	logger.info("loading design system from globals.css")
+	logger.info("loading design system")
 	const designSystem = await loadDesignSystem()
-	logger.info("loaded design tokens", { colors: designSystem.allowedColors.size })
+	const animateCount = designSystem.themeNamespaces.get("--animate")?.size
+	const easeCount = designSystem.themeNamespaces.get("--ease")?.size
+	logger.info("loaded design system", {
+		colors: designSystem.allowedColors.size,
+		animations: animateCount,
+		easings: easeCount,
+		utilities: designSystem.classList.size
+	})
 
 	logger.info("creating TypeScript program")
 	const config = parseTsConfig()
@@ -123,6 +132,13 @@ async function main(): Promise<void> {
 		// Check class-based violations
 		const classes = extractClassesFromFile(sourceFile)
 		if (classes.length > 0) {
+			const unresolvedViolations = noUnresolvedClass.check(
+				classes,
+				designSystem,
+				sourceFile.fileName
+			)
+			allViolations.push(...unresolvedViolations)
+
 			const colorViolations = noInvalidColor.check(classes, designSystem, sourceFile.fileName)
 			allViolations.push(...colorViolations)
 

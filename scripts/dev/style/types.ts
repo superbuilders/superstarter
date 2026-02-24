@@ -4,6 +4,7 @@ type RuleId =
 	| "no-arbitrary-spacing"
 	| "no-arbitrary-radius"
 	| "no-arbitrary-shadow"
+	| "no-unresolved-class"
 	| "require-data-slot"
 	| "no-duplicate-data-slot"
 
