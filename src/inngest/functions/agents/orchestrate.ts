@@ -111,7 +111,7 @@ async function dispatchHumanFeedback(
 
 	const ctaResponse = await step.waitForEvent(`cta-wait-${stepIndex}`, {
 		event: "paul/cta/response",
-		if: `event.data.ctaId == "${ctaId}"`,
+		if: `async.data.ctaId == "${ctaId}"`,
 		timeout: CTA_TIMEOUT
 	})
 

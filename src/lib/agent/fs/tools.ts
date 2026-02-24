@@ -171,10 +171,41 @@ const editTool = tool({
 	execute: executeEdit
 })
 
+const BANNED_COMMANDS = [
+	{
+		pattern: /\bgit\s+push\b/,
+		message:
+			"BANNED: git push is not allowed. The sandbox GitHub token is read-only. " +
+			"All code changes stay local to the sandbox. If you need to persist changes, " +
+			"create a patch or diff and return it to the orchestrator."
+	},
+	{
+		pattern: /\bgit\s+remote\s+(add|set-url)\b/,
+		message:
+			"BANNED: modifying git remotes is not allowed. " +
+			"The sandbox operates on a read-only clone."
+	}
+]
+
+function checkBannedCommand(command: string): string | undefined {
+	for (const banned of BANNED_COMMANDS) {
+		if (banned.pattern.test(command)) {
+			return banned.message
+		}
+	}
+	return undefined
+}
+
 async function executeBash(
 	{ command }: { command: string },
 	{ experimental_context }: { experimental_context?: unknown }
 ) {
+	const bannedMessage = checkBannedCommand(command)
+	if (bannedMessage) {
+		logger.warn("banned command intercepted", { command: command.slice(0, 80) })
+		return { error: bannedMessage, stdout: "", stderr: bannedMessage, exitCode: 1 }
+	}
+
 	const sandbox = extractSandbox(experimental_context)
 	const result = await errors.try(bash(sandbox, command))
 	if (result.error) {
