@@ -34,6 +34,7 @@ type AgentLoopConfig = {
 	step: InngestStep
 	logger: Logger
 	onToolCall: (toolCall: StaticToolCallGeneric) => Promise<ToolResultPart>
+	experimentalContext?: Record<string, unknown>
 }
 
 type AgentLoopResult = {
@@ -136,7 +137,8 @@ async function runAgentLoop(config: AgentLoopConfig): Promise<AgentLoopResult> {
 					model: config.model,
 					system: config.system,
 					messages,
-					tools: config.tools
+					tools: config.tools,
+					experimental_context: config.experimentalContext
 				})
 			)
 			if (result.error) {
