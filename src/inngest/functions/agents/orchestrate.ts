@@ -7,7 +7,7 @@ import { codeFunction } from "@/inngest/functions/agents/code"
 import { exploreFunction } from "@/inngest/functions/agents/explore"
 import type { CtaRequestEvent } from "@/lib/agent/cta"
 import { CtaResponseEventSchema } from "@/lib/agent/cta"
-import { instructions, MAX_STEPS, model, tools } from "@/lib/agent/orchestrator"
+import { buildInstructions, MAX_STEPS, model, tools } from "@/lib/agent/orchestrator"
 import { parseMessages } from "@/lib/agent/step"
 
 const CTA_TIMEOUT = "30d" as const
@@ -144,6 +144,10 @@ const orchestrateFunction = inngest.createFunction(
 		})
 
 		const runId = event.id ? event.id : crypto.randomUUID()
+		const system = buildInstructions({
+			sandboxId: event.data.sandboxId,
+			github: event.data.github
+		})
 
 		let messages: ModelMessage[] = [{ role: "user" as const, content: event.data.prompt }]
 		let lastText = ""
@@ -151,9 +155,7 @@ const orchestrateFunction = inngest.createFunction(
 
 		for (let i = 0; i < MAX_STEPS; i++) {
 			const thought = await step.run(`think-${i}`, async () => {
-				const result = await errors.try(
-					generateText({ model, system: instructions, messages, tools })
-				)
+				const result = await errors.try(generateText({ model, system, messages, tools }))
 				if (result.error) {
 					logger.error("llm call failed", { error: result.error, step: i })
 					throw errors.wrap(result.error, `llm step ${i}`)
@@ -184,9 +186,7 @@ const orchestrateFunction = inngest.createFunction(
 			const assistantMessages = parseMessages(thought.responseMessages)
 			messages = [...messages, ...assistantMessages]
 
-			const toolResults: ToolResultPart[] = []
-
-			for (const toolCall of thought.staticToolCalls) {
+			const toolResultPromises = thought.staticToolCalls.map(function dispatchToolCall(toolCall) {
 				logger.info("dispatching tool", {
 					step: i,
 					tool: toolCall.toolName,
@@ -194,7 +194,7 @@ const orchestrateFunction = inngest.createFunction(
 				})
 
 				if (toolCall.toolName === "spawn_subagent") {
-					const toolResult = await dispatchSubagent(
+					return dispatchSubagent(
 						toolCall.toolCallId,
 						toolCall.toolName,
 						toolCall.input,
@@ -202,29 +202,29 @@ const orchestrateFunction = inngest.createFunction(
 						step,
 						logger
 					)
-					toolResults.push(toolResult)
-				} else {
-					const rawInput = toolCall.input
-					const feedbackOptions = rawInput.options ? rawInput.options : []
-					const feedbackInput: HumanFeedbackInput = {
-						kind: rawInput.kind,
-						message: rawInput.message,
-						prompt: rawInput.prompt,
-						placeholder: rawInput.placeholder,
-						options: feedbackOptions
-					}
-					const toolResult = await dispatchHumanFeedback(
-						toolCall.toolCallId,
-						toolCall.toolName,
-						feedbackInput,
-						i,
-						runId,
-						step,
-						logger
-					)
-					toolResults.push(toolResult)
 				}
-			}
+
+				const rawInput = toolCall.input
+				const feedbackOptions = rawInput.options ? rawInput.options : []
+				const feedbackInput: HumanFeedbackInput = {
+					kind: rawInput.kind,
+					message: rawInput.message,
+					prompt: rawInput.prompt,
+					placeholder: rawInput.placeholder,
+					options: feedbackOptions
+				}
+				return dispatchHumanFeedback(
+					toolCall.toolCallId,
+					toolCall.toolName,
+					feedbackInput,
+					i,
+					runId,
+					step,
+					logger
+				)
+			})
+
+			const toolResults = await Promise.all(toolResultPromises)
 
 			if (toolResults.length > 0) {
 				messages.push({ role: "tool" as const, content: toolResults })

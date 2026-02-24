@@ -44,7 +44,13 @@ const schema = {
 	}),
 	"paul/agents/orchestrate": z.object({
 		prompt: z.string().min(1),
-		sandboxId: z.string().min(1)
+		sandboxId: z.string().min(1),
+		github: z
+			.object({
+				repoUrl: z.string().url(),
+				branch: z.string().min(1)
+			})
+			.optional()
 	}),
 	"paul/cta/request": CtaRequestEventSchema,
 	"paul/cta/response": CtaResponseEventSchema,

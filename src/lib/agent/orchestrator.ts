@@ -1,11 +1,11 @@
-import { openai } from "@ai-sdk/openai"
+import { anthropic } from "@ai-sdk/anthropic"
 import { tool } from "ai"
 import { z } from "zod"
 import { requestHumanFeedbackTool } from "@/lib/agent/cta"
 
 const MAX_STEPS = 50 as const
 
-const model = openai("gpt-5-nano")
+const model = anthropic("claude-sonnet-4-6")
 
 const spawnSubagentTool = tool({
 	description: [
@@ -33,28 +33,47 @@ const tools = {
 	spawn_subagent: spawnSubagentTool
 } as const
 
-const instructions = [
-	"You are an orchestrator agent that manages a team of subagents.",
-	"You have two subagents available:",
-	"- 'explore': researches codebases, reads files, finds patterns",
-	"- 'code': writes code, edits files, runs commands",
-	"",
-	"You also have the ability to request feedback from a human user.",
-	"Use this when you need decisions, approvals, or clarification.",
-	"",
-	"Your job is to:",
-	"1. Break down the user's request into subtasks",
-	"2. Delegate each subtask to the appropriate subagent",
-	"3. Review subagent results and decide next steps",
-	"4. Request human feedback when you need input on decisions",
-	"5. Provide a final summary when the work is complete",
-	"",
-	"Be strategic about when to ask for human feedback.",
-	"Ask early for architectural decisions and approvals.",
-	"Don't ask for things you can decide yourself."
-].join("\n")
+type OrchestratorContext = {
+	sandboxId: string
+	github?: { repoUrl: string; branch: string }
+}
+
+function buildInstructions(ctx: OrchestratorContext): string {
+	const contextLines = [`Sandbox ID: ${ctx.sandboxId}`]
+	if (ctx.github) {
+		contextLines.push(`GitHub repo: ${ctx.github.repoUrl}`)
+		contextLines.push(`Branch: ${ctx.github.branch}`)
+	}
+
+	return [
+		"You are an orchestrator agent that manages a team of subagents.",
+		"You MUST use your tools to accomplish tasks. Never respond with just text.",
+		"",
+		"## Environment",
+		...contextLines.map(function prefixLine(line) {
+			return `- ${line}`
+		}),
+		"",
+		"## Subagents",
+		"- 'explore': researches codebases, reads files, finds patterns",
+		"- 'code': writes code, edits files, runs commands",
+		"Always pass the sandbox ID when spawning subagents.",
+		"",
+		"## Human Feedback",
+		"You can request feedback from a human user.",
+		"Use this when you need decisions, approvals, or clarification.",
+		"Ask early for architectural decisions. Don't ask for things you can decide yourself.",
+		"",
+		"## Workflow",
+		"1. Break down the user's request into subtasks",
+		"2. Delegate each subtask to the appropriate subagent",
+		"3. Review subagent results and decide next steps",
+		"4. Request human feedback when you need input on decisions",
+		"5. Provide a final summary when the work is complete"
+	].join("\n")
+}
 
 type OrchestratorTools = typeof tools
 
-export { MAX_STEPS, instructions, model, spawnSubagentTool, tools }
-export type { OrchestratorTools }
+export { MAX_STEPS, buildInstructions, model, spawnSubagentTool, tools }
+export type { OrchestratorContext, OrchestratorTools }
