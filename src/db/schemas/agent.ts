@@ -141,7 +141,7 @@ const ctaEvents = agentSchema.table(
 		invocationId: uuid("invocation_id").references(() => agentInvocations.id),
 		toolCallId: text("tool_call_id"),
 		kind: ctaKindEnum("kind").notNull(),
-		requestMessage: text("request_message").notNull(),
+		requestMessage: text("request_message"),
 		requestPrompt: text("request_prompt"),
 		requestPlaceholder: text("request_placeholder"),
 		requestOptions: jsonb("request_options"),
