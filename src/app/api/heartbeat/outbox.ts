@@ -1,11 +1,11 @@
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
 import { asc, inArray } from "drizzle-orm"
 import { Inngest } from "inngest"
 import { Client } from "pg"
 import { db } from "@/db"
 import { coreEventOutbox } from "@/db/schemas/core"
 import { env } from "@/env"
+import { logger } from "@/logger"
 
 const relay = new Inngest({ id: "superstarter-outbox-relay", eventKey: env.INNGEST_EVENT_KEY })
 
@@ -31,7 +31,7 @@ async function drain(): Promise<number> {
 			})
 		)
 		if (deleteResult.error) {
-			logger.error("outbox drain delete failed", { error: deleteResult.error })
+			logger.error({ error: deleteResult.error }, "outbox drain delete failed")
 			throw errors.wrap(deleteResult.error, "outbox drain delete")
 		}
 
@@ -54,11 +54,11 @@ async function drain(): Promise<number> {
 
 		const sendResult = await errors.try(relay.send(events))
 		if (sendResult.error) {
-			logger.error("outbox drain send failed", { error: sendResult.error })
+			logger.error({ error: sendResult.error }, "outbox drain send failed")
 			throw errors.wrap(sendResult.error, "outbox drain send")
 		}
 
-		logger.info("outbox drained", { count: rows.length })
+		logger.info({ count: rows.length }, "outbox drained")
 		return rows.length
 	})
 }
@@ -105,16 +105,16 @@ async function waitForNotifications(client: Client, deadlineMs: number): Promise
 		logger.debug("received outbox notification")
 		drainAll().then(
 			function onDrainComplete(count) {
-				logger.debug("notification drain complete", { count })
+				logger.debug({ count }, "notification drain complete")
 			},
 			function onDrainError(err: unknown) {
-				logger.error("notification drain failed", { error: err })
+				logger.error({ error: err }, "notification drain failed")
 			}
 		)
 	}
 
 	function handleError(err: unknown): void {
-		logger.error("listener connection error", { error: err })
+		logger.error({ error: err }, "listener connection error")
 		stop()
 	}
 
@@ -151,7 +151,7 @@ async function listenAndDrain(deadlineMs: number): Promise<void> {
 		stack.defer(async function cleanupClient() {
 			const endResult = await errors.try(client.end())
 			if (endResult.error) {
-				logger.warn("listener client close failed", { error: endResult.error })
+				logger.warn({ error: endResult.error }, "listener client close failed")
 			}
 		})
 
@@ -159,7 +159,7 @@ async function listenAndDrain(deadlineMs: number): Promise<void> {
 		if (connectResult.error) {
 			attempt++
 			const backoff = Math.min(1_000 * 2 ** attempt, MAX_BACKOFF_MS)
-			logger.warn("listener connect retry", { attempt, backoff, error: connectResult.error })
+			logger.warn({ attempt, backoff, error: connectResult.error }, "listener connect retry")
 			await Bun.sleep(backoff)
 			continue
 		}
@@ -168,12 +168,12 @@ async function listenAndDrain(deadlineMs: number): Promise<void> {
 			client.query(`SET idle_session_timeout = ${sessionTimeoutMs}`)
 		)
 		if (setupResult.error) {
-			logger.warn("listener idle timeout set failed", { error: setupResult.error })
+			logger.warn({ error: setupResult.error }, "listener idle timeout set failed")
 		}
 
 		const listenResult = await errors.try(client.query("LISTEN events"))
 		if (listenResult.error) {
-			logger.error("listener setup failed", { error: listenResult.error })
+			logger.error({ error: listenResult.error }, "listener setup failed")
 			continue
 		}
 
@@ -183,7 +183,7 @@ async function listenAndDrain(deadlineMs: number): Promise<void> {
 			break
 		}
 
-		logger.info("listener started", { remainingMs: remaining })
+		logger.info({ remainingMs: remaining }, "listener started")
 		await waitForNotifications(client, remaining)
 		logger.info("listener stopped")
 	}

@@ -2,7 +2,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { __unstable__loadDesignSystem } from "tailwindcss"
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 
 type DesignSystem = Awaited<ReturnType<typeof __unstable__loadDesignSystem>>
 
@@ -143,7 +143,7 @@ async function loadDesignSystem(entryPath = readEntryPath()): Promise<LoadedDesi
 	// Sanity check: verify the design system is properly compiled
 	const sanityResult = ds.candidatesToCss(["flex"])
 	if (sanityResult[0] === null) {
-		logger.error("design system sanity check failed", { entryPath })
+		logger.error({ entryPath }, "design system sanity check failed")
 		throw errors.new(
 			"design system not properly compiled — candidatesToCss returns null for basic utilities"
 		)

@@ -4,30 +4,49 @@ alwaysApply: false
 ---
 ### Structured Logging
 
-All logging MUST use the structured logging library from `@superbuilders/slog`. This library provides Go slog-style structured logging with automatic `toString()` processing and consistent formatting.
+All logging MUST use Pino via the central logger instance. Pino uses object-first structured logging with automatic error serialization and JSON output in production.
+
+#### Import Pattern
+
+```typescript
+import { logger } from "@/logger"
+```
+
+#### Calling Convention (Object-First)
+
+Pino uses object-first argument order:
+
+```typescript
+// Message only
+logger.info("starting server")
+
+// Context object + message
+logger.info({ port: 3000 }, "server listening")
+logger.error({ error: result.error }, "operation failed")
+logger.debug({ userId, action: "login" }, "user authenticated")
+```
 
 #### ⚠️ CRITICAL: Inngest Functions Exception
 
-**For Inngest functions, use the `logger` parameter instead of importing slog directly.** Inngest provides its own logger middleware that handles serverless-specific logging issues like incomplete log flushing and duplicated log deliveries.
+**For Inngest functions, use the `logger` parameter instead of importing the central logger.** Inngest provides its own logger middleware that handles serverless-specific logging issues like incomplete log flushing and duplicated log deliveries.
 
 ```typescript
 // ✅ CORRECT: In Inngest functions, use the logger parameter
-export const myInngestFunction = inngest.createFunction(
+inngest.createFunction(
 	{ id: "my-function" },
 	{ event: "app/some.event" },
 	async ({ event, logger }) => {
-		logger.info("starting function", { eventId: event.id })
-		// Do NOT import slog in Inngest functions
+		logger.info({ eventId: event.id }, "starting function")
 	}
 )
 
-// ❌ WRONG: Don't import slog in Inngest functions
-import * as logger from "@superbuilders/slog"
-export const myInngestFunction = inngest.createFunction(
+// ❌ WRONG: Don't import the central logger in Inngest functions
+import { logger } from "@/logger"
+inngest.createFunction(
 	{ id: "my-function" },
 	{ event: "app/some.event" },
 	async ({ event }) => {
-		logger.info("starting function", { eventId: event.id }) // This can cause issues
+		logger.info({ eventId: event.id }, "starting function")
 	}
 )
 ```
@@ -35,27 +54,20 @@ export const myInngestFunction = inngest.createFunction(
 **Why this exception exists:**
 - Serverless functions can terminate before logs are flushed
 - Inngest's memoization can cause log statements outside steps to run multiple times
-- The Inngest logger is configured with our slog library for consistent formatting
+- Inngest v4 natively supports Pino — it auto-detects `.child()` and `.flush()`
 
-**Outside of Inngest functions** (utility functions, database operations, etc.), continue to use slog directly as documented below.
+**Outside of Inngest functions** (utility functions, database operations, etc.), use `import { logger } from "@/logger"`.
 
 #### ⚠️ CRITICAL: Logging AND Error Handling Together
 
-**Structured logging provides observability while error handling ensures proper control flow.** Always use BOTH logging and error handling patterns from [error-handling.md](mdc:rules/error-handling.md) together for:
-
-- **Error propagation:** Log errors for observability before bubbling up to callers
-- **Operation failures:** Log failed operations for debugging while halting execution  
-- **Validation failures:** Log invalid data context before preventing further processing
-- **External operation failures:** Log failed API calls, database operations, file operations with context
-
-**Use `errors.try` and log + throw errors for observability:**
+Always use BOTH logging and error handling patterns together:
 
 ```typescript
 // ✅ CORRECT: Log errors for observability AND throw for proper propagation
 const result = await errors.try(someOperation())
 if (result.error) {
-	logger.error("operation failed", { error: result.error })
-    throw errors.wrap(result.error, "operation failed")
+	logger.error({ error: result.error }, "operation failed")
+	throw errors.wrap(result.error, "operation failed")
 }
 
 // ❌ WRONG: Silent error handling without logging loses observability
@@ -65,82 +77,58 @@ if (result.error) {
 }
 ```
 
-#### Import Pattern
+#### Pino Error Serialization
 
-Always import the entire slog module as logger:
-
-```typescript
-import * as logger from "@superbuilders/slog"
-```
-
-#### ⚠️ CRITICAL: Automatic toString() Processing
-
-**The logging library automatically calls `toString()` on ALL objects with custom `toString()` methods.** This includes Error objects, Date objects, and custom classes. **NEVER manually call `.toString()`** on objects when logging.
+Pino uses `pino.stdSerializers.err` to serialize error objects. Pass errors in the context object under the `error` key:
 
 ```typescript
-// ✅ CORRECT: Let the logger handle toString() automatically
-logger.error("operation failed", { error: someError })
-logger.info("processing user", { user: userObject, timestamp: new Date() })
+// ✅ CORRECT: Pino serializes the error automatically
+logger.error({ error: result.error }, "operation failed")
 
-// ❌ WRONG: Manual toString() calls are redundant
-logger.error("operation failed", { error: someError.toString() })
+// ❌ WRONG: Manual toString() calls
+logger.error({ error: someError.toString() }, "operation failed")
+
+// ❌ WRONG: Manual cause extraction — Pino handles the error chain
+logger.error({
+	error: result.error,
+	cause: result.error.cause
+}, "operation failed")
 ```
-
-#### ⚠️ CRITICAL: No Manual `cause` Property
-
-**NEVER pass a `cause` property in structured logging attributes.** When you pass an error object to the logger, it automatically unwraps the entire error chain including all nested causes. Passing a separate `cause` property is redundant and can lead to confusion.
-
-```typescript
-// ✅ CORRECT: Pass the error object only - causes are automatically unwrapped
-logger.error("operation failed", { error: result.error })
-
-// ❌ WRONG: Don't manually pass cause - it's handled automatically
-logger.error("operation failed", { 
-    error: result.error,
-    cause: result.error.cause // BANNED: errors are automatically unwound
-})
-```
-
-**Why this is banned:**
-- The slog library automatically traverses the entire error chain via `toString()`
-- Passing `cause` separately creates duplicate information in logs
-- Manual cause extraction can miss nested error chains
-- The automatic unwinding provides complete error context
 
 #### Our Logging Philosophy: Log Everything
 
-To ensure maximum observability, our default approach is to log verbosely. When in doubt, add a log statement. This is especially true for the `debug` level, which is our primary tool for introspection.
+When in doubt, add a log statement. This is especially true for the `debug` level.
 
 **Always Log (Info Level):**
-- Function entry/exit for major operations and workflows.
-- Significant state changes (e.g., job status updated to `COMPLETED`).
-- High-level summaries of completed work (e.g., "processed 50 articles").
+- Function entry/exit for major operations and workflows
+- Significant state changes (e.g., job status updated to `COMPLETED`)
+- High-level summaries of completed work (e.g., "processed 50 articles")
 
 **Always Log (Debug Level):**
-- Detailed inputs and outputs for every function or method.
-- The exact content of API requests and the raw content of API responses.
-- The full prompts sent to AI models.
-- Intermediate data transformations and validation results.
-- Configuration values being used in a function.
-- Every branch in control-flow logic (e.g., if/else statements).
+- Detailed inputs and outputs for every function or method
+- The exact content of API requests and raw API responses
+- The full prompts sent to AI models
+- Intermediate data transformations and validation results
+- Configuration values being used in a function
+- Every branch in control-flow logic (e.g., if/else statements)
 
-#### Go slog Style Guide
+#### Terse Messages with Structured Context
 
-Follow Go's slog idiomatic patterns for terse, structured logging:
+Follow terse, structured logging patterns:
 
 **1. Terse Messages**
 - Use short, action-oriented verbs: `"starting"`, `"processing"`, `"inserted"`, `"completed"`, `"validating"`
-- Keep messages concise and scannable.
+- Keep messages concise and scannable
 
-**2. Key-Value Attributes**
-- Move all contextual data to the attributes object.
-- Use structured data instead of string interpolation.
+**2. Key-Value Context**
+- Move all contextual data to the context object (first argument)
+- Use structured data instead of string interpolation
 
 ```typescript
-// ✅ CORRECT: Terse message with structured attributes
-logger.info("starting zim import", { file: outfile, batchSize: 1000 })
-logger.debug("validating lyrics", { validationIssues: result.issues })
-logger.error("failed to drop schema", { schema: name, error: err })
+// ✅ CORRECT: Terse message with structured context
+logger.info({ file: outfile, batchSize: 1000 }, "starting zim import")
+logger.debug({ validationIssues: result.issues }, "validating lyrics")
+logger.error({ schema: name, error: err }, "failed to drop schema")
 
 // ❌ WRONG: Verbose messages with embedded data
 logger.info(`Starting ZIM import for ${outfile} with batch size ${1000}`)
@@ -154,16 +142,16 @@ Use standardized camelCase attribute names:
 - **`count`** - for quantities, batch sizes, totals
 - **`file`** - for file paths and filenames
 - **`articleId`** - for article references
-- **`error`** - for error objects (automatically converted via toString())
+- **`error`** - for error objects (serialized by Pino)
 - **`userId`** - for user references
 - **`status`** - for HTTP status codes or operation states
 
 #### Log Levels
 
-- **`logger.info()`** - Major operations, user-facing progress, completion status.
-- **`logger.debug()`** - **THE DEFAULT FOR DEVELOPMENT.** Use for detailed internal operations, data structures, API payloads, prompts, validation steps, etc.
-- **`logger.error()`** - Failures with error context (use before throwing errors for observability).
-- **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions.
+- **`logger.info()`** - Major operations, user-facing progress, completion status
+- **`logger.debug()`** - **THE DEFAULT FOR DEVELOPMENT.** Detailed internal operations, data structures, API payloads, prompts, validation steps
+- **`logger.error()`** - Failures with error context (use before throwing errors for observability)
+- **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions
 
 #### Prohibited Patterns
 
@@ -172,175 +160,5 @@ Use standardized camelCase attribute names:
 - String interpolation in log messages
 - Verbose, explanatory messages
 - Silent error handling without logging (always log errors for observability)
-- **Manual `.toString()` calls on objects** (the logger does this automatically)
-### Structured Logging
-
-All logging MUST use the structured logging library from `@superbuilders/slog`. This library provides Go slog-style structured logging with automatic `toString()` processing and consistent formatting.
-
-#### ⚠️ CRITICAL: Inngest Functions Exception
-
-**For Inngest functions, use the `logger` parameter instead of importing slog directly.** Inngest provides its own logger middleware that handles serverless-specific logging issues like incomplete log flushing and duplicated log deliveries.
-
-```typescript
-// ✅ CORRECT: In Inngest functions, use the logger parameter
-export const myInngestFunction = inngest.createFunction(
-	{ id: "my-function" },
-	{ event: "app/some.event" },
-	async ({ event, logger }) => {
-		logger.info("starting function", { eventId: event.id })
-		// Do NOT import slog in Inngest functions
-	}
-)
-
-// ❌ WRONG: Don't import slog in Inngest functions
-import * as logger from "@superbuilders/slog"
-export const myInngestFunction = inngest.createFunction(
-	{ id: "my-function" },
-	{ event: "app/some.event" },
-	async ({ event }) => {
-		logger.info("starting function", { eventId: event.id }) // This can cause issues
-	}
-)
-```
-
-**Why this exception exists:**
-- Serverless functions can terminate before logs are flushed
-- Inngest's memoization can cause log statements outside steps to run multiple times
-- The Inngest logger is configured with our slog library for consistent formatting
-
-**Outside of Inngest functions** (utility functions, database operations, etc.), continue to use slog directly as documented below.
-
-#### ⚠️ CRITICAL: Logging AND Error Handling Together
-
-**Structured logging provides observability while error handling ensures proper control flow.** Always use BOTH logging and error handling patterns from [error-handling.md](mdc:rules/error-handling.md) together for:
-
-- **Error propagation:** Log errors for observability before bubbling up to callers
-- **Operation failures:** Log failed operations for debugging while halting execution  
-- **Validation failures:** Log invalid data context before preventing further processing
-- **External operation failures:** Log failed API calls, database operations, file operations with context
-
-**Use `errors.try` and log + throw errors for observability:**
-
-```typescript
-// ✅ CORRECT: Log errors for observability AND throw for proper propagation
-const result = await errors.try(someOperation())
-if (result.error) {
-	logger.error("operation failed", { error: result.error })
-    throw errors.wrap(result.error, "operation failed")
-}
-
-// ❌ WRONG: Silent error handling without logging loses observability
-const result = await errors.try(someOperation())
-if (result.error) {
-	throw errors.wrap(result.error, "operation failed")
-}
-```
-
-#### Import Pattern
-
-Always import the entire slog module as logger:
-
-```typescript
-import * as logger from "@superbuilders/slog"
-```
-
-#### ⚠️ CRITICAL: Automatic toString() Processing
-
-**The logging library automatically calls `toString()` on ALL objects with custom `toString()` methods.** This includes Error objects, Date objects, and custom classes. **NEVER manually call `.toString()`** on objects when logging.
-
-```typescript
-// ✅ CORRECT: Let the logger handle toString() automatically
-logger.error("operation failed", { error: someError })
-logger.info("processing user", { user: userObject, timestamp: new Date() })
-
-// ❌ WRONG: Manual toString() calls are redundant
-logger.error("operation failed", { error: someError.toString() })
-```
-
-#### ⚠️ CRITICAL: No Manual `cause` Property
-
-**NEVER pass a `cause` property in structured logging attributes.** When you pass an error object to the logger, it automatically unwraps the entire error chain including all nested causes. Passing a separate `cause` property is redundant and can lead to confusion.
-
-```typescript
-// ✅ CORRECT: Pass the error object only - causes are automatically unwrapped
-logger.error("operation failed", { error: result.error })
-
-// ❌ WRONG: Don't manually pass cause - it's handled automatically
-logger.error("operation failed", { 
-    error: result.error,
-    cause: result.error.cause // BANNED: errors are automatically unwound
-})
-```
-
-**Why this is banned:**
-- The slog library automatically traverses the entire error chain via `toString()`
-- Passing `cause` separately creates duplicate information in logs
-- Manual cause extraction can miss nested error chains
-- The automatic unwinding provides complete error context
-
-#### Our Logging Philosophy: Log Everything
-
-To ensure maximum observability, our default approach is to log verbosely. When in doubt, add a log statement. This is especially true for the `debug` level, which is our primary tool for introspection.
-
-**Always Log (Info Level):**
-- Function entry/exit for major operations and workflows.
-- Significant state changes (e.g., job status updated to `COMPLETED`).
-- High-level summaries of completed work (e.g., "processed 50 articles").
-
-**Always Log (Debug Level):**
-- Detailed inputs and outputs for every function or method.
-- The exact content of API requests and the raw content of API responses.
-- The full prompts sent to AI models.
-- Intermediate data transformations and validation results.
-- Configuration values being used in a function.
-- Every branch in control-flow logic (e.g., if/else statements).
-
-#### Go slog Style Guide
-
-Follow Go's slog idiomatic patterns for terse, structured logging:
-
-**1. Terse Messages**
-- Use short, action-oriented verbs: `"starting"`, `"processing"`, `"inserted"`, `"completed"`, `"validating"`
-- Keep messages concise and scannable.
-
-**2. Key-Value Attributes**
-- Move all contextual data to the attributes object.
-- Use structured data instead of string interpolation.
-
-```typescript
-// ✅ CORRECT: Terse message with structured attributes
-logger.info("starting zim import", { file: outfile, batchSize: 1000 })
-logger.debug("validating lyrics", { validationIssues: result.issues })
-logger.error("failed to drop schema", { schema: name, error: err })
-
-// ❌ WRONG: Verbose messages with embedded data
-logger.info(`Starting ZIM import for ${outfile} with batch size ${1000}`)
-logger.error(`Error dropping schema ${name}: ${err}`)
-```
-
-#### Consistent Attribute Names
-
-Use standardized camelCase attribute names:
-
-- **`count`** - for quantities, batch sizes, totals
-- **`file`** - for file paths and filenames
-- **`articleId`** - for article references
-- **`error`** - for error objects (automatically converted via toString())
-- **`userId`** - for user references
-- **`status`** - for HTTP status codes or operation states
-
-#### Log Levels
-
-- **`logger.info()`** - Major operations, user-facing progress, completion status.
-- **`logger.debug()`** - **THE DEFAULT FOR DEVELOPMENT.** Use for detailed internal operations, data structures, API payloads, prompts, validation steps, etc.
-- **`logger.error()`** - Failures with error context (use before throwing errors for observability).
-- **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions.
-
-#### Prohibited Patterns
-
-**NEVER use:**
-- `console.log`, `console.error`, `console.debug`, `console.warn`
-- String interpolation in log messages
-- Verbose, explanatory messages
-- Silent error handling without logging (always log errors for observability)
-- **Manual `.toString()` calls on objects** (the logger does this automatically)
+- **Manual `.toString()` calls on objects** (Pino serializes automatically)
+- **String-first argument order** (`logger.info("msg", { ctx })` — use object-first)

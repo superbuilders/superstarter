@@ -1,8 +1,8 @@
 import "@/env"
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
 import { sql } from "drizzle-orm"
 import { db } from "@/db"
+import { logger } from "@/logger"
 
 async function dropSchemas(schemaNames: string[]) {
 	if (schemaNames.length === 0) {
@@ -22,13 +22,16 @@ async function dropSchemas(schemaNames: string[]) {
 			db.execute(sql`DROP SCHEMA IF EXISTS ${sql.identifier(schemaName)} CASCADE`)
 		)
 		if (result.error) {
-			logger.error("failed to drop schema", {
-				schema: schemaName,
-				error: result.error
-			})
+			logger.error(
+				{
+					schema: schemaName,
+					error: result.error
+				},
+				"failed to drop schema"
+			)
 			success = false
 		} else {
-			logger.info("successfully dropped schema", { schema: schemaName })
+			logger.info({ schema: schemaName }, "successfully dropped schema")
 		}
 	}
 

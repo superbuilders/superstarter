@@ -8,11 +8,11 @@ Every `throw` statement must be immediately preceded by a logger call (`logger.e
 
 **Pattern:**
 ```typescript
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 import * as errors from "@superbuilders/errors"
 
 // Always log before throwing
-logger.error("operation failed", { error: result.error })
+logger.error({ error: result.error }, "operation failed")
 throw errors.wrap(result.error, "operation")
 ```
 

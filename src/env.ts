@@ -1,9 +1,6 @@
 // biome-ignore-all lint/style/noProcessEnv: env wrapper needs to be able to access process.env
-import * as logger from "@superbuilders/slog"
 import { createEnv } from "@t3-oss/env-nextjs"
 import { z } from "zod"
-
-logger.setDefaultLogLevel(logger.DEBUG)
 
 const isServerRuntime = typeof window === "undefined"
 

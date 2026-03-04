@@ -3,7 +3,6 @@
 	"extends": ["./biome/base.json"],
 	"root": true,
 	"plugins": [
-		"./gritql/logger-structured-args.grit",
 		"./gritql/no-as-type-assertion.grit",
 		"./gritql/no-iife.grit",
 		"./gritql/no-nullish-coalescing.grit",

@@ -1,5 +1,5 @@
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 import * as ts from "typescript"
 
 interface ParsedTsConfig {
@@ -20,7 +20,7 @@ function parseTsConfig(): ParsedTsConfig {
 			typeof configFile.error.messageText === "string"
 				? configFile.error.messageText
 				: configFile.error.messageText.messageText
-		logger.error("tsconfig read failed", { error: errorMessage })
+		logger.error({ error: errorMessage }, "tsconfig read failed")
 		throw errors.new("tsconfig read failed")
 	}
 

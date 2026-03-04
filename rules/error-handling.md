@@ -8,12 +8,12 @@ Always import the errors namespace: `import * as errors from "@superbuilders/err
 
 ```typescript
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 
 const result = await errors.try(somePromise)
 if (result.error) {
 	// Handle error case by logging AND throwing the error
-	logger.error("operation failed", { error: result.error })
+	logger.error({ error: result.error }, "operation failed")
 	throw errors.wrap(result.error, "operation")
 }
 const data = result.data // Safe to use the data now
@@ -24,7 +24,7 @@ When propagating errors, always log them using `logger.error` AND use `errors.wr
 ```typescript
 const result = await errors.try(somePromise)
 if (result.error) {
-	logger.error("screenshot capture failed", { error: result.error })
+	logger.error({ error: result.error }, "screenshot capture failed")
 	throw errors.wrap(result.error, "screenshot capture")
 }
 ```
@@ -34,24 +34,24 @@ For synchronous operations, use `errors.trySync` and always log then throw error
 ```typescript
 const result = errors.trySync(() => someOperation())
 if (result.error) {
-	logger.error("synchronous operation failed", { error: result.error })
+	logger.error({ error: result.error }, "synchronous operation failed")
 	throw errors.wrap(result.error, "synchronous operation")
 }
 ```
 
-NEVER use `console.log`, `console.debug`, or `console.error` in any files. Use the structured logging library from `@superbuilders/slog` instead. When handling errors, always log them using `logger.error` AND propagate them by throwing via `errors.wrap` (for external errors) or `errors.new` (for our own errors). Both logging and propagation are required for proper error handling.
+NEVER use `console.log`, `console.debug`, or `console.error` in any files. Use the Pino logger via `import { logger } from "@/logger"` instead. When handling errors, always log them using `logger.error` AND propagate them by throwing via `errors.wrap` (for external errors) or `errors.new` (for our own errors). Both logging and propagation are required for proper error handling.
 
 #### ⚠️ CRITICAL: Script Error Logging Pattern
 
 For manual scripts that need to log errors before exiting:
 
 ```typescript
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 import * as errors from "@superbuilders/errors"
 
 const result = await errors.try(main())
 if (result.error) {
-	logger.error("operation failed", { error: result.error }) // .toString() of error called automatically
+	logger.error({ error: result.error }, "operation failed")
 	process.exit(1)
 }
 ```
@@ -102,7 +102,7 @@ function processUser(id: string): void {
 	if (userResult.error) {
 		if (errors.is(userResult.error, ErrUserNotFound)) {
 			// Handle missing user specifically
-			logger.warn("skipping missing user", { userId: id })
+			logger.warn({ userId: id }, "skipping missing user")
 			return
 		}
 		// Handle other unexpected errors
@@ -273,8 +273,3 @@ When handling errors in critical systems:
 4. **ALWAYS fail fast and loud** – better to stop than guess
 
 Remember: In critical systems, an error that stops the system saves lives. An error that's hidden with a fallback kills people.
-// ❌ WRONG: Using new Error() directly
-throw new Error("invalid configuration")
-// ✅ CORRECT: Use errors.new() for consistent error handling
-throw errors.new("invalid configuration")
-```

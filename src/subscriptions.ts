@@ -61,7 +61,7 @@ function createRealtimeSubscription<
 					const id = event.data.id
 
 					if (isDelete || !config.query) {
-						logger.info("publishing signal", { id, topic: trigger.label })
+						logger.info({ id, topic: trigger.label }, "publishing signal")
 						await inngest.realtime.publish({
 							channel: config.channelName,
 							topic: trigger.label,
@@ -70,12 +70,12 @@ function createRealtimeSubscription<
 						return { id }
 					}
 
-					logger.info("publishing data", { id, topic: trigger.label })
+					logger.info({ id, topic: trigger.label }, "publishing data")
 
 					const rows = await config.query(id)
 					const row = rows[0]
 					if (!row) {
-						logger.warn("row not found", { id })
+						logger.warn({ id }, "row not found")
 						await inngest.realtime.publish({
 							channel: config.channelName,
 							topic: trigger.label,

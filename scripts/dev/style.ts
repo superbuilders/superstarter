@@ -34,7 +34,7 @@ import * as noUnresolvedClass from "@scripts/dev/style/rules/no-unresolved-class
 import * as requireDataSlot from "@scripts/dev/style/rules/require-data-slot"
 import type { Violation } from "@scripts/dev/style/types"
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 import * as ts from "typescript"
 
 function parseArgs(): { useJsonOutput: boolean; specificPaths: string[] } {
@@ -87,13 +87,13 @@ function outputText(violations: Violation[]): void {
 		if (v.componentName) {
 			details.component = v.componentName
 		}
-		logger.warn("style violation", details)
+		logger.warn(details, "style violation")
 	}
 
 	if (violations.length === 0) {
 		logger.info("no style violations found")
 	} else {
-		logger.info("style check complete", { violations: violations.length })
+		logger.info({ violations: violations.length }, "style check complete")
 	}
 }
 
@@ -104,19 +104,22 @@ async function main(): Promise<void> {
 	const designSystem = await loadDesignSystem()
 	const animateCount = designSystem.themeNamespaces.get("--animate")?.size
 	const easeCount = designSystem.themeNamespaces.get("--ease")?.size
-	logger.info("loaded design system", {
-		colors: designSystem.allowedColors.size,
-		animations: animateCount,
-		easings: easeCount,
-		utilities: designSystem.classList.size
-	})
+	logger.info(
+		{
+			colors: designSystem.allowedColors.size,
+			animations: animateCount,
+			easings: easeCount,
+			utilities: designSystem.classList.size
+		},
+		"loaded design system"
+	)
 
 	logger.info("creating TypeScript program")
 	const config = parseTsConfig()
 	const program = ts.createProgram(config.fileNames, config.options)
 	const sourceFiles = collectSourceFiles(program, specificPaths)
 
-	logger.info("checking TSX files", { count: sourceFiles.length })
+	logger.info({ count: sourceFiles.length }, "checking TSX files")
 
 	const allViolations: Violation[] = []
 
@@ -165,6 +168,6 @@ async function main(): Promise<void> {
 
 const result = await errors.try(main())
 if (result.error) {
-	logger.error("failed", { error: result.error })
+	logger.error({ error: result.error }, "failed")
 	process.exit(1)
 }

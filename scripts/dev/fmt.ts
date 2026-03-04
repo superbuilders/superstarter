@@ -37,19 +37,22 @@ import { processFile, reportResults } from "@scripts/dev/fmt/processor"
 import type { FileResult } from "@scripts/dev/fmt/types"
 import { getFilesToCheck } from "@scripts/dev/shared/files"
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 
 async function main() {
 	const args = process.argv.slice(2)
 	const shouldWrite = args.includes("--write")
 	const stripComments = args.includes("--strip-comments")
 	const mode = shouldWrite ? "formatting" : "checking"
-	logger.info("super-fumpt: starting", {
-		mode,
-		stripComments
-	})
+	logger.info(
+		{
+			mode,
+			stripComments
+		},
+		"super-fumpt: starting"
+	)
 	const files = getFilesToCheck()
-	logger.info("super-fumpt: scanning files", { count: files.length })
+	logger.info({ count: files.length }, "super-fumpt: scanning files")
 	const allResults: FileResult[] = []
 	let totalComments = 0
 	let totalBlankLines = 0
@@ -84,6 +87,6 @@ async function main() {
 
 const result = await errors.try(main())
 if (result.error) {
-	logger.error("super-fumpt: failed", { error: result.error })
+	logger.error({ error: result.error }, "super-fumpt: failed")
 	process.exit(1)
 }

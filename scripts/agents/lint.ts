@@ -14,36 +14,16 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { query } from "@anthropic-ai/claude-agent-sdk"
 import * as errors from "@superbuilders/errors"
-import type { Logger } from "@superbuilders/slog"
+import pino from "pino"
 import { z } from "zod"
 
-/**
- * Custom logger that writes to stderr so stdout remains pure JSON.
- * Implements the Logger interface from @superbuilders/slog.
- */
-const LOG_PREFIX = "agents/lint"
-
-function formatLogData(data?: Record<string, unknown>): string {
-	if (data === undefined) {
-		return ""
+const logger = pino({
+	level: "debug",
+	transport: {
+		target: "pino-pretty",
+		options: { colorize: true, destination: 2 }
 	}
-	return ` ${JSON.stringify(data)}`
-}
-
-const logger: Logger = {
-	debug(message: string, data?: Record<string, unknown>): void {
-		process.stderr.write(`DEBUG ${LOG_PREFIX}: ${message}${formatLogData(data)}\n`)
-	},
-	info(message: string, data?: Record<string, unknown>): void {
-		process.stderr.write(`INFO ${LOG_PREFIX}: ${message}${formatLogData(data)}\n`)
-	},
-	warn(message: string, data?: Record<string, unknown>): void {
-		process.stderr.write(`WARN ${LOG_PREFIX}: ${message}${formatLogData(data)}\n`)
-	},
-	error(message: string, data?: Record<string, unknown>): void {
-		process.stderr.write(`ERROR ${LOG_PREFIX}: ${message}${formatLogData(data)}\n`)
-	}
-}
+})
 
 type GritRule = {
 	name: string
@@ -64,7 +44,7 @@ async function loadAllGritRules(): Promise<GritRule[]> {
 
 	const filesResult = await errors.try(readdir(gritqlDir))
 	if (filesResult.error) {
-		logger.error("read gritql directory", { error: filesResult.error })
+		logger.error({ error: filesResult.error }, "read gritql directory")
 		throw filesResult.error
 	}
 
@@ -80,7 +60,7 @@ async function loadAllGritRules(): Promise<GritRule[]> {
 		}
 	}
 
-	logger.info("loaded grit rules", { count: rules.length })
+	logger.info({ count: rules.length }, "loaded grit rules")
 	return rules
 }
 
@@ -93,7 +73,7 @@ async function loadAllMdcDocs(): Promise<MdcDoc[]> {
 
 	const filesResult = await errors.try(readdir(rulesDir))
 	if (filesResult.error) {
-		logger.error("read rules directory", { error: filesResult.error })
+		logger.error({ error: filesResult.error }, "read rules directory")
 		throw filesResult.error
 	}
 
@@ -109,7 +89,7 @@ async function loadAllMdcDocs(): Promise<MdcDoc[]> {
 		}
 	}
 
-	logger.info("loaded mdc docs", { count: docs.length })
+	logger.info({ count: docs.length }, "loaded mdc docs")
 	return docs
 }
 
@@ -129,11 +109,11 @@ async function loadBiomeConfig(): Promise<string> {
 
 	const result = await errors.try(readFile(biomePath, "utf-8"))
 	if (result.error) {
-		logger.warn("could not load biome config", { error: result.error })
+		logger.warn({ error: result.error }, "could not load biome config")
 		return ""
 	}
 
-	logger.info("loaded biome config", { path: "biome/base.json" })
+	logger.info({ path: "biome/base.json" }, "loaded biome config")
 	return result.data
 }
 
@@ -142,13 +122,11 @@ async function loadSuperLintScript(): Promise<string> {
 
 	const result = await errors.try(readFile(scriptPath, "utf-8"))
 	if (result.error) {
-		logger.warn("could not load super-lint script", {
-			error: result.error
-		})
+		logger.warn({ error: result.error }, "could not load super-lint script")
 		return ""
 	}
 
-	logger.info("loaded super-lint script", { path: "scripts/dev/lint.ts" })
+	logger.info({ path: "scripts/dev/lint.ts" }, "loaded super-lint script")
 	return result.data
 }
 
@@ -460,7 +438,7 @@ async function collectSuperLintViolations(): Promise<ViolationGroup[]> {
 	await proc.exited
 
 	if (stderr) {
-		logger.debug("super-lint stderr", { stderr: stderr.slice(0, 500) })
+		logger.debug({ stderr: stderr.slice(0, 500) }, "super-lint stderr")
 	}
 
 	if (!stdout.trim()) {
@@ -470,20 +448,16 @@ async function collectSuperLintViolations(): Promise<ViolationGroup[]> {
 
 	const parseResult = errors.trySync(() => JSON.parse(stdout))
 	if (parseResult.error) {
-		logger.error("parse super-lint output", {
-			error: parseResult.error
-		})
+		logger.error({ error: parseResult.error }, "parse super-lint output")
 		return []
 	}
 
 	if (!parseResult.data.violations) {
-		logger.error("super-lint output missing violations field", {
-			data: parseResult.data
-		})
+		logger.error({ data: parseResult.data }, "super-lint output missing violations field")
 		return []
 	}
 	const violations: SuperLintViolation[] = parseResult.data.violations
-	logger.info("super-lint violations", { count: violations.length })
+	logger.info({ count: violations.length }, "super-lint violations")
 
 	const groupMap = new Map<string, ViolationGroup>()
 	for (const v of violations) {
@@ -523,7 +497,7 @@ async function collectViolations(): Promise<GroupedOutput> {
 	await proc.exited
 
 	if (stderr) {
-		logger.debug("biome stderr", { stderr: stderr.slice(0, 500) })
+		logger.debug({ stderr: stderr.slice(0, 500) }, "biome stderr")
 	}
 
 	function sumViolations(sum: number, g: ViolationGroup) {
@@ -552,20 +526,20 @@ async function collectViolations(): Promise<GroupedOutput> {
 
 	const parseResult = errors.trySync(() => JSON.parse(stdout))
 	if (parseResult.error) {
-		logger.error("parse biome output", { error: parseResult.error })
+		logger.error({ error: parseResult.error }, "parse biome output")
 		throw errors.wrap(parseResult.error, "parse biome output")
 	}
 
 	const validationResult = BiomeOutputSchema.safeParse(parseResult.data)
 	if (!validationResult.success) {
-		logger.error("validate biome output", { error: validationResult.error })
+		logger.error({ error: validationResult.error }, "validate biome output")
 		throw errors.wrap(validationResult.error, "validate biome output")
 	}
 
 	const biomeOutput = validationResult.data
 	const diagnostics = biomeOutput.diagnostics
 
-	logger.info("parsed diagnostics", { count: diagnostics.length })
+	logger.info({ count: diagnostics.length }, "parsed diagnostics")
 
 	function isPluginDiagnostic(d: z.infer<typeof BiomeDiagnosticSchema>) {
 		return d.category === "plugin"
@@ -576,8 +550,8 @@ async function collectViolations(): Promise<GroupedOutput> {
 	const pluginDiagnostics = diagnostics.filter(isPluginDiagnostic)
 	const biomeDiagnostics = diagnostics.filter(isNonPluginDiagnostic)
 
-	logger.info("plugin diagnostics", { count: pluginDiagnostics.length })
-	logger.info("biome diagnostics", { count: biomeDiagnostics.length })
+	logger.info({ count: pluginDiagnostics.length }, "plugin diagnostics")
+	logger.info({ count: biomeDiagnostics.length }, "biome diagnostics")
 
 	const pluginGroupMap = new Map<string, ViolationGroup>()
 	for (const diag of pluginDiagnostics) {
@@ -695,10 +669,7 @@ async function runAgentWithRetry(
 				? await errors.try(buildSuperLintTaskPrompt(group))
 				: await errors.try(buildBiomeTaskPrompt(group))
 	if (taskPromptResult.error) {
-		logger.error("build task prompt", {
-			error: taskPromptResult.error,
-			file: group.file
-		})
+		logger.error({ error: taskPromptResult.error, file: group.file }, "build task prompt")
 		return { success: false, result: "" }
 	}
 	const taskPrompt = taskPromptResult.data
@@ -708,15 +679,18 @@ async function runAgentWithRetry(
 		if (!queryResult.error) {
 			completedRef.count++
 			const agentDuration = Math.round((performance.now() - agentStartTime) / 1000)
-			logger.info("agent completed", {
-				file: group.file,
-				rule: group.rule,
-				type: ruleType,
-				durationSec: agentDuration,
-				progress: `${completedRef.count}/${totalAgents}`,
-				remaining: totalAgents - completedRef.count,
-				attempt
-			})
+			logger.info(
+				{
+					file: group.file,
+					rule: group.rule,
+					type: ruleType,
+					durationSec: agentDuration,
+					progress: `${completedRef.count}/${totalAgents}`,
+					remaining: totalAgents - completedRef.count,
+					attempt
+				},
+				"agent completed"
+			)
 			return { success: true, result: queryResult.data }
 		}
 
@@ -732,29 +706,35 @@ async function runAgentWithRetry(
 
 		if (isRetryable && attempt < maxRetries) {
 			const backoffMs = Math.min(1000 * 2 ** attempt, 30000)
-			logger.warn("agent error, retrying", {
-				file: group.file,
-				rule: group.rule,
-				type: ruleType,
-				attempt,
-				maxRetries,
-				backoffMs,
-				error: errStr.slice(0, 200),
-				isRateLimit
-			})
+			logger.warn(
+				{
+					file: group.file,
+					rule: group.rule,
+					type: ruleType,
+					attempt,
+					maxRetries,
+					backoffMs,
+					error: errStr.slice(0, 200),
+					isRateLimit
+				},
+				"agent error, retrying"
+			)
 			await new Promise(function delayResolve(resolve) {
 				setTimeout(resolve, backoffMs)
 			})
 		} else {
 			const agentDuration = Math.round((performance.now() - agentStartTime) / 1000)
-			logger.error("agent failed permanently", {
-				file: group.file,
-				rule: group.rule,
-				type: ruleType,
-				durationSec: agentDuration,
-				error: errStr,
-				progress: `${completedRef.count}/${totalAgents}`
-			})
+			logger.error(
+				{
+					file: group.file,
+					rule: group.rule,
+					type: ruleType,
+					durationSec: agentDuration,
+					error: errStr,
+					progress: `${completedRef.count}/${totalAgents}`
+				},
+				"agent failed permanently"
+			)
 			return { success: false, result: "" }
 		}
 	}
@@ -771,12 +751,15 @@ async function runAgentWithRetry(
  */
 async function fixWithSubagents(output: GroupedOutput): Promise<void> {
 	const allGroups = [...output.pluginGroups, ...output.biomeGroups, ...output.superLintGroups]
-	logger.info("preparing agents", {
-		total: allGroups.length,
-		plugin: output.pluginGroups.length,
-		biome: output.biomeGroups.length,
-		superLint: output.superLintGroups.length
-	})
+	logger.info(
+		{
+			total: allGroups.length,
+			plugin: output.pluginGroups.length,
+			biome: output.biomeGroups.length,
+			superLint: output.superLintGroups.length
+		},
+		"preparing agents"
+	)
 
 	const gritRules = await loadAllGritRules()
 	const mdcDocs = await loadAllMdcDocs()
@@ -785,20 +768,26 @@ async function fixWithSubagents(output: GroupedOutput): Promise<void> {
 	const gritRuleSet = buildGritRuleSet(gritRules)
 
 	const systemPrompt = buildStaticSystemPrompt(gritRules, mdcDocs, biomeConfig, superLintScript)
-	logger.info("built static system prompt", {
-		length: systemPrompt.length,
-		gritRules: gritRules.length,
-		mdcDocs: mdcDocs.length
-	})
+	logger.info(
+		{
+			length: systemPrompt.length,
+			gritRules: gritRules.length,
+			mdcDocs: mdcDocs.length
+		},
+		"built static system prompt"
+	)
 
 	const validPluginGroups = output.pluginGroups.filter((g) => gritRuleSet.has(g.rule))
 
-	logger.info("valid groups after filtering", {
-		originalPlugin: output.pluginGroups.length,
-		filteredPlugin: validPluginGroups.length,
-		biome: output.biomeGroups.length,
-		superLint: output.superLintGroups.length
-	})
+	logger.info(
+		{
+			originalPlugin: output.pluginGroups.length,
+			filteredPlugin: validPluginGroups.length,
+			biome: output.biomeGroups.length,
+			superLint: output.superLintGroups.length
+		},
+		"valid groups after filtering"
+	)
 
 	const allValidGroups = [...validPluginGroups, ...output.biomeGroups, ...output.superLintGroups]
 	if (allValidGroups.length === 0) {
@@ -810,7 +799,7 @@ async function fixWithSubagents(output: GroupedOutput): Promise<void> {
 	const completedRef = { count: 0 }
 	const startTime = performance.now()
 
-	logger.info("launching agents in parallel", { count: totalAgents })
+	logger.info({ count: totalAgents }, "launching agents in parallel")
 
 	const agentPromises: Promise<{
 		success: boolean
@@ -819,13 +808,16 @@ async function fixWithSubagents(output: GroupedOutput): Promise<void> {
 	}>[] = []
 	for (const group of allValidGroups) {
 		const agentStartTime = performance.now()
-		logger.info("starting agent", {
-			file: group.file,
-			rule: group.rule,
-			type: group.category,
-			violations: group.violations.length,
-			progress: `${completedRef.count}/${totalAgents}`
-		})
+		logger.info(
+			{
+				file: group.file,
+				rule: group.rule,
+				type: group.category,
+				violations: group.violations.length,
+				progress: `${completedRef.count}/${totalAgents}`
+			},
+			"starting agent"
+		)
 
 		const promise = runAgentWithRetry(
 			group,
@@ -853,13 +845,16 @@ async function fixWithSubagents(output: GroupedOutput): Promise<void> {
 	const failed = results.filter(isFailedResult).length
 
 	const totalDuration = Math.round((performance.now() - startTime) / 1000)
-	logger.info("all agents completed", {
-		total: totalAgents,
-		succeeded,
-		failed,
-		durationSec: totalDuration,
-		avgSecPerAgent: Math.round(totalDuration / totalAgents)
-	})
+	logger.info(
+		{
+			total: totalAgents,
+			succeeded,
+			failed,
+			durationSec: totalDuration,
+			avgSecPerAgent: Math.round(totalDuration / totalAgents)
+		},
+		"all agents completed"
+	)
 }
 
 async function main(): Promise<void> {
@@ -880,13 +875,13 @@ async function main(): Promise<void> {
 	if (shouldFix) {
 		await fixWithSubagents(output)
 	} else {
-		logger.info("violations found", { output })
+		logger.info({ output }, "violations found")
 		logger.info("run with --fix to fix violations")
 	}
 }
 
 const result = await errors.try(main())
 if (result.error) {
-	logger.error("script execution", { error: result.error })
+	logger.error({ error: result.error }, "script execution")
 	process.exit(1)
 }

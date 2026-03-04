@@ -1,21 +1,27 @@
 import type { Violation } from "@scripts/dev/lint/types"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 
 function outputText(allViolations: Violation[]): void {
 	for (const v of allViolations) {
 		const relativePath = v.file.replace(`${process.cwd()}/`, "")
-		logger.warn("lint violation", {
-			location: `${relativePath}:${v.line}:${v.column}`,
-			rule: v.rule,
-			message: v.message
-		})
+		logger.warn(
+			{
+				location: `${relativePath}:${v.line}:${v.column}`,
+				rule: v.rule,
+				message: v.message
+			},
+			"lint violation"
+		)
 	}
 
 	if (allViolations.length > 0) {
-		logger.info("summary", {
-			violations: allViolations.length,
-			files: new Set(allViolations.map((v) => v.file)).size
-		})
+		logger.info(
+			{
+				violations: allViolations.length,
+				files: new Set(allViolations.map((v) => v.file)).size
+			},
+			"summary"
+		)
 	} else {
 		logger.info("no violations found")
 	}

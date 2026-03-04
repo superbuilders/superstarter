@@ -28,7 +28,7 @@ import { rules } from "@scripts/dev/lint/rules"
 import type { Violation } from "@scripts/dev/lint/types"
 import { getStagedFiles, isSkippedPath } from "@scripts/dev/shared/files"
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 import type * as ts from "typescript"
 
 function main(): void {
@@ -93,6 +93,6 @@ function main(): void {
 
 const result = errors.trySync(main)
 if (result.error) {
-	logger.error("failed", { error: result.error })
+	logger.error({ error: result.error }, "failed")
 	process.exit(1)
 }

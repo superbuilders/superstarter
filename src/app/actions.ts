@@ -2,23 +2,23 @@
 
 import { eq, not } from "drizzle-orm"
 import * as errors from "@superbuilders/errors"
-import * as logger from "@superbuilders/slog"
 import { db } from "@/db"
 import { coreTodos } from "@/db/schemas/core"
 import { todosSubscription } from "@/db/programs/subscriptions/todos"
 import { inngest } from "@/inngest"
+import { logger } from "@/logger"
 
 async function getRealtimeToken() {
 	return todosSubscription.getToken(inngest)
 }
 
 async function createTodo(title: string) {
-	logger.info("creating todo", { title })
+	logger.info({ title }, "creating todo")
 	const result = await errors.try(
 		db.insert(coreTodos).values({ title }).returning({ id: coreTodos.id })
 	)
 	if (result.error) {
-		logger.error("create todo failed", { error: result.error })
+		logger.error({ error: result.error }, "create todo failed")
 		throw errors.wrap(result.error, "create todo")
 	}
 
@@ -32,7 +32,7 @@ async function createTodo(title: string) {
 }
 
 async function toggleTodo(id: string) {
-	logger.info("toggling todo", { id })
+	logger.info({ id }, "toggling todo")
 	const result = await errors.try(
 		db
 			.update(coreTodos)
@@ -41,18 +41,18 @@ async function toggleTodo(id: string) {
 			.returning({ id: coreTodos.id })
 	)
 	if (result.error) {
-		logger.error("toggle todo failed", { error: result.error })
+		logger.error({ error: result.error }, "toggle todo failed")
 		throw errors.wrap(result.error, "toggle todo")
 	}
 }
 
 async function deleteTodo(id: string) {
-	logger.info("deleting todo", { id })
+	logger.info({ id }, "deleting todo")
 	const result = await errors.try(
 		db.delete(coreTodos).where(eq(coreTodos.id, id)).returning({ id: coreTodos.id })
 	)
 	if (result.error) {
-		logger.error("delete todo failed", { error: result.error })
+		logger.error({ error: result.error }, "delete todo failed")
 		throw errors.wrap(result.error, "delete todo")
 	}
 }

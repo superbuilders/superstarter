@@ -12,7 +12,7 @@ import {
 	removeComments
 } from "@scripts/dev/fmt/rules"
 import type { ExportViolation, FileResult, ReactImportViolation } from "@scripts/dev/fmt/types"
-import * as logger from "@superbuilders/slog"
+import { logger } from "@/logger"
 
 async function processFile(
 	file: string,
@@ -94,30 +94,36 @@ function reportResults(
 	const total =
 		totalComments + totalBlankLines + totalCurlyBraces + totalExports + totalReactImports
 	if (total === 0) {
-		logger.info("super-fumpt: complete", { violations: 0 })
+		logger.info({ violations: 0 }, "super-fumpt: complete")
 		process.stdout.write("No formatting issues found.\n")
 		process.exit(0)
 	}
 	if (shouldWrite) {
-		logger.info("super-fumpt: applied fixes", {
+		logger.info(
+			{
+				comments: totalComments,
+				blankLines: totalBlankLines,
+				curlyBraces: totalCurlyBraces,
+				exports: totalExports,
+				reactImports: totalReactImports,
+				files: allResults.length
+			},
+			"super-fumpt: applied fixes"
+		)
+		process.stdout.write(`Fixed ${total} issue(s) in ${allResults.length} file(s).\n`)
+		process.exit(0)
+	}
+	logger.info(
+		{
 			comments: totalComments,
 			blankLines: totalBlankLines,
 			curlyBraces: totalCurlyBraces,
 			exports: totalExports,
 			reactImports: totalReactImports,
 			files: allResults.length
-		})
-		process.stdout.write(`Fixed ${total} issue(s) in ${allResults.length} file(s).\n`)
-		process.exit(0)
-	}
-	logger.info("super-fumpt: found issues", {
-		comments: totalComments,
-		blankLines: totalBlankLines,
-		curlyBraces: totalCurlyBraces,
-		exports: totalExports,
-		reactImports: totalReactImports,
-		files: allResults.length
-	})
+		},
+		"super-fumpt: found issues"
+	)
 	process.stdout.write(`Found ${total} issue(s) in ${allResults.length} file(s).\n\n`)
 	function sumExportCounts(sum: number, v: ExportViolation): number {
 		return sum + v.count
