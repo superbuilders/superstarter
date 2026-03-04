@@ -31,7 +31,7 @@
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"drizzle-orm": "^0.45.1",
-		"inngest": "^3.52.0",
+		"inngest": "^4.0.0-beta.2",
 		"lucide-react": "^0.564.0",
 		"next": "^16.1.6",
 		"pg": "^8.18.0",

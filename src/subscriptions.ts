@@ -1,5 +1,4 @@
 import { channel, topic } from "@inngest/realtime"
-import { getSubscriptionToken } from "@inngest/realtime"
 import type { Realtime } from "@inngest/realtime"
 import type { Inngest, Logger } from "inngest"
 import type { EventSourceTrigger } from "@/event-source"
@@ -51,22 +50,19 @@ function createRealtimeSubscription<
 			const functionId = trigger.eventName.replaceAll("/", "-").replaceAll(".", "-")
 
 			return inngest.createFunction(
-				{ id: functionId },
-				{ event: trigger.eventName },
+				{ id: functionId, triggers: { event: trigger.eventName } },
 				async function handler({
 					event,
-					logger,
-					publish
+					logger
 				}: {
 					event: { data: { id: string } }
 					logger: Logger
-					publish: Realtime.PublishFn
 				}) {
 					const id = event.data.id
 
 					if (isDelete || !config.query) {
 						logger.info("publishing signal", { id, topic: trigger.label })
-						await publish({
+						await inngest.realtime.publish({
 							channel: config.channelName,
 							topic: trigger.label,
 							data: { id }
@@ -80,7 +76,7 @@ function createRealtimeSubscription<
 					const row = rows[0]
 					if (!row) {
 						logger.warn("row not found", { id })
-						await publish({
+						await inngest.realtime.publish({
 							channel: config.channelName,
 							topic: trigger.label,
 							data: { id }
@@ -88,7 +84,7 @@ function createRealtimeSubscription<
 						return { id }
 					}
 
-					await publish({
+					await inngest.realtime.publish({
 						channel: config.channelName,
 						topic: trigger.label,
 						data: { id, data: row }
@@ -108,7 +104,7 @@ function createRealtimeSubscription<
 	type TToken = Realtime.Subscribe.Token<TChannel, TLabel[]>
 
 	function getToken(inngest: Inngest.Any): Promise<TToken> {
-		const token: Promise<TToken> = getSubscriptionToken(inngest, {
+		const token: Promise<TToken> = inngest.realtime.getSubscriptionToken({
 			channel: config.channelName,
 			topics: topicNames
 		})

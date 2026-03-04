@@ -19,10 +19,6 @@ type ResolvedTrigger<L extends string = string, E extends string = string> = {
 
 type EventPayload = { data: { id: string; tableName: string } }
 
-type InferEventSchemas<S extends { eventNames: string[] }> = {
-	[K in S["eventNames"][number]]: EventPayload
-}
-
 function resolveTrigger<A extends string, N extends string, L extends string>(
 	appId: A,
 	tableName: N,
@@ -79,4 +75,4 @@ function createEventSource<
 }
 
 export { createEventSource }
-export type { EventPayload, EventSourceTrigger, InferEventSchemas, ResolvedTrigger }
+export type { EventPayload, EventSourceTrigger, ResolvedTrigger }
