@@ -15,30 +15,34 @@ import {
 	withBackoff
 } from "@scripts/_lib/anthropic"
 
-const subTypeStyleHints: Record<SubTypeId, string> = {
-	"verbal.synonyms":
-		"Recognition is fast or absent — if the test-taker doesn't know the word, deliberation rarely helps. Frame the explanation around the word's core sense.",
+const subTypeStyleHints: Partial<Record<SubTypeId, string>> = {
 	"verbal.antonyms":
 		"When two options point opposite, the more general opposite usually wins. Watch for words with multiple meanings keyed to the less obvious sense.",
 	"verbal.analogies":
 		"The relationship is the answer; the words are the problem. Solve the relationship first, then test it against each option.",
 	"verbal.sentence_completion":
 		"Conjunctions and contrast words (but, although, however) lock the relationship between blanks. Solve the locked side first.",
-	"verbal.logic":
+	"verbal.critical_reasoning":
 		"Translate the premises into the simplest spatial or set-relationship form. The conclusion is then a direct read-off.",
+	"verbal.letter_series":
+		"Convert letters to alphabet positions and pattern-match on the integers. Group letters work the same way per slot.",
 	"numerical.number_series":
 		"Look for first or second differences before exotic rules. If differences don't help, check ratios.",
-	"numerical.letter_series":
-		"Convert letters to alphabet positions and pattern-match on the integers. Group letters work the same way per slot.",
 	"numerical.word_problems":
 		"Set up the calculation in the smallest unit, then scale up at the end. Most traps come from premature rounding or unit-confusion.",
 	"numerical.fractions":
 		"Convert to a common form before comparing — either common denominator or decimals to two places. Eyeballing fails on close pairs.",
 	"numerical.percentages":
 		"Translate 'X% of Y' into multiplication and 'X is what % of Y' into division. Most traps come from confusing the two directions.",
-	"numerical.averages_ratios":
-		"For averages: sum first, divide last. For ratios: scale to a common multiple before comparing or splitting."
+	"numerical.averages":
+		"Sum first, divide last. For added/removed-element averages, work the delta-from-mean rather than re-averaging.",
+	"numerical.ratios":
+		"Decide parts-to-parts or parts-to-whole first; then scale to the question's known quantity (3:2 with 9 → 9:6)."
+	// numerical.workrate, numerical.speed_distance_time, numerical.lowest_values: pending strategy-authoring round.
 }
+
+const FALLBACK_HINT =
+	"Walk through the question step-by-step and explain the path a fast solver would take from prompt to answer."
 
 const structuredExplanationOutput = z
 	.object({
@@ -151,7 +155,7 @@ async function writeStructuredExplanation(
 	subTypeId: SubTypeId,
 	originalExplanation: string | undefined
 ): Promise<StructuredExplanationOutput> {
-	const hint = subTypeStyleHints[subTypeId]
+	const hint = subTypeStyleHints[subTypeId] ?? FALLBACK_HINT
 	const system = EXPLAIN_SYSTEM_TEMPLATE.replace("${SUB_TYPE_HINT}", hint)
 
 	const userContent = [

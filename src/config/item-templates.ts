@@ -66,12 +66,6 @@ function buildTemplate(
 }
 
 const itemTemplates: Record<SubTypeId, ItemTemplate> = {
-	"verbal.synonyms": buildTemplate(
-		"verbal.synonyms",
-		"Generate a CCAT synonyms item: a target word and four to five candidate options of which one is the closest synonym.",
-		(difficulty) =>
-			`Generate one CCAT synonyms item at ${difficulty} difficulty. The body.text must be a single target word. Options are candidate synonyms.`
-	),
 	"verbal.antonyms": buildTemplate(
 		"verbal.antonyms",
 		"Generate a CCAT antonyms item: a target word and four to five candidate options of which one is the clearest opposite.",
@@ -90,23 +84,23 @@ const itemTemplates: Record<SubTypeId, ItemTemplate> = {
 		(difficulty) =>
 			`Generate one CCAT sentence-completion item at ${difficulty} difficulty. body.text contains the sentence with blanks marked as '___'.`
 	),
-	"verbal.logic": buildTemplate(
-		"verbal.logic",
-		"Generate a CCAT verbal-logic item: a short premise (or pair of premises) and a candidate conclusion. Options are True / False / Uncertain or labeled equivalents. Spatial-direction problems are valid.",
+	"verbal.critical_reasoning": buildTemplate(
+		"verbal.critical_reasoning",
+		"Generate a CCAT critical-reasoning item: a short premise (or pair of premises) and a candidate conclusion. Options are True / False / Uncertain or labeled equivalents. Spatial-direction problems are valid.",
 		(difficulty) =>
-			`Generate one CCAT verbal-logic item at ${difficulty} difficulty. body.text contains the premises and the candidate conclusion.`
+			`Generate one CCAT critical-reasoning item at ${difficulty} difficulty. body.text contains the premises and the candidate conclusion.`
+	),
+	"verbal.letter_series": buildTemplate(
+		"verbal.letter_series",
+		"Generate a CCAT letter-series item: a sequence of letters or letter groups with one missing term. Options are candidate next terms.",
+		(difficulty) =>
+			`Generate one CCAT letter-series item at ${difficulty} difficulty. body.text contains the sequence ending in '?'. Underlying rule maps to alphabet positions.`
 	),
 	"numerical.number_series": buildTemplate(
 		"numerical.number_series",
 		"Generate a CCAT number-series item: a sequence of numbers with one missing term (the next term). Options are candidate next terms.",
 		(difficulty) =>
 			`Generate one CCAT number-series item at ${difficulty} difficulty. body.text contains the sequence ending in '?'. Underlying rule should be guessable in under 18 seconds.`
-	),
-	"numerical.letter_series": buildTemplate(
-		"numerical.letter_series",
-		"Generate a CCAT letter-series item: a sequence of letters or letter groups with one missing term. Options are candidate next terms.",
-		(difficulty) =>
-			`Generate one CCAT letter-series item at ${difficulty} difficulty. body.text contains the sequence ending in '?'. Underlying rule maps to alphabet positions.`
 	),
 	"numerical.word_problems": buildTemplate(
 		"numerical.word_problems",
@@ -126,11 +120,35 @@ const itemTemplates: Record<SubTypeId, ItemTemplate> = {
 		(difficulty) =>
 			`Generate one CCAT percentages item at ${difficulty} difficulty. body.text contains the scenario.`
 	),
-	"numerical.averages_ratios": buildTemplate(
-		"numerical.averages_ratios",
-		"Generate a CCAT averages-and-ratios item: compute a mean, weighted average, or ratio split. Options are numeric answers.",
+	"numerical.averages": buildTemplate(
+		"numerical.averages",
+		"Generate a CCAT averages item: compute a mean or weighted average. Options are numeric answers.",
 		(difficulty) =>
-			`Generate one CCAT averages-or-ratios item at ${difficulty} difficulty. body.text contains the scenario.`
+			`Generate one CCAT averages item at ${difficulty} difficulty. body.text contains the scenario.`
+	),
+	"numerical.ratios": buildTemplate(
+		"numerical.ratios",
+		"Generate a CCAT ratios item: compute a ratio split, scale a ratio, or compare ratios. Options are numeric answers or ratio expressions.",
+		(difficulty) =>
+			`Generate one CCAT ratios item at ${difficulty} difficulty. body.text contains the scenario.`
+	),
+	"numerical.workrate": buildTemplate(
+		"numerical.workrate",
+		"Generate a CCAT work-rate item: combined-work or rate-of-completion problem (e.g. 'A and B together can paint a room in N hours…'). Options are numeric answers in time units.",
+		(difficulty) =>
+			`Generate one CCAT work-rate item at ${difficulty} difficulty. body.text contains the scenario.`
+	),
+	"numerical.speed_distance_time": buildTemplate(
+		"numerical.speed_distance_time",
+		"Generate a CCAT speed-distance-time item: solve for any one of speed, distance, or time given the other two. Options are numeric answers.",
+		(difficulty) =>
+			`Generate one CCAT speed-distance-time item at ${difficulty} difficulty. body.text contains the scenario.`
+	),
+	"numerical.lowest_values": buildTemplate(
+		"numerical.lowest_values",
+		"Generate a CCAT lowest-value item: a small set of numeric expressions to compare and pick the smallest (or largest) value. Options are the candidates themselves.",
+		(difficulty) =>
+			`Generate one CCAT lowest-value item at ${difficulty} difficulty. body.text contains the comparison prompt.`
 	)
 }
 

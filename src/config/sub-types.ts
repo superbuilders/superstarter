@@ -1,17 +1,20 @@
 type Difficulty = "easy" | "medium" | "hard" | "brutal"
 
 const subTypeIds = [
-	"verbal.synonyms",
 	"verbal.antonyms",
 	"verbal.analogies",
 	"verbal.sentence_completion",
-	"verbal.logic",
+	"verbal.critical_reasoning",
+	"verbal.letter_series",
 	"numerical.number_series",
-	"numerical.letter_series",
 	"numerical.word_problems",
 	"numerical.fractions",
 	"numerical.percentages",
-	"numerical.averages_ratios"
+	"numerical.averages",
+	"numerical.ratios",
+	"numerical.workrate",
+	"numerical.speed_distance_time",
+	"numerical.lowest_values"
 ] as const
 
 type SubTypeId = (typeof subTypeIds)[number]
@@ -34,15 +37,15 @@ const DEFAULT_BANK_TARGETS: Record<Difficulty, number> = {
 const subTypes: ReadonlyArray<SubTypeConfig> = [
 	// Recognition (12s)
 	{
-		id: "verbal.synonyms",
-		displayName: "Synonyms",
+		id: "verbal.antonyms",
+		displayName: "Antonyms",
 		section: "verbal",
 		latencyThresholdMs: 12_000,
 		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
 	},
 	{
-		id: "verbal.antonyms",
-		displayName: "Antonyms",
+		id: "verbal.letter_series",
+		displayName: "Letter Series",
 		section: "verbal",
 		latencyThresholdMs: 12_000,
 		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
@@ -55,8 +58,8 @@ const subTypes: ReadonlyArray<SubTypeConfig> = [
 		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
 	},
 	{
-		id: "numerical.letter_series",
-		displayName: "Letter Series",
+		id: "numerical.lowest_values",
+		displayName: "Lowest Values",
 		section: "numerical",
 		latencyThresholdMs: 12_000,
 		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
@@ -91,16 +94,37 @@ const subTypes: ReadonlyArray<SubTypeConfig> = [
 		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
 	},
 	{
-		id: "numerical.averages_ratios",
-		displayName: "Averages & Ratios",
+		id: "numerical.averages",
+		displayName: "Averages",
+		section: "numerical",
+		latencyThresholdMs: 15_000,
+		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
+	},
+	{
+		id: "numerical.ratios",
+		displayName: "Ratios",
+		section: "numerical",
+		latencyThresholdMs: 15_000,
+		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
+	},
+	{
+		id: "numerical.workrate",
+		displayName: "Work Rate",
+		section: "numerical",
+		latencyThresholdMs: 15_000,
+		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
+	},
+	{
+		id: "numerical.speed_distance_time",
+		displayName: "Speed & Distance",
 		section: "numerical",
 		latencyThresholdMs: 15_000,
 		bankTargetByDifficulty: DEFAULT_BANK_TARGETS
 	},
 	// Sustained multi-constraint reasoning (18s)
 	{
-		id: "verbal.logic",
-		displayName: "Verbal Logic",
+		id: "verbal.critical_reasoning",
+		displayName: "Critical Reasoning",
 		section: "verbal",
 		latencyThresholdMs: 18_000,
 		bankTargetByDifficulty: DEFAULT_BANK_TARGETS

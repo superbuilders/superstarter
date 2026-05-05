@@ -3,7 +3,7 @@
 // Sign-off smoke for the "fix(server): make startSession idempotent on
 // in-progress drills" commit. Verifies four scenarios:
 //
-//   1. Two startSession({type:'drill', subTypeId:'verbal.synonyms'}) calls
+//   1. Two startSession({type:'drill', subTypeId:'verbal.antonyms'}) calls
 //      in quick succession return the SAME sessionId. The first creates
 //      the session; the second hits the fresh-resume path (no second
 //      practice_sessions row inserted).
@@ -16,7 +16,7 @@
 //
 //   3. A startSession({type:'drill', subTypeId:'numerical.fractions'}) call
 //      with a DIFFERENT subTypeId does NOT collide with an in-progress
-//      verbal.synonyms drill — the (user_id, type, sub_type_id) match
+//      verbal.antonyms drill — the (user_id, type, sub_type_id) match
 //      partitions cleanly.
 //
 //   4. A startSession({type:'diagnostic'}) call with an existing
@@ -123,14 +123,14 @@ async function check1FreshResume(userId: string): Promise<CheckResult & { firstS
 	const first = await startSession({
 		userId,
 		type: "drill",
-		subTypeId: "verbal.synonyms",
+		subTypeId: "verbal.antonyms",
 		timerMode: "standard",
 		drillLength: 5
 	})
 	const second = await startSession({
 		userId,
 		type: "drill",
-		subTypeId: "verbal.synonyms",
+		subTypeId: "verbal.antonyms",
 		timerMode: "standard",
 		drillLength: 5
 	})
@@ -159,7 +159,7 @@ async function check2StaleAbandon(
 	const fresh = await startSession({
 		userId,
 		type: "drill",
-		subTypeId: "verbal.synonyms",
+		subTypeId: "verbal.antonyms",
 		timerMode: "standard",
 		drillLength: 5
 	})

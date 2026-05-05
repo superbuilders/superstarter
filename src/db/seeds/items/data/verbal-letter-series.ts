@@ -2,7 +2,7 @@ import type { SeedItemInput } from "@/db/seeds/items/types"
 
 const items: SeedItemInput[] = [
 	{
-		subTypeId: "numerical.letter_series",
+		subTypeId: "verbal.letter_series",
 		difficulty: "easy",
 		body: { kind: "text", text: "What letter comes next? A, C, E, G, ___" },
 		options: [
@@ -15,7 +15,7 @@ const items: SeedItemInput[] = [
 		explanation: "Skip every other letter; G + 2 = I."
 	},
 	{
-		subTypeId: "numerical.letter_series",
+		subTypeId: "verbal.letter_series",
 		difficulty: "easy",
 		body: { kind: "text", text: "What letter comes next? Z, X, V, T, ___" },
 		options: [
@@ -28,7 +28,7 @@ const items: SeedItemInput[] = [
 		explanation: "Decreasing alphabet by 2; T - 2 = R."
 	},
 	{
-		subTypeId: "numerical.letter_series",
+		subTypeId: "verbal.letter_series",
 		difficulty: "medium",
 		body: { kind: "text", text: "What pair comes next? AZ, BY, CX, ___" },
 		options: [
@@ -41,7 +41,7 @@ const items: SeedItemInput[] = [
 		explanation: "First letter advances forward (A, B, C, D); second letter moves backward (Z, Y, X, W). Next pair: DW."
 	},
 	{
-		subTypeId: "numerical.letter_series",
+		subTypeId: "verbal.letter_series",
 		difficulty: "medium",
 		body: { kind: "text", text: "What letter comes next? B, D, G, K, ___" },
 		options: [
@@ -54,7 +54,7 @@ const items: SeedItemInput[] = [
 		explanation: "Gaps grow by one: B(+2)D(+3)G(+4)K(+5)P. Next is P."
 	},
 	{
-		subTypeId: "numerical.letter_series",
+		subTypeId: "verbal.letter_series",
 		difficulty: "hard",
 		body: { kind: "text", text: "What pair comes next? AB, DE, HI, MN, ___" },
 		options: [

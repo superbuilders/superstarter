@@ -1,6 +1,6 @@
 "use client"
 
-// <MasteryMap> — the home screen's eleven-icon grid + near-goal line +
+// <MasteryMap> — the home screen's fourteen-icon grid + near-goal line +
 // primary CTA + low-contrast triage adherence. Plan §6.3 / PRD §5.2 /
 // docs/plans/phase3-mastery-map.md §3.
 //
@@ -10,7 +10,7 @@
 //     diagnostic but have no `mastery_state` rows yet (the
 //     post-diagnostic race window between endSession and the
 //     workflow's upserts). When empty, this component renders the
-//     <ComputingState> empty-state pane instead of eleven misleading
+//     <ComputingState> empty-state pane instead of fourteen misleading
 //     outlined icons; the pane's polling effect drives router.refresh()
 //     until the workflow populates.
 //   - `userTargetsPromise` — both fields nullable. deriveNearGoal handles
@@ -60,7 +60,7 @@ function MasteryMap(props: MasteryMapProps) {
 	// completed-non-abandoned diagnostic, so an empty states map means
 	// masteryRecomputeWorkflow hasn't finished upserting yet. Render the
 	// computing-state pane (with polling) instead of the misleading
-	// eleven-outlined-icons render.
+	// fourteen-outlined-icons render.
 	if (states.size === 0) {
 		return <ComputingState />
 	}

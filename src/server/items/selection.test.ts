@@ -88,7 +88,7 @@ test("pickItemRow: within-cell determinism — same (cell, salt) returns same it
 	// Sentinel UUID; reused across the two pickItemRow calls so the md5
 	// ORDER BY produces the same permutation both times.
 	const salt = "11111111-1111-1111-1111-111111111111"
-	const subTypeId = "verbal.synonyms"
+	const subTypeId = "verbal.antonyms"
 	const tier = "medium"
 
 	const liveCount = await liveCellItemCount(subTypeId)
@@ -107,7 +107,7 @@ test("pickItemRow: within-cell determinism — same (cell, salt) returns same it
 })
 
 test("pickItemRow: within-cell variation across sessions — different salts surface different items", async function withinCellVariationAcrossSessions() {
-	const subTypeId = "verbal.synonyms"
+	const subTypeId = "verbal.antonyms"
 	const tier = "medium"
 	const liveCount = await liveCellItemCount(subTypeId)
 	if (liveCount < 2) {

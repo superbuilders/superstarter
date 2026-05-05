@@ -51,10 +51,15 @@ test("shuffledDiagnosticOrder: multiset invariance — every permutation is the 
 	}
 })
 
-test("shuffledDiagnosticOrder: permutation length === 50", function lengthCheck() {
+// Length is 46 under the provisional taxonomy-restructuring allocation
+// (synonyms cut, three new sub-types not yet allocated). The session
+// quota of 50 is not enforced here; selection.ts handles bank
+// fallback when the mix runs out. The full re-balance to 50 is a
+// separate round.
+test("shuffledDiagnosticOrder: permutation length === 46 (provisional)", function lengthCheck() {
 	const a = shuffledDiagnosticOrder("00000000-0000-0000-0000-000000000001")
-	expect(a.length).toBe(50)
-	expect(diagnosticMix.length).toBe(50)
+	expect(a.length).toBe(46)
+	expect(diagnosticMix.length).toBe(46)
 })
 
 test("shuffledDiagnosticOrder: pinned-output regression for sessionId '00000000-0000-0000-0000-000000000001'", function pinnedOutput() {
@@ -63,11 +68,11 @@ test("shuffledDiagnosticOrder: pinned-output regression for sessionId '00000000-
 	// rather than silently changing user-visible diagnostic order.
 	const result = shuffledDiagnosticOrder("00000000-0000-0000-0000-000000000001")
 	const expectedFirstFive: DiagnosticEntry[] = [
+		{ subTypeId: "numerical.word_problems", difficulty: "medium" },
 		{ subTypeId: "verbal.antonyms", difficulty: "hard" },
 		{ subTypeId: "numerical.word_problems", difficulty: "hard" },
 		{ subTypeId: "numerical.number_series", difficulty: "medium" },
-		{ subTypeId: "numerical.averages_ratios", difficulty: "medium" },
-		{ subTypeId: "verbal.sentence_completion", difficulty: "easy" }
+		{ subTypeId: "verbal.analogies", difficulty: "medium" }
 	]
 	expect(result.slice(0, 5)).toEqual(expectedFirstFive)
 })

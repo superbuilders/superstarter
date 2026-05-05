@@ -5,13 +5,23 @@ interface DiagnosticEntry {
 	difficulty: Exclude<Difficulty, "brutal">
 }
 
-// 50-row hand-tuned mix per the diagnostic-composition decision in
-// docs/design_decisions.md. v1 covers 11 text sub-types: 5 verbal × 4 each
-// = 20 plus 6 numerical × 5 each = 30. Brutal-tier items are excluded
-// (no diagnostic should produce a 0%-accuracy band that contaminates
-// the mastery computation). Within each sub-type the tier mix favors
-// medium with one easy and one hard (4-item blocks) or one easy and
-// one hard with three mediums (5-item blocks).
+// PROVISIONAL allocation pending the testbank-re-extraction round.
+//
+// This mix updates sub-type ids to the new 14-sub-type taxonomy
+// (synonyms cut, logic→critical_reasoning, letter_series moved to
+// verbal, averages_ratios split into averages+ratios) but DEFERS the
+// full re-balance to a later round per Q1 of the taxonomy-restructuring
+// redline. The current shape is "old shape minus synonyms" — synonyms'
+// 4 entries are gone with no replacement, three new numerical sub-types
+// (workrate, speed_distance_time, lowest_values) are absent until
+// testbank re-extraction provides the empirical anchor for a confident
+// 50-item allocation. Length is currently 46.
+//
+// Brutal-tier items remain excluded (no diagnostic should produce a
+// 0%-accuracy band that contaminates the mastery computation). Within
+// each sub-type the tier mix favors medium with one easy and one hard
+// (4-item blocks) or one easy and one hard with three mediums (5-item
+// blocks).
 //
 // Storage contract: this constant is a TUPLE-DISTRIBUTION SPEC, not a
 // served sequence. The selection engine reads
@@ -23,11 +33,6 @@ interface DiagnosticEntry {
 // docs/plans/phase-3-polish-practice-surface-features.md §3.3 / §4.1
 // document the reversal of the implicit Phase 3 array-order contract.
 const diagnosticMix: ReadonlyArray<DiagnosticEntry> = [
-	// verbal.synonyms — 4 items
-	{ subTypeId: "verbal.synonyms", difficulty: "easy" },
-	{ subTypeId: "verbal.synonyms", difficulty: "medium" },
-	{ subTypeId: "verbal.synonyms", difficulty: "medium" },
-	{ subTypeId: "verbal.synonyms", difficulty: "hard" },
 	// verbal.antonyms — 4 items
 	{ subTypeId: "verbal.antonyms", difficulty: "easy" },
 	{ subTypeId: "verbal.antonyms", difficulty: "medium" },
@@ -43,23 +48,23 @@ const diagnosticMix: ReadonlyArray<DiagnosticEntry> = [
 	{ subTypeId: "verbal.sentence_completion", difficulty: "medium" },
 	{ subTypeId: "verbal.sentence_completion", difficulty: "medium" },
 	{ subTypeId: "verbal.sentence_completion", difficulty: "hard" },
-	// verbal.logic — 4 items
-	{ subTypeId: "verbal.logic", difficulty: "easy" },
-	{ subTypeId: "verbal.logic", difficulty: "medium" },
-	{ subTypeId: "verbal.logic", difficulty: "medium" },
-	{ subTypeId: "verbal.logic", difficulty: "hard" },
+	// verbal.critical_reasoning — 4 items
+	{ subTypeId: "verbal.critical_reasoning", difficulty: "easy" },
+	{ subTypeId: "verbal.critical_reasoning", difficulty: "medium" },
+	{ subTypeId: "verbal.critical_reasoning", difficulty: "medium" },
+	{ subTypeId: "verbal.critical_reasoning", difficulty: "hard" },
+	// verbal.letter_series — 5 items
+	{ subTypeId: "verbal.letter_series", difficulty: "easy" },
+	{ subTypeId: "verbal.letter_series", difficulty: "medium" },
+	{ subTypeId: "verbal.letter_series", difficulty: "medium" },
+	{ subTypeId: "verbal.letter_series", difficulty: "medium" },
+	{ subTypeId: "verbal.letter_series", difficulty: "hard" },
 	// numerical.number_series — 5 items
 	{ subTypeId: "numerical.number_series", difficulty: "easy" },
 	{ subTypeId: "numerical.number_series", difficulty: "medium" },
 	{ subTypeId: "numerical.number_series", difficulty: "medium" },
 	{ subTypeId: "numerical.number_series", difficulty: "medium" },
 	{ subTypeId: "numerical.number_series", difficulty: "hard" },
-	// numerical.letter_series — 5 items
-	{ subTypeId: "numerical.letter_series", difficulty: "easy" },
-	{ subTypeId: "numerical.letter_series", difficulty: "medium" },
-	{ subTypeId: "numerical.letter_series", difficulty: "medium" },
-	{ subTypeId: "numerical.letter_series", difficulty: "medium" },
-	{ subTypeId: "numerical.letter_series", difficulty: "hard" },
 	// numerical.word_problems — 5 items
 	{ subTypeId: "numerical.word_problems", difficulty: "easy" },
 	{ subTypeId: "numerical.word_problems", difficulty: "medium" },
@@ -78,12 +83,13 @@ const diagnosticMix: ReadonlyArray<DiagnosticEntry> = [
 	{ subTypeId: "numerical.percentages", difficulty: "medium" },
 	{ subTypeId: "numerical.percentages", difficulty: "medium" },
 	{ subTypeId: "numerical.percentages", difficulty: "hard" },
-	// numerical.averages_ratios — 5 items
-	{ subTypeId: "numerical.averages_ratios", difficulty: "easy" },
-	{ subTypeId: "numerical.averages_ratios", difficulty: "medium" },
-	{ subTypeId: "numerical.averages_ratios", difficulty: "medium" },
-	{ subTypeId: "numerical.averages_ratios", difficulty: "medium" },
-	{ subTypeId: "numerical.averages_ratios", difficulty: "hard" }
+	// numerical.averages — 3 items (split from former averages_ratios block)
+	{ subTypeId: "numerical.averages", difficulty: "easy" },
+	{ subTypeId: "numerical.averages", difficulty: "medium" },
+	{ subTypeId: "numerical.averages", difficulty: "hard" },
+	// numerical.ratios — 2 items (split from former averages_ratios block)
+	{ subTypeId: "numerical.ratios", difficulty: "easy" },
+	{ subTypeId: "numerical.ratios", difficulty: "medium" }
 ]
 
 // xmur3 — string → 32-bit hash. Canonical implementation; turns the
@@ -105,7 +111,7 @@ function xmur3(str: string): () => number {
 
 // mulberry32 — canonical seeded PRNG returning floats in [0, 1).
 // Pure, deterministic for a fixed seed. The 32-bit period is more than
-// enough for shuffling a 50-element array.
+// enough for shuffling the diagnostic mix.
 function mulberry32(seed: number): () => number {
 	let s = seed >>> 0
 	return function nextFloat(): number {
@@ -118,11 +124,11 @@ function mulberry32(seed: number): () => number {
 }
 
 // shuffledDiagnosticOrder — pure function returning a deterministic
-// permutation of the 50-row mix seeded by `sessionId`. Same sessionId
-// always returns the same permutation; different sessionIds produce
-// different permutations with overwhelming probability. The returned
-// array contains EXACTLY the same multiset of (subTypeId, difficulty)
-// tuples as `diagnosticMix` — only the order differs.
+// permutation of the mix seeded by `sessionId`. Same sessionId always
+// returns the same permutation; different sessionIds produce different
+// permutations with overwhelming probability. The returned array
+// contains EXACTLY the same multiset of (subTypeId, difficulty) tuples
+// as `diagnosticMix` — only the order differs.
 //
 // Used by `getNextFixedCurve` in src/server/items/selection.ts as the
 // only read path against the diagnostic mix in Phase 3 polish onward.

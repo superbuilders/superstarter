@@ -7,21 +7,13 @@ interface StrategyEntry {
 	text: string
 }
 
-const strategies: Record<SubTypeId, ReadonlyArray<StrategyEntry>> = {
-	"verbal.synonyms": [
-		{
-			kind: "recognition",
-			text: "If you don't know the target word in 3 seconds, you won't recover it. Pick the closest match by sound or shared root and advance."
-		},
-		{
-			kind: "technique",
-			text: "Translate the target into a one-sentence definition before scanning options; whichever option fits the definition is the answer."
-		},
-		{
-			kind: "trap",
-			text: "When two options are near-synonyms of each other, eliminate both — the answer is the one that points at a single shared meaning, not a cluster."
-		}
-	],
+// Partial<Record<...>> per Q4 of the taxonomy-restructuring round:
+// numerical.workrate, numerical.speed_distance_time, and
+// numerical.lowest_values are intentionally omitted until a separate
+// strategy-authoring round populates them. The post-session
+// strategy-selection consumer guards against missing keys with a
+// length-zero / undefined check.
+const strategies: Partial<Record<SubTypeId, ReadonlyArray<StrategyEntry>>> = {
 	"verbal.antonyms": [
 		{
 			kind: "recognition",
@@ -64,7 +56,7 @@ const strategies: Record<SubTypeId, ReadonlyArray<StrategyEntry>> = {
 			text: "An option can be grammatically correct and still wrong — the test wants the choice that makes the sentence cohere, not just parse."
 		}
 	],
-	"verbal.logic": [
+	"verbal.critical_reasoning": [
 		{
 			kind: "recognition",
 			text: "Spatial-direction problems and syllogisms reward sketching the relationships ('David west of Katrina; Nathan west of David → N-D-K'). Don't try to hold them in your head."
@@ -76,6 +68,20 @@ const strategies: Record<SubTypeId, ReadonlyArray<StrategyEntry>> = {
 		{
 			kind: "trap",
 			text: "When a conclusion sounds strong, prefer 'Uncertain' unless the premises explicitly support it — the test rewards the most modest defensible answer."
+		}
+	],
+	"verbal.letter_series": [
+		{
+			kind: "recognition",
+			text: "Convert each letter to its alphabet position (A=1, B=2, …) any time the pattern doesn't resolve at a glance — pretend it's a number series."
+		},
+		{
+			kind: "technique",
+			text: "On multi-letter sequences (xrfm, xqen, xpdo, …), treat each character position as its own independent series and solve them in parallel."
+		},
+		{
+			kind: "trap",
+			text: "Don't count alphabet positions on your fingers in real time — that's where seconds vanish. Memorize milestones (E=5, J=10, O=15, T=20)."
 		}
 	],
 	"numerical.number_series": [
@@ -90,20 +96,6 @@ const strategies: Record<SubTypeId, ReadonlyArray<StrategyEntry>> = {
 		{
 			kind: "trap",
 			text: "Don't fall in love with the first pattern that fits two terms — verify it against at least three before committing."
-		}
-	],
-	"numerical.letter_series": [
-		{
-			kind: "recognition",
-			text: "Convert each letter to its alphabet position (A=1, B=2, …) any time the pattern doesn't resolve at a glance — pretend it's a number series."
-		},
-		{
-			kind: "technique",
-			text: "On multi-letter sequences (xrfm, xqen, xpdo, …), treat each character position as its own independent series and solve them in parallel."
-		},
-		{
-			kind: "trap",
-			text: "Don't count alphabet positions on your fingers in real time — that's where seconds vanish. Memorize milestones (E=5, J=10, O=15, T=20)."
 		}
 	],
 	"numerical.word_problems": [
@@ -148,14 +140,28 @@ const strategies: Record<SubTypeId, ReadonlyArray<StrategyEntry>> = {
 			text: "'X is what percent of Y' and 'Y is what percent of X' have different denominators — confirm which way the question runs before computing."
 		}
 	],
-	"numerical.averages_ratios": [
+	"numerical.averages": [
 		{
 			kind: "recognition",
-			text: "For ratios, decide first whether the question asks parts-to-parts or parts-to-whole. The answer is keyed to that distinction."
+			text: "For 'one element added/removed' questions, the new value's distance from the old mean tells you the shift — you rarely have to recompute the whole average."
 		},
 		{
 			kind: "technique",
-			text: "For 'one element added/removed' average questions, compute the *delta from the mean* and redistribute over the new count — faster than recomputing."
+			text: "Compute the delta from the mean and redistribute over the new count: (new − old_mean) ÷ new_count = mean_shift. Faster than re-averaging."
+		},
+		{
+			kind: "trap",
+			text: "'Average rate' or 'average speed' is not the arithmetic mean of the rates — use total quantity over total denominator (total distance ÷ total time)."
+		}
+	],
+	"numerical.ratios": [
+		{
+			kind: "recognition",
+			text: "Decide first whether the question asks parts-to-parts (3:2 means 3 cats per 2 dogs) or parts-to-whole (3:2 means 3 of every 5 are cats). The answer keys to that distinction."
+		},
+		{
+			kind: "technique",
+			text: "Scale the ratio to match the question's known quantity. 3:2 with 9 cats → multiply by 3 to get 9:6, so 6 dogs."
 		},
 		{
 			kind: "trap",

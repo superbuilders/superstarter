@@ -2,7 +2,7 @@ import type { SeedItemInput } from "@/db/seeds/items/types"
 
 const items: SeedItemInput[] = [
 	{
-		subTypeId: "verbal.logic",
+		subTypeId: "verbal.critical_reasoning",
 		difficulty: "easy",
 		body: {
 			kind: "text",
@@ -18,7 +18,7 @@ const items: SeedItemInput[] = [
 		explanation: "Transitivity: robins ⊂ birds, birds have feathers, so robins have feathers."
 	},
 	{
-		subTypeId: "verbal.logic",
+		subTypeId: "verbal.critical_reasoning",
 		difficulty: "easy",
 		body: {
 			kind: "text",
@@ -34,7 +34,7 @@ const items: SeedItemInput[] = [
 		explanation: "Modus tollens: rain → wet field; field not wet, so it is not raining."
 	},
 	{
-		subTypeId: "verbal.logic",
+		subTypeId: "verbal.critical_reasoning",
 		difficulty: "medium",
 		body: {
 			kind: "text",
@@ -50,7 +50,7 @@ const items: SeedItemInput[] = [
 		explanation: "Snakes ⊂ reptiles, and reptiles ∩ mammals = ∅, so snakes ∩ mammals = ∅."
 	},
 	{
-		subTypeId: "verbal.logic",
+		subTypeId: "verbal.critical_reasoning",
 		difficulty: "medium",
 		body: {
 			kind: "text",
@@ -66,7 +66,7 @@ const items: SeedItemInput[] = [
 		explanation: "Affirming the consequent is invalid; only the original conditional, restricted to Mira, can be reaffirmed."
 	},
 	{
-		subTypeId: "verbal.logic",
+		subTypeId: "verbal.critical_reasoning",
 		difficulty: "hard",
 		body: {
 			kind: "text",

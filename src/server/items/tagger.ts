@@ -8,7 +8,7 @@ import { logger } from "@/logger"
 const TAGGER_MODEL = "claude-haiku-4-5-20251001"
 
 const FALLBACK: TaggerResult = {
-	subTypeId: "verbal.synonyms",
+	subTypeId: "verbal.antonyms",
 	difficulty: "medium",
 	confidence: 0
 }
@@ -111,7 +111,7 @@ function extractText(content: Anthropic.ContentBlock[]): string | undefined {
 function buildSystemPrompt(): string {
 	const lines: string[] = [
 		"You are a CCAT (Criteria Cognitive Aptitude Test) item-classification helper.",
-		"Given a question prompt and its multiple-choice options, you must classify it into exactly one of the 11 v1 sub-types and assign a difficulty.",
+		"Given a question prompt and its multiple-choice options, you must classify it into exactly one of the 14 v1 sub-types and assign a difficulty.",
 		"",
 		"Sub-types:"
 	]
@@ -123,26 +123,33 @@ function buildSystemPrompt(): string {
 		'Difficulty levels: "easy" (under 8s), "medium" (8–14s), "hard" (14–18s), "brutal" (over 18s).',
 		"",
 		"Examples (input question → expected JSON output):",
-		'- verbal.synonyms — "Choose the word that most nearly means HAPPY." (target word in ALL CAPS, options are candidate synonyms) → {"subTypeId":"verbal.synonyms","difficulty":"easy","confidence":0.98}',
 		'- verbal.antonyms — "Choose the word most nearly OPPOSITE in meaning to SCARCE." (target word in ALL CAPS, options are candidate antonyms) → {"subTypeId":"verbal.antonyms","difficulty":"medium","confidence":0.97}',
 		'- verbal.analogies — "PUPPY is to DOG as KITTEN is to ___." (A is to B as C is to ___ pattern) → {"subTypeId":"verbal.analogies","difficulty":"easy","confidence":0.98}',
 		'- verbal.sentence_completion — "After the long hike, the children were so ___ that they fell asleep immediately." (single missing word in a prose sentence) → {"subTypeId":"verbal.sentence_completion","difficulty":"easy","confidence":0.97}',
-		'- verbal.logic — "All robins are birds. All birds have feathers. Which conclusion follows?" (premises + conclusion; syllogism, modus tollens, or similar) → {"subTypeId":"verbal.logic","difficulty":"easy","confidence":0.96}',
+		'- verbal.critical_reasoning — "All robins are birds. All birds have feathers. Which conclusion follows?" (premises + conclusion; syllogism, modus tollens, spatial-direction, or similar) → {"subTypeId":"verbal.critical_reasoning","difficulty":"easy","confidence":0.96}',
 		'- numerical.number_series — "What number comes next? 2, 4, 6, 8, ___" (numeric sequence, find next term) → {"subTypeId":"numerical.number_series","difficulty":"easy","confidence":0.99}',
-		'- numerical.letter_series — "What letter comes next? A, C, E, G, ___" (alphabetic sequence, find next letter or letter pair) → {"subTypeId":"numerical.letter_series","difficulty":"easy","confidence":0.99}',
+		'- verbal.letter_series — "What letter comes next? A, C, E, G, ___" (alphabetic sequence, find next letter or letter pair) → {"subTypeId":"verbal.letter_series","difficulty":"easy","confidence":0.99}',
 		'- numerical.word_problems — "A pen costs $3. How much do 7 pens cost?" (prose arithmetic with no %, no a/b fraction notation, no average/ratio) → {"subTypeId":"numerical.word_problems","difficulty":"easy","confidence":0.95}',
 		'- numerical.fractions — "What is 1/2 + 1/4?" or "What is 2/3 of 9?" (explicit a/b fraction notation drives the operation) → {"subTypeId":"numerical.fractions","difficulty":"easy","confidence":0.97}',
 		'- numerical.percentages — "A jacket costs $80; after a 15% discount, what is the sale price?" ("%" symbol or the word "percent" present) → {"subTypeId":"numerical.percentages","difficulty":"medium","confidence":0.97}',
-		'- numerical.averages_ratios — "What is the average of 4, 6, and 8?" or "The ratio of cats to dogs is 3:2; if there are 9 cats, how many dogs?" ("average"/"mean" or a:b ratio notation) → {"subTypeId":"numerical.averages_ratios","difficulty":"easy","confidence":0.97}',
+		'- numerical.averages — "What is the average of 4, 6, and 8?" or "The mean score of five tests was…" ("average"/"mean" of a value set) → {"subTypeId":"numerical.averages","difficulty":"easy","confidence":0.97}',
+		'- numerical.ratios — "The ratio of cats to dogs is 3:2; if there are 9 cats, how many dogs?" (a:b ratio notation, scale or split) → {"subTypeId":"numerical.ratios","difficulty":"easy","confidence":0.97}',
+		'- numerical.workrate — "Anna can paint a room in 4 hours; Ben in 6. How long together?" (combined-work or rate-of-completion) → {"subTypeId":"numerical.workrate","difficulty":"medium","confidence":0.96}',
+		'- numerical.speed_distance_time — "A car travels 180 miles in 3 hours; what is its speed?" (any of speed / distance / time given the other two) → {"subTypeId":"numerical.speed_distance_time","difficulty":"easy","confidence":0.97}',
+		'- numerical.lowest_values — "Which of the following is the smallest? 0.5, 1/3, 0.45, 2/5" (compare expressions, pick smallest or largest) → {"subTypeId":"numerical.lowest_values","difficulty":"medium","confidence":0.96}',
 		"",
 		"Disambiguation for numerical items — classify by the dominant operation, not surface vocabulary:",
 		'- "%" symbol or the word "percent" → numerical.percentages.',
 		"- a/b fraction notation as operands → numerical.fractions.",
-		'- "average"/"mean" or a:b ratio notation → numerical.averages_ratios.',
+		'- "average"/"mean" of a value set → numerical.averages.',
+		'- a:b ratio notation → numerical.ratios.',
+		'- combined-work or rate-of-completion ("A and B together can…") → numerical.workrate.',
+		'- speed / distance / time scenario → numerical.speed_distance_time.',
+		'- compare a small set of numeric expressions → numerical.lowest_values.',
 		"- Otherwise prose arithmetic without those markers → numerical.word_problems.",
 		"",
 		"Respond with raw JSON only — no markdown code fences, no commentary, just the object.",
-		'{"subTypeId": "<one of the 11 ids>", "difficulty": "easy|medium|hard|brutal", "confidence": <number from 0 to 1>}'
+		'{"subTypeId": "<one of the 14 ids>", "difficulty": "easy|medium|hard|brutal", "confidence": <number from 0 to 1>}'
 	)
 	return lines.join("\n")
 }

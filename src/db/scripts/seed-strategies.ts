@@ -17,6 +17,7 @@ async function main() {
 	let total = 0
 	for (const subTypeId of subTypeIds) {
 		const entries = strategyConfig[subTypeId]
+		if (!entries) continue
 		for (let index = 0; index < entries.length; index += 1) {
 			const entry = entries[index]
 			if (!entry) {
