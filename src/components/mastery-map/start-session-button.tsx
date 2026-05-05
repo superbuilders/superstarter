@@ -8,7 +8,7 @@
 // "Start full-length test" — but full-length is Phase 5, so for Phase 3
 // the page always renders the drill CTA (the recommended-sub-type
 // promise still picks SOMETHING; if every state is mastered the
-// alphabetic tie-break picks numerical.averages_ratios as it's first
+// alphabetic tie-break picks numerical.averages as it's first
 // lexicographically — see recommended-next-session.ts).
 
 import type { SubTypeId } from "@/config/sub-types"

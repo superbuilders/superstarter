@@ -290,8 +290,8 @@ async function runSmoke(): Promise<PhaseResult[]> {
 
 	// Observability: confirm the served order is no longer the unshuffled
 	// `diagnosticMix` array order. The first three diagnosticMix slots
-	// are all `verbal.synonyms`. Under the shuffle, the first three
-	// served sub-types should NOT all be `verbal.synonyms` (with
+	// are all `verbal.antonyms`. Under the shuffle, the first three
+	// served sub-types should NOT all be `verbal.antonyms` (with
 	// overwhelming probability — collision is one in ~3^50).
 	{
 		await using adminDb = await createAdminDb()
@@ -309,7 +309,7 @@ async function runSmoke(): Promise<PhaseResult[]> {
 		const firstSub = firstItemRow.data[0]?.subTypeId
 		const allSubs: Array<string | undefined> = [firstSub, ...preCutoffServedSubTypes]
 		const allSynonyms = allSubs.every(function isSynonyms(s) {
-			return s === "verbal.synonyms"
+			return s === "verbal.antonyms"
 		})
 		const unshuffledFirstThree = [
 			diagnosticMix[0]?.subTypeId,
@@ -317,7 +317,7 @@ async function runSmoke(): Promise<PhaseResult[]> {
 			diagnosticMix[2]?.subTypeId
 		]
 		phases.push({
-			step: "served-order is shuffled (first 3 sub-types are NOT all verbal.synonyms)",
+			step: "served-order is shuffled (first 3 sub-types are NOT all verbal.antonyms)",
 			ok: !allSynonyms,
 			detail: {
 				servedSubTypes: allSubs,

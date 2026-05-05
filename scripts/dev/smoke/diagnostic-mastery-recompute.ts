@@ -25,7 +25,7 @@
 //   - Local docker postgres reachable (createAdminDb works).
 //   - `bun dev` running on http://localhost:3000.
 //   - Items table seeded with at least one live item in each of the
-//     three target sub-types: verbal.synonyms, numerical.fractions,
+//     three target sub-types: verbal.antonyms, numerical.fractions,
 //     numerical.percentages.
 //
 // What this smoke asserts:
@@ -118,7 +118,7 @@ async function setupStaleSessionWithAttempts(): Promise<SetupResult> {
 	// sub-types and fetch one live item from each — typed Drizzle query,
 	// no need for raw SQL DISTINCT ON.
 	const targetSubTypes = [
-		"verbal.synonyms",
+		"verbal.antonyms",
 		"numerical.fractions",
 		"numerical.percentages"
 	] as const

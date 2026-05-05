@@ -96,7 +96,7 @@ async function setupUserWithPopulatedMastery(label: string): Promise<SetupResult
 			.insert(masteryState)
 			.values({
 				userId,
-				subTypeId: "verbal.synonyms",
+				subTypeId: "verbal.antonyms",
 				currentState: "learning",
 				wasMastered: false,
 				updatedAtMs: Date.now()

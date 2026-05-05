@@ -144,7 +144,7 @@ async function setupUserWithEmptyMasteryState(label: string): Promise<SetupResul
 async function upsertMasteryStateRows(userId: string): Promise<void> {
 	await using adminDb = await createAdminDb()
 	const targetSubTypes = [
-		"verbal.synonyms",
+		"verbal.antonyms",
 		"numerical.fractions",
 		"numerical.percentages"
 	] as const
