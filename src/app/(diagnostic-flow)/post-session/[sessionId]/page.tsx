@@ -1,23 +1,28 @@
-// /post-session/[sessionId] — diagnostic-only post-session capture.
+// /post-session/[sessionId] — session-type-aware post-session review surface.
 //
-// Plan: docs/plans/phase3-diagnostic-flow.md §6.
+// Plan: docs/plans/phase5-post-session-review.md §3 + §12 commit 1.
 //
 // Server component:
 //   1. Resolves params to a sessionId promise.
 //   2. Loads the session row + auth check.
-//   3. Redirects non-diagnostic sessions to / and unauthorized access to /.
-//   4. Derives a `pacingMinutes` value from `MAX(attempts.id)`'s UUIDv7
-//      timestamp prefix minus `practice_sessions.started_at_ms`. The value
-//      is undefined when the session ran ≤ 15 minutes (no pacing line
-//      surfaces); when ≥ 15 minutes, the rounded minute count drives the
-//      neutral pacing-line sentence rendered by <PostSessionShell>.
-//   5. Passes the promise to <PostSessionContent> (a client component)
-//      which consumes it via React.use() and renders the shell + form.
-//
-// The `diagnostic_overtime_note_shown_at_ms` column on practice_sessions
-// is left vestigial-and-unread under sub-phase 1 (plan §10). The pacing
-// line is derived from attempts data on every load; no DB write is
-// involved.
+//   3. Redirects unauthorized access (no session, not the owner, missing
+//      row) to / per the existing security shape.
+//   4. **No longer redirects non-diagnostic session types** — drill,
+//      full-length, and simulation sessions all render the review
+//      surface here. Phase 5 sub-phase 1 commit 1 lifts the prior
+//      diagnostic-only gate; the SPEC §10.2 line-5 marker that said
+//      "drills land on the Mastery Map directly, NOT through
+//      /post-session/[sessionId]" rewrites past-tense in commit 7.
+//   5. Derives a `pacingMinutes` value from `MAX(attempts.id)`'s
+//      UUIDv7 timestamp prefix minus `practice_sessions.started_at_ms`.
+//      The value is undefined when the session ran ≤ 15 minutes (no
+//      pacing line surfaces); when ≥ 15 minutes, the rounded minute
+//      count drives the neutral pacing-line sentence rendered by
+//      <PostSessionShell>. The pacing line itself is diagnostic-only
+//      at the render layer; the value flows through universally to
+//      keep the data shape consistent.
+//   6. Passes the promise to <PostSessionContent> (a client component)
+//      which consumes it via React.use() and renders the shell.
 
 import { eq, sql } from "drizzle-orm"
 import { redirect } from "next/navigation"
@@ -29,6 +34,7 @@ import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { timestampFromUuidv7 } from "@/db/lib/uuid-time"
 import { logger } from "@/logger"
 import { PostSessionContent } from "@/app/(diagnostic-flow)/post-session/[sessionId]/content"
+import type { SessionTypeForShell } from "@/components/post-session/post-session-shell"
 
 interface PageProps {
 	params: Promise<{ sessionId: string }>
@@ -36,12 +42,14 @@ interface PageProps {
 
 interface SessionInfo {
 	sessionId: string
+	sessionType: SessionTypeForShell
 	pacingMinutes?: number
 }
 
 // Threshold: the real CCAT is 15 minutes for 50 questions. Sessions at
 // or under this duration are on-pace and surface no pacing line. Above
-// it, the pacing line surfaces with the rounded minute count.
+// it, the pacing line surfaces with the rounded minute count (rendered
+// only on diagnostic sessions per <PostSessionShell>'s gate).
 const PACING_THRESHOLD_MS = 15 * 60_000
 
 async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionInfo> {
@@ -77,11 +85,6 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		)
 		redirect("/")
 	}
-	if (row.type !== "diagnostic") {
-		// Drills don't route through /post-session in Phase 3.
-		logger.info({ sessionId, type: row.type }, "/post-session: non-diagnostic, redirect /")
-		redirect("/")
-	}
 
 	// Derive the pacing-line input from attempts. We want the
 	// chronologically-latest attempt's creation time minus
@@ -94,7 +97,7 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 	//     max(text) works because UUIDv7's hex-text lex order matches its
 	//     byte/time order. The plan executes via attempts_session_id_idx
 	//     and aggregates over the session's at-most-50 rows (verified
-	//     with EXPLAIN ANALYZE during commit 3 development).
+	//     with EXPLAIN ANALYZE during Phase 3 sub-phase 1 commit 3).
 	const lastAttemptRows = await db
 		.select({
 			lastAttemptId: sql<string | null>`max(${attempts.id}::text)::uuid`
@@ -114,6 +117,7 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 
 	return {
 		sessionId: row.id,
+		sessionType: row.type,
 		pacingMinutes
 	}
 }

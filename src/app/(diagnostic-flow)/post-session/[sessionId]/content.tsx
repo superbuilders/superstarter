@@ -3,10 +3,11 @@
 // /post-session/[sessionId] content — consumes the loadSession promise
 // from page.tsx and renders <PostSessionShell>.
 //
-// The shell handles the pacing-line + onboarding-targets form layout;
-// keeping the route's content.tsx thin keeps the visual primitive
-// reusable from a Phase 5 drill post-session route if Phase 5 chooses
-// to share it.
+// Plan: docs/plans/phase5-post-session-review.md §3 + §12 commit 1.
+//
+// Forwards `sessionType` and `pacingMinutes` to the shell. The shell's
+// session-type-aware dispatch decides what renders inside its locked
+// nine-slot ordering.
 
 import * as React from "react"
 import type { SessionInfo } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
@@ -18,7 +19,12 @@ interface PostSessionContentProps {
 
 function PostSessionContent(props: PostSessionContentProps) {
 	const info = React.use(props.sessionPromise)
-	return <PostSessionShell pacingMinutes={info.pacingMinutes} />
+	return (
+		<PostSessionShell
+			sessionType={info.sessionType}
+			pacingMinutes={info.pacingMinutes}
+		/>
+	)
 }
 
 export { PostSessionContent }

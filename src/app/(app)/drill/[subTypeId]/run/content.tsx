@@ -10,9 +10,13 @@
 //   - perQuestionTargetMs: 18000  (triage prompt fires)
 //   - targetQuestionCount: drillLength
 //
-// After the last submit `endSession` resolves and we router.push('/').
-// No detour through /post-session/[sessionId] — drill post-session UI
-// is Phase 5.
+// After the last submit, `endSession` resolves and we route to
+// `/post-session/[sessionId]`. Phase 5 sub-phase 1 commit 1
+// (docs/plans/phase5-post-session-review.md §3 + §12 commit 1) flipped
+// the drill landing from `/` to `/post-session/[sessionId]` so drills
+// land on the same review surface as diagnostic + (sub-phase 3)
+// full-length sessions. SPEC §10.2 line-5 marker rewrites past-tense
+// in commit 7 of this sub-phase.
 
 import { useRouter } from "next/navigation"
 import * as React from "react"
@@ -39,7 +43,7 @@ function DrillRunContent(props: DrillRunContentProps) {
 	const onEndSession = React.useCallback(
 		async function onEndSession() {
 			await endSession(init.sessionId)
-			router.push("/")
+			router.push(`/post-session/${init.sessionId}`)
 		},
 		[init.sessionId, router]
 	)
