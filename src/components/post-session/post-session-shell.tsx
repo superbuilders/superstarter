@@ -10,15 +10,17 @@
 // - Commit 2 widened the prop boundary to carry the review-data
 //   fields (accuracy, latency, wrongItems, triageScore,
 //   surfacedStrategies); slots stayed placeholder.
-// - Commit 3 (this commit) fills slot 2 (<TriageScoreLine>) and
-//   slot 3 (<AccuracySummary>) into their locked positions. Slots 4,
-//   5, 6 remain placeholder; commits 4-6 fill them.
+// - Commit 3 filled slot 2 (<TriageScoreLine>) and slot 3
+//   (<AccuracySummary>) into their locked positions.
+// - Commit 4 (this commit) fills slot 4 (<LatencySummary>) into its
+//   locked position. Slots 5, 6 remain placeholder; commits 5-6 fill
+//   them.
 //
 // Render order (top to bottom), per §10:
 //   1. Heading + brief one-line summary.
 //   2. <TriageScoreLine>           — filled (commit 3, plan §7).
 //   3. <AccuracySummary>           — filled (commit 3, plan §5).
-//   4. <LatencySummary>            — fills in commit 4 (plan §6).
+//   4. <LatencySummary>            — filled (commit 4, plan §6).
 //   5. <WrongItemsBrowser>         — fills in commit 5 (plan §8).
 //   6. <StrategySurface>           — fills in commit 6 (plan §9).
 //   7. <OnboardingTargets>         — diagnostic-only, already shipped.
@@ -39,6 +41,7 @@ import type {
 	WrongItem
 } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { AccuracySummary } from "@/components/post-session/accuracy-summary"
+import { LatencySummary } from "@/components/post-session/latency-summary"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { TriageScoreLine } from "@/components/post-session/triage-score-line"
 import { Button } from "@/components/ui/button"
@@ -109,8 +112,10 @@ function PostSessionShell(props: PostSessionShellProps) {
 				<AccuracySummary rows={props.accuracy} />
 			</div>
 
-			{/* Slot 4: <LatencySummary> — fills in commit 4 (plan §6). */}
-			<div data-testid="post-session-slot-latency-summary" />
+			{/* Slot 4: <LatencySummary> — filled in commit 4 (plan §6). */}
+			<div data-testid="post-session-slot-latency-summary">
+				<LatencySummary rows={props.latency} />
+			</div>
 
 			{/* Slot 5: <WrongItemsBrowser> — fills in commit 5 (plan §8). */}
 			<div data-testid="post-session-slot-wrong-items" />
