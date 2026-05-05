@@ -1252,6 +1252,24 @@ Sub-phase 4's load-bearing example: the original plan-prompt suggested "user_id 
 
 The audit takes one grep + one file read. Cost is negligible compared to the cost of pinning a design that turns out to be impossible. Worth a habit: any time a plan invokes "perf trade-off" as a reason, the perf rationale gets verified against actual config before commit-time.
 
+#### 6.14.17 Doc-only cut-from-v1 reconciliation as a deliberate convention break
+
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 5). Pattern surfaced from the doc-only round (commits `ca2330a` → `832f634`) + the v1-code-cleanup round (commits `7bc96ea` → this commit). Captured here so future scope-tightening rounds inherit the discipline.
+
+When a round cuts features doc-only without corresponding code (the PRD/SPEC/roadmap mark the cut, the code stays untouched), the cut markers describe a **forward-projection of the cut decision** rather than current shipped behavior. The doc-only convention break is deliberate — the markers serve as a forcing function for a follow-up code-cleanup round — but it carries a specific risk: the projection can invert relative to shipped reality.
+
+**Two failure modes to expect:**
+
+1. **The "stays vestigial in tree" projection.** The doc-only cut marker says a column / table / function "stays vestigial" — meaning shipped, but unwritten. A subsequent cleanup-round audit can verify this directly via grep + DB inspection. Example: SPEC §3.4's pre-cleanup marker said `practice_sessions.timer_mode` "stays vestigial in tree"; the cleanup round confirmed and dropped it. **Low-risk projection.** The vestigial claim is a falsifiable assertion about current state.
+
+2. **The "static behavior in v1" projection.** The doc-only cut marker says a feature behaves a specific way under v1 (e.g., "question timer OFF everywhere in v1"). This kind of claim is a forward-projection of what the post-cut behavior *should* look like — and it can invert relative to what's actually shipped. **Higher-risk projection.** Verification requires reading the code's actual default state, not just grepping for the cut feature.
+
+**Inversion caught in this round** (v1-code-cleanup commit 2, `a32131a`): SPEC §6.12's pre-cleanup marker said "all focus-shell audio is silent in v1" because the audio paths gated on `timerPrefs.questionTimerVisible` and the marker projected that flag as static-`false`. **Phase 3 reality**: the diagnostic + drill content components passed `questionTimerVisible: true` as the default, so audio was on by default. The doc-only marker inverted the actual shipped behavior. Commit 2 corrected the SPEC §6.12 prose alongside removing the gate, so the doc and code now agree on "audio always on once unlocked."
+
+**Convention going forward.** Cut markers should describe **what the cut authorizes** (the deletion: "this column is no longer required by v1; cleanup round will drop it") rather than projecting **what the post-cut state will be** ("question timer is OFF in v1"). Vestigial-state claims are safe (verifiable). Behavior-projection claims are unsafe (can invert) and should either be omitted or labeled explicitly as projections subject to verification at cleanup time.
+
+**Cross-references.** Doc-only round commits: `ca2330a`, `991d3eb`, `75240c8`, `4b35449`, `141bf83`, `832f634`. v1-code-cleanup round commits: `7bc96ea`, `a32131a`, `938f771`, `37ad762`, this commit. The `a32131a` commit message documents the §6.12 inversion correction in detail; this entry generalizes the pattern.
+
 ---
 
 ## 7. Server actions, route handlers, and workflows
@@ -1350,7 +1368,7 @@ async function dismissPostSession(sessionId: string): Promise<void>
 ```
 
 Side effects:
-- ~~For `full_length` sessions, sets `practice_sessions.strategy_review_viewed = true`. Throws `ErrStrategyReviewRequired` if the gate has not yet elapsed.~~ **Cut from v1 2026-05-04** — 30-second strategy-review gate (PRD §6.5 cut marker). The `strategy_review_viewed` column **stays vestigial in tree** at `src/db/schemas/practice/practice-sessions.ts` (default `false`, never written `true` in v1). `ErrStrategyReviewRequired` is **never thrown** in v1 — see §7.15 marker. v1 `dismissPostSession` has no full-length-specific branch.
+- ~~For `full_length` sessions, sets `practice_sessions.strategy_review_viewed = true`. Throws `ErrStrategyReviewRequired` if the gate has not yet elapsed.~~ **Cut from v1 2026-05-04**, code-cleanup landed v1-code-cleanup commit 3 (`938f771`). The `strategy_review_viewed` column was dropped from `practice_sessions` via migration `0001_true_young_avengers.sql`. `ErrStrategyReviewRequired` was never declared in tree (PRD §6.5 strategy-review gate cut). v1 `dismissPostSession` has no full-length-specific branch.
 - For diagnostic sessions where the user has not yet provided onboarding targets, the post-session page renders the `<OnboardingTargets>` form first and `dismissPostSession` is gated by `<OnboardingTargets>` having posted (or skipped) via `saveOnboardingTargets`.
 - Calls `revalidatePath('/')`.
 
@@ -1403,7 +1421,7 @@ The `expires_ms` check sits inside the subquery's WHERE clause so an expired tok
 
 ### 7.8 `persistTimerPrefs` — `src/app/(app)/actions.ts`
 
-> **Cut from v1 2026-05-04** — timer-toggle UX (PRD §5.1 cut marker). `persistTimerPrefs` was **never shipped** to tree (`src/app/(app)/actions.ts` does not export it). With the toggle UI cut, no caller needs to write `users.timer_prefs_json` at runtime. Section preserved as historical reference. The "no `revalidatePath`" exception note remains an accurate description of the deliberate design *if* the action ever returns post-v1. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.
+> **Cut from v1 2026-05-04** — timer-toggle UX (PRD §5.1 cut marker). `persistTimerPrefs` was never shipped to tree (`src/app/(app)/actions.ts` does not export it). The `users.timer_prefs_json` column it would have written was dropped in v1-code-cleanup commit 3 (`938f771`). Section preserved as historical reference; the "no `revalidatePath`" exception note documents the rationale for any future v2 reintroduction. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.
 
 ```ts
 async function persistTimerPrefs(input: TimerPrefs): Promise<void>
@@ -2095,7 +2113,7 @@ Sub-phases 1 (diagnostic flow), 2 (Mastery Map + post-diagnostic empty-state pan
 - ~~`src/workflows/review-queue-refresh.ts` (NEW)~~ **Cut from v1 2026-05-04** — SR queue; never shipped to tree.
 - ~~`src/app/(app)/review/{page,content}.tsx` (NEW)~~ **Cut from v1 2026-05-04** — SR queue route; never shipped to tree.
 - `src/components/focus-shell/triage-prompt.tsx` (MOD: full triage logic, persistent rendering)
-- ~~`src/components/focus-shell/question-timer-bar.tsx` (MOD: toggle + persistence)~~ **Cut from v1 2026-05-04** — timer-toggle UX (PRD §5.1). Question-timer bar shipped during Phase 3; the toggle + persistence MOD is cut. Drop unused toggle code paths in v1-code-cleanup.
+- ~~`src/components/focus-shell/question-timer-bar.tsx` (MOD: toggle + persistence)~~ **Cut from v1 2026-05-04** — timer-toggle UX (PRD §5.1). Question-timer bar shipped during Phase 3; the toggle + persistence MOD was cut. Unused toggle code paths dropped in v1-code-cleanup commit 2 (`a32131a`).
 - ~~`src/components/narrowing-ramp/{narrowing-ramp,obstacle-scan,visual-narrowing,session-brief,launch-countdown}.tsx` (NEW)~~ **Cut from v1 2026-05-04** — NarrowingRamp (PRD §5.3); never shipped to tree.
 - ~~`src/server/narrowing-ramp/obstacle.ts` (NEW)~~ **Cut from v1 2026-05-04** — NarrowingRamp helper; never shipped to tree.
 - ~~`src/components/post-session/strategy-review-gate.tsx` (NEW)~~ **Cut from v1 2026-05-04** — strategy gate (PRD §6.5); never shipped to tree.

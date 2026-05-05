@@ -6,8 +6,9 @@ import { logger } from "@/logger"
 // and the RFC-4122 variant bits set. The "timestamp" prefix is *not*
 // real time — it's the leading bytes of a sha256 hash. Use only for
 // seed-time IDs that need to be stable across redeployments (e.g.,
-// strategies, where strategy_views holds FK references that would
-// invalidate on regeneration).
+// strategies, whose ids are referenced by `items.strategy_id` and
+// would invalidate on regeneration if the catalog seed re-ran with a
+// different RNG).
 function deterministicUuidv7(input: string): string {
 	const hash = createHash("sha256").update(input).digest()
 	const bytes = new Uint8Array(hash.buffer, hash.byteOffset, 16)

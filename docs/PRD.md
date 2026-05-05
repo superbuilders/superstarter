@@ -429,8 +429,8 @@ All `id` columns use UUIDv7 (per the Superbuilder Ruleset). All time-bearing col
 The Auth.js tables (`users`, `accounts`, `sessions`, `verification_tokens`) are maintained by the Drizzle adapter with custom `bigint` schemas as noted in section 7. The application-specific tables below are additional.
 
 > **Partial cut from v1 2026-05-04.** Schema sketch below preserved as historical reference; two callouts per the round's on-disk-code-surface convention (cleanup deferred to the v1-code-cleanup follow-up round, not this round):
-> - `sessions.narrowing_ramp_completed` + `sessions.if_then_plan` columns: NarrowingRamp protocol cut (§5.3 marker). Both columns **stay vestigial in tree** at `src/db/schemas/practice/practice-sessions.ts`; v1 sessions write `narrowing_ramp_completed = false` (default) and `if_then_plan = null` unconditionally.
-> - `review_queue` table: spaced-repetition queue cut (§4.3 marker). The table **stays vestigial in tree** at `src/db/schemas/review/review-queue.ts` (shipped during Phase 3 to lock the migration shape); v1 never inserts rows.
+> - `sessions.narrowing_ramp_completed` + `sessions.if_then_plan` columns: NarrowingRamp protocol cut (§5.3 marker). Both columns **were dropped from tree** in v1-code-cleanup commit 3 (`938f771`, 2026-05-04) via migration `0001_true_young_avengers.sql`.
+> - `review_queue` table: spaced-repetition queue cut (§4.3 marker). The table **was dropped from tree** in v1-code-cleanup commit 4 (`37ad762`, 2026-05-04) via migration `0002_tranquil_mach_iv.sql`; the schema file `src/db/schemas/review/review-queue.ts` was deleted alongside the `review/` directory.
 >
 > See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04. The detailed SPEC counterparts are at SPEC §3.4 + §3.5 cut markers.
 

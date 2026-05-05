@@ -12,8 +12,10 @@
 // 10). The form action navigates to `/drill/<subTypeId>/run?length=N`
 // where the run page kicks off `startSession`.
 //
-// No timer-mode selector in Phase 3 — only `standard` is wired. Phase 5
-// adds `speed_ramp` and `brutal` modes.
+// No timer-mode selector — `standard` is the only timer mode in v1.
+// `speed_ramp` and `brutal` modes were cut from v1 2026-05-04 (PRD §4.4
+// + SPEC §3.4 markers); the timer_mode enum was truncated to
+// `['standard']` in v1-code-cleanup commit 3 (`938f771`).
 
 import * as errors from "@superbuilders/errors"
 import { and, count, eq } from "drizzle-orm"
