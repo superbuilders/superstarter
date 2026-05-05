@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm"
-import { bigint, integer, jsonb, pgTable, text, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core"
+import { bigint, integer, pgTable, text, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core"
 
 const users = pgTable(
 	"users",
@@ -11,7 +11,6 @@ const users = pgTable(
 		image: text("image"),
 		targetPercentile: integer("target_percentile"),
 		targetDateMs: bigint("target_date_ms", { mode: "number" }),
-		timerPrefsJson: jsonb("timer_prefs_json").notNull().default(sql`'{}'::jsonb`),
 		createdAtMs: bigint("created_at_ms", { mode: "number" })
 			.notNull()
 			.default(sql`(extract(epoch from now()) * 1000)::bigint`)

@@ -51,22 +51,7 @@ async function readSession(sessionId: string): Promise<SessionRow> {
 		logger.warn({ sessionId }, "readSession: row missing")
 		throw errors.wrap(ErrSessionNotFound, `session id '${sessionId}'`)
 	}
-	const rowType = row.type
-	if (rowType === "review") {
-		// 'review' session_type cut from v1 2026-05-04 (PRD §4.3 + SPEC §3.5
-		// markers). The schema enum still carries the value until commit 4's
-		// migration truncates it; this guard narrows the runtime read for
-		// the duration.
-		logger.error({ sessionId, type: rowType }, "readSession: 'review' session type cut from v1")
-		throw errors.wrap(ErrSessionNotFound, `session '${sessionId}' has cut session_type 'review'`)
-	}
-	return {
-		id: row.id,
-		userId: row.userId,
-		type: rowType,
-		startedAtMs: row.startedAtMs,
-		endedAtMs: row.endedAtMs
-	}
+	return row
 }
 
 interface ItemAnswer {

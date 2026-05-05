@@ -1,15 +1,5 @@
 import { sql } from "drizzle-orm"
-import {
-	bigint,
-	boolean,
-	index,
-	integer,
-	pgEnum,
-	pgTable,
-	text,
-	uuid,
-	varchar
-} from "drizzle-orm/pg-core"
+import { bigint, index, integer, pgEnum, pgTable, uuid, varchar } from "drizzle-orm/pg-core"
 import { users } from "@/db/schemas/auth/users"
 import { subTypes } from "@/db/schemas/catalog/sub-types"
 
@@ -17,11 +7,10 @@ const sessionType = pgEnum("session_type", [
 	"diagnostic",
 	"drill",
 	"full_length",
-	"simulation",
-	"review"
+	"simulation"
 ])
 
-const timerMode = pgEnum("timer_mode", ["standard", "speed_ramp", "brutal"])
+const timerMode = pgEnum("timer_mode", ["standard"])
 
 const completionReason = pgEnum("completion_reason", ["completed", "abandoned"])
 
@@ -42,13 +31,10 @@ const practiceSessions = pgTable(
 			.notNull()
 			.default(sql`(extract(epoch from now()) * 1000)::bigint`),
 		completionReason: completionReason("completion_reason"),
-		narrowingRampCompleted: boolean("narrowing_ramp_completed").notNull().default(false),
-		ifThenPlan: text("if_then_plan"),
 		recencyExcludedItemIds: uuid("recency_excluded_item_ids")
 			.array()
 			.notNull()
 			.default(sql`'{}'::uuid[]`),
-		strategyReviewViewed: boolean("strategy_review_viewed").notNull().default(false),
 		diagnosticOvertimeNoteShownAtMs: bigint("diagnostic_overtime_note_shown_at_ms", {
 			mode: "number"
 		})

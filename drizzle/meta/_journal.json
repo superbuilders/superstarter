@@ -8,6 +8,13 @@
       "when": 1777697094841,
       "tag": "0000_typical_golden_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777952962003,
+      "tag": "0001_true_young_avengers",
+      "breakpoints": true
     }
   ]
 }

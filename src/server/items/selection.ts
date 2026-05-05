@@ -132,10 +132,6 @@ async function loadSessionContext(sessionId: string): Promise<SessionContext> {
 		logger.warn({ sessionId }, "loadSessionContext: session row missing")
 		throw errors.wrap(ErrSessionNotFound, `session id '${sessionId}'`)
 	}
-	if (row.type === "review") {
-		logger.error({ sessionId, type: row.type }, "loadSessionContext: 'review' session type cut from v1")
-		throw errors.wrap(ErrSessionNotFound, `session '${sessionId}' has cut session_type 'review'`)
-	}
 	return {
 		id: row.id,
 		userId: row.userId,

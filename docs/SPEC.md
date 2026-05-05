@@ -285,14 +285,11 @@ The four Auth.js tables are rewritten in `src/db/schemas/auth/` so every time-be
 | `image` | `text` | nullable |
 | `target_percentile` | `integer` | nullable (PRD §6.3) |
 | `target_date_ms` | `bigint` | nullable |
-| `timer_prefs_json` | `jsonb` | `notNull`, `default '{}'` |
 | `created_at_ms` | `bigint` | `notNull`, `default extract(epoch from now()) * 1000` |
 
 Indexes: `email_idx` (unique).
 
-> **Cut from v1 2026-05-04** — timer-toggle UX (PRD §5.1 cut marker). The `timer_prefs_json` column **stays vestigial in tree** at `src/db/schemas/auth/users.ts`; no v1 reader writes or reads it. v1 timer visibility is static-per-session-type (session timer ON for non-diagnostic, question timer OFF everywhere; underlying 18s tracking still drives the triage prompt). Drop the column in the v1-code-cleanup follow-up round. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.
-
-`timer_prefs_json` shape: `{ sessionTimerVisible: boolean; questionTimerVisible: boolean }`. Empty `{}` resolves to `{ sessionTimerVisible: true, questionTimerVisible: false }` at session start.
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 3). The `timer_prefs_json` column was dropped from the `users` table via migration `0001_true_young_avengers.sql`. The prior cut-from-v1 marker described the column as vestigial-in-tree; this commit excised it. Static-per-session-type visibility is now implemented inline in the focus shell (§6.6) without any user-config column.
 
 #### `src/db/schemas/auth/accounts.ts` — table `accounts`
 
@@ -466,10 +463,14 @@ In shadow mode (the first 30 days after the workflow lands), `enforced` is alway
 
 ### 3.4 Practice tables
 
-> **Partial cut from v1 2026-05-04.** Three columns + one table specced below stay vestigial in tree (or are never created) per PRD §4.4 + §5.3 + §6.5 cut markers. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04. Cuts within this subsection:
-> - `practice_sessions.timer_mode` enum: only the `'standard'` value is written in v1. The `pgEnum('timer_mode', ['standard','speed_ramp','brutal'])` declaration **stays vestigial in tree** at `src/db/schemas/practice/practice-sessions.ts` (the enum definition is preserved; v1 just never writes `'speed_ramp'` or `'brutal'`). Drop the unused enum values in the v1-code-cleanup follow-up round. Note: this `timer_mode` enum is the **drill-mode** dimension and is unrelated to the **`item_difficulty`** enum (`['easy','medium','hard','brutal']`) on `attempts.served_at_tier` / `items.difficulty` — the **Brutal difficulty tier stays in v1** (item bank, fallback chains, `TIER_ORDER` references, adaptive walker can serve Brutal-tier items inside Standard drills).
-> - `practice_sessions.narrowing_ramp_completed` + `practice_sessions.if_then_plan` columns: NarrowingRamp protocol cut. Both columns **stay vestigial in tree**; v1 sessions write `narrowing_ramp_completed = false` (default) and `if_then_plan = null` unconditionally. Drop in v1-code-cleanup.
-> - `strategy_views` table prose below: 30-second strategy-review gate cut (PRD §6.5). The table **was never shipped** — `src/db/schemas/practice/strategy_views.ts` does not exist in tree. The schema barrel reference at §3.6 is also vestigial-in-spec-only. The `attempts` post-session-review surface (Phase 5 sub-phase 1) does not need least-recently-viewed strategy tracking.
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 3). Three columns + two enums on `practice_sessions` were excised via migration `0001_true_young_avengers.sql`:
+> - `narrowing_ramp_completed` column dropped (NarrowingRamp protocol cut, PRD §5.3).
+> - `if_then_plan` column dropped (NarrowingRamp cut).
+> - `strategy_review_viewed` column dropped (30-second strategy-review gate cut, PRD §6.5).
+> - `timer_mode` enum truncated from `['standard','speed_ramp','brutal']` to `['standard']` via the rename-swap pattern (CREATE TYPE timer_mode_v2 → ALTER COLUMN USING text-cast → DROP TYPE → RENAME).
+> - `session_type` enum truncated from 5 values to `['diagnostic','drill','full_length','simulation']` via the same rename-swap pattern (PRD §4.3 review-session cut).
+>
+> Brutal-tier-as-difficulty (item bank, `served_at_tier` enum on `attempts`, `items.difficulty` column, `TIER_ORDER` references in `selection.ts`) is **unaffected** — the doc-only round's disambiguation pin held through cleanup. The `strategy_views` table was never shipped to tree (separate from the column drops here); see §3.4 below for what remains in tree post-cleanup.
 
 #### `src/db/schemas/practice/practice-sessions.ts` — table `practice_sessions`
 
@@ -477,18 +478,15 @@ In shadow mode (the first 30 days after the workflow lands), `enforced` is alway
 |---|---|---|
 | `id` | `uuid` | PK, `default uuidv7()` |
 | `user_id` | `uuid` | `notNull`, FK → `users.id`, `onDelete cascade` |
-| `type` | `pgEnum('session_type', ['diagnostic','drill','full_length','simulation','review'])` | `notNull` |
-| `sub_type_id` | `varchar(64)` | nullable, FK → `sub_types.id` (set only for `drill` and `review`) |
-| `timer_mode` | `pgEnum('timer_mode', ['standard','speed_ramp','brutal'])` | nullable (only set for `drill`) |
-| `target_question_count` | `integer` | `notNull` (50 for diagnostic/full_length/simulation; 5/10/20 for drill; computed from due-set size for review) |
+| `type` | `pgEnum('session_type', ['diagnostic','drill','full_length','simulation'])` | `notNull` |
+| `sub_type_id` | `varchar(64)` | nullable, FK → `sub_types.id` (set only for `drill`) |
+| `timer_mode` | `pgEnum('timer_mode', ['standard'])` | nullable (only set for `drill`) |
+| `target_question_count` | `integer` | `notNull` (50 for diagnostic/full_length/simulation; 5/10/20 for drill) |
 | `started_at_ms` | `bigint` | `notNull` |
 | `ended_at_ms` | `bigint` | nullable (set by `endSession` or the abandon sweep) |
 | `last_heartbeat_ms` | `bigint` | `notNull`, `default extract(epoch from now()) * 1000` |
 | `completion_reason` | `pgEnum('completion_reason', ['completed','abandoned'])` | nullable (set when `ended_at_ms` is set) |
-| `narrowing_ramp_completed` | `boolean` | `notNull`, `default false` |
-| `if_then_plan` | `text` | nullable |
 | `recency_excluded_item_ids` | `uuid[]` | `notNull`, `default '{}'` |
-| `strategy_review_viewed` | `boolean` | `notNull`, `default false` (full-length 30s gate) |
 | `diagnostic_overtime_note_shown_at_ms` | `bigint` | nullable, vestigial — left in place for sub-phase 1; no reader writes or reads it. The post-session pacing line (§6.10) is derived from `MAX(attempts.id)` minus `started_at_ms` instead. Drop in a future cleanup commit. |
 
 Indexes:
@@ -497,7 +495,7 @@ Indexes:
 - `practice_sessions_abandon_sweep_idx` on `(last_heartbeat_ms)` `WHERE ended_at_ms IS NULL` — drives the abandon-sweep query.
 - `practice_sessions_recency_excluded_gin_idx` on `recency_excluded_item_ids` using `gin`.
 
-Recover `created_at` via `timestampFromUuidv7(row.id)`. `started_at_ms` is recorded explicitly because it is set from the user's clock (NarrowingRamp end) and may differ from row insertion.
+Recover `created_at` via `timestampFromUuidv7(row.id)`. `started_at_ms` is recorded explicitly because it is set from the user's clock at session-start time (the row may insert slightly later under transaction load).
 
 #### `src/db/schemas/practice/attempts.ts` — table `attempts`
 

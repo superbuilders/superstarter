@@ -1,6 +1,6 @@
 # Plan — Phase 5 v1 code cleanup (pre-sub-phase-1 hygiene)
 
-> **Status: planning, approved, not yet implemented.** This round drops the vestigial code surfaces left behind by the 2026-05-04 doc-only v1-scope-tightening (commits `ca2330a` / `991d3eb` / `75240c8` / `4b35449` / `141bf83` + the hygiene follow-up `832f634`). The doc-only round established what's cut and what stays vestigial in tree; this round excises the vestigial code so it doesn't leak into Phase 5 sub-phase 1's audit findings. Six commits, all small, sequenced leaf-first. Per-commit implementation detail (specific migration SQL, exact reducer-state diffs) lives in the commits themselves; this plan is sequencing-shaped.
+> **Status: in progress, commits 1 + 2 shipped.** This round drops the vestigial code surfaces left behind by the 2026-05-04 doc-only v1-scope-tightening (commits `ca2330a` / `991d3eb` / `75240c8` / `4b35449` / `141bf83` + the hygiene follow-up `832f634`). The doc-only round established what's cut and what stays vestigial in tree; this round excises the vestigial code so it doesn't leak into Phase 5 sub-phase 1's audit findings. **Five commits**, all small, sequenced leaf-first — original commit 3 (application-layer barrel + drill route signature alignment) was dropped after the audit pass at commit-2-close confirmed Outcome 1 (commits 1 + 2 rippled cleanly; no application-layer cleanup needed). Renumber landed atomically with new commit 3's migration work. Per-commit implementation detail (specific migration SQL, exact reducer-state diffs) lives in the commits themselves; this plan is sequencing-shaped.
 
 The audit-first framing carries forward from sub-phase 4. The audit pass against `main` (§2) found the cut surfaces split cleanly across two categories: **never-shipped** (the components, server actions, workflows, and routes the doc-only round marked as "specced-but-never-shipped" — already absent from tree, no cleanup needed) and **shipped-but-now-vestigial** (the schema columns, schema tables, error sentinels, selection-engine throwing stubs, and focus-shell reducer state that DID land during Phase 3 and now have zero v1 callers). The cleanup scope is exclusively the second category.
 
@@ -38,8 +38,8 @@ All have zero application readers (`grep` yields only the column declarations th
 
 ### 2.3 Schema enums
 
-- `timer_mode` enum (`practice-sessions.ts:24`) — `pgEnum('timer_mode', ['standard','speed_ramp','brutal'])`. Cut per PRD §4.4 / SPEC §3.4 leaves only `'standard'` written in v1. **Decision: truncate to `['standard']` via the standard Postgres rename-swap pattern.** Migration shape: `CREATE TYPE timer_mode_v2 AS ENUM ('standard'); ALTER TABLE practice_sessions ALTER COLUMN timer_mode TYPE timer_mode_v2 USING timer_mode::text::timer_mode_v2; DROP TYPE timer_mode; ALTER TYPE timer_mode_v2 RENAME TO timer_mode;`. The `text::timer_mode_v2` cast succeeds for every existing row because the only written value under v1 is `'standard'` (drills) or `NULL` (non-drills), both valid in the v2 enum. The schema-vs-application drift is closed at the database level; future-Claude reads the enum as "this is the only value the app writes" without needing to cross-reference a cut-from-v1 marker. **This work absorbs into commit 4** alongside the column drops on the same `practice_sessions` table — see §6 migration shape.
-- `session_type` enum (`practice-sessions.ts:16-22`) — includes `'review'` value. Cut per PRD §4.3 / SPEC §3.5 leaves no v1 caller writing `'review'`. **Decision: truncate to `['diagnostic','drill','full_length','simulation']` via the same rename-swap pattern as `timer_mode`, in commit 4.** Migration shape parallels `timer_mode`: `CREATE TYPE session_type_v2 AS ENUM ('diagnostic','drill','full_length','simulation'); ALTER TABLE practice_sessions ALTER COLUMN type TYPE session_type_v2 USING type::text::session_type_v2; DROP TYPE session_type; ALTER TYPE session_type_v2 RENAME TO session_type;`. The cast is safe — every existing row's `type` value is one of the four v2 values because the v1 application never wrote `'review'`. The eight `'review'` call sites surfaced by the audit (`practice-sessions.ts:21` enum, `actions.ts:36` zod schema, `sessions/queries.ts:17` + `selection.ts:74` + `start.ts:60` + `focus-shell/types.ts:12` + `focus-shell/shell-reducer.ts:120` type unions, plus the two dispatch sites at `selection.ts:116` + `start.ts:93` already in commit 1's scope) split cleanly across commits 1 / 2 / 4 — see §3 / §4 / §6 for per-commit attribution. **Symmetry with the `timer_mode` decision is preserved**: same redline rationale (§12.1 + §12.4), same migration pattern, same call-site audit shape. The "higher-altitude session_type" framing in §12.4's Option B was considered and rejected on the grounds that the structural-importance argument doesn't change the mechanics or the cleanliness-compounds principle.
+- `timer_mode` enum (`practice-sessions.ts:24`) — `pgEnum('timer_mode', ['standard','speed_ramp','brutal'])`. Cut per PRD §4.4 / SPEC §3.4 leaves only `'standard'` written in v1. **Decision: truncate to `['standard']` via the standard Postgres rename-swap pattern.** Migration shape: `CREATE TYPE timer_mode_v2 AS ENUM ('standard'); ALTER TABLE practice_sessions ALTER COLUMN timer_mode TYPE timer_mode_v2 USING timer_mode::text::timer_mode_v2; DROP TYPE timer_mode; ALTER TYPE timer_mode_v2 RENAME TO timer_mode;`. The `text::timer_mode_v2` cast succeeds for every existing row because the only written value under v1 is `'standard'` (drills) or `NULL` (non-drills), both valid in the v2 enum. The schema-vs-application drift is closed at the database level; future-Claude reads the enum as "this is the only value the app writes" without needing to cross-reference a cut-from-v1 marker. **This work absorbs into commit 3** alongside the column drops on the same `practice_sessions` table — see §5 migration shape.
+- `session_type` enum (`practice-sessions.ts:16-22`) — includes `'review'` value. Cut per PRD §4.3 / SPEC §3.5 leaves no v1 caller writing `'review'`. **Decision: truncate to `['diagnostic','drill','full_length','simulation']` via the same rename-swap pattern as `timer_mode`, in commit 3.** Migration shape parallels `timer_mode`: `CREATE TYPE session_type_v2 AS ENUM ('diagnostic','drill','full_length','simulation'); ALTER TABLE practice_sessions ALTER COLUMN type TYPE session_type_v2 USING type::text::session_type_v2; DROP TYPE session_type; ALTER TYPE session_type_v2 RENAME TO session_type;`. The cast is safe — every existing row's `type` value is one of the four v2 values because the v1 application never wrote `'review'`. The eight `'review'` call sites surfaced by the audit (`practice-sessions.ts:21` enum, `actions.ts:36` zod schema, `sessions/queries.ts:17` + `selection.ts:74` + `start.ts:60` + `focus-shell/types.ts:12` + `focus-shell/shell-reducer.ts:120` type unions, plus the two dispatch sites at `selection.ts:116` + `start.ts:93` already in commit 1's scope) split cleanly across commits 1 / 2 / 3 — see §3 / §4 / §5 for per-commit attribution. **Symmetry with the `timer_mode` decision is preserved**: same redline rationale (§12.1 + §12.4), same migration pattern, same call-site audit shape. The "higher-altitude session_type" framing in §12.4's Option B was considered and rejected on the grounds that the structural-importance argument doesn't change the mechanics or the cleanliness-compounds principle.
 
 ### 2.4 Server actions (mostly never shipped — verify-and-skip)
 
@@ -71,7 +71,7 @@ In `src/server/sessions/start.ts`:
 - Line 93: `if (input.type === "review")` branch — drop (review-type session unreachable from the application layer).
 - Lines 110–112: drill missing `timerMode` error path — drop or keep depending on whether the field stays as a literal or gets dropped.
 - Lines 162–166: `timer_mode` write logic — simplify to always write `'standard'` for drill, `null` otherwise.
-- Lines 247–248: `narrowing_ramp_completed` + `if_then_plan` inserts — drop both write lines (the columns themselves drop in commit 4).
+- Lines 247–248: `narrowing_ramp_completed` + `if_then_plan` inserts — drop both write lines (the columns themselves drop in commit 3).
 
 In `src/app/(app)/actions.ts`:
 
@@ -120,10 +120,10 @@ The doc-only round front-loaded the cut markers; this round tightens them from "
 ### Scope
 
 - `src/server/items/selection.ts`: drop `ErrReviewQueueDeferred` constant + export, drop `'review_queue'` from `SelectionStrategy` union, drop the `type === "review"` dispatch (line 116), drop the throwing branch (lines 489–494), drop the `brutal` early-return + `speed_ramp` shift block in `initialTierFor` (lines 390 + 405–411).
-- `src/server/sessions/start.ts`: drop the `if (input.type === "review")` branch (line 93), simplify `timer_mode` write logic (lines 162–166) to always-write-`'standard'`-for-drill, drop the `ifThenPlan` input (line 70) and its insert site (lines 247–248), drop the `narrowing_ramp_completed` insert site (line 247) — both columns get dropped in commit 4 but the application layer stops writing them now.
+- `src/server/sessions/start.ts`: drop the `if (input.type === "review")` branch (line 93), simplify `timer_mode` write logic (lines 162–166) to always-write-`'standard'`-for-drill, drop the `ifThenPlan` input (line 70) and its insert site (lines 247–248), drop the `narrowing_ramp_completed` insert site (line 247) — both columns get dropped in commit 3 but the application layer stops writing them now.
 - `src/app/(app)/actions.ts`: narrow `timerMode` zod schema to `z.literal("standard").optional()`; drop the `ifThenPlan` zod field (line 40); narrow the `type` zod schema (line 36) from 5-valued to 4-valued by dropping `"review"`. (Whether the `timerMode` field gets dropped entirely vs kept as a literal is a judgment call at commit time; recommendation is to keep as `z.literal` so the wire shape can carry future drill-mode additions without an action-signature break.)
 - `src/app/(app)/drill/[subTypeId]/run/page.tsx`: align with whatever the `actions.ts` decision was — keep `timerMode: "standard"` as a literal field if `actions.ts` kept the field, or drop if `actions.ts` dropped it.
-- **Session-type type-union narrowings (server-side; per §2.3 + §12.4):** drop `"review"` from the local `SessionType` type unions at `src/server/items/selection.ts:74`, `src/server/sessions/start.ts:60`, and `src/server/sessions/queries.ts:17`. Each is a one-line edit; collectively they tighten the server's session-type contract before the schema enum truncation in commit 4.
+- **Session-type type-union narrowings (server-side; per §2.3 + §12.4):** drop `"review"` from the local `SessionType` type unions at `src/server/items/selection.ts:74`, `src/server/sessions/start.ts:60`, and `src/server/sessions/queries.ts:17`. Each is a one-line edit; collectively they tighten the server's session-type contract before the schema enum truncation in commit 3.
 
 ### Dependencies
 
@@ -164,32 +164,7 @@ None — independent of commit 1. Could ship before or after commit 1; sequencin
 
 None.
 
-## 5. Commit 3 — Application-layer barrel + drill route signature alignment
-
-### Scope
-
-This commit absorbs whatever leftover application-layer cleanup didn't fit into commits 1 + 2. Probable contents:
-
-- `src/app/(app)/actions.ts` startSession action signature: any tightening that depends on commits 1 + 2 having landed (e.g., the action's input zod schema reflecting the narrowed `start.ts` input shape).
-- `src/app/(app)/drill/[subTypeId]/run/page.tsx` and any other callers: align with the tightened `startSession` signature.
-- Any orphan imports surfaced by typecheck after commits 1 + 2 (e.g., a `TimerMode` type re-export that's now unused).
-
-**This commit may be empty** if commits 1 + 2 absorb all the application-layer work cleanly. The plan reserves the slot to avoid forcing commit 1 or commit 2 to grow if cleanup-rippling surfaces during implementation. **If the slot stays empty, drop the commit and renumber.**
-
-### Dependencies
-
-Commits 1 + 2.
-
-### Verification
-
-- `bun typecheck` + `bun lint` pass.
-- Full smoke battery passes (diagnostic, drill, focus-shell-anim).
-
-### Migration shape
-
-None.
-
-## 6. Commit 4 — Schema column drops + `timer_mode` + `session_type` enum truncations via Drizzle migration
+## 5. Commit 3 — Schema column drops + `timer_mode` + `session_type` enum truncations via Drizzle migration
 
 ### Scope
 
@@ -217,7 +192,7 @@ None.
 
 ### Dependencies
 
-Commits 1 + 2 (+ 3 if non-empty). The schema column drops require zero application readers — verified by `grep timer_prefs_json src/`, `grep narrowing_ramp_completed src/`, etc., which should each yield only the schema-file declarations being dropped. If grep yields any other hit, that hit is a leftover from commits 1 + 2 and must be cleaned up before this commit lands.
+Commits 1 + 2. The schema column drops require zero application readers — verified by `grep timer_prefs_json src/`, `grep narrowing_ramp_completed src/`, etc., which should each yield only the schema-file declarations being dropped. If grep yields any other hit, that hit is a leftover from commits 1 + 2 and must be cleaned up before this commit lands.
 
 ### Verification
 
@@ -232,7 +207,7 @@ Commits 1 + 2 (+ 3 if non-empty). The schema column drops require zero applicati
 
 `ALTER TABLE … DROP COLUMN` x4 + the four-statement `timer_mode` rename-swap + the four-statement `session_type` rename-swap (each: CREATE → ALTER COLUMN → DROP TYPE → RENAME TYPE). No data preservation needed for the column drops (every cut column is either always-default or always-null under v1 application use). The `timer_mode` cast preserves data for existing rows — every value in the column at migration time is either `'standard'` (drill) or `NULL` (non-drill), both valid in the v2 enum. The `session_type` cast likewise — every existing row's `type` value is one of `{'diagnostic','drill','full_length','simulation'}` because the v1 application never wrote `'review'`; the cast cannot fail. **Hand-verify the migration on a non-fresh dev DB** (one with existing diagnostic + drill rows) to confirm both casts in practice; the fresh-DB verification path doesn't exercise either cast meaningfully.
 
-## 7. Commit 5 — Schema table drops + barrel cleanup
+## 6. Commit 4 — Schema table drops + barrel cleanup
 
 ### Scope
 
@@ -246,11 +221,11 @@ Commits 1 + 2 (+ 3 if non-empty). The schema column drops require zero applicati
 
 ### Dependencies
 
-Commits 1 + 2 (+ 3) for application-layer readers. Commit 4 not strictly required (column drops vs table drops are independent), but sequencing puts column drops first so the migration count grows monotonically.
+Commits 1 + 2 for application-layer readers. Commit 3 not strictly required (column drops vs table drops are independent), but sequencing puts column drops first so the migration count grows monotonically.
 
 ### Verification
 
-- Same shape as commit 4: generate, inspect, apply against fresh + non-fresh dev DB.
+- Same shape as commit 3: generate, inspect, apply against fresh + non-fresh dev DB.
 - `bun typecheck`: the barrel shrinks; the `Db` type in `src/db/schema.ts` no longer carries `reviewQueue` or `strategyViews` keys. Any caller that imported the deleted modules would have surfaced earlier — final typecheck is the guard.
 - `bun lint` passes.
 - Full smoke battery passes.
@@ -259,7 +234,7 @@ Commits 1 + 2 (+ 3) for application-layer readers. Commit 4 not strictly require
 
 `DROP TABLE` x2. The `review_queue` table has FKs to `users` (CASCADE) and `items` (NO ACTION); `strategy_views` has FKs to `users` and `strategies` (both CASCADE). Drop order doesn't matter under Postgres semantics; Drizzle's generated SQL handles dependency order.
 
-## 8. Commit 6 — SPEC + PRD doc reconciliation + plan close
+## 7. Commit 5 — SPEC + PRD doc reconciliation + plan close
 
 ### Scope
 
@@ -286,9 +261,11 @@ The doc-only round front-loaded the cut markers; this commit tightens them from 
 
 - `docs/plans/feature-roadmap.md` "Cut from v1 2026-05-04" section: sub-bullet noting "code-surface cleanup landed in `phase5-v1-code-cleanup.md` round" added beneath the section header.
 
+- **Stale-comment hygiene-debt at `src/app/(app)/drill/[subTypeId]/page.tsx:16`** — surfaced by commit-3-close audit (Outcome 1 finding). Current text: "*No timer-mode selector in Phase 3 — only `standard` is wired. Phase 5 adds `speed_ramp` and `brutal` modes.*" Stale relative to v1 cuts (PRD §4.4 + SPEC §3.4 markers — those drill modes are cut, not deferred to Phase 5). One-line update to remove the "Phase 5 adds" forward-looking clause; phrase to match the v1-cut reality.
+
 ### Dependencies
 
-Commits 1 + 2 (+ 3) + 4 + 5 — all prior commits must land before the doc reconciliation can describe them as past-tense.
+Commits 1 + 2 + 3 + 4 — all prior commits must land before the doc reconciliation can describe them as past-tense.
 
 ### Verification
 
@@ -300,25 +277,23 @@ None.
 
 ## 9. Sequencing recommendation
 
-Six commits, leaf-first, in the order numbered above. Justifications:
+Five commits, leaf-first, in the order numbered above. Justifications:
 
 1. **Commit 1 (selection.ts + start.ts) goes first** — server-side throwing-stub deletion has no dependents and surfaces the cleanest typecheck signal (the `_exhaustive: never` assertion is the load-bearing guard that the union narrowing was complete). Landing this first means any application-layer cleanup that ripples from the input-shape narrowing is forced into commit 1's diff rather than scattering across later commits.
 
 2. **Commit 2 (focus-shell internals) goes second** — independent of commit 1 in principle, but landing the server side first avoids a state where the focus shell reads cleaned-up state shapes from a still-unmodified server. The two commits could swap; the recommendation is server-first to match the user's grep-then-delete framing.
 
-3. **Commit 3 (barrel/route alignment, possibly empty) goes third** — slot-reserved for cleanup-rippling. If empty after commits 1 + 2 land cleanly, drop and renumber.
+3. **Commits 3 + 4 (schema column + table drops) go after the application-layer cleanup** — the migrations must land after every reader is gone, not before. Splitting columns (commit 3) from tables (commit 4) keeps each migration's SQL small and the diff easy to verify, and lets a partial-implementation rollback land at column-drops-only if the table-drop migration surfaces an unexpected issue (it shouldn't — both tables have zero rows under v1 use — but sequencing-for-rollback-friendliness is cheap).
 
-4. **Commits 4 + 5 (schema column + table drops) go after the application-layer cleanup** — the migrations must land after every reader is gone, not before. Splitting columns (commit 4) from tables (commit 5) keeps each migration's SQL small and the diff easy to verify, and lets a partial-implementation rollback land at column-drops-only if the table-drop migration surfaces an unexpected issue (it shouldn't — both tables have zero rows under v1 use — but sequencing-for-rollback-friendliness is cheap).
+4. **Commit 5 (doc reconciliation) goes last** — code first, doc second, no overlap, per the convention pinned in `phase3-heartbeats-and-cron.md` §6 and SPEC §6.14.11. The doc commit describes shipped reality.
 
-5. **Commit 6 (doc reconciliation) goes last** — code first, doc second, no overlap, per the convention pinned in `phase3-heartbeats-and-cron.md` §6 and SPEC §6.14.11. The doc commit describes shipped reality.
-
-If commit 3 stays empty, the round closes at five commits; otherwise six. **The 5-7 range from the prompt holds at the upper bound 6.**
+The original 6-commit shape carved a slot for application-layer cleanup-rippling between commits 2 and the schema work; the audit at commit-2-close (see §12.5) confirmed Outcome 1 (commits 1 + 2 rippled cleanly), so the slot was dropped and the round renumbered to five.
 
 ## 10. Cross-cutting concerns
 
 ### 10.1 Migration discipline
 
-Drizzle migrations are forward-only and committed with the schema files that produce them. Each schema-touching commit (commits 4 + 5) runs `bun run drizzle-kit generate`, inspects the generated SQL by hand for unexpected statements (column reorderings, default-value changes, FK-drop-and-recreate cycles — none should appear for these clean drops), and commits the migration file atomically with the schema-file edits. Dev DB verification is two-phase: fresh DB (`bun run db:reset && bun run db:migrate`) and incremental DB (a DB at the prior state, run the new migration on top). Both must apply cleanly. **No migrations are squashed; the initial migration `0000_typical_golden_guardian.sql` stays untouched.**
+Drizzle migrations are forward-only and committed with the schema files that produce them. Each schema-touching commit (commits 3 + 4) runs `bun run drizzle-kit generate`, inspects the generated SQL by hand for unexpected statements (column reorderings, default-value changes, FK-drop-and-recreate cycles — none should appear for these clean drops), and commits the migration file atomically with the schema-file edits. Dev DB verification is two-phase: fresh DB (`bun run db:reset && bun run db:migrate`) and incremental DB (a DB at the prior state, run the new migration on top). Both must apply cleanly. **No migrations are squashed; the initial migration `0000_typical_golden_guardian.sql` stays untouched.**
 
 ### 10.2 Type-checker exhaustiveness
 
@@ -330,25 +305,25 @@ Per the round's convention, tests referencing deleted server actions, columns, o
 
 ### 10.4 SPEC re-reconciliation cadence
 
-The doc-only round (commits ca2330a → 832f634) was the **bulk-reconciliation pass**. This round is back to the standard "code + doc together" convention — each cleanup commit (1–5) lands its scoped SPEC delta atomically; commit 6 absorbs the residual doc work that's better staged separately (the file-map paragraph rewrite, the §8.1 PRD schema sketch update, the plan-close metadata, the roadmap sub-bullet). This is the inverse of the doc-only round's pattern and matches the phase 3 sub-phase cadence.
+The doc-only round (commits ca2330a → 832f634) was the **bulk-reconciliation pass**. This round is back to the standard "code + doc together" convention — each cleanup commit (1–4) lands its scoped SPEC delta atomically; commit 5 absorbs the residual doc work that's better staged separately (the file-map paragraph rewrite, the §8.1 PRD schema sketch update, the plan-close metadata, the roadmap sub-bullet). This is the inverse of the doc-only round's pattern and matches the phase 3 sub-phase cadence.
 
 ## 11. Out of scope
 
 - **Phase 5 sub-phase 1 implementation work.** Sub-phase 1 (post-session review surface) is the next round, planned separately after this cleanup round closes. This round excises vestigial code; sub-phase 1 builds new surface. No overlap.
-- **(removed 2026-05-04)** ~~`session_type` enum `'review'` value at the database level.~~ Was previously listed as out-of-scope; redlined into scope per §12.4. Migration absorbs into commit 4 alongside `timer_mode`. Both enums get the rename-swap treatment in the same migration file.
+- **(removed 2026-05-04)** ~~`session_type` enum `'review'` value at the database level.~~ Was previously listed as out-of-scope; redlined into scope per §12.4. Migration absorbs into commit 3 alongside `timer_mode`. Both enums get the rename-swap treatment in the same migration file.
 - **PRD §4.2 borderline residual** (`Across sessions, items can repeat per the spaced-repetition rules` — flagged in the `832f634` round-close report). Recommendation: leave as-is. The phrase "spaced-repetition rules" is broad enough to cover the v1 adaptive walker's cross-session-recency rules (the 7-day recency-excluded set), even without an SR queue. Tightening the line is a doc-hygiene judgment call that doesn't fit this round's scope. If sub-phase 1 or sub-phase 2 surfaces a sharper interpretation, the line gets tightened then.
 - **`drizzle/0000_typical_golden_guardian.sql` revisions.** The initial migration is committed history; cleanup is forward-only via new migration files.
 - **Any "while we're in here" cleanup** beyond what the doc-only round explicitly cut. Adjacent code-quality issues that surface during implementation get noted in the commit messages but not addressed in this round.
 
 ## 12. Open questions / resolutions
 
-All four resolved at redline before implementation begins.
+All five resolved.
 
 ### 12.1 `timer_mode` enum cardinality — resolved as TRUNCATE to `['standard']`
 
 **Question.** The `timer_mode` column is nullable and would always carry `'standard'` (drill) or `null` (non-drill) under v1 use. The original plan-draft recommendation was "keep the enum 3-valued; tighten application types only" — leaning on the Postgres-can't-drop-enum-values constraint and the v2-reintroduction-cost argument.
 
-**Resolution at redline (2026-05-04): truncate the enum to `['standard']` via the standard Postgres rename-swap pattern, in commit 4.**
+**Resolution at redline (2026-05-04): truncate the enum to `['standard']` via the standard Postgres rename-swap pattern, in commit 3 (was commit 4 pre-renumber per §12.5).**
 
 **Rationale (user's redline, recorded verbatim):**
 
@@ -356,7 +331,7 @@ All four resolved at redline before implementation begins.
 - The real cost of keeping 3-valued is permanent schema-vs-application drift — schema carries values the application never writes, future-Claude has to cross-reference cut-from-v1 markers to understand why, and "narrower-than-schema application types" leaves the inconsistency where it'll snag the next refactor.
 - Codebase cleanliness compounds; v2-readiness via vestigial enum values is a soft signal anyway. If v2 doesn't return these features, the truncated enum is honest. If v2 returns them in different shapes than v1 had, the v1 enum values would have been wrong to keep.
 
-**Implementation (commit 4 absorbs):** Migration adds the four-statement rename-swap (`CREATE TYPE timer_mode_v2 AS ENUM ('standard'); ALTER TABLE … TYPE timer_mode_v2 USING …::text::timer_mode_v2; DROP TYPE timer_mode; ALTER TYPE timer_mode_v2 RENAME TO timer_mode;`). The schema file's `pgEnum` declaration shrinks to `['standard']` atomically. See §6 for full migration shape + the Drizzle-Kit-may-not-auto-generate-this caveat. Commit 4 absorbs this work alongside the column drops because both touch `practice_sessions` and stay in one migration file. **Commit count stays at 6** (commit 3 stays flagged-possibly-empty-and-droppable; the timer_mode work folds into commit 4 rather than adding a seventh).
+**Implementation (commit 3 absorbs):** Migration adds the four-statement rename-swap (`CREATE TYPE timer_mode_v2 AS ENUM ('standard'); ALTER TABLE … TYPE timer_mode_v2 USING …::text::timer_mode_v2; DROP TYPE timer_mode; ALTER TYPE timer_mode_v2 RENAME TO timer_mode;`). The schema file's `pgEnum` declaration shrinks to `['standard']` atomically. See §5 for full migration shape + the Drizzle-Kit-may-not-auto-generate-this caveat. Commit 3 absorbs this work alongside the column drops because both touch `practice_sessions` and stay in one migration file. **Round closes at 5 commits** post-renumber (see §12.5).
 
 ### 12.2 Audit finding beyond user's prompt scope — `start.ts:93` review-type branch — resolved as INCLUDE in commit 1
 
@@ -368,7 +343,7 @@ All four resolved at redline before implementation begins.
 
 **Question.** The `832f634` round-close report flagged PRD §4.2 line 170 (`Across sessions, items can repeat per the spaced-repetition rules`) as a borderline-residual.
 
-**Resolution at redline (2026-05-04): leave as-is.** Same reasoning as the architecture-plan body-text drift seeds in the doc round's commit 3 (Option 5): PRD §4.2 describes the durable product shape; SR is cut-from-v1, not cut-permanent; the §4.3 cut marker two paragraphs below carries the v1 authority. Tightening §4.2 would be the compounding-amendments creep the doc round refused once already. Commit 6's PRD scope does NOT include a §4.2 edit.
+**Resolution at redline (2026-05-04): leave as-is.** Same reasoning as the architecture-plan body-text drift seeds in the doc round's commit 3 (Option 5): PRD §4.2 describes the durable product shape; SR is cut-from-v1, not cut-permanent; the §4.3 cut marker two paragraphs below carries the v1 authority. Tightening §4.2 would be the compounding-amendments creep the doc round refused once already. Commit 5's PRD scope does NOT include a §4.2 edit.
 
 ### 12.4 `session_type` enum cardinality — resolved as TRUNCATE to four values (parallel to §12.1)
 
@@ -376,7 +351,7 @@ All four resolved at redline before implementation begins.
 
 Two options surfaced at redline:
 
-- **Option A — Truncate `'review'` from `session_type` in this round.** Same shape as `timer_mode`; folds the rename-swap into commit 4's migration. Rationale: same logic as §12.1; schema-vs-application drift compounds; the cleanliness principle applies to both enums.
+- **Option A — Truncate `'review'` from `session_type` in this round.** Same shape as `timer_mode`; folds the rename-swap into commit 3's migration (was commit 4 pre-renumber per §12.5). Rationale: same logic as §12.1; schema-vs-application drift compounds; the cleanliness principle applies to both enums.
 - **Option B — Keep `'review'` as-is, future-revisit.** Rationale: `session_type` is the dispatch primary key for the whole engine, structurally different from `timer_mode` (a per-session config flag). Truncating session-type values touches a higher-altitude schema element worth its own deliberate round.
 
 **Resolution at redline (2026-05-04): Option A — truncate.**
@@ -385,6 +360,23 @@ Two options surfaced at redline:
 
 1. The §12.1 redline rationale ("schema-vs-application drift compounds; codebase cleanliness wins") applies identically — same shape of vestigial-enum-value-with-no-application-writer. Treating the two enums differently would itself be the inconsistency §12.1 pushed back against.
 2. Audit confirmed low effort: 8 call sites total, 6 mechanical type-union edits, 2 already in commit 1's scope (the `selection.ts:116` dispatch + the `start.ts:93` branch redlined into commit 1 per §12.2). Migration shape is mechanically identical to `timer_mode` (rename-swap; cast-safe — every existing row's `type` is one of `{'diagnostic','drill','full_length','simulation'}` because v1 never wrote `'review'`).
-3. Folding into commit 4 keeps all `practice_sessions` schema changes atomic in one migration file. Splitting `session_type` into a separate cleanup round would mean writing+reviewing+deploying two migrations on the same table — structurally more work for no semantic gain. The Option B "higher-altitude" framing is real but doesn't change the mechanics or the cleanliness principle.
+3. Folding into commit 3 keeps all `practice_sessions` schema changes atomic in one migration file. Splitting `session_type` into a separate cleanup round would mean writing+reviewing+deploying two migrations on the same table — structurally more work for no semantic gain. The Option B "higher-altitude" framing is real but doesn't change the mechanics or the cleanliness principle.
 
-**Implementation:** §2.3 + §3 (commit 1) + §4 (commit 2) + §6 (commit 4) + §11 all updated to reflect the truncation. The 8 call sites distribute as: commit 1 absorbs `selection.ts:74` + `start.ts:60` + `sessions/queries.ts:17` type unions and the `actions.ts:36` zod schema (plus the two dispatch sites already in scope per §12.2); commit 2 absorbs `focus-shell/types.ts:12` + `focus-shell/shell-reducer.ts:120` type unions; commit 4 absorbs the schema enum rename-swap. **Commit count stays at 6** — same logic as §12.1 (the truncation work folds into existing commits rather than adding a seventh).
+**Implementation:** §2.3 + §3 (commit 1) + §4 (commit 2) + §5 (commit 3) + §11 all updated to reflect the truncation. The 8 call sites distribute as: commit 1 absorbs `selection.ts:74` + `start.ts:60` + `sessions/queries.ts:17` type unions and the `actions.ts:36` zod schema (plus the two dispatch sites already in scope per §12.2); commit 2 absorbs `focus-shell/types.ts:12` + `focus-shell/shell-reducer.ts:120` type unions; commit 3 absorbs the schema enum rename-swap. **Round closes at 5 commits** post-renumber (see §12.5).
+
+### 12.5 Audit outcome at commit-2-close — Outcome 1 (Empty), renumber landed atomically with commit 3
+
+**Question.** The plan reserved an "application-layer barrel + drill route signature alignment" slot as the original commit 3 (§5 pre-renumber) — a possibly-empty slot for cleanup-rippling work that didn't fit into commits 1 + 2. The decision criterion was: audit at commit-2-close determines whether the slot has work (outcome 2 / 3) or stays empty (outcome 1).
+
+**Resolution at audit (2026-05-04, post-commit-`a32131a`): Outcome 1 — Empty.**
+
+**Audit findings (read-only grep across `src/app/`, `src/components/post-session/`, `src/components/mastery-map/`):**
+
+- Zero functional residuals across the deleted-symbol set: `TimerPrefs`, `timerPrefs`, `initialTimerPrefs`, `ifThenPlan`, the toggle action kinds, `ErrReviewQueueDeferred`, `review_queue`, `narrowingRamp`, `persistTimerPrefs`, `dismissPostSession`, `StrategyReviewGate`, `strategy_review_viewed`.
+- Zero `as`-cast type assertions on the narrowed types (`StartSessionInput` / `FocusShellProps` / `TimerPrefs` / `SessionType` / `TimerMode` / `SelectionStrategy`) anywhere in `src/app/`. Commits 1 + 2 narrowings flowed through type inference cleanly.
+- Three intentional residuals — all explicitly preserved per prior decisions: the drill run page's `timerMode: "standard"` literal (plan §3 wire-shape stability recommendation); the `phase3-smoke/page.tsx:108` historical comment breadcrumb; three `'brutal'` literals at `actions.ts:71` + `ingest-item/route.ts:14` + `_form.tsx:17` referencing the **`item_difficulty`** enum, NOT the cut **`timer_mode`** drill-mode dimension (disambiguation pin).
+- One trailing hygiene-debt — the stale Phase-5 comment at `src/app/(app)/drill/[subTypeId]/page.tsx:16` ("*Phase 5 adds `speed_ramp` and `brutal` modes*"). One line, comment-only, no functional code. Folded into the new commit 5's doc-reconciliation scope rather than expanding the cleanup round.
+
+**Renumber decision.** The original §5 (commit 3 application-layer slot) was dropped; §6 → §5 (commit 3 schema migration), §7 → §6 (commit 4 table drops), §8 → §7 (commit 5 doc reconciliation). All cross-references updated in lockstep — every "commit 4" → "commit 3", every "commit 5" → "commit 4", every "commit 6" → "commit 5", §10.4 cleanup-1-to-5 → 1-to-4, §11 commit-4 reference → commit-3, §12.1 + §12.4 implementation pointers updated, §9 sequencing rewritten to drop the possibly-empty slot bullet, the round's overall commit count from "5–6" to **5**. **Heading-numbering gap (§7 → §9):** §§ 9 / 10 / 11 / 12 retained their pre-renumber numbers per the strict scope of the redline directive (only §§ 6 / 7 / 8 were instructed to renumber forward). The gap is the visible artifact of the slot drop — future-Claude reading the plan's TOC sees §7 jump to §9 and knows from this resolution why.
+
+**Implementation:** the renumber landed in the same commit as commit 3's migration work (one bundled commit covers the plan amendment + the schema migration). This kept the round artifact synchronized with the work it describes — same convention as commits 1 + 2's atomic code+SPEC pattern, applied here to plan+code.
