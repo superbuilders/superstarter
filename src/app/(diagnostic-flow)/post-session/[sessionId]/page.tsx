@@ -37,7 +37,6 @@ import { redirect } from "next/navigation"
 import * as React from "react"
 import { auth } from "@/auth"
 import type { SubTypeId } from "@/config/sub-types"
-import { subTypes as subTypesConfig } from "@/config/sub-types"
 import { db } from "@/db"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { items } from "@/db/schemas/catalog/items"
@@ -48,6 +47,10 @@ import { logger } from "@/logger"
 import { triageScoreForSession, type TriageScore } from "@/server/triage/score"
 import { PostSessionContent } from "@/app/(diagnostic-flow)/post-session/[sessionId]/content"
 import type { SessionTypeForShell } from "@/components/post-session/post-session-shell"
+import {
+	deriveStruggledSubTypes,
+	selectStrategiesForStruggledSubTypes
+} from "@/server/post-session/strategy-selection"
 
 interface PageProps {
 	params: Promise<{ sessionId: string }>
@@ -58,13 +61,6 @@ interface PageProps {
 // it, the pacing line surfaces with the rounded minute count (rendered
 // only on diagnostic sessions per <PostSessionShell>'s gate).
 const PACING_THRESHOLD_MS = 15 * 60_000
-
-// "Struggled" definition per plan §9: a sub-type is struggled this
-// session if EITHER accuracy < 70% (matches computeMastery's SPEC §9.3
-// learning floor) OR median latency > the sub-type's threshold (matches
-// what <LatencySummary> already marks). The OR is intentional — catches
-// fast-wrong AND slow-but-right.
-const STRUGGLED_ACCURACY_FLOOR = 0.7
 
 // ---------------- Prepared statements (plan §4) ----------------
 
@@ -179,68 +175,12 @@ interface SessionInfo {
 	surfacedStrategies: SurfacedStrategy[]
 }
 
-// ---------------- Page-level helpers ----------------
-
-// Threshold lookup table built from the in-memory sub-types config
-// (no DB call). Module-level constant; populated once at startup.
-const THRESHOLD_BY_SUB_TYPE: ReadonlyMap<SubTypeId, number> = new Map(
-	subTypesConfig.map(function entry(t) {
-		return [t.id, t.latencyThresholdMs]
-	})
-)
-
-function isStruggled(args: {
-	accuracy: PerSubTypeAccuracy | undefined
-	latency: PerSubTypeLatency | undefined
-	threshold: number
-}): boolean {
-	const accRatio =
-		args.accuracy !== undefined && args.accuracy.total > 0
-			? args.accuracy.correct / args.accuracy.total
-			: 1
-	const medianMs = args.latency !== undefined ? args.latency.medianLatencyMs : 0
-	const lowAccuracy = accRatio < STRUGGLED_ACCURACY_FLOOR
-	const slowMedian = medianMs > args.threshold
-	return lowAccuracy || slowMedian
-}
-
-// "Struggled" definition per plan §9: accuracy < 0.7 OR median >
-// threshold. Returns the set of struggled sub-type ids; the strategies
-// query consumes this set.
-function deriveStruggledSubTypes(
-	accuracy: ReadonlyArray<PerSubTypeAccuracy>,
-	latency: ReadonlyArray<PerSubTypeLatency>
-): SubTypeId[] {
-	const accuracyBySubType = new Map<SubTypeId, PerSubTypeAccuracy>()
-	for (const a of accuracy) {
-		accuracyBySubType.set(a.subTypeId, a)
-	}
-	const latencyBySubType = new Map<SubTypeId, PerSubTypeLatency>()
-	for (const l of latency) {
-		latencyBySubType.set(l.subTypeId, l)
-	}
-	const seen = new Set<SubTypeId>()
-	for (const a of accuracy) {
-		seen.add(a.subTypeId)
-	}
-	for (const l of latency) {
-		seen.add(l.subTypeId)
-	}
-	const struggled: SubTypeId[] = []
-	for (const subTypeId of seen) {
-		const threshold = THRESHOLD_BY_SUB_TYPE.get(subTypeId)
-		// Sub-type not in config — skip. Should never happen per FK
-		// constraint on attempts → items → sub_types.
-		if (threshold === undefined) continue
-		const struggledHere = isStruggled({
-			accuracy: accuracyBySubType.get(subTypeId),
-			latency: latencyBySubType.get(subTypeId),
-			threshold
-		})
-		if (struggledHere) struggled.push(subTypeId)
-	}
-	return struggled
-}
+// "Struggled" sub-type derivation, failure-mode classification, and
+// kind-preference strategy selection all live in
+// @/components/post-session/strategy-surface (see plan §9). Imported
+// at the top of this file. Numeric anchors (0.7 accuracy floor,
+// per-sub-type threshold) live there, not in a config file — v1 has
+// one consumer, sub-phase 5's dojo work can refactor if needed.
 
 async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionInfo> {
 	const sessionId = await sessionIdPromise
@@ -360,8 +300,13 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 	}
 
 	// Chain: derive struggled sub-types from accuracy + latency, then
-	// fire the strategies query for that set. Per plan §4, the empty
-	// case is short-circuited (no SQL `IN ()` syntax error).
+	// fire the strategies query for that set. Per plan §4 the empty
+	// case is short-circuited (no SQL `IN ()` syntax error). Per plan
+	// §9 kind-preference selection picks ONE strategy per struggled
+	// sub-type matching the failure mode (fast-wrong → trap, slow-
+	// wrong → recognition, slow-but-right → recognition; technique as
+	// universal fallback). Sub-types with zero strategies don't
+	// surface a row.
 	const struggledIds = deriveStruggledSubTypes(accuracy, latency)
 	let surfacedStrategies: SurfacedStrategy[] = []
 	if (struggledIds.length > 0) {
@@ -375,11 +320,11 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			)
 			throw errors.wrap(strategiesResult.error, "strategies for struggled")
 		}
-		// Per plan §9, kind-preference selection (one strategy per
-		// struggled sub-type, preferring the failure-mode-matched kind)
-		// lands in commit 6 alongside <StrategySurface>. Commit 2 emits
-		// all matched strategies; commit 6 narrows to one per sub-type.
-		surfacedStrategies = strategiesResult.data
+		surfacedStrategies = selectStrategiesForStruggledSubTypes(
+			accuracy,
+			latency,
+			strategiesResult.data
+		)
 	}
 
 	return {

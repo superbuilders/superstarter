@@ -14,8 +14,10 @@
 //   (<AccuracySummary>) into their locked positions.
 // - Commit 4 filled slot 4 (<LatencySummary>) into its locked
 //   position.
-// - Commit 5 (this commit) fills slot 5 (<WrongItemsBrowser>). Slot 6
-//   remains placeholder; commit 6 fills it.
+// - Commit 5 filled slot 5 (<WrongItemsBrowser>).
+// - Commit 6 (this commit) fills slot 6 (<StrategySurface>). All six
+//   slots in the locked §10 ordering are now component-filled; no
+//   placeholder divs remain.
 //
 // Render order (top to bottom), per §10:
 //   1. Heading + brief one-line summary.
@@ -23,7 +25,7 @@
 //   3. <AccuracySummary>           — filled (commit 3, plan §5).
 //   4. <LatencySummary>            — filled (commit 4, plan §6).
 //   5. <WrongItemsBrowser>         — filled (commit 5, plan §8).
-//   6. <StrategySurface>           — fills in commit 6 (plan §9).
+//   6. <StrategySurface>           — filled (commit 6, plan §9).
 //   7. <OnboardingTargets>         — diagnostic-only, already shipped.
 //   8. Pacing-line sentence        — diagnostic-only, conditional on >15min.
 //   9. Continue CTA                — non-diagnostic only (drill /
@@ -44,6 +46,7 @@ import type {
 import { AccuracySummary } from "@/components/post-session/accuracy-summary"
 import { LatencySummary } from "@/components/post-session/latency-summary"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
+import { StrategySurface } from "@/components/post-session/strategy-surface"
 import { TriageScoreLine } from "@/components/post-session/triage-score-line"
 import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser"
 import { Button } from "@/components/ui/button"
@@ -65,10 +68,16 @@ function PostSessionShell(props: PostSessionShellProps) {
 	const isDiagnostic = props.sessionType === "diagnostic"
 	const heading = isDiagnostic ? "Diagnostic complete" : "Session complete"
 
+	// Subhead + pacing-line use `text-foreground/80` (~5.7:1 against
+	// light bg) to inherit <TriageScoreLine>'s documented AA rationale.
+	// Light-mode `--muted-foreground: oklch(0.556 0 0)` lands at ~4.0:1
+	// — borderline below AA for normal text. Aligning peer single-line
+	// statements on the post-session shell keeps the surface
+	// consistent. Found by commit 6's full-surface audit.
 	let subhead: React.ReactNode = null
 	if (isDiagnostic) {
 		subhead = (
-			<p className="text-muted-foreground text-sm">
+			<p className="text-foreground/80 text-sm">
 				Tell us what you're aiming for so we can pace your practice.
 			</p>
 		)
@@ -78,7 +87,7 @@ function PostSessionShell(props: PostSessionShellProps) {
 	if (isDiagnostic && props.pacingMinutes !== undefined) {
 		pacingLine = (
 			<p
-				className="text-muted-foreground text-sm"
+				className="text-foreground/80 text-sm"
 				data-testid="post-session-pacing-line"
 			>
 				Your diagnostic took {props.pacingMinutes} minutes. The real CCAT is 15 minutes for 50 questions.
@@ -124,8 +133,10 @@ function PostSessionShell(props: PostSessionShellProps) {
 				<WrongItemsBrowser items={props.wrongItems} />
 			</div>
 
-			{/* Slot 6: <StrategySurface> — fills in commit 6 (plan §9). */}
-			<div data-testid="post-session-slot-strategy-surface" />
+			{/* Slot 6: <StrategySurface> — filled in commit 6 (plan §9). */}
+			<div data-testid="post-session-slot-strategy-surface">
+				<StrategySurface strategies={props.surfacedStrategies} />
+			</div>
 
 			{trailingSection}
 			{pacingLine}
