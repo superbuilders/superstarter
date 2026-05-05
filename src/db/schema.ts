@@ -8,11 +8,9 @@ import * as catalogItemsSchema from "@/db/schemas/catalog/items"
 import * as catalogStrategiesSchema from "@/db/schemas/catalog/strategies"
 import * as catalogSubTypesSchema from "@/db/schemas/catalog/sub-types"
 import * as opsCandidatePromotionLogSchema from "@/db/schemas/ops/candidate-promotion-log"
-import * as opsStrategyViewsSchema from "@/db/schemas/ops/strategy-views"
 import * as practiceAttemptsSchema from "@/db/schemas/practice/attempts"
 import * as practiceMasteryStateSchema from "@/db/schemas/practice/mastery-state"
 import * as practicePracticeSessionsSchema from "@/db/schemas/practice/practice-sessions"
-import * as reviewReviewQueueSchema from "@/db/schemas/review/review-queue"
 
 const dbSchema = {
 	...authUsersSchema,
@@ -25,8 +23,6 @@ const dbSchema = {
 	...practicePracticeSessionsSchema,
 	...practiceAttemptsSchema,
 	...practiceMasteryStateSchema,
-	...reviewReviewQueueSchema,
-	...opsStrategyViewsSchema,
 	...opsCandidatePromotionLogSchema
 }
 

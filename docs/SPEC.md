@@ -216,8 +216,8 @@ src/
 
 > **File-map paths cut from v1 2026-05-04.** The following entries above are specced-but-never-shipped under v1 scope (PRD §4.3 + §4.4 + §5.3 + §6.5 cut markers). On-disk-code-surface notes per entry — anyone wondering "is this path real?" should consult this list before grep'ing for it:
 >
-> - `src/db/schemas/practice/strategy_views.ts` (line 73 above) — **never shipped** in tree. 30-second strategy-review gate cut (PRD §6.5). The schema barrel reference at §3.6 is vestigial-in-spec.
-> - `src/db/schemas/review/review_queue.ts` (line 75; actual on-disk path is `review-queue.ts`) — **shipped during Phase 3, stays vestigial in tree.** Spaced-repetition queue cut (PRD §4.3). v1 never inserts rows. Drop in v1-code-cleanup.
+> - ~~`src/db/schemas/practice/strategy_views.ts`~~ (line 73 above) — **dropped 2026-05-04** (v1-code-cleanup commit 4). The doc-only round's "never shipped" claim referenced the SPEC's planned path; the actual on-disk path was `src/db/schemas/ops/strategy-views.ts`, which was shipped during Phase 3 and dropped in commit 4 alongside `review-queue.ts`. 30-second strategy-review gate cut (PRD §6.5).
+> - ~~`src/db/schemas/review/review_queue.ts`~~ (line 75; actual on-disk path was `review-queue.ts`) — **dropped 2026-05-04** (v1-code-cleanup commit 4). The schema file was shipped during Phase 3 to lock the migration shape; v1 never inserted rows. Spaced-repetition queue cut (PRD §4.3). The `review/` directory was also removed (no other tables lived under it).
 > - `src/server/review/queries.ts` + `src/server/review/schedule.ts` (lines 100–101 / §9.5) — **never shipped** in tree. Spaced-repetition cut.
 > - `src/server/narrowing-ramp/obstacle.ts` (line 110) — **never shipped** in tree. NarrowingRamp cut (PRD §5.3).
 > - `src/workflows/review-queue-refresh.ts` (line 117) — **never shipped** in tree. SR queue cut. `endSession` does not trigger this workflow in v1 (§7.3 marker).
@@ -225,7 +225,7 @@ src/
 > - `src/components/post-session/strategy-review-gate.tsx` (line 150) — **never shipped** in tree. Strategy-gate cut (PRD §6.5).
 > - `src/app/(app)/review/{page,content}.tsx` (lines 190–192) — **never shipped** in tree. SR queue cut.
 >
-> Schema files that **stay vestigial in tree** (column/enum/table preserved, never written by v1): `src/db/schemas/auth/users.ts` (`timer_prefs_json` column), `src/db/schemas/practice/practice-sessions.ts` (`timer_mode` enum, `narrowing_ramp_completed`, `if_then_plan`, `strategy_review_viewed` columns), `src/db/schemas/review/review-queue.ts` (entire table). All of the above queue for drop in the v1-code-cleanup follow-up round. The `# NEW: ...` comment annotations above are preserved as the original spec intent; treat the cut markers as the authoritative v1 status.
+> Schema files that **stayed vestigial in tree** through the doc-only round and were dropped in v1-code-cleanup commits 3 + 4 (2026-05-04): `src/db/schemas/auth/users.ts` (`timer_prefs_json` column — dropped commit 3), `src/db/schemas/practice/practice-sessions.ts` (`timer_mode` enum truncated commit 3, `narrowing_ramp_completed` / `if_then_plan` / `strategy_review_viewed` columns dropped commit 3, `session_type` enum truncated commit 3), `src/db/schemas/review/review-queue.ts` (entire table dropped commit 4), `src/db/schemas/ops/strategy-views.ts` (entire table dropped commit 4). The `# NEW: ...` comment annotations above are preserved as the original spec intent; the cut markers + cleanup callouts trace what happened.
 
 ### New dependencies
 
@@ -470,7 +470,7 @@ In shadow mode (the first 30 days after the workflow lands), `enforced` is alway
 > - `timer_mode` enum truncated from `['standard','speed_ramp','brutal']` to `['standard']` via the rename-swap pattern (CREATE TYPE timer_mode_v2 → ALTER COLUMN USING text-cast → DROP TYPE → RENAME).
 > - `session_type` enum truncated from 5 values to `['diagnostic','drill','full_length','simulation']` via the same rename-swap pattern (PRD §4.3 review-session cut).
 >
-> Brutal-tier-as-difficulty (item bank, `served_at_tier` enum on `attempts`, `items.difficulty` column, `TIER_ORDER` references in `selection.ts`) is **unaffected** — the doc-only round's disambiguation pin held through cleanup. The `strategy_views` table was never shipped to tree (separate from the column drops here); see §3.4 below for what remains in tree post-cleanup.
+> Brutal-tier-as-difficulty (item bank, `served_at_tier` enum on `attempts`, `items.difficulty` column, `TIER_ORDER` references in `selection.ts`) is **unaffected** — the doc-only round's disambiguation pin held through cleanup. The `strategy_views` table — **shipped during Phase 3 at `src/db/schemas/ops/strategy-views.ts`** (the doc-only round's "never shipped" claim referenced the SPEC's planned path `src/db/schemas/practice/strategy_views.ts`, which did not exist; the actual on-disk path differed) — was dropped in v1-code-cleanup commit 4 alongside `review_queue`; see §3.4 below.
 
 #### `src/db/schemas/practice/practice-sessions.ts` — table `practice_sessions`
 
@@ -534,7 +534,9 @@ Composite PK: `(user_id, sub_type_id)`.
 
 `was_mastered` is set `true` the first time `current_state` becomes `'mastered'` OR `'decayed'`, and never reset.
 
-#### `src/db/schemas/practice/strategy_views.ts` — table `strategy_views`
+#### ~~`src/db/schemas/ops/strategy-views.ts` — table `strategy_views`~~
+
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 4). Table dropped via migration `0002_tranquil_mach_iv.sql` (`DROP TABLE strategy_views CASCADE`). Schema file `src/db/schemas/ops/strategy-views.ts` deleted from tree; barrel registration removed (§3.6). The 30-second strategy-review gate cut from v1 (PRD §6.5 marker) eliminated all readers; v1 never wrote rows. Section header preserved with strikethrough as historical reference; the column / index spec below is preserved for the same reason.
 
 Append-only log used by the strategy-review gate to pick least-recently-viewed strategies.
 
@@ -549,9 +551,9 @@ Index: `strategy_views_user_strategy_idx` on `(user_id, strategy_id)` — drives
 
 ### 3.5 Review tables
 
-> **Cut from v1 2026-05-04** — spaced-repetition review queue (PRD §4.3 cut marker). The `review_queue` table **stays vestigial in tree** at `src/db/schemas/review/review-queue.ts` (the schema file shipped during Phase 3 to lock the migration shape; v1 never inserts rows into it). The schema-barrel registration at §3.6 also stays vestigial. Drop the table + its barrel entry in the v1-code-cleanup follow-up round. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 4). Table dropped via migration `0002_tranquil_mach_iv.sql` (`DROP TABLE review_queue CASCADE`). Schema file `src/db/schemas/review/review-queue.ts` deleted from tree; the `src/db/schemas/review/` directory removed (no other tables lived under `review/`); barrel registration removed (§3.6). The spaced-repetition queue cut from v1 (PRD §4.3 marker) eliminated all readers; v1 never inserted rows.
 
-#### `src/db/schemas/review/review_queue.ts` — table `review_queue`
+#### ~~`src/db/schemas/review/review-queue.ts` — table `review_queue`~~
 
 | column | type | constraint |
 |---|---|---|
@@ -581,16 +583,15 @@ import * as catalogCandidatePromotionLog from "@/db/schemas/catalog/candidate_pr
 import * as practiceSessions from "@/db/schemas/practice/sessions"
 import * as practiceAttempts from "@/db/schemas/practice/attempts"
 import * as practiceMasteryState from "@/db/schemas/practice/mastery_state"
-import * as practiceStrategyViews from "@/db/schemas/practice/strategy_views"
-import * as reviewReviewQueue from "@/db/schemas/review/review_queue"
 
 const dbSchema = {
     ...authUsers, ...authAccounts, ...authSessions, ...authVerificationTokens,
     ...catalogSubTypes, ...catalogStrategies, ...catalogItems, ...catalogCandidatePromotionLog,
-    ...practiceSessions, ...practiceAttempts, ...practiceMasteryState, ...practiceStrategyViews,
-    ...reviewReviewQueue
+    ...practiceSessions, ...practiceAttempts, ...practiceMasteryState
 }
 ```
+
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 4). Two schema-barrel imports were removed: `practiceStrategyViews` (path was `practice/strategy_views.ts` per spec; actual on-disk path was `ops/strategy-views.ts`) and `reviewReviewQueue` (`review/review-queue.ts`). Both schema files were deleted from tree; the corresponding tables were dropped from the database via migration `0002_tranquil_mach_iv.sql` (see §3.4 + §3.5 markers). The `review/` directory was removed (no other tables lived there).
 
 `coreTodos` and the demo `app/page.tsx` flow are removed once the diagnostic flow lands.
 
@@ -850,7 +851,7 @@ Layout-level placement is load-bearing — a page-level check would only cover t
 
 `src/server/auth/account-deletion.ts` exports `deleteAccount(userId)`. Runs a single transaction:
 
-1. Compute `rows_affected` per user-scoped table (sessions, attempts via cascade, mastery_state, ~~review_queue~~ [vestigial-in-tree, always 0 rows in v1 — see §3.5 cut marker], ~~strategy_views~~ [never shipped — see §3.4 cut marker; remove from cascade list before v1 ship], accounts, auth_sessions).
+1. Compute `rows_affected` per user-scoped table (sessions, attempts via cascade, mastery_state, accounts, auth_sessions). (`review_queue` + `strategy_views` were dropped in v1-code-cleanup commit 4 — see §3.4 + §3.5 callouts; cascade list updated accordingly.)
 2. `DELETE FROM users WHERE id = $1` — `ON DELETE CASCADE` on every user-scoped table flows the deletion through.
 3. Log a structured event with `{ user_id_hash, deleted_at_ms, rows_affected }` (no PII; `user_id_hash` is `sha256(user_id)`).
 
