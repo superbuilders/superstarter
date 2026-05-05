@@ -62,7 +62,6 @@ function DiagnosticContent(props: DiagnosticContentProps) {
 			perQuestionTargetMs={18_000}
 			targetQuestionCount={50}
 			paceTrackVisible={false}
-			initialTimerPrefs={{ sessionTimerVisible: true, questionTimerVisible: true }}
 			initialItem={firstItem}
 			strictMode={false}
 			onSubmitAttempt={onSubmitAttempt}

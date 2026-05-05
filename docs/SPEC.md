@@ -871,23 +871,18 @@ The single load-bearing client primitive of the application (PRD §5.1, §7). Li
 
 interface FocusShellProps {
     sessionId: string
-    sessionType: "diagnostic" | "drill" | "full_length" | "simulation" | "review"
+    sessionType: "diagnostic" | "drill" | "full_length" | "simulation"
     sessionDurationMs: number | null   // null for diagnostic (untimed at session level)
-    perQuestionTargetMs: number        // 18000 for standard. (~~12000 for speed-ramp~~ — speed-ramp drill mode cut from v1 2026-05-04, see §3.4 marker.)
+    perQuestionTargetMs: number        // 18000 for standard
     targetQuestionCount: number
     paceTrackVisible: boolean          // false for diagnostic
-    initialTimerPrefs: TimerPrefs
-    ifThenPlan?: string
     initialItem: ItemForRender
     strictMode: boolean                // simulation only — disables pause UI etc.
     onSubmitAttempt: (input: SubmitAttemptInput) => Promise<SubmitAttemptResult>
     onEndSession: () => Promise<void>
 }
 
-interface TimerPrefs {
-    sessionTimerVisible: boolean       // ON for diagnostic, drill, full-length, simulation, review by default
-    questionTimerVisible: boolean      // OFF by default
-}
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 2). The `initialTimerPrefs` and `ifThenPlan` props were dropped from `FocusShellProps`; the `TimerPrefs` interface was deleted from `src/components/focus-shell/types.ts`; the `'review'` value was dropped from `sessionType`. v1 timer visibility is static per session type — see §6.6.
 
 interface ItemForRender {
     id: string
@@ -907,7 +902,7 @@ interface ItemSelection {
 
 ### 6.2 Internal state (managed by `shell-reducer.ts`)
 
-> **Partial cut from v1 2026-05-04** — timer-toggle UX (PRD §5.1 cut marker). The `timerPrefs` reducer field stays in `ShellState` (the focus shell's static-per-session-type visibility config still flows through it — session timer ON for non-diagnostic, question timer OFF everywhere). The `toggle_session_timer` and `toggle_question_timer` reducer actions **stay specced but are never dispatched in v1** — there are no toggle UI controls to dispatch them. The shipped focus-shell code surface (`src/components/focus-shell/shell-reducer.ts`) stays vestigial-in-tree for these two action kinds. Drop the unused action kinds + dispatch sites in v1-code-cleanup.
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 2). The `timerPrefs` field was dropped from `ShellState` and the `InitArgs`; the `toggle_session_timer` and `toggle_question_timer` action kinds were dropped from `ShellAction` along with their reducer functions and dispatch lines. v1 timer visibility is static per session type, computed inline in the FocusShell render — session timer + chronometer rendered iff `sessionDurationMs !== null`; per-question timer bar always rendered.
 
 Per PRD §7 — global state libraries are banned; the shell uses `useReducer`.
 
@@ -918,7 +913,6 @@ interface ShellState {
     sessionStartedAtMs: number
     elapsedQuestionMs: number            // updated by requestAnimationFrame
     elapsedSessionMs: number
-    timerPrefs: TimerPrefs
     triagePromptFired: boolean           // flips true once elapsedQuestionMs >= perQuestionTargetMs
     triagePromptFiredAtMs?: number       // for the 3-second triage_taken window
     selectedOptionId?: string
@@ -932,8 +926,6 @@ type ShellAction =
     | { kind: "submit" }
     | { kind: "triage_take" }
     | { kind: "advance"; next?: ItemForRender }
-    | { kind: "toggle_session_timer" }
-    | { kind: "toggle_question_timer" }
 ```
 
 ### 6.3 Layout
@@ -954,7 +946,7 @@ content region:
 ```
 
 - The three bars stack with consistent vertical rhythm; their labels (`Per question time`, `Overall time`) sit immediately below the corresponding bar.
-- The progression bar is unconditional — it renders for every session type regardless of `timerPrefs`. The session bar + chronometer are hidden when `sessionDurationMs === null` (diagnostic) or `timerPrefs.sessionTimerVisible === false`. The per-question bar is hidden when `timerPrefs.questionTimerVisible === false`. **v1 cut (2026-05-04):** `timerPrefs` is static-per-session-type in v1 (no toggle UI) — session bar visible when `sessionDurationMs !== null`, per-question bar hidden everywhere. The `false` branches above stay reachable in code but are never user-toggled.
+- The progression bar is unconditional — it renders for every session type. The session bar + chronometer are hidden when `sessionDurationMs === null` (diagnostic only); visible otherwise. The per-question bar is always visible. (v1 post-cleanup-commit-2 2026-05-04: timer visibility is static per session type — toggle UX cut, no `timerPrefs` state, no user-facing visibility controls.)
 - `<TriagePrompt>` is rendered as an overlay layer outside the chrome row + content region. `<InterQuestionCard>` and `<Heartbeat>` are siblings to the main column.
 
 ### 6.4 Timer animation strategy
@@ -984,9 +976,7 @@ content region:
 
 The two per-question bars are wrapped by a shared `<QuestionTimerBarStack>` parent that owns the layout rhythm and the "Per question time" label sitting beneath the pair.
 
-> **Cut from v1 2026-05-04** — timer-toggle UX + per-user persistence (PRD §5.1 cut marker). The "toggleable mid-session?" column entries (`yes` for session-bar / question-bar / overflow-bar) are **specced-but-never-shipped** in v1: no toggle UI exists. The `<SessionTimerBar>`'s default-visibility column ("ON for drill, full-length, simulation, review. **HIDDEN** for diagnostic.") is the v1 behavior, just static rather than user-toggleable. The `<QuestionTimerBarPrimary>`'s "ON by default per the polish-plan default flip" is **superseded by v1 cut** — question timer is OFF in v1. Drop the toggle prose + persistence-action wiring in v1-code-cleanup.
-
-`timerPrefs` is persisted per user. After every toggle, a server action writes `users.timer_prefs_json`. The server action does **not** call `revalidatePath` — this is a deliberate exception to the standard mutation pattern (§7.8).
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 2). The "toggleable mid-session?" column entries are now all **no** — the toggle UX (state + actions + dispatch + reducer fns + render-condition reads) was dropped from `src/components/focus-shell/`. The `<SessionTimerBar>`'s visibility is now static-per-session-type: hidden when `sessionDurationMs === null` (diagnostic), visible otherwise (drill / full_length / simulation). The `<QuestionTimerBarPrimary>` and `<QuestionTimerBarOverflow>` always render. The "tied to `timerPrefs.questionTimerVisible`" annotations in the table above are stale spec — preserved for historical reference; the per-question bars are unconditional in v1. Per-user persistence (`users.timer_prefs_json`) is unwritten; the column drops in commit 4.
 
 **Bar color allocation.** The progression bar is always blue — it's a question-count indicator with no time semantics. The session bar carries both the elapsed-time signal (the fill ratio) AND the pace-deficit signal (the fill color). An earlier post-overhaul-fixes commit put the pace-deficit color on the progression bar in addition to the session bar's static red; the doubled signal was visually noisy and the progression bar's color was distracting from its "K of N" job, so the color was consolidated onto the session bar in a follow-up.
 
@@ -996,10 +986,7 @@ When `elapsedQuestionMs >= perQuestionTargetMs` and `triagePromptFired` is false
 
 When `sessionDurationMs !== null` and `elapsedSessionMs >= sessionDurationMs`, the focus shell auto-calls `onEndSession()` (wrapped in `errors.try()` so a server-action failure logs but doesn't strand the user) and navigates to `/post-session/[sessionId]`. The diagnostic case (`sessionDurationMs === null`) is exempt — the diagnostic is untimed at the session level (PRD §4.1, capacity measurement) and ends only when all 50 attempts are submitted. Pacing feedback for the diagnostic surfaces post-session as a derived sentence, not in-flow; see §6.10.
 
-Two render rules:
-
-- If `ifThenPlan` is non-empty AND the plan was tagged as a triage plan, render `ifThenPlan` text.
-- Otherwise render: `Best move: guess and advance.` with `(T)` suffix.
+Render rule: always show `Best move: guess and advance.` with `(Space)` suffix. (v1 post-cleanup-commit-2 2026-05-04: the prior "if ifThenPlan is non-empty, render it instead" branch was dropped — NarrowingRamp protocol cut from v1 means no `ifThenPlan` reaches the prompt. The prop chain through `<TriagePrompt>` was removed.)
 
 The user can take the prompt by:
 - Clicking it.
@@ -1062,15 +1049,15 @@ The route handler at `/api/sessions/[sessionId]/heartbeat` updates `last_heartbe
 
 ### 6.12 Audio cues
 
-> **Audio gate downstream of v1-cut timer-toggle (2026-05-04).** The audio paths below gate on `timerPrefs.questionTimerVisible`. Per the v1 cut (§3.2 + §5.1 + §6.2 + §6.6 markers), `questionTimerVisible` is static-`false` in v1 — meaning **all focus-shell audio is silent in v1** (both pre-target ticks and post-target urgency loop). The audio implementation at `src/components/focus-shell/audio-ticker.ts` **stays vestigial in tree** but its hot paths never fire under v1 user state. If audio is desired in v1 separately from the question-timer toggle, the gate condition needs to change (out of v1 scope; track in v1-code-cleanup or a follow-up). See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 2). The audio paths previously gated on `timerPrefs.questionTimerVisible` are now **unconditional** — the gate was removed alongside the timer-toggle UX cut, preserving the Phase-3-shipped behavior of audio-on-by-default. The earlier doc-only round's claim that "all focus-shell audio is silent in v1" was inverted relative to Phase 3 reality and is corrected here. The audio implementation at `src/components/focus-shell/audio-ticker.ts` runs on every per-question target crossing.
 
 The focus shell uses a hybrid two-path audio model — synthesized ticks before the per-question target, a sampled MP3 looping from the target until advance.
 
-**Pre-target ticks.** When `timerPrefs.questionTimerVisible` is true, a soft 880 Hz sine pip fires at every integer second strictly greater than half the per-question target and strictly less than the target itself. For an 18-second target this lands as eight ticks at seconds 10, 11, 12, 13, 14, 15, 16, 17. Each tick is ~50 ms, peak gain 0.12, synthesized via `OscillatorNode` + `GainNode`. AudioContext is created lazily on first user interaction; calls before that unlock are silent no-ops. There is no synth dong at second 18 — the urgency loop's first second of playback replaces it.
+**Pre-target ticks.** A soft 880 Hz sine pip fires at every integer second strictly greater than half the per-question target and strictly less than the target itself. For an 18-second target this lands as eight ticks at seconds 10, 11, 12, 13, 14, 15, 16, 17. Each tick is ~50 ms, peak gain 0.12, synthesized via `OscillatorNode` + `GainNode`. AudioContext is created lazily on first user interaction; calls before that unlock are silent no-ops. There is no synth dong at second 18 — the urgency loop's first second of playback replaces it.
 
 **Post-target urgency loop.** At session start (the same first-interaction moment that creates the AudioContext), one MP3 file is picked at random from the bank manifest at `src/config/sound-bank.ts`. The manifest is build-time-generated by `scripts/copy-sounds-to-public.ts` from the top-level `*.mp3` files in `data/sounds/` — subdirectories under `data/sounds/` (e.g., `success/`, `failure/`, `ticks/`) are deliberately NOT enumerated; the bank is the top-level files only. The chosen file's `AudioBuffer` is fetched and decoded once. When `elapsedQuestionMs` first crosses `perQuestionTargetMs`, that buffer starts playing in a loop (`source.loop = true`) at peak gain ~0.8. The loop stops on item advance via a cleanup-on-`currentItem.id`-change effect — uniformly handles every advance path (Submit click, Space-triage take, click-triage take, server-end). The same file plays for every question in the session; a hard refresh re-picks.
 
-**Gating and silence.** Audio is gated on `timerPrefs.questionTimerVisible`. When the per-question timer bar is hidden, both pre-target ticks and the post-target loop are silent. Before the first user interaction, AudioContext doesn't exist and every audio path returns silently — there is no silent fallback to "no sound, but state still ticks"; failure-to-play is the *correct* behavior under browser autoplay policy.
+**Gating and silence.** Before the first user interaction, AudioContext doesn't exist and every audio path returns silently — there is no silent fallback to "no sound, but state still ticks"; failure-to-play is the *correct* behavior under browser autoplay policy. (The prior `timerPrefs.questionTimerVisible` gate was dropped in v1-code-cleanup commit 2; audio runs unconditionally once the AudioContext is unlocked.)
 
 Audio is implemented in `src/components/focus-shell/audio-ticker.ts`. The reducer's `urgencyLoopStartedForCurrentQuestion` flag prevents double-starts within a question; pre-target ticks use a `useRef`-tracked previous-integer-second value (no reducer state) for cross-second detection.
 

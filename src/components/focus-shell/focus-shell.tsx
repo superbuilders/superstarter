@@ -80,7 +80,6 @@ function FocusShell(props: FocusShellProps) {
 	const [state, dispatch] = React.useReducer(reducer, null, function init() {
 		return initShellState({
 			initialItem: props.initialItem,
-			timerPrefs: props.initialTimerPrefs,
 			targetQuestionCount: props.targetQuestionCount,
 			startMs: performance.now()
 		})
@@ -239,12 +238,14 @@ function FocusShell(props: FocusShellProps) {
 	//
 	// The audio-ticker module picks the MP3 ONCE per session at unlock
 	// time; the same file plays for every question that crosses target.
-	// Audio is gated on `timerPrefs.questionTimerVisible` — if the
-	// per-question timer bar is hidden, both the ticks AND the loop are
-	// silent. The reducer's `urgencyLoopStartedForCurrentQuestion` flag
-	// prevents double-starts within a question; the synth ticks use a
-	// useRef-tracked previous-integer-second value (no reducer state)
-	// to prevent double-fires within a render batch.
+	// In v1 (post-cleanup-commit-2 2026-05-04) the per-question timer
+	// bar is always visible, so audio is unconditional — the prior
+	// `timerPrefs.questionTimerVisible` gate was removed alongside the
+	// timer-toggle UX cut. The reducer's
+	// `urgencyLoopStartedForCurrentQuestion` flag prevents double-starts
+	// within a question; the synth ticks use a useRef-tracked
+	// previous-integer-second value (no reducer state) to prevent
+	// double-fires within a render batch.
 	// Use `state.questionsRemaining` (NOT `state.currentItem.id`) as the
 	// per-question reset signal. The id can be re-served by the server
 	// when the recency / session-soft fallback chain exhausts uniqueness
@@ -263,7 +264,6 @@ function FocusShell(props: FocusShellProps) {
 	)
 	React.useEffect(
 		function maybePlayPreTargetTicks() {
-			if (!state.timerPrefs.questionTimerVisible) return
 			const secondsElapsed = Math.floor(state.elapsedQuestionMs / 1000)
 			if (secondsElapsed === prevSecondRef.current) return
 			const targetSec = props.perQuestionTargetMs / 1000
@@ -276,11 +276,10 @@ function FocusShell(props: FocusShellProps) {
 			}
 			prevSecondRef.current = secondsElapsed
 		},
-		[state.elapsedQuestionMs, state.timerPrefs.questionTimerVisible, props.perQuestionTargetMs]
+		[state.elapsedQuestionMs, props.perQuestionTargetMs]
 	)
 	React.useEffect(
 		function maybeStartUrgencyLoop() {
-			if (!state.timerPrefs.questionTimerVisible) return
 			if (state.elapsedQuestionMs < props.perQuestionTargetMs) return
 			if (state.urgencyLoopStartedForCurrentQuestion) return
 			startUrgencyLoop()
@@ -288,7 +287,6 @@ function FocusShell(props: FocusShellProps) {
 		},
 		[
 			state.elapsedQuestionMs,
-			state.timerPrefs.questionTimerVisible,
 			state.urgencyLoopStartedForCurrentQuestion,
 			props.perQuestionTargetMs
 		]
@@ -385,11 +383,13 @@ function FocusShell(props: FocusShellProps) {
 
 	// Build the peripheral nodes inside narrowed branches so we don't
 	// have to re-check `sessionDurationMs !== null` when passing as a
-	// prop. Hidden entirely when the session has no duration (diagnostic
-	// pre-commit-4) or the user has toggled the timer off.
+	// prop. Hidden entirely when the session has no duration (diagnostic).
+	// The user-facing timer-toggle UX was cut from v1 2026-05-04
+	// (v1-code-cleanup commit 2); session-timer visibility is now static
+	// per session type — visible iff `sessionDurationMs !== null`.
 	let chronometerNode: React.ReactNode = null
 	let sessionBarNode: React.ReactNode = null
-	if (sessionDurationMs !== null && state.timerPrefs.sessionTimerVisible) {
+	if (sessionDurationMs !== null) {
 		const readout = formatRemaining(sessionDurationMs, state.elapsedSessionMs)
 		chronometerNode = (
 			<span className="font-bold text-5xl text-foreground tabular-nums tracking-tight md:text-6xl">
@@ -421,15 +421,15 @@ function FocusShell(props: FocusShellProps) {
 		/>
 	)
 
-	let questionTimerNode: React.ReactNode = null
-	if (state.timerPrefs.questionTimerVisible) {
-		questionTimerNode = (
-			<QuestionTimerBarStack
-				itemId={state.currentItem.id}
-				perQuestionTargetMs={props.perQuestionTargetMs}
-			/>
-		)
-	}
+	// Question-timer bar always visible in v1 (post-cleanup-commit-2
+	// 2026-05-04). The prior `state.timerPrefs.questionTimerVisible`
+	// gate was removed alongside the timer-toggle UX cut.
+	const questionTimerNode = (
+		<QuestionTimerBarStack
+			itemId={state.currentItem.id}
+			perQuestionTargetMs={props.perQuestionTargetMs}
+		/>
+	)
 
 	const questionNumber = props.targetQuestionCount - state.questionsRemaining + 1
 	const lastQuestionSuffix = isLastQuestion ? " — last question" : ""
@@ -462,9 +462,7 @@ function FocusShell(props: FocusShellProps) {
 					{lastQuestionSuffix}
 				</div>
 				{sessionBarNode !== null ? <div className="mt-2">{sessionBarNode}</div> : null}
-				{questionTimerNode !== null ? (
-					<div className="mt-2">{questionTimerNode}</div>
-				) : null}
+				<div className="mt-2">{questionTimerNode}</div>
 				<hr className="mt-3 border-foreground/10" />
 
 				{/* content area — question text + options inside <ItemSlot>,
@@ -528,7 +526,6 @@ function FocusShell(props: FocusShellProps) {
 			{/* overlays — outside the central column. */}
 			<TriagePrompt
 				visible={state.triagePromptFired}
-				ifThenPlan={props.ifThenPlan}
 				onTake={function takeTriage() {
 					// User interaction — unlock audio (idempotent). The
 					// click path through <TriagePrompt> didn't previously

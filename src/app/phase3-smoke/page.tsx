@@ -102,20 +102,11 @@ interface SubmitLogEntry {
 	triageTaken: boolean
 }
 
-// Read a one-shot query-string flag for the per-question timer's
-// initial visibility. Used by the focus-shell-overhaul commit-5
-// verification harness to exercise the `questionTimerVisible: false`
-// branch without modifying drill / diagnostic content components.
-// Default true; `?qt=false` flips to false. Synchronous read at
-// component initialization (no useEffect) so the FocusShell mounts
-// with the correct initial prop on the first render.
-function readInitialQuestionTimerVisible(): boolean {
-	if (typeof window === "undefined") return true
-	const url = new URL(window.location.href)
-	const qt = url.searchParams.get("qt")
-	if (qt === "false") return false
-	return true
-}
+// `?qt=` query-string flag dropped 2026-05-04 (v1-code-cleanup
+// commit 2) — the timer-toggle UX was cut from v1, so the
+// verification harness no longer needs to exercise the
+// `questionTimerVisible: false` branch (it's unreachable). The bar
+// renders unconditionally in v1.
 
 // Read a one-shot query-string flag for sessionDurationMs override.
 // Used by the focus-shell-overhaul commit-7 verification harness to
@@ -136,7 +127,6 @@ function readSessionDurationMs(): number {
 function PhaseThreeSmokePage() {
 	const [submitLog, setSubmitLog] = React.useState<SubmitLogEntry[]>([])
 	const itemIndexRef = React.useRef<number>(0)
-	const [initialQuestionTimerVisible] = React.useState<boolean>(readInitialQuestionTimerVisible)
 	const [sessionDurationMs] = React.useState<number>(readSessionDurationMs)
 
 	const onSubmitAttempt = React.useCallback(
@@ -185,11 +175,6 @@ function PhaseThreeSmokePage() {
 		perQuestionTargetMs: 18_000,
 		targetQuestionCount: STUB_ITEMS.length,
 		paceTrackVisible: true,
-		// Phase 3 polish commit 2 flipped questionTimerVisible default to
-		// true; commit 5 of the focus-shell overhaul added a `?qt=false`
-		// query-string override so the verification harness can exercise
-		// both branches.
-		initialTimerPrefs: { sessionTimerVisible: true, questionTimerVisible: initialQuestionTimerVisible },
 		initialItem: firstItem,
 		strictMode: false,
 		onSubmitAttempt,

@@ -27,17 +27,16 @@ import { cn } from "@/lib/utils"
 
 interface TriagePromptProps {
 	visible: boolean
-	ifThenPlan?: string
 	onTake: () => void
 }
 
+// `ifThenPlan` prop chain dropped 2026-05-04 (v1-code-cleanup commit 2)
+// — NarrowingRamp protocol cut from v1 (PRD §5.3 + SPEC §10.6 markers).
+// Triage prompt always renders the generic "Best move: guess and
+// advance." message in v1; the if-then-plan rendering returns when (if)
+// NarrowingRamp ships post-v1.
 function TriagePrompt(props: TriagePromptProps) {
 	if (!props.visible) return null
-	const hasPlan = props.ifThenPlan !== undefined && props.ifThenPlan.length > 0
-	const message = hasPlan ? props.ifThenPlan : "Best move: guess and advance."
-	const hotkey = hasPlan ? null : (
-		<span className="ml-2 font-mono text-foreground/50 text-xs">(Space)</span>
-	)
 	return (
 		<button
 			type="button"
@@ -51,8 +50,8 @@ function TriagePrompt(props: TriagePromptProps) {
 				"hover:bg-background"
 			)}
 		>
-			<span>{message}</span>
-			{hotkey}
+			<span>Best move: guess and advance.</span>
+			<span className="ml-2 font-mono text-foreground/50 text-xs">(Space)</span>
 		</button>
 	)
 }

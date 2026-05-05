@@ -9,7 +9,7 @@
 
 import type { ItemBody } from "@/server/items/body-schema"
 
-type SessionType = "diagnostic" | "drill" | "full_length" | "simulation" | "review"
+type SessionType = "diagnostic" | "drill" | "full_length" | "simulation"
 
 type Difficulty = "easy" | "medium" | "hard" | "brutal"
 type FallbackLevel = "fresh" | "session-soft" | "recency-soft" | "tier-degraded"
@@ -25,11 +25,6 @@ interface ItemForRender {
 	body: ItemBody
 	options: { id: string; text: string }[]
 	selection: ItemSelection
-}
-
-interface TimerPrefs {
-	sessionTimerVisible: boolean
-	questionTimerVisible: boolean
 }
 
 interface SubmitAttemptInput {
@@ -58,8 +53,6 @@ interface FocusShellProps {
 	perQuestionTargetMs: number
 	targetQuestionCount: number
 	paceTrackVisible: boolean
-	initialTimerPrefs: TimerPrefs
-	ifThenPlan?: string
 	initialItem: ItemForRender
 	// `true` for simulation only (Phase 5). Disables any pause UI etc.
 	// Phase 3 callers pass `false`.
@@ -76,6 +69,5 @@ export type {
 	ItemSelection,
 	SessionType,
 	SubmitAttemptInput,
-	SubmitAttemptResult,
-	TimerPrefs
+	SubmitAttemptResult
 }

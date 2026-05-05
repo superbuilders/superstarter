@@ -24,7 +24,7 @@
 // session is rendered post-session as a derived sentence (plan §6).
 
 import * as errors from "@superbuilders/errors"
-import type { ItemForRender, TimerPrefs } from "@/components/focus-shell/types"
+import type { ItemForRender } from "@/components/focus-shell/types"
 import { logger } from "@/logger"
 
 const TRIAGE_TAKEN_WINDOW_MS = 3000
@@ -42,7 +42,6 @@ interface ShellState {
 	sessionStartedAtMs: number
 	elapsedQuestionMs: number
 	elapsedSessionMs: number
-	timerPrefs: TimerPrefs
 	triagePromptFired: boolean
 	triagePromptFiredAtMs?: number
 	triageTaken: boolean
@@ -82,14 +81,11 @@ type ShellAction =
 	| { kind: "submit_started" }
 	| { kind: "advance"; next: ItemForRender; nowMs: number }
 	| { kind: "set_question_started"; nowMs: number }
-	| { kind: "toggle_session_timer" }
-	| { kind: "toggle_question_timer" }
 	| { kind: "urgency_loop_started" }
 	| { kind: "session_ended" }
 
 interface InitArgs {
 	initialItem: ItemForRender
-	timerPrefs: TimerPrefs
 	targetQuestionCount: number
 	startMs: number
 }
@@ -101,7 +97,6 @@ function initShellState(args: InitArgs): ShellState {
 		sessionStartedAtMs: args.startMs,
 		elapsedQuestionMs: 0,
 		elapsedSessionMs: 0,
-		timerPrefs: args.timerPrefs,
 		triagePromptFired: false,
 		triagePromptFiredAtMs: undefined,
 		triageTaken: false,
@@ -117,7 +112,7 @@ function initShellState(args: InitArgs): ShellState {
 
 interface TickContext {
 	perQuestionTargetMs: number
-	sessionType: "diagnostic" | "drill" | "full_length" | "simulation" | "review"
+	sessionType: "diagnostic" | "drill" | "full_length" | "simulation"
 }
 
 function reduceTick(state: ShellState, nowMs: number, ctx: TickContext): ShellState {
@@ -250,26 +245,6 @@ function reduceAdvance(
 	}
 }
 
-function reduceToggleSessionTimer(state: ShellState): ShellState {
-	return {
-		...state,
-		timerPrefs: {
-			...state.timerPrefs,
-			sessionTimerVisible: !state.timerPrefs.sessionTimerVisible
-		}
-	}
-}
-
-function reduceToggleQuestionTimer(state: ShellState): ShellState {
-	return {
-		...state,
-		timerPrefs: {
-			...state.timerPrefs,
-			questionTimerVisible: !state.timerPrefs.questionTimerVisible
-		}
-	}
-}
-
 // Dispatch is split into two halves so neither exceeds biome's
 // noExcessiveCognitiveComplexity threshold of 15. The `tick` action is
 // handled by the outer reducer (it needs ctx), so neither half sees it.
@@ -308,8 +283,6 @@ function dispatchPrimary(state: ShellState, action: ShellAction): ShellState | u
 }
 
 function dispatchSecondary(state: ShellState, action: ShellAction): ShellState | undefined {
-	if (action.kind === "toggle_session_timer") return reduceToggleSessionTimer(state)
-	if (action.kind === "toggle_question_timer") return reduceToggleQuestionTimer(state)
 	if (action.kind === "urgency_loop_started") {
 		if (state.urgencyLoopStartedForCurrentQuestion) return state
 		return { ...state, urgencyLoopStartedForCurrentQuestion: true }
