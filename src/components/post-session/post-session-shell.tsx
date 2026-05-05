@@ -4,28 +4,31 @@
 // component ordering.
 //
 // Plan: docs/plans/phase5-post-session-review.md §10 + §12 commits 1-6.
-// Phase 5 sub-phase 1 commit 1 established the locked nine-slot
-// ordering; commit 2 (this commit) widens the prop boundary to carry
-// the review-data fields the shell will render in commits 3-6. The
-// shell currently IGNORES the review-data props — slots 2-6 still
-// render as placeholder containers — so visible behavior is unchanged
-// from commit 1.
+//
+// - Commit 1 established the locked nine-slot ordering with empty
+//   placeholder divs in slots 2-6.
+// - Commit 2 widened the prop boundary to carry the review-data
+//   fields (accuracy, latency, wrongItems, triageScore,
+//   surfacedStrategies); slots stayed placeholder.
+// - Commit 3 (this commit) fills slot 2 (<TriageScoreLine>) and
+//   slot 3 (<AccuracySummary>) into their locked positions. Slots 4,
+//   5, 6 remain placeholder; commits 4-6 fill them.
 //
 // Render order (top to bottom), per §10:
 //   1. Heading + brief one-line summary.
-//   2. <TriageScoreLine>           — fills in commit 3.
-//   3. <AccuracySummary>           — fills in commit 3.
-//   4. <LatencySummary>            — fills in commit 4.
-//   5. <WrongItemsBrowser>         — fills in commit 5.
-//   6. <StrategySurface>           — fills in commit 6.
+//   2. <TriageScoreLine>           — filled (commit 3, plan §7).
+//   3. <AccuracySummary>           — filled (commit 3, plan §5).
+//   4. <LatencySummary>            — fills in commit 4 (plan §6).
+//   5. <WrongItemsBrowser>         — fills in commit 5 (plan §8).
+//   6. <StrategySurface>           — fills in commit 6 (plan §9).
 //   7. <OnboardingTargets>         — diagnostic-only, already shipped.
 //   8. Pacing-line sentence        — diagnostic-only, conditional on >15min.
 //   9. Continue CTA                — non-diagnostic only (drill /
 //                                    full-length / simulation).
 //
-// Per the §15.2 amendment in the plan, WrongItem here does NOT carry
-// a structuredExplanation field — sub-phase 4 will extend WrongItem +
-// the page query atomically with the click-to-highlight UI.
+// Slot data-testid markers stay on outer wrapper divs so DOM-order
+// assertions across commits 1-6 keep working — components fill the
+// wrappers, the wrappers stay anchored.
 
 import { useRouter } from "next/navigation"
 import type * as React from "react"
@@ -35,7 +38,9 @@ import type {
 	SurfacedStrategy,
 	WrongItem
 } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+import { AccuracySummary } from "@/components/post-session/accuracy-summary"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
+import { TriageScoreLine } from "@/components/post-session/triage-score-line"
 import { Button } from "@/components/ui/button"
 import type { TriageScore } from "@/server/triage/score"
 
@@ -44,8 +49,6 @@ type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
 interface PostSessionShellProps {
 	sessionType: SessionTypeForShell
 	pacingMinutes?: number
-	// Review-data props plumbed through in commit 2; not yet rendered.
-	// Slots 2-6 fill in commits 3-6; the shape is locked here.
 	accuracy: PerSubTypeAccuracy[]
 	latency: PerSubTypeLatency[]
 	wrongItems: WrongItem[]
@@ -96,11 +99,15 @@ function PostSessionShell(props: PostSessionShellProps) {
 				{subhead}
 			</header>
 
-			{/* Slot 2: <TriageScoreLine> — fills in commit 3 (plan §7). */}
-			<div data-testid="post-session-slot-triage-score" />
+			{/* Slot 2: <TriageScoreLine> — filled in commit 3 (plan §7). */}
+			<div data-testid="post-session-slot-triage-score">
+				<TriageScoreLine score={props.triageScore} />
+			</div>
 
-			{/* Slot 3: <AccuracySummary> — fills in commit 3 (plan §5). */}
-			<div data-testid="post-session-slot-accuracy-summary" />
+			{/* Slot 3: <AccuracySummary> — filled in commit 3 (plan §5). */}
+			<div data-testid="post-session-slot-accuracy-summary">
+				<AccuracySummary rows={props.accuracy} />
+			</div>
 
 			{/* Slot 4: <LatencySummary> — fills in commit 4 (plan §6). */}
 			<div data-testid="post-session-slot-latency-summary" />
