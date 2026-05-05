@@ -21,7 +21,7 @@ Architectural shape:
 - **Auth.js v5 with the Drizzle adapter** wrapped in a thin shim that converts `Date ↔ ms` so every Auth.js timestamp column lands as `bigint(_ms)` per `rules/no-timestamp-columns.md`.
 - **PostgreSQL via Drizzle ORM**, with every PK as `uuid("id").primaryKey().notNull().default(sql\`uuidv7()\`)` per `rules/no-uuid-default-random.md`.
 - **`pgvector` extension** on the `items.embedding` column for the validator's uniqueness check at cosine-similarity threshold 0.92 (PRD §3.2, §7).
-- **Text-only v1 scope.** v1 supports only the 11 text-based sub-types (5 verbal + 6 numerical). The abstract sub-types, the attention-to-detail sub-types, and `numerical.data_interpretation` are deferred (PRD §2, §10). Image storage, signed URLs, and any image-rendering pipeline that supported visual sub-types are out of scope for v1; the schema is shaped to make their later addition additive (see §3.3.1).
+- **Text-only v1 scope.** v1 covers 14 text-based sub-types (5 verbal + 9 numerical) per PRD §2. Image storage, signed URLs, and any image-rendering pipeline are out of scope for v1; the body schema is a discriminated union (see §3.3.1) so additional variants can be added without a schema rewrite.
 
 ---
 
@@ -135,7 +135,7 @@ src/
 │   │   └── body-renderers/
 │   │       └── text.tsx                                       # NEW: { kind: 'text' } — the single v1 body variant
 │   ├── mastery-map/
-│   │   ├── mastery-map.tsx                                    # NEW: 11-icon grid + near-goal line + start CTA + low-contrast triage adherence
+│   │   ├── mastery-map.tsx                                    # NEW: 14-icon grid + near-goal line + start CTA + low-contrast triage adherence
 │   │   ├── mastery-icon.tsx                                   # NEW: per-section lucide icons (BookOpen for verbal / Calculator for numerical)
 │   │   ├── near-goal-line.tsx                                 # NEW: single text line, no graph
 │   │   └── start-session-button.tsx                           # NEW: primary CTA
@@ -207,7 +207,7 @@ src/
 │       │   ├── page.tsx                                       # NEW: real-item ingest form
 │       │   └── actions.ts                                     # NEW: ingestItemAction server action
 │       └── generate/
-│           ├── page.tsx                                       # NEW: 11 × 4 grid (live / candidate / target) + per-cell top-up button + cost dashboard
+│           ├── page.tsx                                       # NEW: 14 × 4 grid (live / candidate / target) + per-cell top-up button + cost dashboard
 │           └── actions.ts                                     # NEW: triggerGenerationAction server action
 │
 └── lib/
@@ -336,9 +336,9 @@ Composite PK: `(identifier, token)`.
 
 | column | type | constraint |
 |---|---|---|
-| `id` | `varchar(64)` | PK (e.g. `"verbal.synonyms"`) |
+| `id` | `varchar(64)` | PK (e.g. `"verbal.antonyms"`) |
 | `name` | `varchar(128)` | `notNull` |
-| `section` | `pgEnum('sub_type_section', ['verbal','numerical'])` | `notNull` (extending the enum is the additive migration when visual sections are added in a future version) |
+| `section` | `pgEnum('sub_type_section', ['verbal','numerical'])` | `notNull` (extending the enum is the additive migration if a new section is added) |
 | `latency_threshold_ms` | `bigint` | `notNull` |
 
 This is the only table that does NOT use a UUIDv7 PK — sub-type ids are stable, human-readable strings used as foreign keys throughout. Seeded from `src/config/sub-types.ts` via the seed script.
@@ -401,7 +401,7 @@ Indexes:
 
 ##### 3.3.1 `body` discriminator schema
 
-v1 is text-only: the body has exactly one variant, but it is still expressed as a Zod `discriminatedUnion("kind", [...])` in `src/server/items/body-schema.ts` so that future visual variants are an additive change rather than a schema rewrite.
+The body is expressed as a Zod `discriminatedUnion("kind", [...])` in `src/server/items/body-schema.ts`. v1 has a single variant; the union shape exists so additional variants can be added without a schema rewrite.
 
 ```ts
 const BodyText = z.object({
@@ -413,8 +413,6 @@ const ItemBody = z.discriminatedUnion("kind", [BodyText])
 ```
 
 The renderer dispatches via `switch` over `body.kind` with TypeScript exhaustiveness checking; today it has one case. Generation pipeline output and admin ingest both validate via `ItemBody.safeParse` per `rules/zod-usage.md`.
-
-Image storage is deferred to a future version when visual sub-types are added; the items table schema does not currently include image references, and the body schema does not carry image keys. When that future version lands, additional variants (text_with_image, chart, grid, image_pair, image_pair_grid, column_matching) will be added to the union, and the renderer's switch will gain corresponding cases.
 
 ##### 3.3.2 `options_json` shape — opaque ids
 
@@ -616,7 +614,7 @@ If `uuidv7LowerBound` is not yet exported from this file, it must be added; the 
 
 ### 4.1 `src/config/sub-types.ts`
 
-Single source of truth for the 11 v1 sub-types per PRD §2. Exports `subTypes`:
+Single source of truth for the 14 v1 sub-types per PRD §2. Exports `subTypes`:
 
 ```ts
 type Difficulty = "easy" | "medium" | "hard" | "brutal"
@@ -632,17 +630,17 @@ interface SubTypeConfig {
 
 Three latency bands, mapped to cognitive operation type:
 
-- **12s (recognition):** `verbal.synonyms`, `verbal.antonyms`, `numerical.number_series`, `numerical.letter_series`.
-- **15s (quick structured reasoning):** `verbal.analogies`, `verbal.sentence_completion`, `numerical.fractions`, `numerical.percentages`, `numerical.averages_ratios`.
-- **18s (sustained multi-constraint reasoning):** `verbal.logic`, `numerical.word_problems`.
+- **12s (recognition):** `verbal.antonyms`, `verbal.letter_series`, `numerical.number_series`, `numerical.lowest_values`.
+- **15s (quick structured reasoning):** `verbal.analogies`, `verbal.sentence_completion`, `numerical.fractions`, `numerical.percentages`, `numerical.averages`, `numerical.ratios`, `numerical.workrate`, `numerical.speed_distance_time`.
+- **18s (sustained multi-constraint reasoning):** `verbal.critical_reasoning`, `numerical.word_problems`.
 
-Default `bankTargetByDifficulty` is `{ easy: 50, medium: 50, hard: 50, brutal: 50 }`. All 11 v1 sub-types use the default; there are no real-only sub-types in v1.
+Default `bankTargetByDifficulty` is `{ easy: 50, medium: 50, hard: 50, brutal: 50 }`. All 14 v1 sub-types use the default; there are no real-only sub-types in v1.
 
-`SubTypeId` is a `as const` union of the 11 string ids. A migration in `src/db/scripts/seed-sub-types.ts` populates the `sub_types` table from this file.
+`SubTypeId` is a `as const` union of the 14 string ids. A migration in `src/db/scripts/seed-sub-types.ts` populates the `sub_types` table from this file.
 
 ### 4.2 `src/config/strategies.ts`
 
-Exports `strategies: Record<SubTypeId, StrategyEntry[]>` where `StrategyEntry = { kind: 'recognition' | 'technique' | 'trap'; text: string }`. Each of the 11 sub-types has exactly three entries — one of each kind — distilled from `docs/CCAT-categories.md`. 33 strategy rows total (3 × 11). Each entry is 1–2 sentences. A migration populates the `strategies` table from this file.
+Exports `strategies: Partial<Record<SubTypeId, StrategyEntry[]>>` where `StrategyEntry = { kind: 'recognition' | 'technique' | 'trap'; text: string }`. Each of the **11 currently-authored sub-types** (5 verbal + 6 numerical, excluding `numerical.workrate`, `numerical.speed_distance_time`, and `numerical.lowest_values`, which are pending a separate strategy-authoring round) has exactly three entries — one of each kind — distilled from `docs/CCAT-categories.md`. 33 strategy rows total (3 entries × 11 currently-authored sub-types). Each entry is 1–2 sentences. The `Partial<Record<...>>` typing per Q4 of the taxonomy-restructuring round lets the three pending sub-types omit cleanly; the seed script (`src/db/scripts/seed-strategies.ts`) skips missing keys with an `if (!entries) continue` guard.
 
 ### 4.3 `src/config/admins.ts`
 
@@ -650,7 +648,7 @@ Hardcoded admin email allowlist. Lowercase only. Compared case-insensitively in 
 
 ### 4.4 `src/config/item-templates.ts`
 
-Per-sub-type generator templates, versioned. v1 has 11 templates (one per v1 sub-type). The Zod schema for each template's structured output emits `body: { kind: "text", text: string }`:
+Per-sub-type generator templates, versioned. v1 has 14 templates (one per v1 sub-type). The Zod schema for each template's structured output emits `body: { kind: "text", text: string }`:
 
 ```ts
 interface ItemTemplate {
@@ -668,12 +666,12 @@ Templates are versioned so a regeneration run can be associated with a specific 
 
 ### 4.5 `src/config/diagnostic-mix.ts`
 
-Hand-tuned 50-row array for the diagnostic. Each entry is `{ subTypeId, difficulty }`. Brutal-tier items are excluded. Distribution across the 11 v1 sub-types: 5 verbal × 4 each = 20; 6 numerical × 5 each = 30. Total = 50. Within each sub-type, tier mix is hand-picked from `easy / medium / hard` (no brutal); typical per-sub-type shapes:
+Hand-tuned array for the diagnostic. Each entry is `{ subTypeId, difficulty }`. Brutal-tier items are excluded. Distribution across the 14 v1 sub-types is currently **PROVISIONAL** at 46 entries (4 × 4 verbal blocks for antonyms / analogies / sentence_completion / critical_reasoning + 5 entries for letter_series + 5 × 4 numerical blocks for number_series / word_problems / fractions / percentages + 3 averages + 2 ratios; no entries yet for `numerical.workrate`, `numerical.speed_distance_time`, or `numerical.lowest_values`). The 50-item target is restored in a follow-up re-balance round once the testbank-re-extraction round provides empirical CCAT-prep ratios. Within each sub-type, tier mix is hand-picked from `easy / medium / hard` (no brutal); typical per-sub-type shapes:
 
 - 4-item verbal block: `[easy, medium, medium, hard]`.
 - 5-item numerical block: `[easy, medium, medium, medium, hard]`.
 
-The exact tier assignments are curated in the file rather than derived from a formula — the diagnostic is calibration-critical and a flat data file is more honest than an algorithm.
+The exact tier assignments are curated in the file rather than derived from a formula — the diagnostic is calibration-critical and a flat data file is more honest than an algorithm. The top comment in `src/config/diagnostic-mix.ts` carries the same provisional flag.
 
 ### 4.6 `src/config/difficulty-curves.ts`
 
@@ -961,7 +959,7 @@ content region:
 - Start: `performance.now()` captured in the `<ItemSlot>` mount effect.
 - End: `performance.now()` captured in the click handler that dispatches `submit`.
 - Difference is the `latency_ms` written to `attempts.latency_ms`.
-- v1 items are text-only, so first paint == text paint == question visible. (When future visual sub-types are added, latency will need to anchor on the text paint rather than the image paint so visual sub-types aren't systematically penalized.)
+- v1 items are text-only, so first paint == text paint == question visible.
 - The shell does not round; the database column is `integer` so the value is implicitly truncated by `Math.floor` at the boundary.
 
 ### 6.6 Three peripheral elements
@@ -1000,7 +998,7 @@ Triage rendering is independent of timer-bar visibility — it appears regardles
 Active inside the FocusShell:
 - `T` — take the triage prompt.
 - `1`–`5` — select option at index 0–4.
-- `A`–`E` — same as 1–5 (for visual sub-types where options are letter-labeled).
+- `A`–`E` — same as 1–5 (the letter-labeled alternative shorthand).
 - `Enter` — submit the currently selected option.
 
 Spacebar is **not** bound; preventing default on space would break radio-button selection elsewhere.
@@ -1942,7 +1940,7 @@ A user can re-take the diagnostic from the History tab via "Retake diagnostic." 
 
 PRD §4.4.
 
-1. `/drill/[subTypeId]/page.tsx` is a configure page. Validates the route param against `subTypeIds`; on miss → `notFound()`. Pre-checks the sub-type's live-item count via `SELECT count(*) FROM items WHERE sub_type_id = $1 AND status = 'live'`. **If the count is zero, renders `<EmptyBankPane>` instead of the configure form** — heading "No questions available for {sub-type} yet.", body "Try a different sub-type from the Mastery Map.", single "Back to Mastery Map" CTA. The pane uses `data-testid="drill-empty-bank-pane"`. This handling replaces the prior fail-through to `startSession`'s `ErrFirstItemMissing` → Next.js error boundary, which gave users an unhelpful error for what's a known empty-bank case (e.g., `verbal.synonyms` while the testbank workstream is between stage-1 ingest and stage-2 explanation generation).
+1. `/drill/[subTypeId]/page.tsx` is a configure page. Validates the route param against `subTypeIds`; on miss → `notFound()`. Pre-checks the sub-type's live-item count via `SELECT count(*) FROM items WHERE sub_type_id = $1 AND status = 'live'`. **If the count is zero, renders `<EmptyBankPane>` instead of the configure form** — heading "No questions available for {sub-type} yet.", body "Try a different sub-type from the Mastery Map.", single "Back to Mastery Map" CTA. The pane uses `data-testid="drill-empty-bank-pane"`. This handling replaces the prior fail-through to `startSession`'s `ErrFirstItemMissing` → Next.js error boundary, which gave users an unhelpful error for what's a known empty-bank case (e.g., `numerical.workrate`, `numerical.speed_distance_time`, or `numerical.lowest_values` — three sub-types added in the taxonomy-restructuring round whose seed banks are empty until the testbank-re-extraction round populates them).
 2. With a populated bank, the configure page renders a length picker (5 / 10 / 20, default 10). **Phase 3 wires only `standard` timer mode** — `speed_ramp` and `brutal` ship in Phase 5; the configure page's timer-mode selector is correspondingly absent in Phase 3. The PRD §4.4 timer-mode-selection narrative applies to Phase 5+.
 3. Form submit `GET`s to `/drill/[subTypeId]/run?length=N`. The run page calls `startSession({ userId, type: "drill", subTypeId, timerMode: "standard", drillLength })`. **Phase 3 ships no NarrowingRamp** — `startSession` is invoked directly. PRD §5.3 NarrowingRamp ships in Phase 5.
 4. `<FocusShell>` runs with `sessionDurationMs = drillLength * 18000`, `perQuestionTargetMs: 18000`, `paceTrackVisible: true`. **Selection strategy is `'uniform_band'`** in Phase 3 (§9.2 deferred-adaptive note); the requested tier is constant across the drill, derived from `mastery_state` per §9.1's initial-tier table.
@@ -1956,7 +1954,7 @@ The session-timer toggle does NOT live on the configure page — it's a focus-sh
 
 > **Partial cut from v1 2026-05-04.** Full-length test stays in v1 (Phase 5 sub-phase 3). Two prefix/suffix elements cut: NarrowingRamp pre-session (PRD §5.3) and strategy-review gate post-session (PRD §6.5). v1 shape: directly → `<FocusShell>` → post-session review (dismissible immediately). On-disk surface: `src/components/narrowing-ramp/*` and `src/components/post-session/strategy-review-gate.tsx` were **never shipped** to tree.
 
-PRD §4.5. 50 items, 15 minutes, real-test difficulty mix with randomized interleaving across the 11 v1 sub-types (verbal and numerical, no section breaks). The real CCAT additionally interleaves abstract and attention-to-detail items; v1 omits those because v1 does not cover those sections.
+PRD §4.5. 50 items, 15 minutes, real-test difficulty mix with randomized interleaving across the 14 v1 sub-types (verbal and numerical, no section breaks).
 
 1. ~~`/test/page.tsx` renders `<NarrowingRamp>`.~~ **Cut 2026-05-04.** v1 `/test/page.tsx` calls `startSession({ type: "full_length" })` directly (no `ifThenPlan`).
 2. `startSession({ type: "full_length", ifThenPlan })`. `getNextItem` selects per the per-decile mix in `src/config/difficulty-curves.ts`, with cross-sub-type interleaving (the ordering of sub-types within a decile is randomized per session). Pulls from `source: "real"` first; only falls back to `generated` when the real-bank set is exhausted for the requested sub-type/difficulty bucket.
@@ -2083,7 +2081,7 @@ This list is the union of `rules/*.md` and `gritql/*.grit` actually present in t
 - [ ] **No non-null assertions (`!`).** Validate and throw instead. (`biome/base.json:71-74` `style/noNonNullAssertion: error`)
 - [ ] **No `process.env`.** Use `env` from `@/env`. (`biome/base.json:70` `style/noProcessEnv: error`)
 - [ ] **No `forEach`.** Use `for...of`. (`biome/base.json:34-36` `complexity/noForEach: error`)
-- [ ] **No `<img>`.** Use Next `<Image>`. (`biome/base.json:106` `performance/noImgElement: error`) v1 has no item images so the application surface today rarely needs `<Image>` either; the rule is documented for completeness and for future visual sub-types.
+- [ ] **No `<img>`.** Use Next `<Image>`. (`biome/base.json:106` `performance/noImgElement: error`) v1 has no item images so the application surface today rarely needs `<Image>` either; the rule is documented for completeness.
 - [ ] **Unused variables/imports/parameters are errors.** (`biome/base.json:53-56`)
 - [ ] **No `timestamp` / `date` / `time` / `interval` columns.** Use `bigint` `_ms`. (`rules/no-timestamp-columns.md`, enforced by `scripts/dev/lint/rules/no-timestamp-columns.ts`)
 - [ ] **No `uuid().defaultRandom()`.** Use `default(sql\`uuidv7()\`)`. (`rules/no-uuid-default-random.md`, enforced by `scripts/dev/lint/rules/no-uuid-default-random.ts`)
@@ -2130,7 +2128,7 @@ Six phases over a 2-week window. Each phase lists the files to create or modify 
 - `scripts/migrate-opaque-option-ids.ts` (NEW) — one-shot migration that rewrote letter-shaped ids to opaque base32 ids on the existing dataset.
 - `scripts/import-questions.ts`, `scripts/generate-explanations.ts`, `scripts/regenerate-explanations.ts`, `scripts/_lib/{anthropic,extract,solve-verify,explain,sample,logs}.ts` (NEW) — three-stage OCR import pipeline.
 - `scripts/backfill-missing-embeddings.ts` (NEW) — populates `items.embedding` for rows inserted via the seed loader (which deliberately skips the workflow trigger).
-- Hand-seed 55 real items (5 per sub-type × 11 v1 sub-types) via the form. Then OCR-import additional items from CCAT practice-test screenshots via the four-pass pipeline at `scripts/import-questions.ts` + `scripts/generate-explanations.ts`. Validates the (single-variant) body discriminator end-to-end.
+- Hand-seed 70 real items (5 per sub-type × 14 v1 sub-types) via the form. Then OCR-import additional items from CCAT practice-test screenshots via the four-pass pipeline at `scripts/import-questions.ts` + `scripts/generate-explanations.ts`. Validates the (single-variant) body discriminator end-to-end.
 - The opaque-option-id schema (§3.3.2) and the structured-explanation contract (§3.3.3) both shipped within Phase 2, in lockstep with the OCR pipeline. See `docs/plans/ocr-import-screenshots.md` and `docs/plans/opaque-option-ids-and-pipeline-split.md` for the design rationale and the migration history.
 
 ### Phase 3 — Practice surface (week 1, days 5–7) — **COMPLETE 2026-05-04**
@@ -2186,9 +2184,3 @@ Sub-phases 1 (diagnostic flow), 2 (Mastery Map + post-diagnostic empty-state pan
 - Surface strategies in `<PostSessionReview>` (already wired in phase 5).
 
 PRD §9 cuts apply if behind: simulation, history detail views. The mastery model, generation pipeline, focus shell, and Mastery Map are non-negotiable. (NarrowingRamp's visual-narrowing step was previously listed here as a cut candidate — moot now since the entire NarrowingRamp protocol is cut from v1 2026-05-04, see PRD §5.3 + SPEC §10.6 markers.)
-
----
-
-## 13. Open questions
-
-1. **Future visual-sub-type migration.** v1's text-only scope informs eventual addition of the abstract reasoning, attention-to-detail, and `numerical.data_interpretation` sub-types. The current schema is shaped to make that migration additive (single-variant body discriminator stays a discriminated union; `sub_type_section` enum extensible; `options_json` carries `text` only but the type allows `imageUrl` to be added). The specific assumptions that will need revisiting: introducing image keys into the body schema, choosing image storage (S3 with the proxied-image route handler is the obvious choice but isn't committed), wiring image-MIME-type validation at ingest, deciding whether visual sub-types use `selectionStrategy: 'real-only'` or get their own programmatic generators, and re-anchoring latency on text-paint instead of first-paint when image-bearing variants exist. Flagged here so the future migration isn't a surprise; not a v1 deliverable.
