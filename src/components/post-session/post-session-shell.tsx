@@ -3,13 +3,13 @@
 // <PostSessionShell> — session-type-aware dispatch with locked §10
 // component ordering.
 //
-// Plan: docs/plans/phase5-post-session-review.md §10 + §12 commit 1.
-// Phase 5 sub-phase 1's foundation commit. The shell's job is to
-// dispatch on session type and present the locked nine-slot ordering
-// from §10. Slots 2-6 (TriageScoreLine, AccuracySummary, LatencySummary,
-// WrongItemsBrowser, StrategySurface) render as empty placeholders in
-// this commit; commits 3-6 swap their components into the predetermined
-// slots without restructuring the shell.
+// Plan: docs/plans/phase5-post-session-review.md §10 + §12 commits 1-6.
+// Phase 5 sub-phase 1 commit 1 established the locked nine-slot
+// ordering; commit 2 (this commit) widens the prop boundary to carry
+// the review-data fields the shell will render in commits 3-6. The
+// shell currently IGNORES the review-data props — slots 2-6 still
+// render as placeholder containers — so visible behavior is unchanged
+// from commit 1.
 //
 // Render order (top to bottom), per §10:
 //   1. Heading + brief one-line summary.
@@ -23,24 +23,34 @@
 //   9. Continue CTA                — non-diagnostic only (drill /
 //                                    full-length / simulation).
 //
-// Diagnostic mode renders 1 + slots 2-6 (empty) + 7 + 8.
-// Review-only mode (drill / full-length / simulation) renders 1 +
-// slots 2-6 (empty) + 9.
-//
-// `<OnboardingTargets>` carries the diagnostic flow's "Save and
-// continue" / "Skip for now" CTAs internally; `<ContinueButton>` is
-// the review-only CTA that lands on / via router.push.
+// Per the §15.2 amendment in the plan, WrongItem here does NOT carry
+// a structuredExplanation field — sub-phase 4 will extend WrongItem +
+// the page query atomically with the click-to-highlight UI.
 
 import { useRouter } from "next/navigation"
 import type * as React from "react"
+import type {
+	PerSubTypeAccuracy,
+	PerSubTypeLatency,
+	SurfacedStrategy,
+	WrongItem
+} from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { Button } from "@/components/ui/button"
+import type { TriageScore } from "@/server/triage/score"
 
 type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
 
 interface PostSessionShellProps {
 	sessionType: SessionTypeForShell
 	pacingMinutes?: number
+	// Review-data props plumbed through in commit 2; not yet rendered.
+	// Slots 2-6 fill in commits 3-6; the shape is locked here.
+	accuracy: PerSubTypeAccuracy[]
+	latency: PerSubTypeLatency[]
+	wrongItems: WrongItem[]
+	triageScore: TriageScore
+	surfacedStrategies: SurfacedStrategy[]
 }
 
 function PostSessionShell(props: PostSessionShellProps) {
