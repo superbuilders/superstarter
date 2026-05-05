@@ -1280,19 +1280,20 @@ API routes live under `src/app/api/`. They use the same `errors.try` pattern.
 async function startSession(input: StartSessionInput): Promise<{ sessionId: string; firstItem: ItemForRender }>
 
 interface StartSessionInput {
-    type: "diagnostic" | "drill" | "full_length" | "simulation" | "review"   // v1 (2026-05-04): "review" type cut, see §10.5 marker
-    subTypeId?: SubTypeId           // required for drill, ~~review~~ (review type cut from v1)
-    timerMode?: "standard" | "speed_ramp" | "brutal"  // required for drill. v1 (2026-05-04): only "standard" is written; "speed_ramp" and "brutal" cut, see §3.4 marker
+    type: "diagnostic" | "drill" | "full_length" | "simulation"
+    subTypeId?: SubTypeId           // required for drill
+    timerMode?: "standard"          // optional; defaults to 'standard' for drill internally (v1 2026-05-04: speed_ramp + brutal drill modes cut, see §3.4)
     drillLength?: 5 | 10 | 20       // required for drill
-    ifThenPlan?: string             // ~~captured by NarrowingRamp~~ — NarrowingRamp cut from v1 2026-05-04 (§5.3 marker); v1 callers do not pass `ifThenPlan`
 }
 ```
 
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 1). The `'review'` session type, the `ifThenPlan` input, and the speed_ramp/brutal `timerMode` values were all dropped from `StartSessionInput` in tree. The `narrowing_ramp_completed` and `if_then_plan` insert paths were dropped from `start.ts`'s INSERT VALUES list. Schema columns + enum values stay until commit 4's migration drops them.
+
 Side effects:
 - Reads `auth()` to resolve `userId` (throws `ErrUnauthorized` if missing).
-- Computes `target_question_count` from `input` (50 for diagnostic / full_length / simulation; `drillLength` for drill; `count(due)` for review).
+- Computes `target_question_count` from `input` (50 for diagnostic / full_length / simulation; `drillLength` for drill).
 - Calls `computeRecencyExcludedSet(userId, Date.now())` from `src/server/items/recency.ts` — a single query joining `attempts` to `practice_sessions` filtered by `practice_sessions.user_id = $1 AND attempts.id >= uuidv7LowerBound(now - 7d)`, returning the distinct set of `item_id`s.
-- Inserts a `practice_sessions` row with `started_at_ms = Date.now()`, `last_heartbeat_ms = Date.now()`, `target_question_count`, `recency_excluded_item_ids`, `narrowing_ramp_completed = !!input.ifThenPlan`, `if_then_plan = input.ifThenPlan ?? null`. (v1 2026-05-04: `input.ifThenPlan` is always `undefined` — NarrowingRamp cut, §5.3 marker. v1 rows always have `narrowing_ramp_completed = false` and `if_then_plan = null`. Both columns stay vestigial in tree, see §3.4 marker.)
+- Inserts a `practice_sessions` row with `started_at_ms = Date.now()`, `last_heartbeat_ms = Date.now()`, `target_question_count`, `recency_excluded_item_ids`. The `narrowing_ramp_completed` and `if_then_plan` columns receive the schema's defaults (`false`, `NULL`) — no application writer touches them in v1.
 - Calls `getNextItem(sessionId)` synchronously to return the first item.
 
 Tables touched: `practice_sessions` (insert), `attempts` + `practice_sessions` (read for recency), `items` (select via `getNextItem`).
@@ -1342,20 +1343,19 @@ Not a server action — invoked by `startSession` and `submitAttempt`.
 async function getNextItem(sessionId: string): Promise<ItemForRender | undefined>
 ```
 
-Implementation dispatches on the session's `selectionStrategy`, derived from `practice_sessions.type` and `timer_mode`:
+Implementation dispatches on the session's `selectionStrategy`, derived from `practice_sessions.type`:
 
-- `'adaptive'` (drill only) — adaptive tier via `nextDifficultyTier` over the user's last 10 in-session attempts on this sub-type, computed from the `attempts` table on every call. Filtered by the recency-excluded set, then by the tier-fallback ladder (§9.1).
+- `'adaptive'` (drill only) — adaptive tier via `nextDifficultyTier` over the user's last 10 in-session attempts on this sub-type, computed from the `attempts` table on every call. Filtered by the recency-excluded set, then by the tier-fallback ladder (§9.1). **Phase 5 sub-phase 2 closes the deferred `ErrAdaptiveDeferred` placeholder; v1 currently dispatches `drill → uniform_band` (Phase 3).**
 - `'fixed_curve'` (diagnostic / full_length / simulation) — the per-question (sub-type, difficulty) is read from the deterministic mix in `src/config/diagnostic-mix.ts` (diagnostic) or from the per-decile distribution in `src/config/difficulty-curves.ts` (full_length / simulation), indexed by the count of attempts already in the session. Filtered by the recency-excluded set.
-- ~~`'review_queue'` — items pulled from `review_queue` ordered by `due_at_ms` ascending.~~ **Cut from v1 2026-05-04** (PRD §4.3 cut). The `'review_queue'` selection-strategy branch is **specced-but-never-dispatched** in v1: no v1 session has `type === 'review'` (the `/review/` route is also cut, see §10.5). The `'review_queue'` enum value in `selectionStrategy` stays vestigial in spec; the implementation branch was never shipped to `src/server/items/selection.ts`.
+
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 1). The `'review_queue'` selection strategy was dropped from `SelectionStrategy` and from the dispatch in tree, alongside `ErrReviewQueueDeferred`. The brutal/speed-ramp drill-mode tier-fallback paths in `initialTierFor` were also dropped (the `timerMode` parameter is now narrowed to `'standard'` everywhere).
 
 Returns `undefined` when:
-- The session quota is reached (`COUNT(attempts WHERE session_id = $1) >= target_question_count`), OR
-- For brutal drills, both the brutal and hard banks are exhausted under the user's recency floor, OR ~~**Brutal drill mode cut from v1 2026-05-04**; the brutal-tier-fallback path stays specced but is unreachable in v1 because no v1 session has `timer_mode === 'brutal'`. Brutal-tier *items* still exist in the bank — see §3.4 marker on the tier/mode disambiguation.~~
-- ~~For review sessions, the due-set has been served.~~ **Cut from v1 2026-05-04** (PRD §4.3 cut). No v1 session has `type === 'review'`.
+- The session quota is reached (`COUNT(attempts WHERE session_id = $1) >= target_question_count`).
 
 The `served_at_tier`, `fallback_from_tier`, and `fallback_level` for the chosen item are passed back to the client alongside the `ItemForRender` payload (see §6.1 — `ItemForRender` carries a `selection` field with `{ servedAtTier, fallbackFromTier?, fallbackLevel }`). The FocusShell echoes them back to the server in the next `submitAttempt` invocation, where `submitAttempt` writes them onto the inserted `attempts` row. No serverless-state-survival concern: the values travel through the request/response cycle exactly once, in flight.
 
-Tables: `items`, `attempts`, `practice_sessions`. ~~`review_queue`~~ (review_queue reads cut from v1 2026-05-04; see PRD §4.3 + SPEC §3.5 cut markers).
+Tables: `items`, `attempts`, `practice_sessions`.
 
 ### 7.5 `dismissPostSession` — `src/app/(app)/post-session/[sessionId]/actions.ts`
 
@@ -1773,14 +1773,13 @@ The recompute window for adaptive uses `served_at_tier`, not `items.difficulty`,
 | `drill`      | `'adaptive'` |
 | `full_length` | `'fixed_curve'` (sourced from `difficulty-curves.ts`) |
 | `simulation`  | `'fixed_curve'` (same curve as full_length) |
-| ~~`review`~~ | ~~`'review_queue'`~~ — **cut from v1 2026-05-04** (PRD §4.3 + SPEC §3.5 + §10.5 markers). No v1 session has `type === 'review'`. |
+
+> **Code-cleanup landed 2026-05-04** (v1-code-cleanup commit 1). The `review → review_queue` row was dropped from this dispatch table; `'review_queue'` was dropped from `SelectionStrategy`; the `'review'` value stays in the `session_type` enum until commit 4's migration truncates it. Brutal-tier-as-difficulty (item bank, `served_at_tier` enum, `TIER_ORDER`) is **unaffected** — the adaptive walker (§9.1) can still serve Brutal-tier *items* inside a Standard drill via the next-harder-tier step.
 
 Fallback chains within `getNextItem`:
 
 - **Recency floor (soft):** Try eligible items not served in the last 7 days first. If none, fall back to eligible-and-not-served-this-session. If still none, any eligible item ordered by oldest-served-first. This guarantees `getNextItem` always returns something rather than throwing mid-drill.
-- **Tier fallback (drill mode):** If the requested tier is exhausted under the recency floor:
-    - **Standard ~~/ speed-ramp~~ drill:** fall back to the next-easier tier and surface a peripheral note framed as user achievement: "All hard items mastered for this set — continuing at medium." (~~speed-ramp drill mode cut from v1 2026-05-04 — PRD §4.4 cut. Standard-drill tier-fallback ladder is the only v1 path.~~)
-    - ~~**Brutal drill:** fall back from `brutal → hard → end`. If both are exhausted, end the session early with the user-positive message "All brutal items mastered for this set." Falling further (to medium) is **not allowed** — the alternative would defeat the brutal mode's purpose.~~ **Brutal drill mode cut from v1 2026-05-04** (PRD §4.4 cut). Brutal-tier-as-mode is unreachable in v1. Brutal-tier-as-difficulty (item bank, `served_at_tier` enum, `TIER_ORDER`) is **unaffected** — the adaptive walker (§9.1) can still serve Brutal-tier *items* inside a Standard drill via the next-harder-tier step.
+- **Tier fallback (drill mode):** If the requested tier is exhausted under the recency floor, fall back to the next-easier tier and surface a peripheral note framed as user achievement: "All hard items mastered for this set — continuing at medium." (Speed-ramp + brutal drill modes were cut from v1 2026-05-04 per PRD §4.4; Standard-drill tier-fallback is the only v1 drill-mode path.)
 
 Each `attempts` row records both `served_at_tier` (what the engine intended) and `fallback_from_tier` (nullable; populated only when tier-degraded). `metadata_json.fallback_level` captures which fallback path fired: `'fresh' | 'session-soft' | 'recency-soft' | 'tier-degraded'`.
 

@@ -33,11 +33,10 @@ const ErrUnauthorized = errors.new("unauthorized")
 const ErrInvalidActionInput = errors.new("invalid action input")
 
 const startSessionInputSchema = z.object({
-	type: z.enum(["diagnostic", "drill", "full_length", "simulation", "review"]),
+	type: z.enum(["diagnostic", "drill", "full_length", "simulation"]),
 	subTypeId: z.enum(subTypeIds).optional(),
-	timerMode: z.enum(["standard", "speed_ramp", "brutal"]).optional(),
-	drillLength: z.union([z.literal(5), z.literal(10), z.literal(20)]).optional(),
-	ifThenPlan: z.string().min(1).max(2048).optional()
+	timerMode: z.literal("standard").optional(),
+	drillLength: z.union([z.literal(5), z.literal(10), z.literal(20)]).optional()
 })
 
 type StartSessionActionInput = Omit<StartSessionInput, "userId">

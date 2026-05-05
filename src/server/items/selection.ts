@@ -1,17 +1,18 @@
-// Selection-engine dispatch — Phase 3.
+// Selection-engine dispatch — Phase 3 + v1-code-cleanup (2026-05-04).
 //
 // Plan §4.1–§4.4. `getNextItem(sessionId)` resolves the session's
-// strategy from `practice_sessions.type` (and timer_mode for drills via
-// the future Phase 5 mapping change), then dispatches over a switch.
+// strategy from `practice_sessions.type`, then dispatches over a switch.
 //
-// Phase 3 implements 'fixed_curve' (diagnostic) and 'uniform_band'
-// (Phase-3-only drill) fully. 'adaptive' and 'review_queue' are
-// throwing stubs — unreachable from any Phase 3 call site, but present
-// in the switch so the type-checker enforces exhaustiveness against
-// SelectionStrategy.
+// Phase 3 ships 'fixed_curve' (diagnostic) and 'uniform_band'
+// (drill) fully. 'adaptive' is a throwing stub — unreachable from any
+// v1 call site, but present in the switch so the type-checker enforces
+// exhaustiveness against SelectionStrategy. Phase 5 sub-phase 2 closes
+// the adaptive deferral. The 'review_queue' strategy and 'review'
+// session type were cut from v1 2026-05-04 (PRD §4.3 + SPEC §3.5
+// markers) and dropped here in the same round.
 //
-// All three strategies obey the SAME serverless-state-derivation rule:
-// no in-memory state survives across calls. The recency-excluded set is
+// All strategies obey the SAME serverless-state-derivation rule: no
+// in-memory state survives across calls. The recency-excluded set is
 // materialized at session start (§3.2); within-session attempted items
 // are read from the `attempts` table on every call.
 
@@ -46,7 +47,6 @@ const ErrSessionNotFound = errors.new("session not found")
 const ErrInvalidItemBody = errors.new("invalid item body")
 const ErrInvalidOptions = errors.new("invalid options shape")
 const ErrAdaptiveDeferred = errors.new("adaptive strategy deferred to phase 5")
-const ErrReviewQueueDeferred = errors.new("review_queue strategy deferred to phase 5")
 const ErrDiagnosticMixOutOfRange = errors.new("diagnostic mix index out of range")
 const ErrUnsupportedStrategyForSubType = errors.new(
 	"strategy requires a sub_type_id but the session has none"
@@ -70,9 +70,8 @@ function asSubTypeId(s: string): SubTypeId {
 	return matched
 }
 
-type SelectionStrategy = "fixed_curve" | "uniform_band" | "adaptive" | "review_queue"
-type SessionType = "diagnostic" | "drill" | "full_length" | "simulation" | "review"
-type TimerMode = "standard" | "speed_ramp" | "brutal"
+type SelectionStrategy = "fixed_curve" | "uniform_band" | "adaptive"
+type SessionType = "diagnostic" | "drill" | "full_length" | "simulation"
 type FallbackLevel = "fresh" | "session-soft" | "recency-soft" | "tier-degraded"
 
 interface ItemSelection {
@@ -93,27 +92,18 @@ interface SessionContext {
 	userId: string
 	type: SessionType
 	subTypeId: SubTypeId | null
-	timerMode: TimerMode | null
 	targetQuestionCount: number
 	recencyExcludedItemIds: ReadonlyArray<string>
 }
 
-// Resolve the strategy from session.type. Phase 5 changes the `drill →
-// uniform_band` line to `drill → adaptive` and fills in the `'adaptive'`
-// branch in dispatch — no other call site moves.
-function selectionStrategyForSession(
-	type: SessionType,
-	timerMode: TimerMode | null
-): SelectionStrategy {
-	// timerMode is currently unused in the mapping (Phase 5 adds the drill
-	// timer-mode-aware adaptive routing); reserved here for the same Phase 5
-	// diff site.
-	void timerMode
+// Resolve the strategy from session.type. Phase 5 sub-phase 2 changes
+// the `drill → uniform_band` line to `drill → adaptive` and fills in
+// the `'adaptive'` branch in dispatch — no other call site moves.
+function selectionStrategyForSession(type: SessionType): SelectionStrategy {
 	if (type === "diagnostic") return "fixed_curve"
 	if (type === "drill") return "uniform_band"
 	if (type === "full_length") return "fixed_curve"
 	if (type === "simulation") return "fixed_curve"
-	if (type === "review") return "review_queue"
 	const _exhaustive: never = type
 	return _exhaustive
 }
@@ -126,7 +116,6 @@ async function loadSessionContext(sessionId: string): Promise<SessionContext> {
 				userId: practiceSessions.userId,
 				type: practiceSessions.type,
 				subTypeId: practiceSessions.subTypeId,
-				timerMode: practiceSessions.timerMode,
 				targetQuestionCount: practiceSessions.targetQuestionCount,
 				recencyExcludedItemIds: practiceSessions.recencyExcludedItemIds
 			})
@@ -143,12 +132,15 @@ async function loadSessionContext(sessionId: string): Promise<SessionContext> {
 		logger.warn({ sessionId }, "loadSessionContext: session row missing")
 		throw errors.wrap(ErrSessionNotFound, `session id '${sessionId}'`)
 	}
+	if (row.type === "review") {
+		logger.error({ sessionId, type: row.type }, "loadSessionContext: 'review' session type cut from v1")
+		throw errors.wrap(ErrSessionNotFound, `session '${sessionId}' has cut session_type 'review'`)
+	}
 	return {
 		id: row.id,
 		userId: row.userId,
 		type: row.type,
 		subTypeId: row.subTypeId === null ? null : asSubTypeId(row.subTypeId),
-		timerMode: row.timerMode,
 		targetQuestionCount: row.targetQuestionCount,
 		recencyExcludedItemIds: row.recencyExcludedItemIds
 	}
@@ -380,40 +372,30 @@ async function readMasteryStateFor(
 }
 
 // SPEC §9.1 initial-tier table — used by Phase 3's uniform_band as a
-// constant band for the whole drill (no walking). Phase 5's adaptive
-// uses the same table for the drill's starting tier and then walks via
-// nextDifficultyTier.
+// constant band for the whole drill (no walking). Phase 5 sub-phase 2's
+// adaptive walker uses the same table for the drill's starting tier and
+// then walks via nextDifficultyTier.
+//
+// Brutal-mode early-return + speed-ramp shift-down branches were dropped
+// in v1-code-cleanup 2026-05-04 (PRD §4.4 + SPEC §3.4 markers). Brutal
+// difficulty *tier* still exists as an `item_difficulty` value; the
+// adaptive walker can serve Brutal-tier items inside Standard drills via
+// the next-harder-tier step.
 function initialTierFor(
-	state: { currentState: "learning" | "fluent" | "mastered" | "decayed"; wasMastered: boolean } | undefined,
-	timerMode: TimerMode
+	state: { currentState: "learning" | "fluent" | "mastered" | "decayed"; wasMastered: boolean } | undefined
 ): Difficulty {
-	if (timerMode === "brutal") return "brutal"
 	if (state === undefined) return "medium"
 	const cs = state.currentState
 	const wm = state.wasMastered
-	let base: Difficulty
 	if (cs === "learning") {
-		if (wm) {
-			base = "medium"
-		} else {
-			base = "easy"
-		}
-	}
-	else if (cs === "fluent") base = "medium"
-	else if (cs === "mastered") base = "hard"
-	else if (cs === "decayed") base = "medium"
-	else {
-		const _exhaustive: never = cs
-		return _exhaustive
-	}
-	if (timerMode === "speed_ramp") {
-		// SPEC §9.1: speed-ramp shifts initial tier down by one. After the
-		// brutal early-return above, base ∈ {easy, medium, hard}.
-		if (base === "hard") return "medium"
-		if (base === "medium") return "easy"
+		if (wm) return "medium"
 		return "easy"
 	}
-	return base
+	if (cs === "fluent") return "medium"
+	if (cs === "mastered") return "hard"
+	if (cs === "decayed") return "medium"
+	const _exhaustive: never = cs
+	return _exhaustive
 }
 
 async function getNextUniformBand(ctx: SessionContext): Promise<ItemForRender | undefined> {
@@ -421,14 +403,10 @@ async function getNextUniformBand(ctx: SessionContext): Promise<ItemForRender | 
 		logger.error({ sessionId: ctx.id }, "getNextUniformBand: session has no sub_type_id")
 		throw errors.wrap(ErrUnsupportedStrategyForSubType, `session id '${ctx.id}'`)
 	}
-	if (ctx.timerMode === null) {
-		logger.error({ sessionId: ctx.id }, "getNextUniformBand: session has no timer_mode")
-		throw errors.new("uniform_band requires a timer_mode")
-	}
 	const subTypeId = ctx.subTypeId
 
 	const state = await readMasteryStateFor(ctx.userId, subTypeId)
-	const tier = initialTierFor(state, ctx.timerMode)
+	const tier = initialTierFor(state)
 
 	const sessionAttemptedIds = await readSessionAttemptedItemIds(ctx.id)
 	const picked = await pickWithFallback({
@@ -476,7 +454,7 @@ async function getNextItem(sessionId: string): Promise<ItemForRender | undefined
 		return undefined
 	}
 
-	const strategy = selectionStrategyForSession(ctx.type, ctx.timerMode)
+	const strategy = selectionStrategyForSession(ctx.type)
 	if (strategy === "fixed_curve") return getNextFixedCurve(ctx, attemptCount)
 	if (strategy === "uniform_band") return getNextUniformBand(ctx)
 	if (strategy === "adaptive") {
@@ -485,13 +463,6 @@ async function getNextItem(sessionId: string): Promise<ItemForRender | undefined
 			"getNextItem: adaptive strategy invoked in phase 3"
 		)
 		throw ErrAdaptiveDeferred
-	}
-	if (strategy === "review_queue") {
-		logger.error(
-			{ sessionId, strategy },
-			"getNextItem: review_queue strategy invoked in phase 3"
-		)
-		throw ErrReviewQueueDeferred
 	}
 	const _exhaustive: never = strategy
 	return _exhaustive
@@ -502,15 +473,13 @@ export type {
 	ItemForRender,
 	ItemSelection,
 	SelectionStrategy,
-	SessionType,
-	TimerMode
+	SessionType
 }
 export {
 	ErrAdaptiveDeferred,
 	ErrDiagnosticMixOutOfRange,
 	ErrInvalidItemBody,
 	ErrInvalidOptions,
-	ErrReviewQueueDeferred,
 	ErrSessionNotFound,
 	ErrUnsupportedStrategyForSubType,
 	getNextItem,

@@ -57,8 +57,8 @@ const ErrInvalidStartInput = errors.new("invalid startSession input")
 const ErrSessionInsertFailed = errors.new("session insert returned no rows")
 const ErrFirstItemMissing = errors.new("first item could not be selected")
 
-type SessionType = "diagnostic" | "drill" | "full_length" | "simulation" | "review"
-type TimerMode = "standard" | "speed_ramp" | "brutal"
+type SessionType = "diagnostic" | "drill" | "full_length" | "simulation"
+type TimerMode = "standard"
 type DrillLength = 5 | 10 | 20
 
 interface StartSessionInput {
@@ -67,7 +67,6 @@ interface StartSessionInput {
 	subTypeId?: SubTypeId
 	timerMode?: TimerMode
 	drillLength?: DrillLength
-	ifThenPlan?: string
 }
 
 interface StartSessionResult {
@@ -90,13 +89,6 @@ function targetQuestionCountFor(input: StartSessionInput): number {
 		return input.drillLength
 	}
 	if (input.type === "full_length" || input.type === "simulation") return 50
-	if (input.type === "review") {
-		// Phase 5: review session reads count from `review_queue` due-set size.
-		// Throws here so any Phase 3 caller that strays into this branch fails
-		// fast — no Phase 3 path constructs a review session anyway.
-		logger.error({ type: input.type }, "startSession: review type not yet supported")
-		throw errors.wrap(ErrInvalidStartInput, "review session type deferred to phase 5")
-	}
 	const _exhaustive: never = input.type
 	return _exhaustive
 }
@@ -106,10 +98,6 @@ function validateInputShape(input: StartSessionInput): void {
 		if (input.subTypeId === undefined) {
 			logger.error({ type: input.type }, "startSession: drill missing subTypeId")
 			throw errors.wrap(ErrInvalidStartInput, "drill requires subTypeId")
-		}
-		if (input.timerMode === undefined) {
-			logger.error({ type: input.type }, "startSession: drill missing timerMode")
-			throw errors.wrap(ErrInvalidStartInput, "drill requires timerMode")
 		}
 	}
 }
@@ -159,11 +147,12 @@ async function startSession(input: StartSessionInput): Promise<StartSessionResul
 	const nowMs = Date.now()
 	const cutoffMs = nowMs - ABANDON_THRESHOLD_MS
 
-	// timerMode defaults to NULL in the DB for non-drill types; for drills it
-	// MUST come from the caller (validated above).
+	// timerMode is `'standard'` for drill, NULL for non-drill types. v1
+	// only writes 'standard' (PRD §4.4 + SPEC §3.4 cut markers — speed-ramp
+	// + brutal drill modes cut from v1 2026-05-04).
 	let timerModeForRow: TimerMode | null = null
-	if (input.type === "drill" && input.timerMode !== undefined) {
-		timerModeForRow = input.timerMode
+	if (input.type === "drill") {
+		timerModeForRow = "standard"
 	}
 
 	// subTypeId is NULL for diagnostic/full_length/simulation; required for drill.
@@ -243,9 +232,7 @@ async function startSession(input: StartSessionInput): Promise<StartSessionResul
 					targetQuestionCount: target,
 					startedAtMs: nowMs,
 					lastHeartbeatMs: nowMs,
-					recencyExcludedItemIds: recencyExcluded,
-					narrowingRampCompleted: input.ifThenPlan !== undefined,
-					ifThenPlan: input.ifThenPlan
+					recencyExcludedItemIds: recencyExcluded
 				})
 				.returning({ id: practiceSessions.id })
 			return insertedRows
