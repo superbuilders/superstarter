@@ -1294,6 +1294,50 @@ The audit is cheap. The revision cost — plan-time pin → commit-time revision
 
 ---
 
+#### 6.14.19 Type-error-as-audit cascade pattern
+
+> **Captured 2026-05-04** (taxonomy-restructure round commit 6). Pattern surfaced from the round's commit-1 narrowing of the `SubTypeId` union, where the original 8-commit clustering relied on a "type-error-as-audit" approach — narrow the union in commit 1, let downstream commits clear the resulting compile errors as discrete scope — but `lefthook`'s project-wide pre-commit typecheck made that approach structurally infeasible.
+
+When a TypeScript union type is narrowed in a codebase that runs project-wide typecheck on every pre-commit hook, the narrowing commit cannot ship until **every consumer** of the old union is updated. The "narrow first, fix consumers in subsequent commits" pattern only works when the typecheck gate scopes per-commit (e.g., changed-files-only typecheck). With project-wide typecheck enforced, narrowing cascades absorbed-or-blocked, with no middle ground:
+
+- **Absorb (option a):** Update the narrowing commit to include all consumer fixes. The commit becomes wider than its stated scope; the original commit clustering needs to renumber.
+- **Bridge (option b):** Introduce a transient `Partial<Record<...>>` widening at consumer sites + leave the union itself wide; narrow in a later commit once consumers are clean. More ceremony per consumer than the absorb path, but preserves commit clustering shape.
+
+The audit-time recommendation needs to bake in the typecheck-gate posture before locking commit clustering. If the codebase runs project-wide typecheck on pre-commit (lefthook + tsgo here; same shape applies to other pre-commit-gated build pipelines), default to absorb when the cascade is small and renumber the round; default to bridge when the cascade is large and splitting buys readability. Whichever choice, the round-close summary records the cascade as load-bearing — bookmark commits ("absorbed into commit 1, no work this commit") are commit-as-narrative rather than commit-as-work and should be collapsed via renumber, not preserved as structural gestures.
+
+**The taxonomy-restructure round's cascade and renumber:** commit 1 narrowed `SubTypeId` from 11 ids to 14 with cuts/renames/moves/splits/adds. The narrowing surfaced 28 typecheck errors across 7 consumer files (`src/config/diagnostic-mix.ts`, `src/config/diagnostic-mix.test.ts`, `src/config/strategies.ts`, `src/server/items/tagger.ts`, `src/server/items/selection.test.ts`, `scripts/_lib/explain.ts`, `scripts/dev/smoke/start-session-idempotency.ts`). Original commit clustering projected 8 commits with diagnostic-mix.ts as commit 2 and strategies.ts as commit 3; both cascaded into commit 1 per option (a). The 8-commit projection collapsed to 6 commits in flight: original commits 4-7 renumbered to 2-5 ; original commit 8 (plan close) became 6.
+
+**Convention going forward.** When pinning a commit clustering at audit-redline, ask: "does any commit narrow a type union, and what's the typecheck-gate posture?" If project-wide pre-commit typecheck is enforced, plan the cascade-absorb path explicitly OR plan the bridge-via-Partial path explicitly. Don't rely on a per-commit-scoped typecheck that the codebase doesn't actually run. §6.14.18's framework-constraint-audit rule is the parent convention; §6.14.19 is the type-system / build-tooling specialization.
+
+**Cross-references.** Plan: `docs/plans/phase5-taxonomy-restructure.md` §4 (commit clustering shipped vs projected). Round commits: `5e43eaa`, `21b5594`, `9d9b358`, `e9cf5d5`, `ae87754`, this commit. The round's round-close summary records the cascade-collapse as a structural fact rather than a narrative gloss.
+
+#### 6.14.20 Closed-plans-immutable as a multi-round convention
+
+> **Captured 2026-05-04** (taxonomy-restructure round commit 6). Convention has now been invoked across four rounds (Phase 5 sub-phase 1 close-out, doc-only cuts, v1-code-cleanup, taxonomy-restructure); pinning as a §6.14 entry per the second-instance discipline (capture-when-pattern-repeats — this is the fourth instance).
+
+Plans under `docs/plans/` that have flipped to "shipped <date>" status are immutable historical records. They describe what was planned and what shipped at the time the round closed. Subsequent rounds — even when they touch the same surfaces, redefine the same domain vocabulary, or invalidate plan-time assumptions — do not edit closed plans. The drift between closed plans and current living-doc state is acceptable cost; closed plans are commit-as-shipped artifacts that future-Claude reads to understand round-time context, not current-state references.
+
+**Three concrete consequences for round-planning:**
+
+1. **Audit identifies closed-plan drift; round does not correct it.** The audit step at round-open lists every doc surface with stale references including closed plans, but the edit step deliberately skips closed plans. The audit report explicitly categorizes closed-plan findings as "out of scope per closed-plans-immutable convention" rather than as edit candidates. This was the explicit shape of the taxonomy-restructure round's audit (commit 6 / `5e43eaa` precursor): closed plans `phase5-post-session-review.md` and `phase5-v1-code-cleanup.md` were both identified as carrying stale taxonomy refs (`verbal.synonyms` test fixtures, 11-taxonomy counts) and explicitly not edited.
+
+2. **The convention requires a `git diff HEAD -- docs/plans/<closed>.md` returning zero lines as empirical proof at round close.** Verbal assertion alone isn't enough — the round-close summary or commit body should run the closed-plan diff check and record the zero-line result. The taxonomy-restructure round did this at commit 4 (`e9cf5d5`) for `phase5-post-session-review.md`, `phase5-v1-code-cleanup.md`, and `phase3-*.md` (zero diff lines, recorded in the commit body).
+
+3. **Living plans (active or never-closed) DO get edited.** `docs/plans/feature-roadmap.md` is the canonical living roadmap and updates with every round; `docs/plans/phase5-master-plan.md` is the open phase plan and updates as sub-phases close. The convention applies only to plans with explicit "shipped" status banners.
+
+**The four invocations to date:**
+
+- **Phase 5 sub-phase 1 round close** (`022dbd6`, 2026-05-04). Closed plan `phase5-post-session-review.md`'s status flip; immediately following rounds did not edit the plan despite living-doc drift.
+- **Doc-only cuts round** (preserved as historical context across `feature-roadmap.md` "Cut from v1 2026-05-04" entries). Five surfaces cut from v1; the SPEC + PRD reconciled; closed plans referencing the cut surfaces (e.g., the post-session strategy-review-gate references in pre-cut closed plans) were not edited.
+- **v1-code-cleanup round** (closed 2026-05-04). Schema columns and tables dropped; closed plans naming those surfaces were not retroactively updated.
+- **Taxonomy-restructure round** (this round). 14 sub-types replace 11; closed plans naming the old taxonomy were not retroactively updated. The convention has now earned its §6.14 slot via repeated invocation.
+
+**Convention going forward.** When a round opens, the audit step lists closed plans with stale references; the edit step skips them; the round-close summary records the closed-plan diff at zero. Future-Claude reading any closed plan should treat its contents as "true at round close" not "true now"; cross-reference against current-state living docs (PRD, SPEC, architecture_plan, feature-roadmap) when the closed plan's framing doesn't match what the codebase shows.
+
+**Cross-references.** Plan: `docs/plans/phase5-taxonomy-restructure.md` §3 resolution 8 (closed-plan drift acknowledgment). Round commits where the convention was empirically verified via `git diff` zero-line check: `e9cf5d5` (commit 4 of this round). The convention was first invoked structurally at `022dbd6` (Phase 5 sub-phase 1 commit 7); §6.14.20 generalizes the four-round repeat into a meta-convention.
+
+---
+
 ## 7. Server actions, route handlers, and workflows
 
 All server actions live at the closest `actions.ts` file under `src/app/(app)/...`. All follow the patterns demonstrated in `src/app/actions.ts`: file-top `"use server"`; mutations use `errors.try` around DB calls (`rules/no-try.md`); errors are logged then thrown via `errors.wrap` (`rules/error-handling.md`); writes call `revalidatePath` after writes (with the specific exception in §7.8).
