@@ -1270,6 +1270,30 @@ When a round cuts features doc-only without corresponding code (the PRD/SPEC/roa
 
 **Cross-references.** Doc-only round commits: `ca2330a`, `991d3eb`, `75240c8`, `4b35449`, `141bf83`, `832f634`. v1-code-cleanup round commits: `7bc96ea`, `a32131a`, `938f771`, `37ad762`, this commit. The `a32131a` commit message documents the §6.12 inversion correction in detail; this entry generalizes the pattern.
 
+#### 6.14.18 Framework constraint audit before pinning architectural detail at plan time
+
+> **Captured 2026-05-04** (Phase 5 sub-phase 1 commit 7). Pattern surfaced from two findings during Phase 5 sub-phase 1 (`c1ee435` → `eaeb882`) where plan-time architectural pins had to be revised at commit time because a framework constraint the plan missed made the pinned shape impossible.
+
+When a plan pins a specific architectural detail — module placement, query construction, file shape, prepared-statement parameter binding — verify the framework / stack constraints that bear on that detail **before** treating the pin as final. Plan-time analysis is good at concerns the plan author can hold in head (data contracts, ordering, API shape); it is consistently weaker on framework-imposed runtime / build constraints that only surface at the boundary between plan and code.
+
+**Two load-bearing examples from Phase 5 sub-phase 1:**
+
+1. **Module-placement constraint — Next.js client/server boundary.** Plan §9 + §15.3 said the "struggled" definition's numeric anchors (the 70% accuracy floor + the per-sub-type latency thresholds) live "as constants inside `<StrategySurface>`." `<StrategySurface>` is a `"use client"` component (it consumes a `SurfacedStrategy[]` prop and renders an editorial list). The post-session page is a server component. **Next.js disallows server components from importing helpers exported by `"use client"` modules at runtime** — the plan-time pin was structurally impossible. Commit 6 (`eaeb882`) extracted the helpers + anchors to `src/server/post-session/strategy-selection.ts`; `<StrategySurface>` stays purely presentational; the page imports `deriveStruggledSubTypes` + `selectStrategiesForStruggledSubTypes` from the server module. Plan §15.3's sentence ("numeric anchors live as constants inside `<StrategySurface>`") was tightened at this commit (commit 7) to reflect actual placement.
+
+2. **Query-construction constraint — Drizzle `inArray` + prepared statements.** Plan §4 specified the strategies query as a parameterized lookup over a struggled-sub-type set, naturally written as `where(inArray(strategies.subTypeId, sql.placeholder("subTypeIds")))`. **Drizzle's `inArray` + `sql.placeholder` combination renders as `IN $1` for prepared statements**, which is invalid SQL — Postgres expects an expanded `IN (...)` list, not a single bound array. Commit 2 (`0ec6f4f`) used the explicit `where(sql\`${strategies.subTypeId} = ANY(${sql.placeholder("subTypeIds")}::varchar[])\`)` shape with explicit Postgres array casting. Empty-input handling (short-circuit at the call site) preserved per plan §4.
+
+**Common shape:** in both cases, the plan-time pin was reasonable on its face — the helpers belonged with their consumer; `inArray` is the obvious Drizzle helper for "id ∈ set." The framework constraint (Next.js boundary; Drizzle prepared-statement semantics) was the load-bearing fact the plan missed. Verification cost is small: a one-paragraph check of the framework's docs, a one-grep audit of how a similar shape compiles elsewhere in the codebase, or a quick prototype against the actual stack. The cost of NOT verifying is a plan-time architectural pin that must be revised at commit time, sometimes with a name-change ripple (the helpers in this case got a `@/server/post-session/` import path that the plan-time `@/components/post-session/strategy-surface` import path didn't anticipate).
+
+**Convention going forward.** When the plan pins a structural detail, ask: "what framework constraint would invalidate this?" — and verify the answer before the plan locks the pin. Three concrete classes of framework constraint where the audit pays off:
+
+- **Module-boundary constraints** (Next.js server components ↔ `"use client"` modules; React Server Component import rules; `"use server"` action constraints).
+- **ORM / query-builder semantics under prepared statements** (parameter binding, array expansion, type coercion, `RETURNING` shape, prepared-statement TTL).
+- **Build-time / bundler constraints** (Tailwind class purging vs dynamic class names; environment-variable inlining boundaries; Zod schema-vs-runtime discrepancies).
+
+The audit is cheap. The revision cost — plan-time pin → commit-time revision → SPEC reconciliation later — is not. §6.14.16's "auth-shape audit before pinning a perf-justified design" is a special case of this rule (verify the auth-shape constraint before pinning the design); §6.14.18 generalizes the pattern across all framework-imposed constraints.
+
+**Cross-references.** Phase 5 sub-phase 1 commits: `c1ee435`, `0ec6f4f`, `a0aa1fd`, `c71770c`, `8d4195e`, `eaeb882`, this commit. Commit `eaeb882`'s message documents the Next.js module-boundary revision; commit `0ec6f4f`'s message documents the Drizzle `inArray` workaround. This entry generalizes both into the convention.
+
 ---
 
 ## 7. Server actions, route handlers, and workflows
@@ -1922,7 +1946,7 @@ PRD §4.4.
 2. With a populated bank, the configure page renders a length picker (5 / 10 / 20, default 10). **Phase 3 wires only `standard` timer mode** — `speed_ramp` and `brutal` ship in Phase 5; the configure page's timer-mode selector is correspondingly absent in Phase 3. The PRD §4.4 timer-mode-selection narrative applies to Phase 5+.
 3. Form submit `GET`s to `/drill/[subTypeId]/run?length=N`. The run page calls `startSession({ userId, type: "drill", subTypeId, timerMode: "standard", drillLength })`. **Phase 3 ships no NarrowingRamp** — `startSession` is invoked directly. PRD §5.3 NarrowingRamp ships in Phase 5.
 4. `<FocusShell>` runs with `sessionDurationMs = drillLength * 18000`, `perQuestionTargetMs: 18000`, `paceTrackVisible: true`. **Selection strategy is `'uniform_band'`** in Phase 3 (§9.2 deferred-adaptive note); the requested tier is constant across the drill, derived from `mastery_state` per §9.1's initial-tier table.
-5. After the last submit, `endSession` then `router.push("/")` — drills land on the Mastery Map directly, NOT through `/post-session/[sessionId]`. Drill post-session UI is Phase 5 (PRD §6.5).
+5. After the last submit, `endSession` then `router.push("/post-session/" + sessionId)` — drills land on the post-session review surface (PRD §6.5 / §10.7). The drill post-session shell renders triage / accuracy / latency / wrong-items / strategy summaries plus a single "Continue" button → `/`. **Code shipped 2026-05-04 (Phase 5 sub-phase 1, commit `c1ee435`).** Pre-shipped phrasing — "drills land on the Mastery Map directly, NOT through `/post-session/[sessionId]`. Drill post-session UI is Phase 5" — preserved as historical reference for the Phase 3 sub-phase 3 default. See `docs/plans/phase5-post-session-review.md` for the round.
 
 **Sign-out button.** The Mastery Map's header (top-right) renders `<SignOutButton>` for users not currently inside a session — see §10.1's flow paragraph. The button is deliberately absent from `/diagnostic/run` and `/drill/[subTypeId]/run` (the focus shell strips chrome to maintain session focus) and from the diagnostic explainer at `/diagnostic` (mid-flow surface). Visual treatment is `text-foreground/70` with a `hover:text-foreground` transition — distinct from the footer's low-contrast `<TriageAdherenceLine>` because sign-out is an ACTION, not a STATUS, and inheriting the periphery treatment would make it harder to find.
 
@@ -1976,20 +2000,53 @@ Lives at `src/components/narrowing-ramp/narrowing-ramp.tsx`. Pure client compone
 
 ### 10.7 Post-session review composition
 
-`/post-session/[sessionId]/page.tsx` (server component) loads:
+> **Code shipped 2026-05-04 (Phase 5 sub-phase 1).** Seven commits: `c1ee435` (round setup + shell-shape refactor + drill landing flip), `0ec6f4f` (server-side aggregation queries), `a0aa1fd` (`<TriageScoreLine>` + `<AccuracySummary>`), `c71770c` (`<LatencySummary>`), `8d4195e` (`<WrongItemsBrowser>`), `eaeb882` (`<StrategySurface>` + struggled-sub-type derivation + drill Continue button + full-surface audit + polish), this commit (doc reconciliation + plan close). See `docs/plans/phase5-post-session-review.md` for the round. Pre-shipped phrasing — the `<PostSessionReview>` / `<WrongItemsList>` composer vocabulary that this section previously projected — was a plan-time draft; the shipped composition is described below.
 
-- The session row.
-- All attempts for the session.
-- The user's strategies for sub-types where session accuracy was below 70%.
-- The wrong items with prompt/options/explanation.
-- For diagnostic sessions: a percentile-estimate string ("your diagnostic accuracy was 65% — average CCAT score is around 48%").
+`/post-session/[sessionId]/page.tsx` lives at `src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx`. It is a server component (NOT `async`, per `rules/rsc-data-fetching-patterns.md`) that resolves the session row + auth check + four review aggregations + the triage score + the surfaced-strategies query in parallel, and passes the bundle to `<PostSessionContent>` (a `"use client"` component) which consumes the promise via `React.use()` and drills resolved values to `<PostSessionShell>`.
 
-Then renders `<PostSessionReview>` which composes `<WrongItemsList>`, accuracy/latency summary, triage score (with the small-sample / N/A branches per §9.7), surfaced strategies, and:
+**Page-level data flow.** Four prepared statements colocated in `page.tsx` per `rules/rsc-data-fetching-patterns.md`:
 
-- For diagnostic only: `<OnboardingTargets>` (target percentile + target date capture). Primary button "Save and continue"; smaller "Skip for now" link. Both flows then dismiss the post-session.
-- ~~For full_length only: `<StrategyReviewGate>` — 30-second timer plus a single rendered strategy paired with the user's worst sub-type from this session. Dismiss button is disabled until the gate elapses and the strategy is marked viewed; the gate posts a `strategy_views` row when the strategy first appears.~~ **Cut from v1 2026-05-04** — strategy-review gate (PRD §6.5 cut marker). `<StrategyReviewGate>` was **never shipped** to tree. v1 full_length post-session is dismissible immediately like every other session type.
+- `getPerSubTypeAccuracy` — `SELECT items.sub_type_id, COUNT(*) FILTER (WHERE attempts.correct), COUNT(*) FROM attempts JOIN items ON attempts.item_id = items.id WHERE session_id = $1 GROUP BY items.sub_type_id`. Returns `{ subTypeId, correct, total }` rows.
+- `getPerSubTypeLatency` — same JOIN; aggregates `percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms)` per sub-type. Returns `{ subTypeId, medianLatencyMs }` rows. **`percentile_cont`, NOT `percentile_disc` or `AVG`** — `_disc` returns an actually-observed value (wrong shape for "median"); `AVG` is the mean (wrong stat).
+- `getWrongItemsForSession` — chronological order via `ORDER BY attempts.id` (UUIDv7 ⇒ time-sorted). Returns `{ attemptId, itemId, subTypeId, body, optionsJson, correctAnswer, selectedAnswer?, explanation? }`. Per the §15.2-amendment seam in the round plan, this query carries NO `structuredExplanation` field; sub-phase 4 adds it atomically with the click-to-highlight UI.
+- `getStrategiesForSubTypes` — `WHERE sub_type_id = ANY($1::varchar[])` parameter shape. Empty input is short-circuited at the call site (no SQL `IN ()` syntax error). Drizzle's `inArray` + `sql.placeholder` combination renders as invalid `IN $1` for prepared statements — this query uses the explicit `= ANY(...)::varchar[]` shape to compile cleanly. See §6.14.18.
 
-For diagnostic ~~and drill and review~~ **and drill** (review session type also cut, §10.5 marker), the dismiss button is enabled immediately. **In v1 (2026-05-04), this applies to all session types** including full_length and simulation.
+**Struggled-sub-type derivation.** Pure helpers in `src/server/post-session/strategy-selection.ts`:
+
+- `deriveStruggledSubTypes(accuracy, latency)`: a sub-type is **struggled** in this session iff EITHER accuracy < 70% (matches `computeMastery`'s SPEC §9.3 learning floor) OR median latency > the sub-type's threshold from `src/config/sub-types.ts`. The OR is intentional — catches both fast-wrong and slow-but-right.
+- `selectStrategiesForStruggledSubTypes(accuracy, latency, allStrategies)`: per struggled sub-type, picks ONE strategy via the kind-preference table:
+
+  | Failure mode    | Definition                              | Preferred kind  | Fallback     |
+  | --------------- | --------------------------------------- | --------------- | ------------ |
+  | fast-wrong      | accuracy < 70% AND median ≤ threshold   | `'trap'`        | `'technique'`|
+  | slow-wrong      | accuracy < 70% AND median > threshold   | `'recognition'` | `'technique'`|
+  | slow-but-right  | accuracy ≥ 70% AND median > threshold   | `'recognition'` | `'technique'`|
+
+  If neither preferred nor fallback exists, takes any strategy that exists. If zero strategies exist for the sub-type, no row renders for it (struggled-but-unsurfaceable).
+
+  These helpers live under `src/server/post-session/` rather than alongside `<StrategySurface>` because Next.js disallows server components from importing functions exported by `"use client"` modules; the page (server component) needs to invoke them. Plan §9 originally said "numeric anchors live inside `<StrategySurface>`"; the implementation revision is captured in §6.14.18.
+
+**Render composition.** `<PostSessionShell>` (`src/components/post-session/post-session-shell.tsx`) is a session-type-aware dispatcher with a locked nine-slot ordering (top to bottom):
+
+1. Heading + brief one-line summary ("Diagnostic complete" / "Session complete").
+2. `<TriageScoreLine>` — single line; PRD §6.5; SPEC §9.7 small-sample / N/A branches.
+3. `<AccuracySummary>` — per-sub-type ✓/✗ counts, NO percentages (PRD §6.5).
+4. `<LatencySummary>` — per-sub-type median with horizontal SVG track + threshold tick + above/below-threshold marker color.
+5. `<WrongItemsBrowser>` — sub-type grouped (verbal-first, alphabetical within section), chronological within group via `attempts.id` ASC, prose explanation only. Display letters A-E computed via `String.fromCharCode(0x41 + index)` at render time per SPEC §3.3.2 — letters are NOT stored.
+6. `<StrategySurface>` — one strategy per struggled sub-type, sub-type displayName prefix + strategy text, verbal-first then alphabetical within section. Empty state ("No sub-types flagged this session — keep going.") when struggled set is empty.
+7. `<OnboardingTargets>` — **diagnostic-only.** Existing Phase 3 component, unchanged. Primary button "Save and continue"; smaller "Skip for now" link. Both flows trigger `saveOnboardingTargets` (§7.6) and `router.push("/")`.
+8. Pacing-line sentence — **diagnostic-only**, conditional on session duration > 15 minutes. Existing Phase 3 derivation (§6.10).
+9. Continue CTA — **drill / full_length / simulation only.** Single `<Button>` → `router.push("/")`. Diagnostic mode does NOT render this button — `<OnboardingTargets>`'s Save / Skip handle nav.
+
+Sort across sections 3 / 4 / 5 / 6 is identical (verbal-first, alphabetical by `displayName` within section), so the four review sections align row-for-row when stacked. Sub-type displayNames come from `src/config/sub-types.ts`.
+
+The dismiss path is implicit: the post-session page does NOT render a separate "Dismiss" or "Done" button. Diagnostic mode dismisses via `<OnboardingTargets>`'s Save-and-continue / Skip-for-now (both call `saveOnboardingTargets` then `router.push("/")`). Drill / full-length / simulation dismiss via the Continue button → `router.push("/")`. There is no `dismissPostSession` server action; the `dismissPostSession` shape projected in §7.5 was never shipped.
+
+**Cut markers preserved (PRD §6.5 cut from v1 2026-05-04).**
+
+- ~~For full_length only: `<StrategyReviewGate>` — 30-second timer plus a single rendered strategy paired with the user's worst sub-type from this session. Dismiss button is disabled until the gate elapses and the strategy is marked viewed; the gate posts a `strategy_views` row when the strategy first appears.~~ **Cut from v1 2026-05-04** (PRD §6.5 cut marker). `<StrategyReviewGate>` was **never shipped** to tree. v1 full_length post-session is dismissible immediately like every other session type.
+
+For diagnostic ~~and drill and review~~ **and drill** (review session type also cut, §10.5 marker), the dismiss path is enabled immediately. **In v1 (2026-05-04), this applies to all session types** including full_length and simulation.
 
 ### 10.8 Heartbeats and abandons
 

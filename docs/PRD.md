@@ -319,15 +319,20 @@ Strategies never appear during an active question.
 
 ### 6.5 Post-session review
 
+> **Code shipped 2026-05-04 (Phase 5 sub-phase 1).** The review surface lands on `/post-session/[sessionId]` for every session type (drill / diagnostic / full_length / simulation). Diagnostic mode additionally renders the existing `<OnboardingTargets>` form + conditional pacing-line. See SPEC §10.7 for the shipped composition; `docs/plans/phase5-post-session-review.md` for the round; commits `c1ee435` (round setup + shell-shape refactor + drill landing flip) → `eaeb882` (`<StrategySurface>` + drill Continue button + full-surface audit + polish).
+
 After every session (drill, full-length test, simulation, diagnostic), the user lands on a review screen. Contents:
 
+- Triage score for the session (rendered first per the calibration-discipline framing in §1).
 - Accuracy summary by sub-type (categorical: ✓ / ✗ counts, no percentages on this screen).
 - Median latency by sub-type, with the threshold marked.
-- Triage score for the session.
 - Any wrong items, browsable. Each shows the prompt, options, correct answer, explanation.
-- Surfaced strategies for sub-types where the user struggled.
+- Surfaced strategies for sub-types where the user struggled (one strategy per struggled sub-type; failure-mode-driven kind preference: fast-wrong → trap, slow-wrong / slow-but-right → recognition; technique as universal fallback).
+- Diagnostic only: `<OnboardingTargets>` (target percentile + target date capture). Primary "Save and continue"; smaller "Skip for now" link.
+- Diagnostic only, conditional on session duration > 15 minutes: a derived pacing-line sentence ("Your diagnostic took N minutes. The real CCAT is 15 minutes for 50 questions.").
+- Drill / full-length / simulation: a single "Continue" button → `/`. Diagnostic mode dismisses via the `<OnboardingTargets>` form; both flows call `router.push("/")`.
 
-> **30-second strategy-review gate cut from v1 2026-05-04** (post-full-length only). Paragraph below preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. In v1, the post-session review is dismissible immediately for **all** session types (drill, full-length, simulation, diagnostic). The rest of §6.5 (the post-session review surface itself — accuracy, latency, triage score, wrong items, surfaced strategies) remains in scope.
+> **30-second strategy-review gate cut from v1 2026-05-04** (post-full-length only). Paragraph below preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. In v1, the post-session review is dismissible immediately for **all** session types (drill, full-length, simulation, diagnostic). The rest of §6.5 (the post-session review surface itself — accuracy, latency, triage score, wrong items, surfaced strategies) remains in scope and shipped 2026-05-04.
 
 After a full-length practice test only, an additional 30-second strategy-review prompt runs before the user can dismiss the screen. The system picks one strategy (paired with the question type the user struggled most with in the test) and displays it. The user must view it before "completing" the test in the system.
 
@@ -498,7 +503,7 @@ A 2-week build plan, in priority order.
 6. LLM generation pipeline (generator + validator + scorer + deploy).
 7. Adaptive difficulty ~~+ spaced-repetition queue~~. (**Cut from v1 2026-05-04** — SR queue cut, §4.3 marker. Adaptive difficulty stays in v1 — Phase 5 sub-phase 2. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
 8. Triage trainer ~~+ speed ramp + brutal drill modes + question timer toggle~~. (**Cut from v1 2026-05-04** — speed-ramp + brutal drill modes (§4.4 marker) + question-timer toggle (§5.1 marker) all cut. Triage trainer stays in v1. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
-9. ~~NarrowingRamp +~~ score-to-target + post-session review. (**NarrowingRamp cut from v1 2026-05-04** — §5.3 marker. Score-to-target and post-session review both stay in v1; post-session review is Phase 5 sub-phase 1. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
+9. ~~NarrowingRamp +~~ score-to-target + post-session review. (**NarrowingRamp cut from v1 2026-05-04** — §5.3 marker. Score-to-target and post-session review both stay in v1; **post-session review shipped Phase 5 sub-phase 1, 2026-05-04.** See `docs/plans/phase5-post-session-review.md` and `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
 10. Strategy library + test-day simulation mode + history tab.
 
 **Cuts if behind:** test-day simulation, history tab detail views. The mastery model, generation pipeline, focus shell, and Mastery Map are non-negotiable.
