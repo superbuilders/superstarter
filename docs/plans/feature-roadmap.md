@@ -113,7 +113,7 @@ Already specified in the PRD: four-stage server pipeline (`generateItem → vali
 **What's already in place**: the generator's Zod schema templates at `src/config/item-templates.ts`. The opaque-ids architecture from Phase 2 means the generation pipeline inherits opaque-id semantics for free.
 
 **Open product calls** (from architecture plan, not yet decided):
-- Per-sub-type generation rate and target bank size (the PRD's bank-target grid is 11 × 4 = 44 cells).
+- Per-sub-type generation rate and target bank size (the PRD's bank-target grid is 14 × 4 = 56 cells).
 - How aggressive validator confidence thresholds are (the PRD says ≥4 on all four checks AND nearest-neighbor cosine < 0.92).
 - Candidate-promotion shadow mode duration (PRD §4: 30 days before enforcement).
 
@@ -138,7 +138,7 @@ No scope here — feature exists. Worth reaffirming because the rest of the road
 **Status: Mastery Map covers per-sub-type mastery state and triage adherence; extending to richer stats is net-new.**
 
 What the Mastery Map shows today:
-- 11-icon grid with mastery state (learning / fluent / mastered / decayed)
+- 14-icon grid with mastery state (learning / fluent / mastered / decayed)
 - Single-line "today's near goal" derived from mastery state + target percentile + target date
 - 30-day rolling triage adherence
 
@@ -201,19 +201,19 @@ Use the focus shell's timer + audio + bar chrome as a standalone tool — no que
 
 **Status: Net-new. PRD has strategies (3 per sub-type, plain-text notes); Leo's request is more substantial.**
 
-The PRD's strategy library is small: 3 entries per sub-type × 11 sub-types = 33 entries, each one a paragraph or two of plain text. The strategies surface in post-session review (paired with sub-types the user struggled with) and on the history tab.
+The PRD's strategy library is small: 3 entries per sub-type × 11 currently-authored sub-types = 33 entries (5 verbal + 6 numerical, excluding `numerical.workrate`, `numerical.speed_distance_time`, and `numerical.lowest_values`, which are pending a separate strategy-authoring round). Each entry is a paragraph or two of plain text. The strategies surface in post-session review (paired with sub-types the user struggled with) and on the history tab.
 
 Leo's request — "lessons for CCAT test taking for certain groups of problems" — implies something larger: structured tutorial content per sub-type, walking the user through what the sub-type tests, common patterns, worked examples, and common traps.
 
 **What this feature is**:
-- A `/lessons/[subTypeId]` route per sub-type (11 routes for v1).
+- A `/lessons/[subTypeId]` route per sub-type (14 routes for v1).
 - Each lesson is a long-form structured doc: introduction, 3-5 worked examples (with full explanations using the BrainLift fast-triage framing), common patterns, common traps, practice-tips section.
 - Lessons are static content (markdown rendered via MDX or similar) — no LLM generation.
 - Cross-link from the Mastery Map: "Learn more about [sub-type]" link from each icon.
 
 **Why this matters for CCAT prep**: high-scoring CCAT performers have explicit pattern recognition for each sub-type. Time-pressured pattern recognition is what 18 Seconds trains; the lessons would teach what the patterns ARE, before the user starts practicing under time pressure. This is the "study mode" complement to drill mode.
 
-**Authoring overhead**: this is the most labor-intensive feature on the list because the content is hand-written. 11 lessons × ~1500-3000 words each = 16k-33k words of careful pedagogical content. Could be scaffolded by an LLM and edited; can't be entirely LLM-generated without quality drift.
+**Authoring overhead**: this is the most labor-intensive feature on the list because the content is hand-written. 14 lessons × ~1500-3000 words each = 21k-42k words of careful pedagogical content. Could be scaffolded by an LLM and edited; can't be entirely LLM-generated without quality drift.
 
 **Scope estimate**: ~3-4 commits for the technical surface (route, MDX rendering, cross-links from Mastery Map, doc updates). The content itself is a separate workstream — probably 2-4 weeks of writing per Leo's pace, depending on how thorough.
 
@@ -243,7 +243,7 @@ What the PRD specifies: history tab on the Mastery Map, browsable by sub-type or
 
 **Status: Net-new. Not in PRD.**
 
-The verbal section's first three sub-types (synonyms, antonyms, analogies) are vocabulary-bound: if you don't know the word, no amount of pattern recognition saves you. The CCAT's vocabulary skews toward GRE-level words — recondite, perfunctory, sanguine, etc.
+The verbal section's two vocabulary-bound sub-types (antonyms, analogies) reward an expanded vocabulary: if you don't know the word, no amount of pattern recognition saves you. The CCAT's vocabulary skews toward GRE-level words — recondite, perfunctory, sanguine, etc.
 
 **What this feature is**:
 - A vocabulary list, organized by frequency or difficulty.
@@ -251,7 +251,7 @@ The verbal section's first three sub-types (synonyms, antonyms, analogies) are v
 - Flashcard-style review: show the word, user thinks of definition, click to reveal, mark known/unknown.
 - Spaced-repetition queue (SM-2-style, similar to PRD §4.3's review queue) so unknown words resurface.
 
-**Why this matters for CCAT prep**: among the 11 v1 sub-types, three are vocabulary-bound. A user who struggles on synonyms/antonyms can't drill their way to mastery without expanding their vocabulary. The strategy library helps with elimination tactics ("pick the more general opposite") but doesn't help if the user doesn't know the candidate words.
+**Why this matters for CCAT prep**: among the 14 v1 sub-types, two are vocabulary-bound (antonyms, analogies). A user who struggles on antonyms can't drill their way to mastery without expanding their vocabulary. The strategy library helps with elimination tactics ("pick the more general opposite") but doesn't help if the user doesn't know the candidate words.
 
 **Source for the vocab list**: ~500-1000 high-frequency CCAT-style words. Existing GRE vocab lists (Magoosh, Manhattan Prep) are reasonable starting points, filtered to words that actually show up in CCAT-style questions. The OCR-imported 99 stage-1 items can be mined for vocab to seed the list.
 
@@ -295,7 +295,7 @@ Show the user's stats relative to a cohort: "you're scoring at the 70th percenti
 
 A drill mode where each "question" is a short pattern (e.g., a number series with one missing term, a single analogy, a single synonym) shown for a fixed short window (3-5 seconds), then the user types or selects the answer. Trains the recognize-fast skill in isolation from elimination/decision.
 
-**Why it matters**: CCAT speed comes from pattern recognition, not from doing-arithmetic-faster. Isolated pattern-recognition training is a known-effective sub-skill drill, particularly for verbal.synonyms/antonyms/analogies and numerical.number_series/letter_series.
+**Why it matters**: CCAT speed comes from pattern recognition, not from doing-arithmetic-faster. Isolated pattern-recognition training is a known-effective sub-skill drill, particularly for verbal.antonyms/analogies and numerical.number_series/verbal.letter_series.
 
 **Different from the regular drill**: the regular drill exercises the full triage loop (recognize → eliminate → decide). The pattern-recognition drill exercises only recognize. Faster cycle, more reps per minute.
 
@@ -360,7 +360,6 @@ These are PRD non-goals or have been explicitly considered and rejected:
 - Mobile-native apps (web only per PRD §1).
 - Live tutoring or AI chat (non-goal per PRD §1).
 - Direct individual leaderboards (PRD §1; cohort comparisons in #A1 are anonymized aggregates only).
-- Image-bearing sub-types (abstract reasoning, attention-to-detail, numerical.data_interpretation) — deferred to v2 per PRD §10.
 
 ---
 
