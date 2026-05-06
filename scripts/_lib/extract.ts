@@ -75,10 +75,11 @@ Sub-types (id — display name (section)):
 \${SUB_TYPE_LIST}
 
 Disambiguation for numerical items — classify by the dominant operation, not surface vocabulary:
+- When a problem matches multiple rules, prefer the most specific: percentages > fractions > workrate / speed_distance_time / averages / lowest_values > ratios > word_problems.
 - "%" symbol or the word "percent" → numerical.percentages.
 - a/b fraction notation as operands → numerical.fractions.
 - "average"/"mean" of a value set → numerical.averages.
-- a:b ratio notation, OR proportional/unit-rate reasoning ("X items cost Y, what about Z items?"; "X cost Y per unit, total for N units?"; "A is k times B; given A+B, find A or B"; "scale up/down by factor") → numerical.ratios.
+- a:b ratio notation, OR proportional/unit-rate reasoning involving objects, money, or static quantities ("X items cost Y, what about Z items?"; "A is k times B, given A+B, find A or B"; "scale up/down by factor") → numerical.ratios. Time/work/speed/distance scenarios — even when proportional in shape — go to numerical.workrate or numerical.speed_distance_time per their rules below.
 - combined-work or rate-of-completion ("A and B together can…") → numerical.workrate.
 - speed / distance / time scenario → numerical.speed_distance_time.
 - compare a small set of numeric expressions → numerical.lowest_values.
@@ -175,11 +176,20 @@ const EXTRACT_TOOL: Anthropic.Messages.Tool = {
 	}
 }
 
+// Resolved system prompt — substitutes the dynamic SUB_TYPE_LIST into the
+// template. Exported so siblings (e.g., scripts/dev/retag-items.ts) can
+// reuse the exact same classifier prompt mechanically rather than
+// transcribing it. The disambiguation rules + difficulty rubric are the
+// load-bearing rubric the testbank-ingest pipeline classifies under.
+function buildExtractSystemPrompt(): string {
+	return EXTRACT_SYSTEM_TEMPLATE.replace("${SUB_TYPE_LIST}", buildSubTypeList())
+}
+
 async function extractFromImage(imagePath: string): Promise<ExtractResult | ExtractFailure> {
 	const buf = await Bun.file(imagePath).arrayBuffer()
 	const b64 = Buffer.from(buf).toString("base64")
 
-	const system = EXTRACT_SYSTEM_TEMPLATE.replace("${SUB_TYPE_LIST}", buildSubTypeList())
+	const system = buildExtractSystemPrompt()
 
 	let message: Anthropic.Messages.Message
 	try {
@@ -245,4 +255,10 @@ async function extractFromImage(imagePath: string): Promise<ExtractResult | Extr
 }
 
 export type { ExtractedItem, ExtractFailure, ExtractResult, SubTypeId }
-export { extractedItem, extractFromImage }
+export {
+	buildExtractSystemPrompt,
+	EXTRACT_TOOL,
+	EXTRACT_TOOL_NAME,
+	extractedItem,
+	extractFromImage
+}
