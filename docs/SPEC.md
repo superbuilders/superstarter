@@ -1389,6 +1389,38 @@ The two semantics (folder origin vs answer-extraction provenance) are complement
 
 **Cross-references.** Plan: `docs/plans/phase5-testbank-re-extraction.md` §2(c) (amended framing) + §14 (round-close summary). Round commits where the pattern was empirically demonstrated: `5b56627` (commit 3 — execution-time discrepancy + IngestPayload comment), this commit (plan-doc amendment + this SPEC entry). Sibling: §6.14.21 (DB row-state audit). §6.14.18 (framework constraint audit) is the shared parent — both are specializations of the broader "audit against actual artifact" discipline.
 
+#### 6.14.23 Runtime verification for UI side-effect fixes; static-trace alone is insufficient
+
+> **Captured 2026-05-06** (diagnostic-bug-fixes round commit 5). Pattern surfaced from two consecutive in-round failures of static-trace verification: BUG 2 commit `b02590a` (a one-shot pointerdown/keydown listener intended to unlock the audio context on first user interaction) and BUG 3 commit `caccfbd` (a `leading-relaxed` → `leading-normal` line-height tightening). Both fixes were code-level correct — the listener correctly attached on mount, removed itself on first fire, and called `unlockAudio()` (idempotent per audit); the line-height was correctly applied in the bundled CSS — and both passed the round's static-trace verification at commit time. Both failed the user's runtime test on the next iteration: Q1 audio still silent, multi-paragraph spacing still loose. Root causes were at a different level than the static trace inspected: browser-policy-and-event-firing semantics for the listener, character-data-driven layout dominance for the line-height.
+
+When a fix's stated goal is **user-perceived behavior change** — audio firing, visual spacing, animation smoothness, scroll feel, focus rings, color rendering, anything where the success criterion is "the user sees / hears / experiences X" — the verification chain MUST include runtime confirmation. Static-trace verification is necessary (it catches code-level errors) but not sufficient (it can't catch gaps between code-level correctness and user-perceived behavior).
+
+**Two distinct gap-classes the static-trace verification can't catch:**
+
+- **Browser-policy gaps.** The code is correct in isolation, but a browser-platform constraint (autoplay policy, user-activation timing, scroll-restoration behavior, transition-events firing, focus-trap interactions, viewport-meta behavior on mobile) prevents the code from delivering the intended behavior at runtime. Example from this round: `unlockAudio()` is correctly called from a listener handler, but the listener's gating event (next pointerdown/keydown) never fires because the user is reading silently — and the transient user-activation window from the prior-page click expired before any threshold tick. The static trace was sound; the browser-policy interaction was the gap.
+- **Perception-dominance gaps.** The code's intended effect IS being applied at runtime, but a different-level factor dominates the user's perception of the overall behavior. The fix shipped, the CSS bundle serves the new class, the computed style reflects it — but the user reports no visible change because what the user actually perceives is dominated by a factor the fix didn't touch. Example from this round: line-height tightening from 1.625 → 1.5 reduced each line by ~7.7%, but the user-perceived spacing was dominated by `\n\n`-rendered blank lines (5 full-line gaps, 27px each = 135px), and the line-height change shrank each blank line by ~2px (~9px total, imperceptible against the 135px dominant factor).
+
+**Convention going forward.** For UI side-effect fixes, the commit-time verification gates expand from `bun lint && bun typecheck && bun test` to also include one of:
+
+- **Runtime-automation verification.** Playwright (or equivalent) navigates the actual flow, captures runtime state assertions: `audioCtx.state === "running"`, `getComputedStyle(...).lineHeight === "1.5"`, screenshot diffs against a fixture, etc. The harness produces a verification artifact reviewable at commit time.
+- **Explicit user-verification ask.** When runtime automation isn't feasible (auth-gated routes without scriptable test users, behavior that requires human perception like audio audibility or motion smoothness), the commit body explicitly defers verification to the user with a specific test scenario. The commit is not reported as "verified" until the user confirms; the round is not closed until both automation OR user verification has passed for every UI-side-effect fix in the round.
+
+**Anti-pattern.** Reporting a UI side-effect fix as "verified" on the basis of static-trace alone, with terminology like "verified via direct inspection" or "static-trace confirmed via code path reasoning" — these phrases describe code-level verification, not behavior-level verification. They obscure the gap and ship fixes that don't actually fix.
+
+**Empirical instances from this round.**
+- Commit `b02590a` reported "static-trace confirmed via the audio-ticker module's gate logic" + "no-regression for Q2+ confirmed via handler-driven unlockAudio remaining idempotent." Failed user runtime test (Q1 audio still silent). The static-trace reasoning was sound about the listener's mechanics; the gap was at the event-firing level (no event fires in the natural test condition).
+- Commit `caccfbd` reported "static-trace reasoning rather than captured screenshots" with mathematical breakdown of the per-line reduction. Failed user visual test (no perceptible change). The math was correct; the gap was at the perception-dominance level (blank-line gaps dominated, not line-height).
+
+The fixes that addressed the gaps shipped explicit user-verification asks instead of static-trace claims:
+- `f7045f8` (Link conversion) and `f59a8ea` (mount-effect unlock) for BUG 2 — both deferred to user runtime verification with specific test scenarios.
+- `08ba782` (paragraph-split refactor) for BUG 3 — deferred with explicit "navigate to multi-paragraph case + confirm visibly tighter spacing" ask.
+
+All three of those commits passed runtime verification on the user's next pass; the discipline of explicit deferral closed the gap that static-trace claims had been masking.
+
+**Kinship to §6.14.21 + §6.14.22.** Both prior entries codify "audit / verify against the actual artifact, not against the assumed shape." §6.14.21 specializes to runtime DB row-state vs. plan-time intended state; §6.14.22 specializes to consuming-code semantics vs. producing-code reads; this §6.14.23 specializes to runtime user-experience vs. static-trace code-level reasoning. Future-Claude reading any of the three should consider the others — they're three faces of the same parent discipline ("audit against actual artifact, not assumed shape," see §6.14.18).
+
+**Cross-references.** Plan: `docs/plans/diagnostic-bug-fixes.md` §3 (BUG 2 + BUG 3 round-close summaries) + §5 (round-close meta-finding capture). Round commits where the pattern was empirically demonstrated: `b02590a` + `caccfbd` (the static-trace failures), `f7045f8` + `f59a8ea` + `08ba782` (the explicit-deferral successes), this commit (plan-doc + this SPEC entry). Siblings: §6.14.21 (DB row-state audit), §6.14.22 (consuming-code audit). Shared parent: §6.14.18 (audit against actual artifact).
+
 ---
 
 ## 7. Server actions, route handlers, and workflows
