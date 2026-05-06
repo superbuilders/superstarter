@@ -24,7 +24,8 @@
 		"db:studio": "bun --bun run src/db/scripts/drizzle-kit-shim.ts studio",
 		"db:drop:schema": "bun --bun run src/db/scripts/drop-schema.ts",
 		"db:seed": "bun --bun run src/db/scripts/seed-sub-types.ts && bun --bun run src/db/scripts/seed-strategies.ts",
-		"db:seed:items": "bun --bun run src/db/seeds/items/index.ts"
+		"db:seed:items": "bun --bun run src/db/seeds/items/index.ts",
+		"db:wipe:practice-data": "bun --bun run scripts/dev/wipe-practice-data.ts"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "0.92.0",
