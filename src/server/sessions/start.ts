@@ -42,6 +42,7 @@
 
 import * as errors from "@superbuilders/errors"
 import { and, desc, eq, isNull, sql } from "drizzle-orm"
+import { diagnosticMix } from "@/config/diagnostic-mix"
 import type { SubTypeId } from "@/config/sub-types"
 import { db } from "@/db"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
@@ -80,7 +81,12 @@ interface ExistingInProgress {
 }
 
 function targetQuestionCountFor(input: StartSessionInput): number {
-	if (input.type === "diagnostic") return 50
+	// Diagnostic target derives from diagnosticMix.length (Reading B per
+	// phase5-data-wipe plan Q1): mix is canonical, code derives from mix.
+	// When the future testbank-re-extraction round restores mix to 50,
+	// targetQuestionCount follows automatically. full_length / simulation
+	// branches keep the hardcoded 50 — they have no mix-equivalent yet.
+	if (input.type === "diagnostic") return diagnosticMix.length
 	if (input.type === "drill") {
 		if (input.drillLength === undefined) {
 			logger.error({ type: input.type }, "startSession: drill missing drillLength")

@@ -14,10 +14,11 @@
 //     uniform hash, the probability of all 20 collapsing to one item
 //     is vanishingly small for any cell with ≥2 live items).
 //
-//   - No-re-serve within a session: drive a 50-attempt diagnostic to
-//     completion; assert all 50 attempt.item_id values are distinct.
-//     The selection engine's session-attempted-ids exclusion is what
-//     guarantees this.
+//   - No-re-serve within a session: drive the diagnostic to quota
+//     completion (mix-derived per phase5-data-wipe plan Q1: the
+//     diagnostic's target question count IS diagnosticMix.length);
+//     assert all attempt.item_id values are distinct. The selection
+//     engine's session-attempted-ids exclusion is what guarantees this.
 //
 // Tests assume the local docker postgres is up + seeded (db:seed +
 // db:seed:items). Each test creates its own user and isolates state to
@@ -27,6 +28,7 @@ import "@/env"
 import { expect, test } from "bun:test"
 import * as errors from "@superbuilders/errors"
 import { and, count, eq } from "drizzle-orm"
+import { diagnosticMix } from "@/config/diagnostic-mix"
 import { createAdminDb } from "@/db/admin"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { items } from "@/db/schemas/catalog/items"
@@ -134,13 +136,20 @@ test("pickItemRow: within-cell variation across sessions — different salts sur
 	expect(seenIds.size).toBeGreaterThanOrEqual(2)
 })
 
-test("getNextItem: no re-serve within a session — 50 attempts produce 50 distinct item_ids", async function noReServeInSession() {
+test("getNextItem: no re-serve within a session — diagnostic completion produces all distinct item_ids", async function noReServeInSession() {
+	// Mix is canonical (phase5-data-wipe plan Q1, Reading B). The
+	// diagnostic's target_question_count derives from diagnosticMix.length
+	// in start.ts:targetQuestionCountFor, so the loop bound here MUST also
+	// derive from diagnosticMix.length — that's what keeps this test in
+	// lockstep with the engine when the mix grows back to 50 in the
+	// testbank-re-extraction round.
+	const N = diagnosticMix.length
 	const userId = await createTestUser("no-reserve")
 	const start = await startSession({ userId, type: "diagnostic" })
 	const sessionId = start.sessionId
 
 	let next: ItemForRender = start.firstItem
-	for (let i = 1; i <= 49; i += 1) {
+	for (let i = 1; i < N; i += 1) {
 		const r = await errors.try(
 			submitAttempt({
 				sessionId,
@@ -167,9 +176,11 @@ test("getNextItem: no re-serve within a session — 50 attempts produce 50 disti
 		next = data.nextItem
 	}
 
-	// Final 50th submit — selection engine produces undefined here (mix
-	// exhausted).
-	const fiftiethResult = await errors.try(
+	// Final Nth submit — at the mix-exhausted boundary, getNextItem
+	// returns undefined cleanly (because target_question_count = N =
+	// diagnosticMix.length). The defensive ErrDiagnosticMixOutOfRange in
+	// selection.ts:294-303 is unreachable from this path post-fix.
+	const finalResult = await errors.try(
 		submitAttempt({
 			sessionId,
 			itemId: next.id,
@@ -180,13 +191,16 @@ test("getNextItem: no re-serve within a session — 50 attempts produce 50 disti
 			selection: next.selection
 		})
 	)
-	if (fiftiethResult.error) {
-		logger.error({ error: fiftiethResult.error, sessionId }, "selection-test: submit 50 failed")
-		throw errors.wrap(fiftiethResult.error, "submit 50")
+	if (finalResult.error) {
+		logger.error(
+			{ error: finalResult.error, sessionId, attemptIndex: N },
+			"selection-test: final submit failed"
+		)
+		throw errors.wrap(finalResult.error, "final submit")
 	}
-	expect(fiftiethResult.data.nextItem).toBeUndefined()
+	expect(finalResult.data.nextItem).toBeUndefined()
 
-	// Read all attempts back. Assert 50 rows, all distinct item_ids.
+	// Read all attempts back. Assert N rows, all distinct item_ids.
 	await using adminDb = await createAdminDb()
 	const rowsResult = await errors.try(
 		adminDb.db
@@ -201,7 +215,7 @@ test("getNextItem: no re-serve within a session — 50 attempts produce 50 disti
 	const itemIds = rowsResult.data.map(function pickItemId(r) {
 		return r.itemId
 	})
-	expect(itemIds.length).toBe(50)
+	expect(itemIds.length).toBe(N)
 	const distinct = new Set(itemIds)
-	expect(distinct.size).toBe(50)
+	expect(distinct.size).toBe(N)
 }, 60_000)
