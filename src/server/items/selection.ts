@@ -1,15 +1,14 @@
-// Selection-engine dispatch — Phase 3 + v1-code-cleanup (2026-05-04).
+// Selection-engine dispatch — Phase 3 + v1-code-cleanup (2026-05-04) +
+// Phase 5 sub-phase 2 (adaptive walker, 2026-05-06).
 //
 // Plan §4.1–§4.4. `getNextItem(sessionId)` resolves the session's
 // strategy from `practice_sessions.type`, then dispatches over a switch.
 //
-// Phase 3 ships 'fixed_curve' (diagnostic) and 'uniform_band'
-// (drill) fully. 'adaptive' is a throwing stub — unreachable from any
-// v1 call site, but present in the switch so the type-checker enforces
-// exhaustiveness against SelectionStrategy. Phase 5 sub-phase 2 closes
-// the adaptive deferral. The 'review_queue' strategy and 'review'
-// session type were cut from v1 2026-05-04 (PRD §4.3 + SPEC §3.5
-// markers) and dropped here in the same round.
+// v1 ships 'fixed_curve' (diagnostic / full_length / simulation) and
+// 'adaptive' (drill). The 'review_queue' strategy and 'review' session
+// type were cut from v1 2026-05-04 (PRD §4.3 + SPEC §3.5 markers); the
+// transitional 'uniform_band' strategy was removed by Phase 5 sub-phase
+// 2 commit 3 once the adaptive walker (SPEC §9.1) shipped.
 //
 // All strategies obey the SAME serverless-state-derivation rule: no
 // in-memory state survives across calls. The recency-excluded set is
@@ -48,7 +47,6 @@ const optionsJsonSchema = z
 const ErrSessionNotFound = errors.new("session not found")
 const ErrInvalidItemBody = errors.new("invalid item body")
 const ErrInvalidOptions = errors.new("invalid options shape")
-const ErrAdaptiveDeferred = errors.new("adaptive strategy deferred to phase 5")
 const ErrDiagnosticMixOutOfRange = errors.new("diagnostic mix index out of range")
 const ErrUnsupportedStrategyForSubType = errors.new(
 	"strategy requires a sub_type_id but the session has none"
@@ -72,7 +70,7 @@ function asSubTypeId(s: string): SubTypeId {
 	return matched
 }
 
-type SelectionStrategy = "fixed_curve" | "uniform_band" | "adaptive"
+type SelectionStrategy = "fixed_curve" | "adaptive"
 type SessionType = "diagnostic" | "drill" | "full_length" | "simulation"
 type FallbackLevel = "fresh" | "session-soft" | "recency-soft" | "tier-degraded"
 
@@ -98,10 +96,9 @@ interface SessionContext {
 	recencyExcludedItemIds: ReadonlyArray<string>
 }
 
-// Resolve the strategy from session.type. Phase 5 sub-phase 2 commit 2
-// flipped `drill → adaptive`; the `'adaptive'` arm of `getNextItem`
-// dispatches to `getNextAdaptive`. `uniform_band` is dead post-commit-2
-// pending commit 3's removal of the strategy + getNextUniformBand.
+// Resolve the strategy from session.type. Drill uses the adaptive
+// walker (SPEC §9.1); diagnostic / full_length / simulation use the
+// pre-set per-slot tier from diagnostic-mix.ts / difficulty-curves.ts.
 function selectionStrategyForSession(type: SessionType): SelectionStrategy {
 	if (type === "diagnostic") return "fixed_curve"
 	if (type === "drill") return "adaptive"
@@ -438,10 +435,9 @@ async function readMasteryStateFor(
 	return result.data[0]
 }
 
-// SPEC §9.1 initial-tier table — used by Phase 3's uniform_band as a
-// constant band for the whole drill (no walking). Phase 5 sub-phase 2's
-// adaptive walker uses the same table for the drill's starting tier and
-// then walks via nextDifficultyTier.
+// SPEC §9.1 initial-tier table — the adaptive walker uses this for the
+// drill's starting tier (empty in-session window) and then walks via
+// nextDifficultyTier from attempt 11 onward.
 //
 // Brutal-mode early-return + speed-ramp shift-down branches were dropped
 // in v1-code-cleanup 2026-05-04 (PRD §4.4 + SPEC §3.4 markers). Brutal
@@ -463,51 +459,6 @@ function initialTierFor(
 	if (cs === "decayed") return "medium"
 	const _exhaustive: never = cs
 	return _exhaustive
-}
-
-async function getNextUniformBand(ctx: SessionContext): Promise<ItemForRender | undefined> {
-	if (ctx.subTypeId === null) {
-		logger.error({ sessionId: ctx.id }, "getNextUniformBand: session has no sub_type_id")
-		throw errors.wrap(ErrUnsupportedStrategyForSubType, `session id '${ctx.id}'`)
-	}
-	const subTypeId = ctx.subTypeId
-
-	const state = await readMasteryStateFor(ctx.userId, subTypeId)
-	const tier = initialTierFor(state)
-
-	const sessionAttemptedIds = await readSessionAttemptedItemIds(ctx.id)
-	const picked = await pickWithFallback({
-		subTypeId,
-		requestedTier: tier,
-		recencyExcludedIds: ctx.recencyExcludedItemIds,
-		sessionAttemptedIds,
-		sessionIdSalt: ctx.id
-	})
-	if (!picked) {
-		logger.warn(
-			{ sessionId: ctx.id, subTypeId, tier },
-			"getNextUniformBand: no item available even after full fallback chain"
-		)
-		return undefined
-	}
-
-	logger.debug(
-		{
-			sessionId: ctx.id,
-			subTypeId,
-			requestedTier: tier,
-			servedAtTier: picked.servedAtTier,
-			fallbackLevel: picked.fallbackLevel,
-			itemId: picked.row.id
-		},
-		"getNextUniformBand: served"
-	)
-
-	return buildItemForRender(picked.row, {
-		servedAtTier: picked.servedAtTier,
-		fallbackFromTier: picked.fallbackFromTier,
-		fallbackLevel: picked.fallbackLevel
-	})
 }
 
 const ErrSubTypeConfigMissing = errors.new("sub type config missing")
@@ -557,15 +508,14 @@ async function readInSessionAttemptWindow(sessionId: string): Promise<InSessionW
 	return result.data
 }
 
-// SPEC §9.1 adaptive-walker drill arm. Mirrors getNextUniformBand's
-// shape with the in-session attempt-window read added. The walker
-// derives `currentTier` from the most-recent attempt's `served_at_tier`
-// (per SPEC §9.1 last paragraph: fallback-served items affect the walk
-// based on what the user actually experienced) — or `initialTierFor`
-// when the window is empty (session start). nextDifficultyTier holds
-// across the first 10 attempts (the floor) and steps thereafter; the
-// existing pickWithFallback chain handles tier-exhaustion (recency-soft
-// → tier-degraded → session-soft).
+// SPEC §9.1 adaptive-walker drill arm. Reads the in-session attempt
+// window, derives `currentTier` from the most-recent attempt's
+// `served_at_tier` (per SPEC §9.1 last paragraph: fallback-served items
+// affect the walk based on what the user actually experienced) — or
+// `initialTierFor(masteryState)` when the window is empty (session
+// start). nextDifficultyTier holds across the first 10 attempts (the
+// floor) and steps thereafter; the existing pickWithFallback chain
+// handles tier-exhaustion (recency-soft → tier-degraded → session-soft).
 async function getNextAdaptive(ctx: SessionContext): Promise<ItemForRender | undefined> {
 	if (ctx.subTypeId === null) {
 		logger.error({ sessionId: ctx.id }, "getNextAdaptive: session has no sub_type_id")
@@ -655,7 +605,6 @@ async function getNextItem(sessionId: string): Promise<ItemForRender | undefined
 
 	const strategy = selectionStrategyForSession(ctx.type)
 	if (strategy === "fixed_curve") return getNextFixedCurve(ctx, attemptCount)
-	if (strategy === "uniform_band") return getNextUniformBand(ctx)
 	if (strategy === "adaptive") return getNextAdaptive(ctx)
 	const _exhaustive: never = strategy
 	return _exhaustive
@@ -670,7 +619,6 @@ export type {
 	SessionType
 }
 export {
-	ErrAdaptiveDeferred,
 	ErrDiagnosticMixOutOfRange,
 	ErrInvalidItemBody,
 	ErrInvalidOptions,

@@ -125,10 +125,12 @@ async function setup(): Promise<SmokeContext> {
 	}
 
 	// Pre-populate mastery_state with current_state='mastered' for every
-	// sub-type. This forces uniform_band's initialTierFor() to return
-	// 'hard', so drillLength=5 against the 5-item-per-sub-type seed bank
-	// resolves into 1 hard + 2 medium + 2 easy = 5 distinct items
-	// (no session-soft repeats).
+	// sub-type. This forces the adaptive walker's `initialTierFor()` to
+	// return 'hard' for the empty-window case, so drillLength=5 (entirely
+	// inside the 10-attempt floor — walker holds at the initial tier)
+	// against the 5-item-per-sub-type seed bank resolves into
+	// 1 hard + 2 medium + 2 easy = 5 distinct items (no session-soft
+	// repeats) via tier-degraded fallback through the band.
 	const masteryRows = subTypeIds.map(function makeRow(id) {
 		return {
 			userId: u.id,
@@ -276,9 +278,9 @@ async function clickCtaAndConfigure(
 
 	// Pick length=5 (default form value is 10, but we want 5 to fit the
 	// 55-item seed bank's per-sub-type distribution: 1H + 2M + 2E = 5
-	// distinct items at the band uniform_band picks for a "mastered"
-	// user). Click the label (the input is sr-only and not directly
-	// clickable in playwright).
+	// distinct items at the band the adaptive walker holds for a
+	// "mastered" user inside the 10-attempt floor). Click the label
+	// (the input is sr-only and not directly clickable in playwright).
 	await page.locator("label[for='length-5']").click().catch(function onErr() {})
 	await page
 		.locator("button", { hasText: "Start drill" })
