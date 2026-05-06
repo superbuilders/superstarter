@@ -1,6 +1,6 @@
 # Plan — Dev DB data wipe (taxonomy-restructure operational follow-up)
 
-> **Status: planning, approved, not yet implemented.** Round opens against `main` at HEAD `98170e9` post-taxonomy-restructure-close.
+> **Status: shipped 2026-05-06.** Round opened against `main` at HEAD `98170e9` post-taxonomy-restructure-close; closed at this commit. Three commits, fixed (the conditional-fourth from Q5 was removed at redline + confirmed unnecessary at execution): `8d3cf1d` (commit 1 — wipe-and-reseed dev DB; expand TRUNCATE scope to sub_types+strategies per audit finding), `647a609` (commit 2 — derive targetQuestionCountFor from diagnosticMix.length; restore noReServeInSession final-submit assertion), this commit (commit 3 — plan close + SPEC §6.14.21 + formal §2(b) amendment).
 
 This plan covers the operational data-wipe round that follows the taxonomy-restructuring round (closed at `1710a91`). The taxonomy round shipped config + schema-seed + doc reconciliation but deliberately did not touch dev-DB row state; the dev DB still carries `items`, `attempts`, `practice_sessions`, `mastery_state`, and `candidate_promotion_log` rows tagged or stamped against the prior 11-sub-type taxonomy. The application code now expects only the new 14-sub-type taxonomy. This round wipes the items + practice surfaces (preserving auth + taxonomy + strategy data), restores the test surface to a coherent state, and unblocks the testbank re-extraction round that comes next.
 
@@ -24,30 +24,36 @@ The audit ran read-only against `main` post-taxonomy-restructure (HEAD = `98170e
 
 ### 2(a) Tables to TRUNCATE
 
-Five tables exist on disk that carry items + practice rows that must be wiped:
+> **Amended at commit 1 (`8d3cf1d`) per Path (A) audit finding.** The original §2(a) listed five tables; the pre-execution audit against the live dev DB found `sub_types` and `strategies` had drifted from their plan-time-assumed state (11 sub_types under old taxonomy IDs + 111 strategies vs the plan's expected 14 + 33) due to UPSERT-leaves-orphans semantics in the seed scripts. Both tables moved from §2(b) preserved → §2(a) wiped; the round's TRUNCATE list is now seven tables. See commit 1's commit body for the record-at-execution narrative; see §10.6 below for the formal Resolution-6 framing of the amendment; see SPEC §6.14.21 for the generalizable pattern.
+
+Seven tables exist on disk that carry items + practice + catalog rows that must be wiped:
 
 - **`items`** (`src/db/schemas/catalog/items.ts`) — canonical item bank; FK to `sub_types` and `strategies`. Will be repopulated by testbank re-extraction round.
 - **`attempts`** (`src/db/schemas/practice/attempts.ts`) — per-question results; FKs to `practice_sessions` (ON DELETE CASCADE) and `items`. Stale by definition once `items` and `practice_sessions` are wiped.
 - **`practice_sessions`** (`src/db/schemas/practice/practice-sessions.ts`) — session records; FKs to `users` (ON DELETE CASCADE) and `sub_types`. Some rows reference now-invalid `sub_type_id` values for drill-typed rows started under the old taxonomy.
-- **`mastery_state`** (`src/db/schemas/practice/mastery-state.ts`) — per-`(user_id, sub_type_id)` mastery; composite PK; FKs to `users` (ON DELETE CASCADE) and `sub_types`. Rows with `sub_type_id IN ('verbal.synonyms', 'verbal.logic', 'numerical.letter_series', 'numerical.averages_ratios')` are now-orphaned in app semantics (the FK still resolves only if those rows still exist in `sub_types`; whether they do is itself an audit question — see §2(c)).
-- **`candidate_promotion_log`** (`src/db/schemas/ops/candidate-promotion-log.ts`) — promotion audit trail; FK to `items`. Will be empty in dev DB at present (no Phase 6 work has shipped) but listed for completeness.
+- **`mastery_state`** (`src/db/schemas/practice/mastery-state.ts`) — per-`(user_id, sub_type_id)` mastery; composite PK; FKs to `users` (ON DELETE CASCADE) and `sub_types`. Rows with old-taxonomy `sub_type_id` are wiped together with the FK parent.
+- **`candidate_promotion_log`** (`src/db/schemas/ops/candidate-promotion-log.ts`) — promotion audit trail; FK to `items`. Empty in dev DB at the round's execution time (no Phase 6 work has shipped) but listed for completeness.
+- **`sub_types`** (`src/db/schemas/catalog/sub-types.ts`) — added to the wipe list per the Path (A) amendment. Empirical pre-wipe state at execution time was 11 rows carrying old-taxonomy IDs (`verbal.synonyms`, `verbal.logic`, `numerical.letter_series`, `numerical.averages_ratios` all present); the taxonomy round's commit-1 schema-seed run inserted/updated the 14 new IDs but left the 4 cut/renamed/moved old IDs orphaned in place because `seed-sub-types.ts` uses `onConflictDoUpdate` without companion delete-not-in-config logic. Re-seeded post-wipe via `bun db:seed` (FK-ordered: sub_types first, then strategies).
+- **`strategies`** (`src/db/schemas/catalog/strategies.ts`) — added to the wipe list per the Path (A) amendment. Empirical pre-wipe state at execution time was 111 rows (3.36× the expected 33), distributed across both old and new sub_type_ids, with deterministic-id-by-`(subTypeId, index)` keying having upserted only the indices that existed under each successive strategy-config shape and leaving stale rows from prior shapes orphaned. Re-seeded post-wipe via `bun db:seed` after sub_types.
 
 ### 2(b) Tables to PRESERVE
 
-Six tables must survive the wipe untouched:
+> **Amended at commit 1 (`8d3cf1d`).** Originally listed six tables; `sub_types` and `strategies` moved to §2(a) per the Path (A) audit finding above.
+
+Four tables must survive the wipe untouched:
 
 - **`users`** (`src/db/schemas/auth/users.ts`) — auth identity; preserves Leo's dev account.
 - **`sessions`** (auth, `src/db/schemas/auth/sessions.ts`; table named `sessions` in DB despite the import alias `authSessions`) — Auth.js v5 database-strategy session storage; cookie-token-keyed.
 - **`accounts`** (`src/db/schemas/auth/accounts.ts`) — Auth.js OAuth account links.
 - **`verification_tokens`** (`src/db/schemas/auth/verification_tokens.ts`) — Auth.js verification-token flow.
-- **`sub_types`** (`src/db/schemas/catalog/sub-types.ts`) — taxonomy definitions; updated to the 14-sub-type shape via the taxonomy round's commit 1 schema-seed run.
-- **`strategies`** (`src/db/schemas/catalog/strategies.ts`) — taxonomy-aligned per the taxonomy round's commit 1 (`Partial<Record<...>>` typing; 11 currently-authored sub-types' strategies seeded).
 
 The taxonomy-round audit identified `strategy_views` and `review_queue` as tables dropped during the v1-code-cleanup round (per that round's audit category 1, dropped via `DROP TABLE … CASCADE` in commit 4). Verified during this audit: neither table appears in `src/db/schemas/**` and neither imports under `src/db/schema.ts`'s barrel. **Both are confirmed dropped.** No action required on either.
 
 ### 2(c) Foreign-key ordering for TRUNCATE
 
-The FK dependency graph among the five tables to wipe:
+> **Amended at commit 1 (`8d3cf1d`).** The original analysis below was for the five-table case; the round shipped seven tables (sub_types + strategies added per Path (A) — see §2(a) above). The recommended approach (single TRUNCATE with CASCADE + explicit table list) and the bounded-CASCADE-blast-radius reasoning generalize cleanly to the seven-table case: `items`, `practice_sessions`, `mastery_state`, `strategies` all FK `sub_types`; `items` FKs `strategies`; `attempts` and `candidate_promotion_log` FK `items`; every CASCADE-reachable child remains in the explicit wipe list (no walk-out). The shipped statement is `TRUNCATE TABLE items, attempts, practice_sessions, mastery_state, candidate_promotion_log, sub_types, strategies RESTART IDENTITY CASCADE`.
+
+The FK dependency graph among the original five tables to wipe (preserved as plan-time analysis):
 
 ```
 attempts        →  practice_sessions (ON DELETE CASCADE), items
@@ -319,39 +325,99 @@ These are deliberately not addressed in this round:
 
 ## 10. Resolutions log
 
-Five questions surfaced during plan-writing. **All five resolved at redline 2026-05-04.** No remaining open questions at plan-greenlight.
+Five questions surfaced during plan-writing; one additional resolution (Path (A) amendment) surfaced at commit-1 pre-execution audit. **All six resolved + shipped 2026-05-06.** No remaining open questions at round-close.
 
 ### 10.1 Q1 — Test-restoration approach
 
-**Resolved 2026-05-04: option (ii) with architectural-posture amendment.** Re-seed addresses Reason 1; the round adopts Reading B (`diagnosticMix.length` is canonical, `targetQuestionCountFor` derives from it) and addresses Reason 2 via a one-line derivation fix in `start.ts:82` plus the parameterized test. Round closes at 37/37. The taxonomy round's Q1(b) deferral of the diagnostic-mix re-balance is honored — re-balance still lives in the testbank-re-extraction round; this round's derivation fix codifies the dynamic relationship as the right architectural posture going forward, so when the future round restores `mix.length` to 50, `targetQuestionCount` follows automatically without a coordinated edit. (i) was rejected as it does not reach 37/37 (Reason 2 unresolved). (iii) was rejected as it defers 37/37 to the next round and creates an awkward intermediate state where the test stays red after the data-state round closes.
+**Resolved + shipped 2026-05-06 at commit 2 (`647a609`): option (ii) with architectural-posture amendment.** Re-seed addresses Reason 1 (commit 1 / `8d3cf1d`); the round adopts Reading B (`diagnosticMix.length` is canonical, `targetQuestionCountFor` derives from it) and addresses Reason 2 via a one-line derivation fix in `start.ts:82` plus the parameterized test (commit 2 / `647a609`). Round closes at 37/37. The taxonomy round's Q1(b) deferral of the diagnostic-mix re-balance is honored — re-balance still lives in the testbank-re-extraction round; this round's derivation fix codifies the dynamic relationship as the right architectural posture going forward, so when the future round restores `mix.length` to 50, `targetQuestionCount` follows automatically without a coordinated edit. (i) was rejected as it does not reach 37/37 (Reason 2 unresolved). (iii) was rejected as it defers 37/37 to the next round and creates an awkward intermediate state where the test stays red after the data-state round closes.
 
 ### 10.2 Q2 — Pre-wipe snapshot posture
 
-**Resolved 2026-05-04: default-on with `--no-snapshot` opt-out.** Cheap insurance at v1 dev-DB scale; future operator running the script under different conditions (e.g., in-flight investigation rows, hand-crafted manual test data) benefits from default-on; opt-out flag preserves discretion for CI-style runs. Snapshot writes to `scripts/_logs/wipe-snapshot-${timestamp}.sql` (gitignored).
+**Resolved + shipped 2026-05-06 at commit 1 (`8d3cf1d`): default-on with `--no-snapshot` opt-out.** Cheap insurance at v1 dev-DB scale; future operator running the script under different conditions (e.g., in-flight investigation rows, hand-crafted manual test data) benefits from default-on; opt-out flag preserves discretion for CI-style runs. Snapshot writes to `scripts/_logs/wipe-snapshot-${timestamp}.sql` (gitignored). Empirical execution-time snapshot landed at `scripts/_logs/wipe-snapshot-2026-05-06T05-34-34-354.sql`.
 
 ### 10.3 Q3 — Wipe script naming + wiring
 
-**Resolved 2026-05-04: `scripts/dev/wipe-practice-data.ts` + `db:wipe:practice-data`.** Path matches `scripts/dev/*` convention used by smoke harnesses + SPEC §6.14.8's environment-dependent operational-script convention. Name `wipe-practice-data` is unambiguous about scope (the items + practice + mastery surfaces). `package.json` script wiring matches the `db:` namespace used by `db:seed`, `db:seed:items`, `db:drop:schema`. Alternative `scripts/dev/db-wipe.ts` + `db:wipe` rejected as too broad — "wipe" without qualifier reads as "wipe everything."
+**Resolved + shipped 2026-05-06 at commit 1 (`8d3cf1d`): `scripts/dev/wipe-practice-data.ts` + `db:wipe:practice-data`.** Path matches `scripts/dev/*` convention used by smoke harnesses + SPEC §6.14.8's environment-dependent operational-script convention. Name `wipe-practice-data` is unambiguous about scope (the items + practice + mastery + catalog surfaces post Path (A) amendment). `package.json` script wiring matches the `db:` namespace used by `db:seed`, `db:seed:items`, `db:drop:schema`. Alternative `scripts/dev/db-wipe.ts` + `db:wipe` rejected as too broad — "wipe" without qualifier reads as "wipe everything."
 
 ### 10.4 Q4 — Embedding backfill posture
 
-**Resolved 2026-05-04: yes, included in commit 1.** Keeps dev DB single-coherent-state at round-close — no in-flight "items exist but embeddings missing" partial state for verification scenarios to reason about. The cost is small (50 items × OpenAI embedding cost ≈ negligible); the existing `scripts/backfill-missing-embeddings.ts` script handles the work. Caveat: requires `OPENAI_API_KEY` in the operator's env; the script's existing graceful-degradation handles missing keys with a `logger.warn`-then-skip path (verify against current code at commit-time).
+**Resolved + shipped 2026-05-06 at commit 1 (`8d3cf1d`): yes, included in commit 1.** Keeps dev DB single-coherent-state at round-close — no in-flight "items exist but embeddings missing" partial state for verification scenarios to reason about. Empirical post-execution result: 50 items backfilled, 0 failed (100% embedding coverage at round close). The existing `scripts/backfill-missing-embeddings.ts` script handled the work; `OPENAI_API_KEY` was set in the operator's env at execution time.
 
 ### 10.5 Q5 — Seed status pre-pinning
 
-**Resolved 2026-05-04: pre-pin to `status='live'` in this round.** The v1 dev-DB seed represents real-items-bank items the application treats as production-ready; `selection.test.ts:liveCellItemCount` queries `WHERE status = 'live'` per its design. The `'candidate'` status is the LLM-generation pipeline's territory (Phase 4 deliverable per `docs/architecture_plan.md` build sequencing); `'candidate'` items in dev DB before Phase 4 ships would be ahead of the pipeline that produces them. Round contract: all 50 seed items land at `status='live'` post-seed. If the audit during commit 1's verification finds the seed pipeline (`src/server/items/ingest.ts:ingestRealItem` invoked by `src/db/seeds/items/index.ts`) inserts at `'candidate'` (the items table's column default), the seed pipeline is updated to land seed-path items at `'live'` as part of commit 1's scope. **The conditional fourth-commit possibility from the pre-redline plan is removed** — round closes at exactly three commits.
+**Resolved + shipped 2026-05-06 at commit 1 (`8d3cf1d`): pre-pin to `status='live'` confirmed satisfied by existing pipeline.** The v1 dev-DB seed represents real-items-bank items the application treats as production-ready; `selection.test.ts:liveCellItemCount` queries `WHERE status = 'live'` per its design. The `'candidate'` status is the LLM-generation pipeline's territory (Phase 4 deliverable per `docs/architecture_plan.md` build sequencing). Commit-1 pre-execution verification confirmed `src/server/items/ingest.ts:ingestRealItem` already inserts at `status: "live"` explicitly (overriding the items column default of `"candidate"`); no seed-script edit was needed. Empirical post-execution result: all 50 seed items at `status='live'`. **The conditional fourth-commit contingency closed without firing** — round closed at exactly three commits.
+
+### 10.6 Path (A) amendment — sub_types + strategies added to TRUNCATE list
+
+**Resolved + shipped 2026-05-06 at commit 1 (`8d3cf1d`).** Surfaced at the pre-execution audit step inside commit 1: the live dev DB carried 11 sub_types (under old taxonomy IDs: `verbal.synonyms`, `verbal.logic`, `numerical.letter_series`, `numerical.averages_ratios` all present alongside the new IDs) and 111 strategies (3.36× the expected 33), instead of the plan §2(b)-assumed post-taxonomy-restructure 14 + 33 state. Root cause: `seed-sub-types.ts` and `seed-strategies.ts` use `onConflictDoUpdate` (UPSERT) without companion delete-not-in-config logic, so accumulated seed runs across rounds left stale rows orphaned in place.
+
+Three options at audit-time:
+- **(A) Expand TRUNCATE.** Add sub_types + strategies to the wipe list. Re-seed pipeline runs in FK order: `bun db:seed` (sub_types then strategies) before `bun db:seed:items`. Single-statement TRUNCATE blast radius still bounded (every CASCADE-reachable child remains in the explicit list).
+- **(B) Manual surgical DELETE.** Delete only the rows with old-taxonomy IDs from sub_types; delete duplicate strategies. More fragile (requires careful WHERE-clause auditing per sub_type_id; risks missing rows under future drift shapes); leaves the discrepancy-vs-config rebuild ambiguous.
+- **(C) Pre-amend the plan.** Pause execution, formally amend §2(b) before commit 1 ships, restart. Highest documentation overhead; lowest information-velocity payoff (the fix itself is small).
+
+Path (A) was selected per the redline tightening: amendment captured inline in commit 1's commit body (record-at-execution); formal plan-doc amendment lands in commit 3's round-close (this commit). Empirical pre-wipe state recorded in commit 1's body as primary-source evidence: items=55, attempts=2663, practice_sessions=282, mastery_state=141, candidate_promotion_log=0, sub_types=11, strategies=111. Post-wipe-and-reseed verified state: sub_types=14 (canonical NEW IDs only; 0 old-taxonomy orphans), strategies=33 (3 each × 11 currently-authored sub_types per `Partial<Record>` shape from taxonomy round Q4; 0 over-counts), items=50 (status=live across all 50; embeddings 50/50).
+
+This resolution is the single empirical instance of SPEC §6.14.21 (added in commit 3, this commit); see SPEC for the generalizable pattern.
+
+### 10.7 Side-findings (out-of-scope flags surfaced during execution)
+
+Two findings surfaced during commit 1's verification phase that are deliberately not folded into this round's commits:
+
+- **Docker-proxy stale port routing.** During commit 1's post-reseed verification, the operator observed that `docker exec 18seconds-postgres psql ...` connects to a DIFFERENT postgres instance than `psql -h localhost -p 54320 ...` (different `pg_postmaster_start_time`; different data; INSERT/SELECT writes across the two endpoints are mutually invisible). The host port 54320 (per `docker-compose.override.yml`) is routed by `docker-proxy` to container IP `172.29.0.2:5432`, which is in the `warranted_frontend` network — NOT the current `18seconds-postgres` container at `192.168.32.2` in `18seconds_default`. This is environment-state drift from a previous container-network configuration; the `DATABASE_LOCAL_URL=localhost:54320` endpoint that the bun scripts and the Next.js dev server target is consistent with itself, so the round's scripts and tests landed against the same DB and the verification is sound. Captured here as environment-hygiene-tracking; out of scope for this round and any future plan round (it's an operator-environment artifact, not a generalizable code/architecture pattern). Recommended cleanup: `docker compose down && docker compose up -d` to rebuild the network mapping cleanly.
+
+- **Seed-script UPSERT-leaves-orphans pattern as future-work flag.** The Path (A) audit finding has a generalizable code-state implication: any future taxonomy or strategy config change that cuts/renames an entry will leave orphans in the dev DB through subsequent `bun db:seed` runs unless either (i) the seed scripts adopt delete-not-in-config logic before the upsert step, or (ii) the round in question explicitly TRUNCATEs sub_types and strategies before re-seeding (the Path-A discipline this round established). Future-work tracking: a follow-up round adding `DELETE FROM sub_types WHERE id NOT IN (config-side-id-set)` + the equivalent for strategies would close this footgun at the seed-script layer; until that ships, every round that touches the taxonomy or strategy config should plan an explicit wipe-before-seed step. Captured here as future-work-flag; not auto-bundled into any current round.
 
 ---
 
-## Audit cross-references summary (post-redline)
+## Audit cross-references summary (post-redline + post-execution)
 
-- §2(a) tables to wipe: 5 tables (`items`, `attempts`, `practice_sessions`, `mastery_state`, `candidate_promotion_log`).
-- §2(b) tables to preserve: 6 tables (`users`, `sessions`, `accounts`, `verification_tokens`, `sub_types`, `strategies`).
+- §2(a) tables wiped: **7 tables** post Path (A) amendment (`items`, `attempts`, `practice_sessions`, `mastery_state`, `candidate_promotion_log`, `sub_types`, `strategies`).
+- §2(b) tables preserved: **4 tables** post Path (A) amendment (`users`, `sessions`, `accounts`, `verification_tokens`).
 - §2(b) confirmed dropped (no action): `strategy_views`, `review_queue` — both eliminated by v1-code-cleanup round per the prior audit; verified absent from `src/db/schemas/**`.
-- §2(c) FK ordering: single `TRUNCATE … CASCADE` with explicit table list.
-- §2(d) test-restoration: option (ii) with architectural-posture amendment per Q1 — re-seed + derive `targetQuestionCountFor` from `diagnosticMix.length` + parameterize test.
+- §2(c) FK ordering: single `TRUNCATE … CASCADE` with explicit 7-table list per Path (A) — bounded blast radius, no walk-out beyond the explicit set.
+- §2(d) test-restoration: shipped per Q1 — re-seed (commit 1) + derive `targetQuestionCountFor` from `diagnosticMix.length` + parameterize test (commit 2).
 - §2(e) other tests at risk: none (3 of 4 test files pure-function; smoke side already taxonomy-aligned).
-- §2(f) backup posture: default-on snapshot with `--no-snapshot` opt-out per Q2.
-- §4 seed status posture: pre-pin to `status='live'` per Q5.
-- §6 SPEC §6.14.21 candidate: data-state-masking-code-state precondition meta-pattern, sharpened by the redline outcome.
-- §7 commits: **3 commits, fixed.** No conditional fourth.
+- §2(f) backup posture: default-on snapshot with `--no-snapshot` opt-out per Q2; empirical execution snapshot at `scripts/_logs/wipe-snapshot-2026-05-06T05-34-34-354.sql`.
+- §4 seed status posture: pre-pin to `status='live'` per Q5; verified satisfied by existing pipeline (no seed-script edit needed).
+- §6 SPEC §6.14.21: live-DB-state-audit pattern shipped in commit 3 — see SPEC for the generalizable framing; see §10.6 here for the in-round empirical instance.
+- §7 commits: **3 commits, fixed.** No conditional fourth (Q5 pre-pinning closed the contingency at audit-time + verification-time).
+- §10.6 Path (A) amendment: sub_types + strategies moved §2(b) → §2(a); empirical pre-wipe state was 11/111 (vs plan-time-assumed 14/33) due to UPSERT-leaves-orphans semantics across rounds.
+- §10.7 side-findings (out-of-round): docker-proxy stale port routing (environment hygiene); seed-script UPSERT-leaves-orphans pattern (future-work flag).
+
+## 11. Round-close summary
+
+> **Round closed 2026-05-06.** Three commits as projected; conditional fourth removed at redline + confirmed unnecessary at execution.
+
+The round shipped a clean operational follow-up to the taxonomy-restructuring round, with one substantive scope expansion at audit-time (Path (A) — sub_types + strategies added to TRUNCATE list) and one architectural posture decision at planning-time (Reading B — `diagnosticMix.length` is canonical; `targetQuestionCountFor` derives from it, not vice versa).
+
+**Final commit shape:**
+
+1. `8d3cf1d` — `feat(scripts): wipe-and-reseed dev DB; expand TRUNCATE scope to sub_types+strategies per audit finding`. Lands `scripts/dev/wipe-practice-data.ts`, the package.json wiring, and the gitignore entry. Captures the §2(b) amendment inline in the commit body as record-at-execution. Empirical post-execution state: sub_types=14 (canonical NEW IDs), strategies=33 (3×11 with 0 over-counts), items=50 (status=live, embeddings 50/50), preserved tables unchanged.
+
+2. `647a609` — `fix+test(selection): derive targetQuestionCountFor from diagnosticMix.length; restore noReServeInSession final-submit assertion`. One-line derivation fix in `src/server/sessions/start.ts` (diagnostic branch only — full_length, simulation, drill untouched per scope discipline) + parameterized test in `src/server/items/selection.test.ts:noReServeInSession`. Restores 37/37; end-to-end spot-check confirms `practice_sessions.target_question_count=46` for new diagnostic sessions.
+
+3. (this commit) — `docs(plan+spec): close phase5-data-wipe round; add §6.14.21; record §2(b) formal amendment + Path (A) audit-finding`. Plan status flip to "shipped 2026-05-06"; formal §2(a)/§2(b) amendment in the plan doc; §10 resolutions log flipped to shipped with hashes; §10.6 Path (A) resolution added; §10.7 side-findings captured as out-of-round flags; SPEC §6.14.21 added (live-DB-state-audit pattern). No edits to any prior closed plan (closed-plans-immutable convention from §6.14.20 holds; verified via `git diff` zero-line check at commit-3 author-time).
+
+**Two-cause failure framing for `noReServeInSession`:**
+
+The test's failure had two independent causes (per §2(d) audit finding):
+
+- **Reason 1 — data-state.** Items in dev DB carried old-taxonomy IDs; the new-taxonomy diagnostic mix queried cells with zero items in the new IDs. Resolved by commit 1's wipe + reseed.
+- **Reason 2 — code-state.** `targetQuestionCountFor` returned hardcoded 50 while `diagnosticMix.length` was 46; the engine threw `ErrDiagnosticMixOutOfRange` at attempt 47 (mix-exhausted boundary defensive guard) before reaching quota. Resolved by commit 2's derivation fix + test parameterization.
+
+The framing was load-bearing for the round's commit clustering: addressing only Reason 1 (option (i) at Q1) would not have reached 37/37; addressing only Reason 2 (option (iii) at Q1) would have left the data-state issue unresolved. The round adopted option (ii) — both — and committed them as a sequenced pair (data-state first in commit 1, code-state in commit 2 once the data-state path was clean enough to verify the code-state fix).
+
+**Architectural posture endorsed (Reading B):**
+
+`src/config/diagnostic-mix.ts` is the single source of truth for "how many questions a diagnostic delivers"; `src/server/sessions/start.ts:targetQuestionCountFor`'s diagnostic branch derives from `diagnosticMix.length`. Forward effect: when the testbank-re-extraction round restores `diagnosticMix.length` to ~50 (via the deferred re-balance from taxonomy round Q1(b)), `targetQuestionCount` follows automatically without a coordinated re-edit. The `full_length` and `simulation` branches retain hardcoded 50 — those are Phase 5 sub-phase territory, not data-wipe territory; their derivation source (a `full_length`-equivalent of `diagnosticMix`) does not exist yet.
+
+**Verification at round close:**
+
+- `bun lint`: clean
+- `bun typecheck`: clean
+- `bun test`: 37/37 (round goal achieved)
+- Closed-plans-immutable: verified zero-line `git diff` against all closed plans (`phase5-post-session-review`, `phase5-v1-code-cleanup`, `phase5-taxonomy-restructure`, `phase3-*`, `phase-3-*`, `focus-shell-post-overhaul-fixes`, `opaque-option-ids-and-pipeline-split`, `ocr-import-screenshots`).
+- Pre-wipe snapshot retained at `scripts/_logs/wipe-snapshot-2026-05-06T05-34-34-354.sql` (gitignored).
+
+**Next round unblocked: testbank re-extraction.** Reruns OCR + ingest + explanation generation against `data/testbank/` under the new taxonomy; repopulates the items table to the empirical-anchor shape that the diagnostic-mix re-balance to ~50 entries depends on. Strategy authoring for the three new sub-types (`workrate`, `speed_distance_time`, `lowest_values`) is independent and can run in parallel.
