@@ -15,14 +15,26 @@
 // foreground / muted-foreground / subtle borders — so the visual
 // transition into `/diagnostic/run` is continuous.
 
-// `next/link` typed-routes (next.config.ts: typedRoutes: true) reject
-// the forward-reference to `/diagnostic/run` because the route was
-// added in the same commit — its typed-route entry hasn't propagated
-// yet. Following the precedent in
-// docs/plans/phase-3-practice-surface.md §11.1 (commit 4 used the
-// same workaround for `/drill/[subTypeId]`), use a plain `<a>` tag
-// for the forward-reference. Once the typed-routes cache catches up
-// post-build, a future commit can swap this back to <Link>.
+// Use `<Link>` (not plain `<a>`) so the click on "Start Diagnostic"
+// stays an SPA navigation. Plain-`<a>` triggers a full-page reload,
+// which destroys the prior document's transient user activation;
+// the new `/diagnostic/run` document then has no active user-gesture,
+// and the FocusShell's audio-ticker cannot create / resume the
+// AudioContext until the user happens to interact with the new
+// document — which the natural test condition (read Q1 silently,
+// let the threshold tick fire from the timer alone) explicitly
+// precludes. SPA navigation keeps the same document, preserves the
+// transient user activation window (~5s), and lets the FocusShell's
+// mount-time `unlockAudio()` calls fire within the gesture window.
+//
+// Historical note (preserved per closed-plan-immutable, the pre-fix
+// state): an earlier author used `<a>` with a comment citing
+// typed-routes forward-reference rejection — the route was added in
+// the same commit, so its typed-route entry hadn't propagated. The
+// typed-routes cache has long since caught up; `<Link>` typechecks
+// cleanly against `/diagnostic/run` now.
+
+import Link from "next/link"
 
 function Page() {
 	return (
@@ -63,12 +75,12 @@ function Page() {
 			</ul>
 
 			<div className="mt-12">
-				<a
+				<Link
 					href="/diagnostic/run"
 					className="inline-flex w-full items-center justify-center rounded-md bg-primary px-6 py-4 font-medium text-base text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
 					Start Diagnostic
-				</a>
+				</Link>
 			</div>
 		</main>
 	)
