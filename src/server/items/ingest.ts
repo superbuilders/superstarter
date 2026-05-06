@@ -59,6 +59,13 @@ const ingestInput = z.object({
 	correctAnswer: z.string().regex(/^[0-9a-z]{8}$/),
 	explanation: z.string().min(1).optional(),
 	strategyId: z.string().uuid().optional(),
+	// Source provenance — top-level fields (added in
+	// phase5-testbank-re-extraction round commit 3 per Q1 redline) that
+	// write directly to the items.source_folder + items.source_filename
+	// columns added in commit 2. Both optional for backward-compat with
+	// the seed loader (which has no provenance).
+	sourceFolder: z.string().min(1).max(128).optional(),
+	sourceFilename: z.string().min(1).max(256).optional(),
 	metadata: ingestMetadata.optional()
 })
 
@@ -70,6 +77,8 @@ interface IngestRealItemInput {
 	correctAnswer: string
 	explanation?: string
 	strategyId?: string
+	sourceFolder?: string
+	sourceFilename?: string
 	metadata?: {
 		originalExplanation?: string
 		importSource?: string
@@ -171,7 +180,9 @@ async function ingestRealItem(
 				correctAnswer: data.correctAnswer,
 				explanation: data.explanation,
 				strategyId: data.strategyId,
-				metadataJson
+				metadataJson,
+				sourceFolder: data.sourceFolder,
+				sourceFilename: data.sourceFilename
 			})
 			.returning({ id: items.id })
 	)

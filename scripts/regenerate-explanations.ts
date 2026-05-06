@@ -341,13 +341,19 @@ async function main(): Promise<void> {
 		console.log("  [explain]")
 		let structured: StructuredExplanationOutput
 		try {
-			structured = await writeStructuredExplanation(
+			// Stage 3 has no access to source PNG (regen runs against existing
+			// items in the DB, not against stage-1 JSONs). Pass imagePath=undefined
+			// so the explain pass falls back to text-only mode; the
+			// chart-description rule self-disables.
+			const explainResult = await writeStructuredExplanation(
 				row.body.text,
 				options,
 				row.correctAnswer,
 				row.subTypeId,
-				oldMetadata.originalExplanation
+				oldMetadata.originalExplanation,
+				undefined
 			)
+			structured = explainResult.structured
 		} catch (err) {
 			counters.failedExplain++
 			const message = errorToString(err)

@@ -193,6 +193,8 @@ function printSummary(c: Counters): void {
 interface Stage1Json {
 	sourceImagePath: string
 	sourceImageHash: string
+	sourceFolder: string
+	sourceFilename: string
 	extractedAt: string
 	subTypeId: ExtractedItem["subTypeId"]
 	difficulty: ExtractedItem["difficulty"]
@@ -390,9 +392,14 @@ async function processImage(
 		void letterForIndex
 	}
 
+	const sourceFolder = path.basename(args.inboxDir.replace(/\/$/, ""))
+	const sourceFilename = path.basename(filePath)
+
 	const stage1Json: Stage1Json = {
 		sourceImagePath: relPath,
 		sourceImageHash: `sha256:${hash}`,
+		sourceFolder,
+		sourceFilename,
 		extractedAt: nowIso(),
 		subTypeId: data.subTypeId,
 		difficulty: data.difficulty,

@@ -25,6 +25,8 @@ const requestSchema = z.object({
 	correctAnswer: z.string().regex(/^[0-9a-z]{8}$/),
 	explanation: z.string().min(1).optional(),
 	strategyId: z.string().uuid().optional(),
+	sourceFolder: z.string().min(1).max(128).optional(),
+	sourceFilename: z.string().min(1).max(256).optional(),
 	metadata: z
 		.object({
 			originalExplanation: z.string().min(1).optional(),

@@ -6,6 +6,7 @@
 // EXEMPT FROM THE PROJECT RULESET.
 
 import type Anthropic from "@anthropic-ai/sdk"
+import { Buffer } from "node:buffer"
 import { z } from "zod"
 import type { SubTypeId } from "@/config/sub-types"
 import {
@@ -96,6 +97,7 @@ Call the submit_structured_explanation tool with two or three parts in this orde
 When to OMIT the tie-breaker: count the option ids in your elimination's referencedOptions array. If they include every option except the correct answer, OMIT the tie-breaker — submit only two parts (recognition + elimination). The test is mechanical: count the ids, compare to the option list, decide. Do not emit a tie-breaker that compares the correct answer to "any survivor" or "any remaining option" — those phrases are signals you should have omitted instead.
 
 Hard rules:
+- If the screenshot contains a chart, graph, table, or other visual data the question relies on, describe that data quantitatively in the recognition step (e.g., "The bar chart shows quarterly revenue: Q1 $40k, Q2 $55k, Q3 $50k, Q4 $65k.") before naming the pattern. Then proceed with the elimination + tie-breaker steps as normal. The structured-explanation contract is unchanged — parts stay [recognition, elimination, optional tie-breaker]; the recognition part absorbs the chart description naturally. If the screenshot has no chart, ignore this rule entirely.
 - When referring to an answer choice in the text, quote its text exactly (e.g., 'sell' or 'engaging') rather than paraphrasing. Do not invent paraphrases like "the transfer-flavored option."
 - The text of each part teaches a *triage move*, not a derivation. If a part walks step-by-step through arithmetic or restates premises, it's failing the contract.
 - Each part's text is one sentence, or two if the move genuinely has parallel sub-steps (e.g., a double-blank where each blank needs a rule).
@@ -148,17 +150,31 @@ function formatOptionsBlock(options: { id: string; text: string }[]): string {
 	return options.map((o) => `${o.id}. ${o.text}`).join("\n")
 }
 
+interface ExplainUsage {
+	input_tokens: number
+	output_tokens: number
+	cache_read_input_tokens: number
+	cache_creation_input_tokens: number
+	had_image: boolean
+}
+
+interface ExplainResult {
+	structured: StructuredExplanationOutput
+	usage: ExplainUsage
+}
+
 async function writeStructuredExplanation(
 	question: string,
 	options: { id: string; text: string }[],
 	correctAnswer: string,
 	subTypeId: SubTypeId,
-	originalExplanation: string | undefined
-): Promise<StructuredExplanationOutput> {
+	originalExplanation: string | undefined,
+	imagePath: string | undefined
+): Promise<ExplainResult> {
 	const hint = subTypeStyleHints[subTypeId] ?? FALLBACK_HINT
 	const system = EXPLAIN_SYSTEM_TEMPLATE.replace("${SUB_TYPE_HINT}", hint)
 
-	const userContent = [
+	const userText = [
 		"Question:",
 		question,
 		"",
@@ -169,6 +185,22 @@ async function writeStructuredExplanation(
 		"",
 		`Source explanation (background context only — write a fresh explanation, do not paraphrase): ${originalExplanation ?? "(none)"}`
 	].join("\n")
+
+	// Build content blocks. When imagePath is set, prepend an image block so
+	// the model can describe charts/graphs in the recognition step (DEPARTURE
+	// 2 in docs/plans/phase5-testbank-re-extraction.md). When unset (e.g.
+	// stage 3 regeneration where the original PNG is no longer available),
+	// fall back to text-only — the chart-description rule self-disables.
+	const userContent: Anthropic.Messages.ContentBlockParam[] = []
+	if (imagePath !== undefined) {
+		const buf = await Bun.file(imagePath).arrayBuffer()
+		const b64 = Buffer.from(buf).toString("base64")
+		userContent.push({
+			type: "image",
+			source: { type: "base64", media_type: "image/png", data: b64 }
+		})
+	}
+	userContent.push({ type: "text", text: userText })
 
 	const message = await withBackoff("explain", () =>
 		client.messages.create({
@@ -197,12 +229,20 @@ async function writeStructuredExplanation(
 	if (!parsed.success) {
 		throw new Error(`explanation Zod validation failed: ${JSON.stringify(parsed.error.issues)}`)
 	}
-	return parsed.data
+
+	const usage: ExplainUsage = {
+		input_tokens: message.usage.input_tokens,
+		output_tokens: message.usage.output_tokens,
+		cache_read_input_tokens: message.usage.cache_read_input_tokens ?? 0,
+		cache_creation_input_tokens: message.usage.cache_creation_input_tokens ?? 0,
+		had_image: imagePath !== undefined
+	}
+	return { structured: parsed.data, usage }
 }
 
 function renderExplanationProse(structured: StructuredExplanationOutput): string {
 	return structured.parts.map((p) => p.text).join(" ")
 }
 
-export type { StructuredExplanationOutput }
+export type { ExplainResult, ExplainUsage, StructuredExplanationOutput }
 export { renderExplanationProse, structuredExplanationOutput, writeStructuredExplanation }

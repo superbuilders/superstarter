@@ -41,6 +41,8 @@ if (!cronSecret) {
 const stage1JsonSchema = z.object({
 	sourceImagePath: z.string().min(1),
 	sourceImageHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+	sourceFolder: z.string().min(1).max(128).optional(),
+	sourceFilename: z.string().min(1).max(256).optional(),
 	extractedAt: z.string().min(1),
 	subTypeId: z.enum(subTypeIds),
 	difficulty: z.enum(["easy", "medium", "hard", "brutal"]),
@@ -166,7 +168,14 @@ interface IngestPayload {
 	options: { id: string; text: string }[]
 	correctAnswer: string
 	explanation: string
+	sourceFolder?: string
+	sourceFilename?: string
 	metadata: {
+		// importSource here is the answer-extraction-provenance tag
+		// ("ocr-visible" | "ocr-solved"). It is NOT a folder name; commit
+		// 3 keeps this semantic distinct from sourceFolder per the discrepancy
+		// resolved at execution time vs. the plan-write "legacy alias for
+		// sourceFolder" framing in §2(c).
 		importSource: "ocr-visible" | "ocr-solved"
 		originalExplanation?: string
 		structuredExplanation?: StructuredExplanationOutput
@@ -197,6 +206,12 @@ interface Counters {
 	successOcrSolved: number
 	successWithOriginal: number
 	successWithoutOriginal: number
+	explainCallsWithImage: number
+	explainCallsWithoutImage: number
+	explainTotalInputTokens: number
+	explainTotalOutputTokens: number
+	explainTotalCacheReadInputTokens: number
+	explainTotalCacheCreationInputTokens: number
 }
 
 function newCounters(totalFiles: number): Counters {
@@ -209,7 +224,13 @@ function newCounters(totalFiles: number): Counters {
 		successOcrVisible: 0,
 		successOcrSolved: 0,
 		successWithOriginal: 0,
-		successWithoutOriginal: 0
+		successWithoutOriginal: 0,
+		explainCallsWithImage: 0,
+		explainCallsWithoutImage: 0,
+		explainTotalInputTokens: 0,
+		explainTotalOutputTokens: 0,
+		explainTotalCacheReadInputTokens: 0,
+		explainTotalCacheCreationInputTokens: 0
 	}
 }
 
@@ -219,6 +240,8 @@ function pad(value: string | number, width: number): string {
 
 function printSummary(c: Counters): void {
 	const success = c.successOcrVisible + c.successOcrSolved
+	const totalCalls = c.explainCallsWithImage + c.explainCallsWithoutImage
+	const meanInputAll = totalCalls > 0 ? Math.round(c.explainTotalInputTokens / totalCalls) : 0
 	console.log("")
 	console.log("=== Stage 2 summary ===")
 	console.log(`Total stage-1 files:         ${pad(c.totalFiles, 4)}`)
@@ -231,6 +254,13 @@ function printSummary(c: Counters): void {
 		`  - visible answer:          ${pad(c.successOcrVisible, 4)}  (orig explanation: ${c.successWithOriginal}, no orig: ${c.successWithoutOriginal})`
 	)
 	console.log(`  - solve + verify:          ${pad(c.successOcrSolved, 4)}`)
+	console.log(`Explain calls (image):       ${pad(c.explainCallsWithImage, 4)}`)
+	console.log(`Explain calls (text-only):   ${pad(c.explainCallsWithoutImage, 4)}`)
+	console.log(`Explain input tokens (sum):  ${pad(c.explainTotalInputTokens, 4)}`)
+	console.log(`Explain output tokens (sum): ${pad(c.explainTotalOutputTokens, 4)}`)
+	console.log(`Explain cache_read in tokens: ${pad(c.explainTotalCacheReadInputTokens, 4)}`)
+	console.log(`Explain cache_create tokens:  ${pad(c.explainTotalCacheCreationInputTokens, 4)}`)
+	console.log(`Mean input tokens / call:    ${pad(meanInputAll, 4)}`)
 }
 
 async function processStage1File(
@@ -281,15 +311,39 @@ async function processStage1File(
 	)
 
 	console.log("  [explain]")
+	// Resolve the absolute path to the source PNG for vision input. The
+	// stage-1 JSON stores sourceImagePath as a CWD-relative path; pass an
+	// absolute path to writeStructuredExplanation so it doesn't depend on
+	// stage 2's CWD. If the file is missing (e.g., archived stage-1 JSON
+	// pointing at a deleted screenshot), fall back to text-only — the
+	// chart-description rule self-disables when the model has no image.
+	const absImagePath = path.resolve(data.sourceImagePath)
+	const imageAvailable = fs.existsSync(absImagePath)
+	const imagePathArg = imageAvailable ? absImagePath : undefined
+	if (!imageAvailable) {
+		console.log(`  [no source PNG at ${absImagePath} — text-only explain]`)
+	}
 	let structured: StructuredExplanationOutput
 	try {
-		structured = await writeStructuredExplanation(
+		const explainResult = await writeStructuredExplanation(
 			data.question,
 			data.options,
 			data.correctAnswer,
 			data.subTypeId,
-			data.originalExplanation
+			data.originalExplanation,
+			imagePathArg
 		)
+		structured = explainResult.structured
+		const u = explainResult.usage
+		console.log(
+			`  [explain tokens] in=${u.input_tokens} out=${u.output_tokens} cache_read=${u.cache_read_input_tokens} cache_create=${u.cache_creation_input_tokens} had_image=${u.had_image}`
+		)
+		counters.explainTotalInputTokens += u.input_tokens
+		counters.explainTotalOutputTokens += u.output_tokens
+		counters.explainTotalCacheReadInputTokens += u.cache_read_input_tokens
+		counters.explainTotalCacheCreationInputTokens += u.cache_creation_input_tokens
+		if (u.had_image) counters.explainCallsWithImage++
+		else counters.explainCallsWithoutImage++
 	} catch (err) {
 		counters.explanationFailures++
 		console.log(`  [explain failed] ${errorToString(err)}`)
@@ -337,6 +391,8 @@ async function processStage1File(
 		options: data.options,
 		correctAnswer: data.correctAnswer,
 		explanation,
+		...(data.sourceFolder ? { sourceFolder: data.sourceFolder } : {}),
+		...(data.sourceFilename ? { sourceFilename: data.sourceFilename } : {}),
 		metadata: {
 			importSource: data.importSource,
 			structuredExplanation: structured,
