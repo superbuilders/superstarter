@@ -24,8 +24,12 @@ function TextBody(props: TextBodyProps) {
 	return (
 		<div className="space-y-3">
 			{paragraphs.map(function renderParagraph(paragraph, index) {
+				// Index key is safe here. Paragraphs are derived from a
+				// deterministic split of a stable input string; the array's
+				// identity and order are functions of the input alone, and
+				// the parent `<ItemSlot>` is already keyed on `item.id` so
+				// cross-item TextBody swaps unmount the entire subtree.
 				return (
-					// biome-ignore lint/suspicious/noArrayIndexKey: paragraphs are derived from a stable split; reordering is impossible without the source string itself changing
 					<p key={index} className="text-foreground text-lg leading-normal">
 						{paragraph}
 					</p>
