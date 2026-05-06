@@ -32,6 +32,7 @@ import { diagnosticMix } from "@/config/diagnostic-mix"
 import { createAdminDb } from "@/db/admin"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { items } from "@/db/schemas/catalog/items"
+import { masteryState } from "@/db/schemas/practice/mastery-state"
 import { users } from "@/db/schemas/auth/users"
 import { logger } from "@/logger"
 import type { ItemForRender } from "@/components/focus-shell/types"
@@ -218,4 +219,213 @@ test("getNextItem: no re-serve within a session — diagnostic completion produc
 	expect(itemIds.length).toBe(N)
 	const distinct = new Set(itemIds)
 	expect(distinct.size).toBe(N)
+}, 60_000)
+
+// Phase 5 sub-phase 2 commit 2 — adaptive walker integration tests
+// (plan §5.2). Drive real drills via startSession + submitAttempt; seed
+// mastery_state to control the initial tier; assert the walker holds
+// across the 10-attempt floor and steps up after high-performance
+// windows. Uses verbal.antonyms (latencyThresholdMs = 12_000; bank
+// depth easy=11 medium=12 hard=12 — full coverage for step-up paths).
+
+const ErrItemAnswerMissing = errors.new("selection-test: item correctAnswer not found")
+const ADAPTIVE_TEST_SUB_TYPE = "verbal.antonyms"
+const ADAPTIVE_TEST_LATENCY_THRESHOLD_MS = 12_000
+
+async function readItemCorrectAnswer(itemId: string): Promise<string> {
+	await using adminDb = await createAdminDb()
+	const result = await errors.try(
+		adminDb.db
+			.select({ correctAnswer: items.correctAnswer })
+			.from(items)
+			.where(eq(items.id, itemId))
+			.limit(1)
+	)
+	if (result.error) {
+		logger.error({ error: result.error, itemId }, "selection-test: item answer read failed")
+		throw errors.wrap(result.error, "read item answer")
+	}
+	const row = result.data[0]
+	if (!row) {
+		logger.error({ itemId }, "selection-test: item correctAnswer row missing")
+		throw ErrItemAnswerMissing
+	}
+	return row.correctAnswer
+}
+
+function requestedTierForItem(item: ItemForRender): string {
+	// SPEC §9.2 — the walker decides REQUESTED tier; pickWithFallback may
+	// degrade. fallbackFromTier records the original request; absent →
+	// fresh/recency-soft/session-soft at the served tier.
+	if (item.selection.fallbackFromTier) {
+		return item.selection.fallbackFromTier
+	}
+	return item.selection.servedAtTier
+}
+
+async function seedMasteryState(input: {
+	userId: string
+	subTypeId: string
+	currentState: "learning" | "fluent" | "mastered" | "decayed"
+	wasMastered: boolean
+}): Promise<void> {
+	await using adminDb = await createAdminDb()
+	const result = await errors.try(
+		adminDb.db.insert(masteryState).values({
+			userId: input.userId,
+			subTypeId: input.subTypeId,
+			currentState: input.currentState,
+			wasMastered: input.wasMastered,
+			updatedAtMs: Date.now()
+		})
+	)
+	if (result.error) {
+		logger.error(
+			{ error: result.error, userId: input.userId, subTypeId: input.subTypeId },
+			"selection-test: mastery_state seed failed"
+		)
+		throw errors.wrap(result.error, "mastery_state seed")
+	}
+}
+
+test("getNextAdaptive: initial tier from mastery_state — fluent + ¬wasMastered → medium", async function adaptiveInitialTierFromMasteryState() {
+	const userId = await createTestUser("adaptive-initial")
+	await seedMasteryState({
+		userId,
+		subTypeId: ADAPTIVE_TEST_SUB_TYPE,
+		currentState: "fluent",
+		wasMastered: false
+	})
+	const start = await startSession({
+		userId,
+		type: "drill",
+		subTypeId: ADAPTIVE_TEST_SUB_TYPE,
+		drillLength: 5
+	})
+	// initialTierFor maps fluent → 'medium'. The first served item's
+	// requested tier is the initial tier (window is empty at session
+	// start). Assert against requestedTierForItem (which prefers
+	// fallbackFromTier when set) per SPEC §9.2 — the no-walking contract
+	// is on REQUESTED tier.
+	expect(requestedTierForItem(start.firstItem)).toBe("medium")
+}, 30_000)
+
+test("getNextAdaptive: walker holds across first 10 attempts — initial 'medium' through floor", async function adaptiveHoldsAcrossFloor() {
+	const userId = await createTestUser("adaptive-hold")
+	await seedMasteryState({
+		userId,
+		subTypeId: ADAPTIVE_TEST_SUB_TYPE,
+		currentState: "fluent",
+		wasMastered: false
+	})
+	const start = await startSession({
+		userId,
+		type: "drill",
+		subTypeId: ADAPTIVE_TEST_SUB_TYPE,
+		drillLength: 20
+	})
+	const sessionId = start.sessionId
+
+	// Drive 10 attempts at high accuracy + low latency. The walker holds
+	// the initial tier (medium) across the floor: items 1..10 should all
+	// be requested at 'medium'. Bank depth (12 medium items) is enough to
+	// avoid session-soft re-serve on 10 attempts.
+	const requestedTiers: string[] = []
+	requestedTiers.push(requestedTierForItem(start.firstItem))
+	let next: ItemForRender = start.firstItem
+	for (let i = 1; i < 10; i += 1) {
+		const correctAnswer = await readItemCorrectAnswer(next.id)
+		const r = await errors.try(
+			submitAttempt({
+				sessionId,
+				itemId: next.id,
+				selectedAnswer: correctAnswer,
+				latencyMs: 5_000,
+				triagePromptFired: false,
+				triageTaken: false,
+				selection: next.selection
+			})
+		)
+		if (r.error) {
+			logger.error({ error: r.error, sessionId, i }, "selection-test: submit failed")
+			throw errors.wrap(r.error, "submit")
+		}
+		const data = r.data
+		if (data.nextItem === undefined) {
+			logger.error({ sessionId, i }, "selection-test: nextItem undefined before quota")
+			throw ErrUnexpectedNextItemAbsence
+		}
+		next = data.nextItem
+		requestedTiers.push(requestedTierForItem(next))
+	}
+	// 10 captured requested tiers (item 1 .. item 10), all 'medium' (the
+	// initial tier from mastery_state).
+	expect(requestedTiers.length).toBe(10)
+	for (const tier of requestedTiers) {
+		expect(tier).toBe("medium")
+	}
+}, 60_000)
+
+test("getNextAdaptive: walker steps up after 10 attempts at high performance — easy → medium", async function adaptiveStepsUpAfterFloor() {
+	const userId = await createTestUser("adaptive-stepup")
+	await seedMasteryState({
+		userId,
+		subTypeId: ADAPTIVE_TEST_SUB_TYPE,
+		currentState: "learning",
+		wasMastered: false
+	})
+	const start = await startSession({
+		userId,
+		type: "drill",
+		subTypeId: ADAPTIVE_TEST_SUB_TYPE,
+		drillLength: 20
+	})
+	const sessionId = start.sessionId
+
+	// Initial tier is 'easy' (learning + ¬wasMastered). Drive 10 attempts
+	// at 9/10 correct + median latency 5_000ms (< 0.8 × 12_000ms = 9_600).
+	// Last attempt (i=9) is deliberately wrong (passes a non-matching
+	// answer string) so accuracy is 9/10 = 0.9 — exactly the SPEC §9.1
+	// step-up threshold (>= 0.9 AND < 0.8× latency). The 11th item
+	// (returned from the 10th submit) should request 'medium'.
+	const wrongAnswer = "__deliberately_wrong_answer__"
+	let next: ItemForRender = start.firstItem
+	let lastSubmitResult: { nextItem?: ItemForRender } | undefined
+	for (let i = 0; i < 10; i += 1) {
+		const correctAnswer = await readItemCorrectAnswer(next.id)
+		const isLast = i === 9
+		const selectedAnswer = isLast ? wrongAnswer : correctAnswer
+		const r = await errors.try(
+			submitAttempt({
+				sessionId,
+				itemId: next.id,
+				selectedAnswer,
+				latencyMs: 5_000,
+				triagePromptFired: false,
+				triageTaken: false,
+				selection: next.selection
+			})
+		)
+		if (r.error) {
+			logger.error({ error: r.error, sessionId, i }, "selection-test: submit failed")
+			throw errors.wrap(r.error, "submit")
+		}
+		lastSubmitResult = r.data
+		const data = r.data
+		if (data.nextItem === undefined) {
+			logger.error({ sessionId, i }, "selection-test: nextItem undefined before quota")
+			throw ErrUnexpectedNextItemAbsence
+		}
+		next = data.nextItem
+	}
+
+	if (!lastSubmitResult?.nextItem) {
+		logger.error(
+			{ sessionId, latencyThresholdMs: ADAPTIVE_TEST_LATENCY_THRESHOLD_MS },
+			"selection-test: 11th item missing"
+		)
+		throw ErrUnexpectedNextItemAbsence
+	}
+	const eleventh = lastSubmitResult.nextItem
+	expect(requestedTierForItem(eleventh)).toBe("medium")
 }, 60_000)

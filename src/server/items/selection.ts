@@ -17,11 +17,12 @@
 // are read from the `attempts` table on every call.
 
 import * as errors from "@superbuilders/errors"
-import { and, eq } from "drizzle-orm"
+import { and, desc, eq } from "drizzle-orm"
 import { z } from "zod"
-import { type Difficulty, type SubTypeId, subTypeIds } from "@/config/sub-types"
+import { type Difficulty, type SubTypeId, subTypeIds, subTypes } from "@/config/sub-types"
 import { shuffledDiagnosticOrder } from "@/config/diagnostic-mix"
 import { db } from "@/db"
+import { attempts } from "@/db/schemas/practice/attempts"
 import { masteryState } from "@/db/schemas/practice/mastery-state"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
@@ -97,12 +98,13 @@ interface SessionContext {
 	recencyExcludedItemIds: ReadonlyArray<string>
 }
 
-// Resolve the strategy from session.type. Phase 5 sub-phase 2 changes
-// the `drill → uniform_band` line to `drill → adaptive` and fills in
-// the `'adaptive'` branch in dispatch — no other call site moves.
+// Resolve the strategy from session.type. Phase 5 sub-phase 2 commit 2
+// flipped `drill → adaptive`; the `'adaptive'` arm of `getNextItem`
+// dispatches to `getNextAdaptive`. `uniform_band` is dead post-commit-2
+// pending commit 3's removal of the strategy + getNextUniformBand.
 function selectionStrategyForSession(type: SessionType): SelectionStrategy {
 	if (type === "diagnostic") return "fixed_curve"
-	if (type === "drill") return "uniform_band"
+	if (type === "drill") return "adaptive"
 	if (type === "full_length") return "fixed_curve"
 	if (type === "simulation") return "fixed_curve"
 	const _exhaustive: never = type
@@ -508,6 +510,138 @@ async function getNextUniformBand(ctx: SessionContext): Promise<ItemForRender | 
 	})
 }
 
+const ErrSubTypeConfigMissing = errors.new("sub type config missing")
+
+function latencyThresholdFor(subTypeId: SubTypeId): number {
+	const cfg = subTypes.find(function bySubTypeId(s) {
+		return s.id === subTypeId
+	})
+	if (!cfg) {
+		logger.error({ subTypeId }, "latencyThresholdFor: sub type config missing")
+		throw errors.wrap(ErrSubTypeConfigMissing, `sub type id '${subTypeId}'`)
+	}
+	return cfg.latencyThresholdMs
+}
+
+interface InSessionWindowRow {
+	correct: boolean
+	latencyMs: number
+	servedAtTier: Difficulty
+}
+
+// Reads the most recent 10 in-session attempts (rev-chronological by
+// `attempts.id`, the UUIDv7 PK whose 48-bit prefix is unix-ms). Drill is
+// sub-type-locked per the route param, so all in-session attempts are on
+// `ctx.subTypeId` by construction — no sub_type_id filter is needed
+// (plan §9.6). The `attempts_session_id_idx` index covers the WHERE.
+async function readInSessionAttemptWindow(sessionId: string): Promise<InSessionWindowRow[]> {
+	const result = await errors.try(
+		db
+			.select({
+				correct: attempts.correct,
+				latencyMs: attempts.latencyMs,
+				servedAtTier: attempts.servedAtTier
+			})
+			.from(attempts)
+			.where(eq(attempts.sessionId, sessionId))
+			.orderBy(desc(attempts.id))
+			.limit(10)
+	)
+	if (result.error) {
+		logger.error(
+			{ error: result.error, sessionId },
+			"readInSessionAttemptWindow: query failed"
+		)
+		throw errors.wrap(result.error, "readInSessionAttemptWindow")
+	}
+	return result.data
+}
+
+// SPEC §9.1 adaptive-walker drill arm. Mirrors getNextUniformBand's
+// shape with the in-session attempt-window read added. The walker
+// derives `currentTier` from the most-recent attempt's `served_at_tier`
+// (per SPEC §9.1 last paragraph: fallback-served items affect the walk
+// based on what the user actually experienced) — or `initialTierFor`
+// when the window is empty (session start). nextDifficultyTier holds
+// across the first 10 attempts (the floor) and steps thereafter; the
+// existing pickWithFallback chain handles tier-exhaustion (recency-soft
+// → tier-degraded → session-soft).
+async function getNextAdaptive(ctx: SessionContext): Promise<ItemForRender | undefined> {
+	if (ctx.subTypeId === null) {
+		logger.error({ sessionId: ctx.id }, "getNextAdaptive: session has no sub_type_id")
+		throw errors.wrap(ErrUnsupportedStrategyForSubType, `session id '${ctx.id}'`)
+	}
+	const subTypeId = ctx.subTypeId
+
+	const window = await readInSessionAttemptWindow(ctx.id)
+	const last10Correct = window.map(function pickCorrect(r) {
+		return r.correct
+	})
+	const last10LatencyMs = window.map(function pickLatency(r) {
+		return r.latencyMs
+	})
+
+	let currentTier: Difficulty
+	if (window.length === 0) {
+		const state = await readMasteryStateFor(ctx.userId, subTypeId)
+		currentTier = initialTierFor(state)
+	} else {
+		const mostRecent = window[0]
+		if (!mostRecent) {
+			logger.error(
+				{ sessionId: ctx.id, windowLength: window.length },
+				"getNextAdaptive: window non-empty but row[0] undefined (impossible)"
+			)
+			throw errors.new("getNextAdaptive: window row[0] undefined")
+		}
+		currentTier = mostRecent.servedAtTier
+	}
+
+	const latencyThresholdMs = latencyThresholdFor(subTypeId)
+	const requestedTier = nextDifficultyTier({
+		last10Correct,
+		last10LatencyMs,
+		currentTier,
+		latencyThresholdMs
+	})
+
+	const sessionAttemptedIds = await readSessionAttemptedItemIds(ctx.id)
+	const picked = await pickWithFallback({
+		subTypeId,
+		requestedTier,
+		recencyExcludedIds: ctx.recencyExcludedItemIds,
+		sessionAttemptedIds,
+		sessionIdSalt: ctx.id
+	})
+	if (!picked) {
+		logger.warn(
+			{ sessionId: ctx.id, subTypeId, requestedTier },
+			"getNextAdaptive: no item available even after full fallback chain"
+		)
+		return undefined
+	}
+
+	logger.debug(
+		{
+			sessionId: ctx.id,
+			subTypeId,
+			windowSize: window.length,
+			currentTier,
+			requestedTier,
+			servedAtTier: picked.servedAtTier,
+			fallbackLevel: picked.fallbackLevel,
+			itemId: picked.row.id
+		},
+		"getNextAdaptive: served"
+	)
+
+	return buildItemForRender(picked.row, {
+		servedAtTier: picked.servedAtTier,
+		fallbackFromTier: picked.fallbackFromTier,
+		fallbackLevel: picked.fallbackLevel
+	})
+}
+
 async function getNextItem(sessionId: string): Promise<ItemForRender | undefined> {
 	const ctx = await loadSessionContext(sessionId)
 	const attemptCount = await countAttemptsInSession(sessionId)
@@ -522,13 +656,7 @@ async function getNextItem(sessionId: string): Promise<ItemForRender | undefined
 	const strategy = selectionStrategyForSession(ctx.type)
 	if (strategy === "fixed_curve") return getNextFixedCurve(ctx, attemptCount)
 	if (strategy === "uniform_band") return getNextUniformBand(ctx)
-	if (strategy === "adaptive") {
-		logger.error(
-			{ sessionId, strategy },
-			"getNextItem: adaptive strategy invoked in phase 3"
-		)
-		throw ErrAdaptiveDeferred
-	}
+	if (strategy === "adaptive") return getNextAdaptive(ctx)
 	const _exhaustive: never = strategy
 	return _exhaustive
 }
