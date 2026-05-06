@@ -22,6 +22,13 @@
       "when": 1777953538665,
       "tag": "0002_tranquil_mach_iv",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778049949870,
+      "tag": "0003_simple_stryfe",
+      "breakpoints": true
     }
   ]
 }
