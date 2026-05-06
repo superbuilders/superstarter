@@ -225,6 +225,34 @@ function FocusShell(props: FocusShellProps) {
 		}
 	}, [])
 
+	// One-shot audio-unlock on first user interaction with the focus-shell
+	// document. Defensive against entry paths that arrive without a prior
+	// in-document click — notably the /diagnostic → /diagnostic/run hop,
+	// which is a full-page navigation (plain `<a>` per
+	// src/app/(diagnostic-flow)/diagnostic/page.tsx), so the click on
+	// "Start Diagnostic" lives in the prior document and the new
+	// document's AudioContext remains uncreated. Without this listener,
+	// Q1's synth ticks (sec 10+) and urgency loop (sec 18) silently
+	// no-op for the entire first question, since unlockAudio() otherwise
+	// only fires from option-select / submit / triage handlers — none
+	// of which run during the audio threshold window if the user is just
+	// reading the question. Listener removes itself after first fire to
+	// avoid redundant calls; subsequent unlockAudio invocations from the
+	// existing handlers are idempotent no-ops once the context is open.
+	React.useEffect(function attachAudioUnlockOnFirstInteraction() {
+		function onFirstInteraction() {
+			unlockAudio()
+			window.removeEventListener("pointerdown", onFirstInteraction)
+			window.removeEventListener("keydown", onFirstInteraction)
+		}
+		window.addEventListener("pointerdown", onFirstInteraction)
+		window.addEventListener("keydown", onFirstInteraction)
+		return function detach() {
+			window.removeEventListener("pointerdown", onFirstInteraction)
+			window.removeEventListener("keydown", onFirstInteraction)
+		}
+	}, [])
+
 	// Audio: hybrid two-path model (post-overhaul-fixes round commit 2.5,
 	// SPEC §6.12). Two distinct sounds per question:
 	//   1. Pre-target synth ticks at integer seconds in the second half
