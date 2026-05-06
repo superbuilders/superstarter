@@ -225,20 +225,47 @@ function FocusShell(props: FocusShellProps) {
 		}
 	}, [])
 
-	// One-shot audio-unlock on first user interaction with the focus-shell
-	// document. Defensive against entry paths that arrive without a prior
-	// in-document click — notably the /diagnostic → /diagnostic/run hop,
-	// which is a full-page navigation (plain `<a>` per
-	// src/app/(diagnostic-flow)/diagnostic/page.tsx), so the click on
-	// "Start Diagnostic" lives in the prior document and the new
-	// document's AudioContext remains uncreated. Without this listener,
-	// Q1's synth ticks (sec 10+) and urgency loop (sec 18) silently
-	// no-op for the entire first question, since unlockAudio() otherwise
-	// only fires from option-select / submit / triage handlers — none
-	// of which run during the audio threshold window if the user is just
-	// reading the question. Listener removes itself after first fire to
-	// avoid redundant calls; subsequent unlockAudio invocations from the
-	// existing handlers are idempotent no-ops once the context is open.
+	// Three-layer audio-unlock defense for the FocusShell entry path.
+	// All three layers stay; redundancy is the design (audio-unlock can
+	// fail silently in browser-policy-specific ways, so we don't want
+	// any single layer to be load-bearing on its own).
+	//
+	// LAYER 1 — `/diagnostic` page uses `<Link>` (not plain `<a>`) so the
+	// click on "Start Diagnostic" stays an SPA navigation. Same-document
+	// SPA navigation preserves the browser's transient user-activation
+	// window (~5s) across the route change. (Source:
+	// src/app/(diagnostic-flow)/diagnostic/page.tsx, BUG 2 commit 3.)
+	//
+	// LAYER 2 — this mount effect: consume the preserved user-activation
+	// synchronously by calling `unlockAudio()` once at mount, no event
+	// gating. The mount-effect runs during React's commit phase, well
+	// within the ~5s window from the Link click that initiated the
+	// navigation. `AudioContext` is created + resumed; threshold ticks
+	// at sec 10/18 fire against a running context without requiring any
+	// post-mount user interaction. (BUG 2 commit 3.5.)
+	//
+	// LAYER 3 — the listener below: defense-in-depth for entry paths
+	// that DON'T have a same-document prior click (direct URL entry,
+	// browser back/forward, future routes not yet converted to SPA).
+	// One-shot pointerdown/keydown on `window`; fires `unlockAudio()`
+	// the first time the user interacts with the new document. The
+	// listener can't catch the Link click that initiated this mount
+	// (the click already fired before the listener attached), so this
+	// layer doesn't help the SPA-navigation case — that's why layer 2
+	// exists. (BUG 2 commit 1, b02590a.)
+	React.useEffect(function unlockAudioOnMount() {
+		// Consume the user-activation window preserved by the SPA
+		// navigation from `/diagnostic`. `unlockAudio()` is idempotent
+		// (checks `audioCtx === undefined` before construction; checks
+		// `state === "suspended"` before resume), so the post-mount
+		// handlers (option-select, submit, triage Space, triage Take,
+		// layer 3's listener) continue to call it as no-ops once the
+		// context is open. Returns nothing — no cleanup needed because
+		// the AudioContext lives at module scope in audio-ticker.ts and
+		// outlives any single FocusShell mount.
+		unlockAudio()
+	}, [])
+
 	React.useEffect(function attachAudioUnlockOnFirstInteraction() {
 		function onFirstInteraction() {
 			unlockAudio()
