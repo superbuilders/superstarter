@@ -32,6 +32,7 @@ import {
 	readSessionAttemptedItemIds,
 	type SelectedRow
 } from "@/server/items/queries"
+import { median } from "@/server/mastery/compute"
 
 const optionsJsonSchema = z
 	.array(
@@ -152,6 +153,74 @@ function tiersDownFrom(start: Difficulty): ReadonlyArray<Difficulty> {
 		return [start]
 	}
 	return TIER_ORDER_DESCENDING.slice(idx)
+}
+
+interface AdaptiveContext {
+	last10Correct: ReadonlyArray<boolean>
+	last10LatencyMs: ReadonlyArray<number>
+	currentTier: Difficulty
+	latencyThresholdMs: number
+}
+
+function stepUp(tier: Difficulty): Difficulty {
+	const idx = TIER_ORDER_DESCENDING.indexOf(tier)
+	if (idx < 0) {
+		logger.error({ tier }, "stepUp: tier not in known order")
+		throw errors.new("stepUp: unknown tier")
+	}
+	if (idx === 0) {
+		// Already at brutal (top of TIER_ORDER_DESCENDING) — clamp.
+		return tier
+	}
+	const next = TIER_ORDER_DESCENDING[idx - 1]
+	if (next === undefined) {
+		logger.error({ tier, idx }, "stepUp: next-tier index unreachable")
+		throw errors.new("stepUp: next-tier unreachable")
+	}
+	return next
+}
+
+function stepDown(tier: Difficulty): Difficulty {
+	const idx = TIER_ORDER_DESCENDING.indexOf(tier)
+	if (idx < 0) {
+		logger.error({ tier }, "stepDown: tier not in known order")
+		throw errors.new("stepDown: unknown tier")
+	}
+	if (idx === TIER_ORDER_DESCENDING.length - 1) {
+		// Already at easy (bottom of TIER_ORDER_DESCENDING) — clamp.
+		return tier
+	}
+	const next = TIER_ORDER_DESCENDING[idx + 1]
+	if (next === undefined) {
+		logger.error({ tier, idx }, "stepDown: next-tier index unreachable")
+		throw errors.new("stepDown: next-tier unreachable")
+	}
+	return next
+}
+
+// SPEC §9.1 adaptive difficulty stepper. Pure function over the last
+// 10 in-session attempts: holds before the 10-attempt floor; steps up
+// on (accuracy ≥ 0.9 AND median latency < 0.8× threshold); steps down
+// on (accuracy ≤ 0.6 OR median latency > 1.2× threshold); holds
+// otherwise. The 0.8×/1.2× zone widths match PRD §4.2's "comfortably
+// under"/"well above" framing. Sub-phase 2 commit 1 lands the function
+// dormant; commit 2 wires it into the drill arm of getNextItem.
+function nextDifficultyTier(ctx: AdaptiveContext): Difficulty {
+	if (ctx.last10Correct.length < 10) {
+		return ctx.currentTier
+	}
+	const correctCount = ctx.last10Correct.filter(function isTrue(b) {
+		return b
+	}).length
+	const accuracy = correctCount / ctx.last10Correct.length
+	const medianLatency = median(ctx.last10LatencyMs)
+	if (accuracy >= 0.9 && medianLatency < ctx.latencyThresholdMs * 0.8) {
+		return stepUp(ctx.currentTier)
+	}
+	if (accuracy <= 0.6 || medianLatency > ctx.latencyThresholdMs * 1.2) {
+		return stepDown(ctx.currentTier)
+	}
+	return ctx.currentTier
 }
 
 function decodeRow(row: SelectedRow): { body: ItemBody; options: { id: string; text: string }[] } {
@@ -465,6 +534,7 @@ async function getNextItem(sessionId: string): Promise<ItemForRender | undefined
 }
 
 export type {
+	AdaptiveContext,
 	FallbackLevel,
 	ItemForRender,
 	ItemSelection,
@@ -480,5 +550,6 @@ export {
 	ErrUnsupportedStrategyForSubType,
 	getNextItem,
 	initialTierFor,
+	nextDifficultyTier,
 	selectionStrategyForSession
 }
