@@ -372,10 +372,13 @@ Three strategies per sub-type seeded from `src/config/strategies.ts`. The (`sub_
 | `strategy_id` | `uuid` | nullable, FK → `strategies.id` |
 | `embedding` | `vector(1536)` | nullable (set by `embeddingBackfillWorkflow`, or by `scripts/backfill-missing-embeddings.ts` for items inserted via the seed loader) |
 | `metadata_json` | `jsonb` | `notNull`, `default '{}'` |
+| `source_folder` | `varchar(128)` | nullable (basename of the source directory under `data/testbank/`; populated by the OCR pipeline's stage 2 ingest path; pre-2026-05-06 seed items carry NULL) |
+| `source_filename` | `varchar(256)` | nullable (basename of the source PNG; pairs with `source_folder`) |
 
 Indexes:
 - `items_sub_type_status_idx` on `(sub_type_id, status)` — primary lookup path for `getNextItem`.
 - `items_sub_type_difficulty_status_idx` on `(sub_type_id, difficulty, status)` — used by selection by tier.
+- `items_source_folder_idx` on `source_folder` — used by future admin-portal "show items from {folder}" filter queries (added 2026-05-06 in the testbank-re-extraction round per Q1 redline). At v1 bank scale (~440 rows post-round) Postgres uses Index Scan; at lower row counts (~50) the planner correctly chooses Seq Scan per SPEC §6.14.13.
 - `items_embedding_ivfflat_idx` on `embedding` using `ivfflat (embedding vector_cosine_ops) WITH (lists = 100)`.
 
 `metadata_json` shape (typed at the boundary, not enforced by the column):
@@ -390,6 +393,11 @@ Indexes:
     qualityScore?: number
 
     // Provenance for items entering the bank — set at ingest time.
+    // Note: `importSource` records ANSWER-EXTRACTION provenance (how the
+    // correct answer was determined), distinct from the `source_folder` /
+    // `source_filename` columns which record FOLDER provenance (which
+    // testbank source the screenshot came from). Both fields are populated
+    // by the OCR pipeline's stage 2; pre-2026-05-06 seed items omit both.
     importSource?: 'hand-seed' | 'ocr-visible' | 'ocr-solved' | 'generated'
     originalExplanation?: string  // verbatim text from a source screenshot, when extracted by the OCR pipeline
     sourceImageHash?: string       // SHA-256 of the source PNG; OCR-imported items only
@@ -666,12 +674,12 @@ Templates are versioned so a regeneration run can be associated with a specific 
 
 ### 4.5 `src/config/diagnostic-mix.ts`
 
-Hand-tuned array for the diagnostic. Each entry is `{ subTypeId, difficulty }`. Brutal-tier items are excluded. Distribution across the 14 v1 sub-types is currently **PROVISIONAL** at 46 entries (4 × 4 verbal blocks for antonyms / analogies / sentence_completion / critical_reasoning + 5 entries for letter_series + 5 × 4 numerical blocks for number_series / word_problems / fractions / percentages + 3 averages + 2 ratios; no entries yet for `numerical.workrate`, `numerical.speed_distance_time`, or `numerical.lowest_values`). The 50-item target is restored in a follow-up re-balance round once the testbank-re-extraction round provides empirical CCAT-prep ratios. Within each sub-type, tier mix is hand-picked from `easy / medium / hard` (no brutal); typical per-sub-type shapes:
+Hand-tuned array for the diagnostic. Each entry is `{ subTypeId, difficulty }`. Brutal-tier items are excluded. Distribution across the 14 v1 sub-types is **50 entries** under a clamped-proportional allocation: 14 sub-types × 3-entry floor + 8 proportional bonus via largest-remainders against empirical CCAT-prep ratios from `12min_prep_practice_{1..6}/` (204-item denominator). 8 sub-types receive 4 entries (the top 8 by empirical rank: `numerical.number_series`, `verbal.antonyms`, `verbal.sentence_completion`, `verbal.analogies`, `numerical.lowest_values`, `verbal.critical_reasoning`, `numerical.word_problems`, `numerical.percentages`); 6 sub-types stay at the 3-entry floor. Within each sub-type, tier mix is hand-picked from `easy / medium / hard` (no brutal); typical per-sub-type shapes:
 
 - 4-item verbal block: `[easy, medium, medium, hard]`.
 - 5-item numerical block: `[easy, medium, medium, medium, hard]`.
 
-The exact tier assignments are curated in the file rather than derived from a formula — the diagnostic is calibration-critical and a flat data file is more honest than an algorithm. The top comment in `src/config/diagnostic-mix.ts` carries the same provisional flag.
+The exact tier assignments are curated in the file rather than derived from a formula — the diagnostic is calibration-critical and a flat data file is more honest than an algorithm. The top comment in `src/config/diagnostic-mix.ts` documents the algorithm, the empirical anchor, and two forced tier substitutions for empirical-bank gaps (`numerical.workrate` substitutes `medium` for `easy`; `numerical.lowest_values` substitutes `medium` for `hard`). `targetQuestionCountFor` in `src/server/sessions/start.ts` derives from `diagnosticMix.length`; future mix changes propagate to the diagnostic's session quota automatically.
 
 ### 4.6 `src/config/difficulty-curves.ts`
 
@@ -1355,6 +1363,31 @@ The first two are config-table-row-state problems; the third is a schema-state p
 **Inverse-pattern reference (audit done correctly).** The v1-code-cleanup round (closed at `37ad762`) provides the well-handled-failure-mode contrast: that round's audit identified `review_queue` and `strategy_views` as schema files marked "shipped, vestigial — needs to be dropped from disk." The audit step verified each table was in `src/db/schemas/**` AND in the schema barrel before authoring the `DROP TABLE … CASCADE` migration, rather than assuming the doc-only-cuts round had eliminated them. The contrast is instructive: schema-state was verified live in v1-code-cleanup; row-state was assumed-from-config in the original phase5-data-wipe plan §2(b). The audit-against-live-state discipline applies in both directions (intent says "exists, should drop" → verify it's still on disk; intent says "should be at shape X post-prior-round" → verify it's actually at shape X).
 
 **Cross-references.** Plan: `docs/plans/phase5-data-wipe.md` §10.6 (Path (A) amendment) + §11 (round-close summary). Round commits where the pattern was empirically demonstrated: `8d3cf1d` (commit 1 — audit-finding inline + Path (A) amendment shipped), this commit (plan-doc formal §2(b) amendment + this SPEC entry). Inverse-pattern reference: `37ad762` (v1-code-cleanup commit 4 — schema-state verified live before authoring the `DROP TABLE` migration).
+
+#### 6.14.22 Audit claims about existing code semantics against the consuming code, not the producing code
+
+> **Captured 2026-05-06** (testbank-re-extraction round commit 6). Pattern surfaced from the round's commit 3 implementation, where the plan §2(c) framing claimed `metadata.importSource` was *"a legacy alias for `sourceFolder`"* — its semantics already align — based on a plan-write read of `scripts/_lib/explain.ts`. The actual semantic in the consuming code (`src/server/items/ingest.ts`'s `IngestRealItemInput.metadata.importSource` plus `scripts/generate-explanations.ts`'s `IngestPayload.metadata.importSource`) was different: the field carried answer-extraction-provenance values (`"ocr-visible"` | `"ocr-solved"`), NOT a folder name. The plan's claim of semantic equivalence between the existing field and the new `sourceFolder` was structurally inaccurate.
+
+When a plan's audit step makes a claim about an existing field's semantics ("X is a legacy alias for Y," "X already carries the same content as Y," "X's semantics already align with the new design"), the claim must be verified by reading the **consuming code** — the schemas, route handlers, ingest paths, and call sites that determine what values the field actually holds — not just the **producing code** (script libraries, helpers, defaults). Producing code reveals what values the field *might* be set to in one path; consuming code reveals what values the field *can* hold across all paths and what downstream code expects.
+
+**Three concrete failure modes this convention addresses:**
+
+- **Single-source-of-truth claims from single-source audit.** Plan-write reads one file (a script library), sees a field used in a particular way, and claims that's the field's semantic. The consuming Zod schema or interface says otherwise. Multi-source claims need multi-source audit.
+- **"Legacy alias" framing for fields with distinct semantics.** When a new design adds a field that *seems* to overlap an existing one, the plan-write may frame the existing field as a "legacy alias" or "renames-to." The actual semantic divergence is invisible until the implementation lands and the consuming code's type-checking surfaces the conflict. The plan should not claim semantic equivalence without evidence from both sides.
+- **Free-text fields with implicit type unions.** When a field's type is `string` (free-text), the plan can read different uses across different files and conclude they're the same semantic. They might be — or they might be a `'a' | 'b'` union encoded as a typeless string with implicit branching downstream. Only the consuming code makes the union explicit.
+
+**Convention going forward.** Round-open audits that make claims about existing field semantics (especially "X is an alias for Y" or "X already carries Z") get an explicit consuming-code verification step. The plan-write's audit findings include a `consumed-by` reference for any field whose semantic is load-bearing for the round's design — listing the files that read the field and the values they expect. If the consuming-code audit reveals divergence, the plan amends scope inline; the round's commits document the amendment.
+
+**Empirical instance from this round.** Plan-write §2(c) claimed `metadata.importSource` was *"a legacy alias for sourceFolder going forward — its semantics already align."* The consuming code read at commit 3 implementation time:
+- `src/server/items/ingest.ts:48-52` — `ingestMetadata` Zod schema: `importSource: z.string().min(1).max(64).optional()` — typeless free-text.
+- `src/server/items/ingest.ts:82-86` — `IngestRealItemInput.metadata.importSource?: string` — typeless.
+- `scripts/generate-explanations.ts` `IngestPayload.metadata.importSource: "ocr-visible" | "ocr-solved"` — explicit two-value union, NOT a folder name. This was the load-bearing signal: the field was an answer-extraction-provenance tag, not a folder alias.
+
+The two semantics (folder origin vs answer-extraction provenance) are complementary, not equivalent. Commit 3 preserved the existing semantic and added `sourceFolder` + `sourceFilename` as **distinct, complementary** top-level fields. The plan's framing was amended at commit 6's plan close.
+
+**Kinship to §6.14.21.** Both §6.14.21 (audit DB row-state against live DB) and this §6.14.22 (audit code semantics against consuming code) share a meta-pattern: audit assumptions must verify against the actual artifact, not the assumed shape. §6.14.21 specializes to runtime DB state vs. plan-time intended state; §6.14.22 specializes to code-semantic claims vs. single-source plan-write reads. Future-Claude reading either entry should consider the other for related-but-distinct lessons.
+
+**Cross-references.** Plan: `docs/plans/phase5-testbank-re-extraction.md` §2(c) (amended framing) + §14 (round-close summary). Round commits where the pattern was empirically demonstrated: `5b56627` (commit 3 — execution-time discrepancy + IngestPayload comment), this commit (plan-doc amendment + this SPEC entry). Sibling: §6.14.21 (DB row-state audit). §6.14.18 (framework constraint audit) is the shared parent — both are specializations of the broader "audit against actual artifact" discipline.
 
 ---
 

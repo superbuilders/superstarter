@@ -1,6 +1,6 @@
 # Plan — Testbank re-extraction (Phase 5 third operational round)
 
-> **Status: planning, approved-pending-redline, not yet implemented.** Round opens against `main` at HEAD `54775a9` post-data-wipe-close.
+> **Status: shipped 2026-05-06.** Round opened against `main` at HEAD `54775a9` post-data-wipe-close; closed at this commit. Six commits, fixed (the redline-expanded count from the original 5-commit plan-write held throughout): `663351f` (commit 1 — round open + stage-1/imported.jsonl archival), `bedbe4b` (commit 2 — schema migration: source_folder + source_filename columns + items_source_folder_idx), `5b56627` (commit 3 — pipeline: vision-input to explain pass + provenance pass-through + cost telemetry), `42c4481` (commit 4 — re-extract data/testbank/ end-to-end + verification), `9c99103` (commit 5 — diagnostic-mix rebalance to 50 with 3-floor + 8-proportional), this commit (commit 6 — round close + PRD/SPEC reconciliation + SPEC §6.14.22).
 
 This is the third operational round in Phase 5: taxonomy-restructure (`1710a91`) → data-wipe (`54775a9`) → testbank re-extraction (this round). The dev DB is in single-coherent-state post-data-wipe (sub_types=14 canonical, strategies=33 with `Partial<Record>` shape, items=50 at `status='live'` with embeddings 50/50, preserved auth tables intact). This round runs the OCR pipeline against `data/testbank/` to populate items under the 14-sub-type taxonomy from a substantially larger empirical bank, then re-balances `diagnosticMix` to 50 entries based on empirical per-sub-type ratios — the deferred Q1(b) work from the taxonomy round.
 
@@ -73,7 +73,9 @@ Three scripts in `scripts/`:
 
 > **Q1 redline-resolved 2026-05-06: column addition wins over metadata_json.** The plan-write recommendation was to extend `metadata_json` with `sourceFolder` + `sourceFilename` keys. Redline overrode on three counts: (a) the future admin-portal round (roadmap #2) will likely want "show items from {folder}" as a filter — column queries are faster + more durable than jsonb path queries; (b) the "future-lift if needed" argument cuts both ways — adding columns later requires a backfill migration from JSON, while adding columns now means data is queryable from day one; (c) cost is one small migration commit; benefit is queryability for the lifetime of the data. The minority case for metadata_json (debugging-only / ratchet-default-to-JSON) was undercut by the admin-portal forward dependency.
 
-**Decision: add `source_folder` + `source_filename` columns to the `items` table via Drizzle migration.** Both nullable `varchar` (the existing 50 seed items have no provenance; columns must accept NULL for those rows). The `metadata_json.importSource` key continues to be populated by stage 2 for backward-compatibility with the 50 existing items and as a self-contained record on each row; new items populate both columns AND the metadata_json key. A future cleanup round can drop `importSource` from `metadata_json` once all items have columns populated.
+**Decision: add `source_folder` + `source_filename` columns to the `items` table via Drizzle migration.** Both nullable `varchar` (the existing 50 seed items have no provenance; columns must accept NULL for those rows). The `metadata_json.importSource` key continues to be populated by stage 2 — see the amendment below.
+
+> **Plan-write framing amended at commit 6 round-close per finding from commit 3:** the original §2(c) text described `metadata_json.importSource` as *"a legacy alias for `sourceFolder`"*. That framing was inaccurate. The existing `metadata_json.importSource` field has its own answer-extraction-provenance semantic, with two values — `"ocr-visible"` (answer was visible on the screenshot, used directly) and `"ocr-solved"` (answer was not visible, computed via solve+verify). It is **NOT** a folder name and was never meant to alias `sourceFolder`. The plan-write read of the field's semantic was based on inspecting `scripts/_lib/explain.ts` alone; the consuming code at `src/server/items/ingest.ts` (`IngestRealItemInput.metadata.importSource`) and `scripts/generate-explanations.ts` (`IngestPayload.metadata.importSource`) made the actual semantic explicit. Commit 3 preserved the field at its existing semantic and added `sourceFolder` + `sourceFilename` as **distinct, complementary** top-level fields. Both record provenance from different angles (folder origin vs. answer-extraction method); neither aliases the other. SPEC §6.14.22 (added in this round-close commit) generalizes the audit-claim-vs-actual-code lesson.
 
 **Schema shape (commit 2 — schema-migration commit, see §9 for cluster):**
 
@@ -152,6 +154,8 @@ The 50 existing seed items don't have provenance metadata (they came from `src/d
 | `12min_numerical_summary` | UNCLEAR — empirical observation needed |
 
 Post-stage-1 verification scenario: for each clearly-mapped folder, ≥80% of stage-1 JSONs should classify into the expected sub-type. If a folder lands <50% in the expected sub-type, the tagger has a misclassification cluster worth investigating before stage 2 runs (correcting at the stage-1-JSON level is cheaper than re-extracting). The 80% threshold accounts for legitimate within-folder variance (some `12min_general_arithmetic` items might use percent-symbols, legitimately classifying as `percentages`).
+
+> **Plan-write framing amended at commit 6 round-close per finding (b):** the original §2(d) text said *"12 of 16 ground-truth-from-naming folders"*. The actual count is **14 of 16** (the 16-folder topic set has 14 with clear ground-truth mappings + 2 unclear: `12min_advanced_topics` and `12min_numerical_summary`). The 14-vs-12 difference traces to a plan-write enumeration miscount that landed in the audit; the 80% threshold + the unclear-folders-excluded discipline both apply per the original framing's intent.
 
 ### 2(e) Stage-1 JSON disposition
 
@@ -296,7 +300,7 @@ const ingestBody = {
 }
 ```
 
-3. **`scripts/_lib/extract.ts`** — extract prompt unchanged for this round. The `isTextOnly` check stays as-is (it filters items where any *option* is non-text, which is what we want; the chart-bearing question stems with text-only options remain `isTextOnly: true` and proceed through the pipeline).
+3. **`scripts/_lib/extract.ts`** — extract prompt unchanged for this round. The `isTextOnly` check stays as-is. **Plan-write framing amended at commit 6 round-close per finding (c):** the filter is more aggressive than the original §2(b) text characterized. Reading the actual prompt at `scripts/_lib/extract.ts:91` — *"Set 'isTextOnly': false if ANY of the answer choices is a chart, shape, image, or visual diagram. Set it true only if the entire question and every option is plain text."* — confirms the filter drops items where the **question stem** has visual content, not just items where the **options** are visual. Chart-bearing question stems with text-only options are filtered out by the LLM's classification despite the round's DEPARTURE 2 capability handling exactly that case. Empirical impact: 7 items dropped at stage 1 for "visual content" (most of which were likely chart-in-stem candidates); only 1 item slipped through to land as a chart-described item in the bank. Future-round scope candidate: relax the filter to allow chart-stems-with-text-options to flow into stage 2 where DEPARTURE 2's chart-description capability can fire.
 
 4. **`scripts/import-questions.ts`** — stage 1 emits `sourceFolder` (extracted from `path.basename(path.dirname(sourceImagePath))`) + `sourceFilename` (`path.basename(sourceImagePath)`) into the stage-1 JSON.
 
@@ -565,31 +569,31 @@ These are deliberately not addressed in this round:
 
 ## 13. Open questions / resolutions
 
-Seven questions surfaced at plan-write. **All seven resolved at redline 2026-05-06.** No remaining open questions at plan-greenlight.
+Seven questions surfaced at plan-write; all seven resolved at redline 2026-05-06 and **shipped 2026-05-06**. Per-resolution commit hashes captured below.
 
 ### 13.1 Q1 — Source-provenance storage shape (DEPARTURE 3)
 
-**Resolved at redline 2026-05-06: column addition wins over metadata_json.** Plan-write recommendation was metadata_json extension; redline overrode in favor of two new nullable varchar columns (`source_folder` + `source_filename`) plus an `items_source_folder_idx` index. Rationale per §2(c) (rewritten this round): (a) the future admin-portal round (roadmap #2) will likely want "show items from {folder}" as a filter, and column queries are faster + more durable than jsonb path queries; (b) the "future-lift if needed" argument cuts both ways — adding columns later requires backfilling from JSON, while adding columns now means data is queryable from day one; (c) cost is one small migration commit, benefit is queryability for the lifetime of the data. `metadata_json.importSource` is kept for backward-compat with the 50 pre-round seed items + new items also write through; a future cleanup round can drop the JSON key. **Schema migration adopts its own commit (commit 2) per migration-discipline split — see §10.**
+**Resolved + shipped 2026-05-06 at commit 2 (`bedbe4b`) + commit 3 (`5b56627`): column addition wins over metadata_json.** Plan-write recommendation was metadata_json extension; redline overrode in favor of two new nullable varchar columns (`source_folder` + `source_filename`) plus an `items_source_folder_idx` index. Rationale per §2(c) (rewritten this round): (a) the future admin-portal round (roadmap #2) will likely want "show items from {folder}" as a filter, and column queries are faster + more durable than jsonb path queries; (b) the "future-lift if needed" argument cuts both ways — adding columns later requires backfilling from JSON, while adding columns now means data is queryable from day one; (c) cost is one small migration commit, benefit is queryability for the lifetime of the data. `metadata_json.importSource` is kept for backward-compat with the 50 pre-round seed items + new items also write through; a future cleanup round can drop the JSON key. **Schema migration adopts its own commit (commit 2) per migration-discipline split — see §10.**
 
 ### 13.2 Q2 — Stage-1 JSON disposition (§2(e))
 
-**Resolved at redline 2026-05-06: archive to `scripts/_stage1_old_2026-05-06/` before re-extraction starts.** Plan-write recommendation accepted. Rationale: preserves audit trail; allows cross-reference of old-taxonomy classification vs new-taxonomy classification if a tagger-correctness investigation surfaces; low cost.
+**Resolved + shipped 2026-05-06 at commit 1 (`663351f`): archive to `scripts/_stage1_old_2026-05-06/`.** Plan-write recommendation accepted. Rationale: preserves audit trail; allows cross-reference of old-taxonomy classification vs new-taxonomy classification if a tagger-correctness investigation surfaces; low cost.
 
 ### 13.3 Q3 — `imported.jsonl` disposition
 
-**Resolved at redline 2026-05-06: archive to `scripts/_logs/imported.jsonl_old_2026-05-06` and start fresh, with explicit caveat captured.** Plan-write recommendation accepted with one tightening: commit 1's body and the round-close summary in commit 6 must explicitly call out that archived stale entries describe items no longer in DB (data-wipe round zeroed the items table); future-Claude reading the archive sees a historical record but should NOT treat it as source-of-truth for what's currently in the bank. Rationale: the data-wipe round zeroed the items table but did NOT delete `imported.jsonl`; stale entries pointing at no-longer-existing items would cause stage 2 to skip fresh inserts under the existing source-image-hash idempotency. Archive shape mirrors §2(e).
+**Resolved + shipped 2026-05-06 at commit 1 (`663351f`): no-op (file absent at round-open); caveat captured for any future round where the file is present.** Plan-write recommendation accepted with one tightening: commit 1's body and the round-close summary in commit 6 must explicitly call out that archived stale entries describe items no longer in DB (data-wipe round zeroed the items table); future-Claude reading the archive sees a historical record but should NOT treat it as source-of-truth for what's currently in the bank. Rationale: the data-wipe round zeroed the items table but did NOT delete `imported.jsonl`; stale entries pointing at no-longer-existing items would cause stage 2 to skip fresh inserts under the existing source-image-hash idempotency. Archive shape mirrors §2(e).
 
 ### 13.4 Q4 — Diagnostic-mix per-sub-type allocation algorithm (§2(f))
 
-**Resolved at redline 2026-05-06: clamped proportional, minimum 3 entries per sub-type (was 2 in plan-write draft).** Plan-write recommendation overridden in favor of a higher floor. Rationale per §2(f) (rewritten this round): SPEC §9.3's mastery-computation per-sub-type-floor requires >= 3 attempts; 2 attempts doesn't reach the floor; mastery state stays at `'unknown'` for sub-types with fewer than 3 entries in the diagnostic. The diagnostic's whole product purpose (per PRD §4.1) is calibrating mastery state on the user's first session; per-sub-type unreliability would produce a Mastery Map with `'unknown'` cells, defeating the diagnostic's purpose. Tradeoff: 3-floor gives mastery-computation more reliable per-sub-type signal at the cost of less proportional differentiation (only 8 entries free for proportional allocation, vs. 22 under the 2-floor draft). The empirical anchor itself is small-N (six prep tests), so high-confidence proportional differentiation is overstated as a payoff. **14 × 3 = 42 reserved + 8 proportional = 50 total.**
+**Resolved + shipped 2026-05-06 at commit 5 (`9c99103`): clamped proportional, minimum 3 entries per sub-type (was 2 in plan-write draft, 3 per redline).** Plan-write recommendation overridden in favor of a higher floor. Rationale per §2(f) (rewritten this round): SPEC §9.3's mastery-computation per-sub-type-floor requires >= 3 attempts; 2 attempts doesn't reach the floor; mastery state stays at `'unknown'` for sub-types with fewer than 3 entries in the diagnostic. The diagnostic's whole product purpose (per PRD §4.1) is calibrating mastery state on the user's first session; per-sub-type unreliability would produce a Mastery Map with `'unknown'` cells, defeating the diagnostic's purpose. Tradeoff: 3-floor gives mastery-computation more reliable per-sub-type signal at the cost of less proportional differentiation (only 8 entries free for proportional allocation, vs. 22 under the 2-floor draft). The empirical anchor itself is small-N (six prep tests), so high-confidence proportional differentiation is overstated as a payoff. **14 × 3 = 42 reserved + 8 proportional = 50 total.**
 
 ### 13.5 Q5 — Diagnostic-mix target count
 
-**Resolved at redline 2026-05-06: 50 entries, matching PRD §4.1's 50-question-diagnostic contract.** Plan-write recommendation accepted. Rationale: PRD §4.1 explicitly states "50-question calibration test"; the `PROVISIONAL` 46 in the current mix is the data-wipe-round-Q1 deferral, not a permanent 46-question intent. The data-wipe-round-commit-2 derivation makes this propagate without code edit.
+**Resolved + shipped 2026-05-06 at commit 5 (`9c99103`): 50 entries, matching PRD §4.1's 50-question-diagnostic contract.** Plan-write recommendation accepted. Rationale: PRD §4.1 explicitly states "50-question calibration test"; the `PROVISIONAL` 46 in the current mix is the data-wipe-round-Q1 deferral, not a permanent 46-question intent. The data-wipe-round-commit-2 derivation makes this propagate without code edit.
 
 ### 13.6 Q6 — Chart-description integration shape (DEPARTURE 2)
 
-**Resolved at redline 2026-05-06: explain pass takes the source PNG as a vision-input alongside the text content; explain prompt instructs the LLM to describe chart data in the recognition step. Two implementation details captured per redline:**
+**Resolved + shipped 2026-05-06 at commit 3 (`5b56627`) + commit 4 (`42c4481`): explain pass takes the source PNG as a vision-input alongside the text content; explain prompt instructs the LLM to describe chart data in the recognition step. Two implementation details captured per redline (both verified empirically at commit 4):**
 
 - **Vision-model verification.** Verified at plan-write: all four pipeline models in `scripts/_lib/anthropic.ts:58-61` are pinned to `claude-sonnet-4-6` (EXTRACT/SOLVE/VERIFY/EXPLAIN). Sonnet 4.6 is vision-capable (already used by EXTRACT pass). No model migration needed; the existing EXPLAIN_MODEL accepts image content blocks unchanged.
 - **Cost telemetry.** Per architecture-plan's "LLM spend runs away" mitigation discipline: `writeStructuredExplanation` logs token usage per call (input text tokens, image tokens, output tokens); stage 2 aggregates per-call tokens into a per-run summary; commit 4's verification report records total stage-2 invocations, chart-bearing-call count, per-call mean input tokens for chart vs. text-only, total cost increment estimate from chart-bearing calls.
@@ -598,9 +602,100 @@ Plan-write rationale per §5 stands: per-item judgment ("is this chart relevant 
 
 ### 13.7 Q7 — Tagger spot-check threshold (§2(d))
 
-**Resolved at redline 2026-05-06: 80% threshold per clearly-mapped topic folder; 12 of 16 topic folders apply (the 2 unclear folders `12min_advanced_topics` + `12min_numerical_summary` are excluded from threshold check and observed empirically as a data point).** Plan-write recommendation accepted. Rationale: accommodates legitimate within-folder variance (e.g., a `12min_general_arithmetic` item using percent-symbols legitimately classifying as `numerical.percentages`); flags any folder dropping below 80% as an investigation candidate before commit 5 (diagnostic-mix re-balance) ships. The 2 unclear folders' classification distribution is reported in commit 4's body for forward-reference value.
+**Resolved + shipped 2026-05-06 at commit 4 (`42c4481`): 80% threshold per clearly-mapped topic folder; 14 of 16 topic folders apply (the 2 unclear folders `12min_advanced_topics` + `12min_numerical_summary` are excluded from threshold check and observed empirically as a data point — the plan-write "12 of 16" was a typo per finding (b) at round-close, amended inline in §2(d)). Empirical result at commit 4: 13 of 14 ground-truth folders pass; 1 miss (`12min_ratios` at 45%) tracked as round finding (a) for tagger-improvement follow-up.**
 
-## 14. Inputs from prior rounds carrying forward
+## 14. Round-close summary
+
+> **Round closed 2026-05-06.** Six commits as projected at the redline-expanded plan; commit count held throughout (the Q1 redline split commit 2 from commit 3 per migration-discipline; no further splits in flight).
+
+**Final commit shape (in order):**
+
+1. `663351f` — `docs+chore: open phase5-testbank-re-extraction round; archive stale stage-1 JSONs + imported.jsonl`. Plan ships at planning status; stage-1 archived to `scripts/_stage1_old_2026-05-06/` (99 stale JSONs preserved); `imported.jsonl` archival was a no-op (file absent at round-open). Q3 caveat captured for any future round where `imported.jsonl` is present.
+
+2. `bedbe4b` — `feat(schema): add source_folder + source_filename columns to items + items_source_folder_idx`. Three-statement Drizzle migration (`drizzle/0003_simple_stryfe.sql`); two nullable varchars + one btree index. All 50 pre-round seed items at NULL on the new columns; backward-compat preserved.
+
+3. `5b56627` — `feat(scripts+ingest): pass screenshot to explain pass; capture source-provenance via items columns`. Six files edited: `scripts/_lib/explain.ts` (vision-input parameter + chart-description prompt + cost-telemetry return), `scripts/import-questions.ts` (provenance fields in stage-1 JSON), `scripts/generate-explanations.ts` (image pass-through + telemetry aggregation + provenance threading), `scripts/regenerate-explanations.ts` (signature cascade absorbed per §6.14.19), `src/server/items/ingest.ts` + `src/app/api/admin/ingest-item/route.ts` (top-level provenance fields, schema mirror).
+
+4. `42c4481` — `chore(testbank): re-extract data/testbank/ under 14-subtype taxonomy`. End-to-end run: 397 PNGs → 389 stage-1 JSONs (8 lost: 7 visual-content skipped + 1 extract failure) → 389 ingested (100% stage-2 success). Items 50 → 439. All 14 sub-types non-zero including the 3 new ones. Cost-telemetry recorded (~$8-12 round total). EXPLAIN Seq→Index transition empirically captured between 50 and 439 rows.
+
+5. `9c99103` — `feat(diagnostic-mix): rebalance to 50 entries with 3-floor + 8-proportional per CCAT-prep empirical distribution`. 46 → 50 entries; 14 × 3 floor + 8 proportional via largest-remainders; 8 sub-types at 4 entries (top empirical-rank), 6 at 3 entries. New mastery-reachability test added. Test count baseline shifts from 37 to **38**. Two forced tier substitutions (numerical.workrate easy → medium, numerical.lowest_values hard → medium) due to bank-distribution gaps.
+
+6. (this commit) — `docs(plan+prd+spec): close phase5-testbank-re-extraction round; reconcile PRD §3.1 + §4.1 + SPEC §3.3 metadata + columns; add §6.14.22`. Plan status flip; formal §2(b)/(c)/(d) amendments per round findings; PRD/SPEC reconciliation; SPEC §6.14.22 added (audit-claim-vs-actual-code pattern).
+
+**Pre/post item count delta:** 50 → **439** (+389 newly-ingested under the 14-sub-type taxonomy; 50 pre-round seed items preserved at NULL provenance per the columns' nullable shape).
+
+**Empirical bank coverage** (from commit 4's verification):
+
+| sub-type | n | sub-type | n |
+|---|---|---|---|
+| numerical.averages | 18 | verbal.analogies | 43 |
+| numerical.fractions | 15 | verbal.antonyms | 35 |
+| numerical.lowest_values | 33 (NEW) | verbal.critical_reasoning | 59 |
+| numerical.number_series | 49 | verbal.letter_series | 16 |
+| numerical.percentages | 31 | verbal.sentence_completion | 59 |
+| numerical.ratios | 15 | | |
+| numerical.speed_distance_time | 16 (NEW) | | |
+| numerical.word_problems | 39 | | |
+| numerical.workrate | 11 (NEW) | | |
+
+**Tagger correctness:** 13 of 14 ground-truth folders pass ≥80% threshold (per Q7 redline). One miss: `12min_ratios` at 45% — captured as finding (a) below.
+
+**Three departures shipped:**
+
+- **DEPARTURE 1 (no-solve-verify):** input set had answers visible in every screenshot; the solve+verify branch was unreachable. Code preserved as defensive fallback (no removal — out of round scope).
+- **DEPARTURE 2 (chart-as-text-in-explanation):** vision-input pass + chart-description prompt clause shipped in commit 3. Capability verified via the 1 chart-bearing item that landed in the bank (`12min_advanced_topics/q11.png`). Lower-than-estimated input set (1 vs 5-15) due to the isTextOnly filter aggression — finding (c) below.
+- **DEPARTURE 3 (source-provenance via columns):** 389/389 newly-ingested items carry `source_folder` + `source_filename` populated per Q1 redline. Future admin-portal "show items from {folder}" filter is a column-query away.
+
+**Reading B architectural posture endorsed across rounds:** `targetQuestionCountFor` derives from `diagnosticMix.length`; commit 5 grew the mix from 46 to 50 and the session quota propagated automatically with **no `start.ts` edit**. Spot-check on the newest diagnostic session confirmed `practice_sessions.target_question_count = 50`. The data-wipe round shipped the derivation; this round exercised it cleanly.
+
+**Cost telemetry:**
+
+- Stage 2 (per commit 4 telemetry): 1,426,677 input tokens + 85,863 output tokens across 389 image-bearing calls @ Sonnet 4.6 ≈ **$5.57**.
+- Stage 1 + ingest-workflow embeddings + ad-hoc verification: rough ballpark **$2-7**.
+- **Round total: ~$8-12.**
+
+**Round findings (5 items, all tracked for future rounds):**
+
+(a) **`12min_ratios` tagger miss** — 45% per-folder threshold (6 of 11 misclassified as `numerical.word_problems`). Likely cause: prose ratio framing vs `a:b` notation; tagger disambiguation rule favors `a:b`. Tracked for tagger-improvement follow-up round.
+
+(b) **Plan §2(d) folder-count typo** — "12 of 16 ground-truth folders" should be **"14 of 16 ground-truth + 2 unclear"**. Amended inline in §2(d) of this plan at commit 6.
+
+(c) **isTextOnly filter aggression** — `scripts/_lib/extract.ts:91` drops items whose question stem has visual content, not just items with chart options. Plan §2(b) framing was inaccurate. Reduced DEPARTURE 2's input set from 5-15 estimated to 1 actual. Future-round scope candidate: relax filter to allow chart-stems-with-text-options through. Amended inline in §2(b) of this plan at commit 6.
+
+(d) **EXPLAIN Seq→Index transition** between 50 and 439 rows confirmed empirically per SPEC §6.14.13 (dev-vs-prod planner choice). Not a regression; expected planner behavior.
+
+(e) **Two forced tier substitutions in diagnostic-mix** — `numerical.workrate` at `easy` (0 items) → substituted with `medium`; `numerical.lowest_values` at `hard` (0 items) → substituted with `medium`. Same root cause class as (a): tagger classification artifacts produced bank-distribution gaps. Tracked alongside (a) for tagger-improvement follow-up round.
+
+**Closed-plans-immutable verified** (per SPEC §6.14.20 + Q3 caveat in commit 1's body about archived-but-stale `imported.jsonl`/`_stage1` describing items no longer in DB):
+
+  Closed plans verified at zero `git diff HEAD --` lines:
+    `phase5-data-wipe.md`, `phase5-post-session-review.md`,
+    `phase5-v1-code-cleanup.md`, `phase5-taxonomy-restructure.md`,
+    `phase3-diagnostic-flow.md`, `phase3-drill-mode.md`,
+    `phase3-mastery-map.md`, `phase3-heartbeats-and-cron.md`,
+    `phase-3-practice-surface.md`,
+    `phase-3-polish-practice-surface-features.md`,
+    `focus-shell-post-overhaul-fixes.md`,
+    `opaque-option-ids-and-pipeline-split.md`,
+    `ocr-import-screenshots.md`.
+
+  Q3 caveat: `scripts/_stage1_old_2026-05-06/` and (had it been
+  present) `scripts/_logs/imported.jsonl_old_2026-05-06` are
+  historical record only; future-Claude reading those archives sees
+  stale state that does NOT match the current bank.
+
+**Test count baseline shifts to 38/38** from this round forward. The new `masteryReachability` test in `src/config/diagnostic-mix.test.ts` guards the 3-entry per-sub-type floor; future mix changes that violate the SPEC §9.3 mastery-floor invariant will fail this test.
+
+**Next rounds unblocked:**
+
+- **Tagger-improvement round** — covers findings (a) and (e). Sharpen the tagger prompt for ratio prose (vs a:b notation), workrate easy-tier classification, and lowest_values hard-tier classification. Independent of other rounds; any future testbank ingestion benefits.
+- **Strategy-authoring round** — `numerical.workrate`, `numerical.speed_distance_time`, `numerical.lowest_values` now have empirical bank coverage but no strategy entries (per the `Partial<Record>` shape from taxonomy round Q4). Authors three strategies per sub-type per the existing convention. Independent; can run parallel.
+- **isTextOnly filter relaxation round** — covers finding (c). Allows chart-in-stem items with text-only options to flow into stage 2 where DEPARTURE 2's chart-description capability handles them. Out of scope here; touch `scripts/_lib/extract.ts:91`.
+- **Phase 5 sub-phase 2 adaptive walker** — the next sub-phase work per `docs/plans/phase5-master-plan.md`; the dev DB now has the empirical bank size needed for adaptive-difficulty selection to exercise meaningfully.
+
+**Production deploy** remains gated on Leo's no-deploy-until-feature-complete decision; this round was dev-only, same as the predecessor rounds.
+
+## 15. Inputs from prior rounds carrying forward
 
 - **From taxonomy-restructure round** (`1710a91`): the 14-sub-type canonical taxonomy in `src/config/sub-types.ts`; the `Partial<Record<SubTypeId, …>>` strategy-config shape with three sub-types unallocated; the diagnostic-mix at 46 entries with the deferred re-balance.
 - **From data-wipe round** (`54775a9`): the dev DB at single-coherent-state (sub_types=14, strategies=33, items=50 at status='live' with 50/50 embeddings, preserved auth tables); the `targetQuestionCountFor` derivation from `diagnosticMix.length` (commit 2 / `647a609`); SPEC §6.14.21 (live-DB-state-audit pattern); the operational-script convention (`scripts/dev/wipe-practice-data.ts` shape).
