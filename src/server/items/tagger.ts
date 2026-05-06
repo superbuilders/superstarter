@@ -142,7 +142,7 @@ function buildSystemPrompt(): string {
 		'- "%" symbol or the word "percent" → numerical.percentages.',
 		"- a/b fraction notation as operands → numerical.fractions.",
 		'- "average"/"mean" of a value set → numerical.averages.',
-		'- a:b ratio notation → numerical.ratios.',
+		'- a:b ratio notation, OR proportional/unit-rate reasoning ("X items cost Y, what about Z items?"; "X cost Y per unit, total for N units?"; "A is k times B; given A+B, find A or B"; "scale up/down by factor") → numerical.ratios.',
 		'- combined-work or rate-of-completion ("A and B together can…") → numerical.workrate.',
 		'- speed / distance / time scenario → numerical.speed_distance_time.',
 		'- compare a small set of numeric expressions → numerical.lowest_values.',

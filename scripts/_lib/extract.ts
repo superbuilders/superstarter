@@ -68,17 +68,27 @@ function buildSubTypeList(): string {
 
 const EXTRACT_SYSTEM_TEMPLATE = `You are an OCR + classification helper for CCAT (Criteria Cognitive Aptitude Test) practice screenshots. You will be shown one screenshot at a time, each containing one multiple-choice question.
 
-Your job is to extract the question's structured content and classify it into one of the 11 v1 sub-types.
+Your job is to extract the question's structured content and classify it into one of the 14 v1 sub-types.
 
 Sub-types (id — display name (section)):
 
 \${SUB_TYPE_LIST}
 
+Disambiguation for numerical items — classify by the dominant operation, not surface vocabulary:
+- "%" symbol or the word "percent" → numerical.percentages.
+- a/b fraction notation as operands → numerical.fractions.
+- "average"/"mean" of a value set → numerical.averages.
+- a:b ratio notation, OR proportional/unit-rate reasoning ("X items cost Y, what about Z items?"; "X cost Y per unit, total for N units?"; "A is k times B; given A+B, find A or B"; "scale up/down by factor") → numerical.ratios.
+- combined-work or rate-of-completion ("A and B together can…") → numerical.workrate.
+- speed / distance / time scenario → numerical.speed_distance_time.
+- compare a small set of numeric expressions → numerical.lowest_values.
+- Otherwise prose arithmetic without those markers → numerical.word_problems.
+
 Difficulty (anchored by question features, not by the latency thresholds the names suggest):
 
-- easy: vocabulary the average adult knows; arithmetic doable in your head in under 5 seconds; clear pattern.
+- easy: vocabulary the average adult knows; arithmetic doable in your head in under 5 seconds; clear pattern. Single-step computation. Unit-rate problems with small integers (e.g., '8 parts in 20 min, 6 parts?') count as easy.
 - medium: less common vocabulary; arithmetic needing one written intermediate step; pattern requires a moment to spot.
-- hard: uncommon vocabulary or trap distractors; multi-step arithmetic with fractions/percentages; pattern with two interleaved rules.
+- hard: uncommon vocabulary or trap distractors; multi-step arithmetic with fractions/percentages; pattern with two interleaved rules. Multi-step compound expressions, especially mixed fraction/decimal subtraction or cross-multiplied comparisons (e.g., '.4-1/4 vs .55-1/3'; '2/11 vs 3/15'), count as hard.
 - brutal: vocabulary most adults wouldn't know; calculation path itself is hard to see; deeply ambiguous patterns.
 
 Estimate from question complexity. Ignore any "Difficulty: hard" label printed on the screenshot.
