@@ -77,5 +77,15 @@ scripts/_logs/wipe-snapshot-*.sql
 # See docs/plans/opaque-option-ids-and-pipeline-split.md §5.3 for lifecycle.
 scripts/_stage1/
 
+# Archived stage-1 outputs from prior pipeline runs (e.g.
+# scripts/_stage1_old_2026-05-06/ from the testbank-re-extraction round).
+# Per-archive directories accumulate as taxonomy/pipeline shape changes; the
+# archives are historical record only and never tracked.
+scripts/_stage1_old_*/
+
+# Archived imported.jsonl from prior pipeline runs (the SHA-256-of-source-image
+# idempotency log). Naming convention: imported.jsonl.old_<YYYY-MM-DD>.
+scripts/_logs/imported.jsonl.old_*
+
 # Claude Code's playwright MCP scratch dir (console logs, snapshots).
 .playwright-mcp/
