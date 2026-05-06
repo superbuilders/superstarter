@@ -51,15 +51,39 @@ test("shuffledDiagnosticOrder: multiset invariance — every permutation is the 
 	}
 })
 
-// Length is 46 under the provisional taxonomy-restructuring allocation
-// (synonyms cut, three new sub-types not yet allocated). The session
-// quota of 50 is not enforced here; selection.ts handles bank
-// fallback when the mix runs out. The full re-balance to 50 is a
-// separate round.
-test("shuffledDiagnosticOrder: permutation length === 46 (provisional)", function lengthCheck() {
+// Length is 50 post the testbank-re-extraction round commit 5
+// rebalance: 14 sub-types × 3 floor + 8 proportional = 50 entries.
+// targetQuestionCountFor in start.ts derives from this length per the
+// data-wipe-round commit 2 fix; growing or shrinking diagnosticMix
+// auto-updates the diagnostics session quota.
+test("shuffledDiagnosticOrder: permutation length === 50", function lengthCheck() {
 	const a = shuffledDiagnosticOrder("00000000-0000-0000-0000-000000000001")
-	expect(a.length).toBe(46)
-	expect(diagnosticMix.length).toBe(46)
+	expect(a.length).toBe(50)
+	expect(diagnosticMix.length).toBe(50)
+})
+
+// Mastery-reachability invariant (Q4 motivation made testable):
+// every sub-type in the diagnostic mix must have >= 3 entries so the
+// SPEC §9.3 mastery-computation per-sub-type-floor is reachable on
+// the users first session. If a sub-type drops below 3,
+// mastery state for that sub-type stays at unknown post-diagnostic —
+// the failure mode the diagnostic exists to prevent.
+test("diagnosticMix: every sub-type has at least 3 entries (mastery floor)", function masteryReachability() {
+	const counts = new Map<string, number>()
+	for (const e of diagnosticMix) {
+		const prev = counts.get(e.subTypeId)
+		let next: number
+		if (prev === undefined) {
+			next = 1
+		} else {
+			next = prev + 1
+		}
+		counts.set(e.subTypeId, next)
+	}
+	for (const [, n] of counts) {
+		expect(n).toBeGreaterThanOrEqual(3)
+	}
+	expect(counts.size).toBe(14)
 })
 
 test("shuffledDiagnosticOrder: pinned-output regression for sessionId '00000000-0000-0000-0000-000000000001'", function pinnedOutput() {
@@ -68,11 +92,11 @@ test("shuffledDiagnosticOrder: pinned-output regression for sessionId '00000000-
 	// rather than silently changing user-visible diagnostic order.
 	const result = shuffledDiagnosticOrder("00000000-0000-0000-0000-000000000001")
 	const expectedFirstFive: DiagnosticEntry[] = [
-		{ subTypeId: "numerical.word_problems", difficulty: "medium" },
-		{ subTypeId: "verbal.antonyms", difficulty: "hard" },
-		{ subTypeId: "numerical.word_problems", difficulty: "hard" },
-		{ subTypeId: "numerical.number_series", difficulty: "medium" },
-		{ subTypeId: "verbal.analogies", difficulty: "medium" }
+		{ subTypeId: "verbal.analogies", difficulty: "hard" },
+		{ subTypeId: "numerical.averages", difficulty: "easy" },
+		{ subTypeId: "numerical.number_series", difficulty: "hard" },
+		{ subTypeId: "numerical.lowest_values", difficulty: "medium" },
+		{ subTypeId: "verbal.critical_reasoning", difficulty: "easy" }
 	]
 	expect(result.slice(0, 5)).toEqual(expectedFirstFive)
 })

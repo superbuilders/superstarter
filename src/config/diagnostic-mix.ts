@@ -5,23 +5,36 @@ interface DiagnosticEntry {
 	difficulty: Exclude<Difficulty, "brutal">
 }
 
-// PROVISIONAL allocation pending the testbank-re-extraction round.
+// 50-entry diagnostic mix — empirical-anchor allocation shipped 2026-05-06
+// (phase5-testbank-re-extraction round commit 5).
 //
-// This mix updates sub-type ids to the new 14-sub-type taxonomy
-// (synonyms cut, logic→critical_reasoning, letter_series moved to
-// verbal, averages_ratios split into averages+ratios) but DEFERS the
-// full re-balance to a later round per Q1 of the taxonomy-restructuring
-// redline. The current shape is "old shape minus synonyms" — synonyms'
-// 4 entries are gone with no replacement, three new numerical sub-types
-// (workrate, speed_distance_time, lowest_values) are absent until
-// testbank re-extraction provides the empirical anchor for a confident
-// 50-item allocation. Length is currently 46.
+// Allocation algorithm (Q4 redline-resolved): clamped proportional with
+// a 3-entry minimum floor per sub-type.
+//   - 14 sub-types × 3 floor = 42 entries reserved (covers SPEC §9.3's
+//     mastery-computation per-sub-type-floor of >=3 attempts; the
+//     diagnostic's whole product purpose is calibrating mastery state,
+//     and the floor guarantees no sub-type stays at 'unknown' on the
+//     user's first session).
+//   - 8 entries allocated proportionally to the most-prevalent sub-types
+//     in the empirical CCAT-prep distribution (per-sub-type counts from
+//     items where source_folder LIKE '12min_prep_practice_%' across the
+//     6 prep-practice folders, totaling 204 items).
+//   - Largest-remainders method against an 8-entry budget assigned the
+//     +1 bonus to the top 8 sub-types by empirical count: number_series,
+//     antonyms, sentence_completion, analogies, lowest_values,
+//     critical_reasoning, word_problems, percentages.
 //
-// Brutal-tier items remain excluded (no diagnostic should produce a
-// 0%-accuracy band that contaminates the mastery computation). Within
-// each sub-type the tier mix favors medium with one easy and one hard
-// (4-item blocks) or one easy and one hard with three mediums (5-item
-// blocks).
+// Total: 50 entries (8 sub-types × 4 entries + 6 sub-types × 3 entries).
+//
+// Tier mix per sub-type (no brutal — the diagnostic must not produce
+// 0%-accuracy bands that contaminate mastery):
+//   - 4-entry blocks: easy + medium + medium + hard.
+//   - 3-entry blocks: easy + medium + hard.
+//
+// targetQuestionCountFor in start.ts derives from diagnosticMix.length
+// per the data-wipe-round commit 2 derivation fix; growing or shrinking
+// this mix automatically updates the diagnostic's session-quota with
+// no coordinated edit needed.
 //
 // Storage contract: this constant is a TUPLE-DISTRIBUTION SPEC, not a
 // served sequence. The selection engine reads
@@ -33,63 +46,78 @@ interface DiagnosticEntry {
 // docs/plans/phase-3-polish-practice-surface-features.md §3.3 / §4.1
 // document the reversal of the implicit Phase 3 array-order contract.
 const diagnosticMix: ReadonlyArray<DiagnosticEntry> = [
-	// verbal.antonyms — 4 items
+	// verbal.antonyms — 4 items (3 floor + 1 proportional; empirical 30/204)
 	{ subTypeId: "verbal.antonyms", difficulty: "easy" },
 	{ subTypeId: "verbal.antonyms", difficulty: "medium" },
 	{ subTypeId: "verbal.antonyms", difficulty: "medium" },
 	{ subTypeId: "verbal.antonyms", difficulty: "hard" },
-	// verbal.analogies — 4 items
+	// verbal.analogies — 4 items (3 floor + 1 proportional; empirical 25/204)
 	{ subTypeId: "verbal.analogies", difficulty: "easy" },
 	{ subTypeId: "verbal.analogies", difficulty: "medium" },
 	{ subTypeId: "verbal.analogies", difficulty: "medium" },
 	{ subTypeId: "verbal.analogies", difficulty: "hard" },
-	// verbal.sentence_completion — 4 items
+	// verbal.sentence_completion — 4 items (3 floor + 1 proportional; empirical 26/204)
 	{ subTypeId: "verbal.sentence_completion", difficulty: "easy" },
 	{ subTypeId: "verbal.sentence_completion", difficulty: "medium" },
 	{ subTypeId: "verbal.sentence_completion", difficulty: "medium" },
 	{ subTypeId: "verbal.sentence_completion", difficulty: "hard" },
-	// verbal.critical_reasoning — 4 items
+	// verbal.critical_reasoning — 4 items (3 floor + 1 proportional; empirical 18/204)
 	{ subTypeId: "verbal.critical_reasoning", difficulty: "easy" },
 	{ subTypeId: "verbal.critical_reasoning", difficulty: "medium" },
 	{ subTypeId: "verbal.critical_reasoning", difficulty: "medium" },
 	{ subTypeId: "verbal.critical_reasoning", difficulty: "hard" },
-	// verbal.letter_series — 5 items
+	// verbal.letter_series — 3 items (floor only; empirical 10/204)
 	{ subTypeId: "verbal.letter_series", difficulty: "easy" },
 	{ subTypeId: "verbal.letter_series", difficulty: "medium" },
-	{ subTypeId: "verbal.letter_series", difficulty: "medium" },
-	{ subTypeId: "verbal.letter_series", difficulty: "medium" },
 	{ subTypeId: "verbal.letter_series", difficulty: "hard" },
-	// numerical.number_series — 5 items
+	// numerical.number_series — 4 items (3 floor + 1 proportional; empirical 30/204)
 	{ subTypeId: "numerical.number_series", difficulty: "easy" },
 	{ subTypeId: "numerical.number_series", difficulty: "medium" },
 	{ subTypeId: "numerical.number_series", difficulty: "medium" },
-	{ subTypeId: "numerical.number_series", difficulty: "medium" },
 	{ subTypeId: "numerical.number_series", difficulty: "hard" },
-	// numerical.word_problems — 5 items
+	// numerical.word_problems — 4 items (3 floor + 1 proportional; empirical 12/204)
 	{ subTypeId: "numerical.word_problems", difficulty: "easy" },
 	{ subTypeId: "numerical.word_problems", difficulty: "medium" },
 	{ subTypeId: "numerical.word_problems", difficulty: "medium" },
-	{ subTypeId: "numerical.word_problems", difficulty: "medium" },
 	{ subTypeId: "numerical.word_problems", difficulty: "hard" },
-	// numerical.fractions — 5 items
+	// numerical.fractions — 3 items (floor only; empirical 7/204)
 	{ subTypeId: "numerical.fractions", difficulty: "easy" },
 	{ subTypeId: "numerical.fractions", difficulty: "medium" },
-	{ subTypeId: "numerical.fractions", difficulty: "medium" },
-	{ subTypeId: "numerical.fractions", difficulty: "medium" },
 	{ subTypeId: "numerical.fractions", difficulty: "hard" },
-	// numerical.percentages — 5 items
+	// numerical.percentages — 4 items (3 floor + 1 proportional; empirical 10/204)
 	{ subTypeId: "numerical.percentages", difficulty: "easy" },
 	{ subTypeId: "numerical.percentages", difficulty: "medium" },
 	{ subTypeId: "numerical.percentages", difficulty: "medium" },
-	{ subTypeId: "numerical.percentages", difficulty: "medium" },
 	{ subTypeId: "numerical.percentages", difficulty: "hard" },
-	// numerical.averages — 3 items (split from former averages_ratios block)
+	// numerical.averages — 3 items (floor only; empirical 4/204)
 	{ subTypeId: "numerical.averages", difficulty: "easy" },
 	{ subTypeId: "numerical.averages", difficulty: "medium" },
 	{ subTypeId: "numerical.averages", difficulty: "hard" },
-	// numerical.ratios — 2 items (split from former averages_ratios block)
+	// numerical.ratios — 3 items (floor only; empirical 5/204)
 	{ subTypeId: "numerical.ratios", difficulty: "easy" },
-	{ subTypeId: "numerical.ratios", difficulty: "medium" }
+	{ subTypeId: "numerical.ratios", difficulty: "medium" },
+	{ subTypeId: "numerical.ratios", difficulty: "hard" },
+	// numerical.workrate — 3 items (floor only; empirical 5/204).
+	// Tier distribution adjusted: empirical dev-DB bank has 0 items at
+	// easy tier (8 medium + 3 hard); mix substitutes a second medium for
+	// the easy slot to keep the slot servable. Tagger improvement is a
+	// future-round candidate (commit 4 finding #1).
+	{ subTypeId: "numerical.workrate", difficulty: "medium" },
+	{ subTypeId: "numerical.workrate", difficulty: "medium" },
+	{ subTypeId: "numerical.workrate", difficulty: "hard" },
+	// numerical.speed_distance_time — 3 items (floor only; empirical 4/204)
+	{ subTypeId: "numerical.speed_distance_time", difficulty: "easy" },
+	{ subTypeId: "numerical.speed_distance_time", difficulty: "medium" },
+	{ subTypeId: "numerical.speed_distance_time", difficulty: "hard" },
+	// numerical.lowest_values — 4 items (3 floor + 1 proportional; empirical 18/204).
+	// Tier distribution adjusted: empirical dev-DB bank has 0 items at
+	// hard tier (21 easy + 12 medium); mix substitutes a third medium for
+	// the hard slot to keep the slot servable. Tagger improvement is a
+	// future-round candidate (commit 4 finding #1).
+	{ subTypeId: "numerical.lowest_values", difficulty: "easy" },
+	{ subTypeId: "numerical.lowest_values", difficulty: "medium" },
+	{ subTypeId: "numerical.lowest_values", difficulty: "medium" },
+	{ subTypeId: "numerical.lowest_values", difficulty: "medium" }
 ]
 
 // xmur3 — string → 32-bit hash. Canonical implementation; turns the
