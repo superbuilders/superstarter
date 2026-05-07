@@ -312,7 +312,7 @@ Adjust the line daily based on actual progress. No graphs. One line of text.
 
 ### 6.4 Strategy library
 
-A small library of plain-text strategy notes, three per sub-type for the 11 currently-authored sub-types (33 total: 3 entries × 11 sub-types — 5 verbal + 6 numerical, excluding `numerical.workrate`, `numerical.speed_distance_time`, and `numerical.lowest_values`, which are pending a separate strategy-authoring round). The three entries per sub-type differ by **kind**: one recognition tip, one technique tip, one trap-avoidance tip. Stored in the codebase at `src/config/strategies.ts` (generated based on example problems and reference material) as a `Partial<Record<SubTypeId, ...>>` so the three pending sub-types omit cleanly. Examples:
+A small library of plain-text strategy notes, three per sub-type across all 14 v1 sub-types (42 total: 3 entries × 14 sub-types — 5 verbal + 9 numerical). The three entries per sub-type differ by **kind**: one recognition tip, one technique tip, one trap-avoidance tip. Stored in the codebase at `src/config/strategies.ts` (generated based on example problems and reference material) as a `Record<SubTypeId, ...>` so any future taxonomy add fails at typecheck if its strategies are not authored. Examples:
 
 - Number series: "Test differences between consecutive terms before testing ratios."
 - Antonyms: "When two answers seem opposite, the correct answer is usually the more general opposite."

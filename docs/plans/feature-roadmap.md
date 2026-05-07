@@ -206,7 +206,7 @@ Use the focus shell's timer + audio + bar chrome as a standalone tool — no que
 
 **Status: Net-new. PRD has strategies (3 per sub-type, plain-text notes); Leo's request is more substantial.**
 
-The PRD's strategy library is small: 3 entries per sub-type × 11 currently-authored sub-types = 33 entries (5 verbal + 6 numerical, excluding `numerical.workrate`, `numerical.speed_distance_time`, and `numerical.lowest_values`, which are pending a separate strategy-authoring round). Each entry is a paragraph or two of plain text. The strategies surface in post-session review (paired with sub-types the user struggled with) and on the history tab.
+The PRD's strategy library is small: 3 entries per sub-type × 14 v1 sub-types = 42 entries (5 verbal + 9 numerical, fully authored at the strategy-authoring round close, commit `f3bf0da`). Each entry is a paragraph or two of plain text. The strategies surface in post-session review (paired with sub-types the user struggled with) and on the history tab.
 
 Leo's request — "lessons for CCAT test taking for certain groups of problems" — implies something larger: structured tutorial content per sub-type, walking the user through what the sub-type tests, common patterns, worked examples, and common traps.
 

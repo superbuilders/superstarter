@@ -648,7 +648,7 @@ Default `bankTargetByDifficulty` is `{ easy: 50, medium: 50, hard: 50, brutal: 5
 
 ### 4.2 `src/config/strategies.ts`
 
-Exports `strategies: Partial<Record<SubTypeId, StrategyEntry[]>>` where `StrategyEntry = { kind: 'recognition' | 'technique' | 'trap'; text: string }`. Each of the **11 currently-authored sub-types** (5 verbal + 6 numerical, excluding `numerical.workrate`, `numerical.speed_distance_time`, and `numerical.lowest_values`, which are pending a separate strategy-authoring round) has exactly three entries — one of each kind — distilled from `docs/CCAT-categories.md`. 33 strategy rows total (3 entries × 11 currently-authored sub-types). Each entry is 1–2 sentences. The `Partial<Record<...>>` typing per Q4 of the taxonomy-restructuring round lets the three pending sub-types omit cleanly; the seed script (`src/db/scripts/seed-strategies.ts`) skips missing keys with an `if (!entries) continue` guard.
+Exports `strategies: Record<SubTypeId, StrategyEntry[]>` where `StrategyEntry = { kind: 'recognition' | 'technique' | 'trap'; text: string }`. Each of the **14 v1 sub-types** (5 verbal + 9 numerical) has exactly three entries — one of each kind — distilled from `docs/CCAT-categories.md`. The three originally-deferred numerical sub-types (`numerical.workrate`, `numerical.speed_distance_time`, `numerical.lowest_values`) were closed in the strategy-authoring round. 42 strategy rows total (3 entries × 14 sub-types). Each entry is 1–2 sentences. The full `Record<...>` typing makes any future taxonomy add fail at typecheck if its strategies are not authored; the seed script (`src/db/scripts/seed-strategies.ts`) retains its `if (!entries) continue` guard as defense-in-depth.
 
 ### 4.3 `src/config/admins.ts`
 
