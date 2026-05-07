@@ -2,17 +2,19 @@
 
 Ship the "Dojo" dashboard at `/`. This document is the source of truth for that screen; implement against it. When something is ambiguous, default to the visual mockup in `docs/plans/dashboard_reference.png` that produced this spec.
 
-This rev of the PRD has been reconciled against the actual codebase as of 2026-05-07. Tables, helpers, and file paths now match what's there, with column-mapping tables where names drifted and stub helpers/schemas where the dashboard's data needs outrun what's been built. The visual spec (layout, tokens, cobalt rule, belt mechanics) is unchanged.
+This rev of the PRD has been reconciled against the actual codebase as of 2026-05-07 (Phase 5 v1 feature-complete at `8a10fb1`). Tables, helpers, and file paths now match what's there, with column-mapping tables where names drifted and stub helpers/schemas where the dashboard's data needs outrun what's been built. The visual spec (layout, tokens, cobalt rule, belt mechanics) is unchanged.
+
+**Decisions applied in this rev** (see §11.5, §8, §10.1, §6.3, §6.7, §10.8, §6.1, §19): Mastery Map relocates from `/` to `/drill` as a sub-type picker; the dashboard takes `/`. Dashboard belt component renames to `<BeltStripe>` to avoid collision with the post-session `<BeltIndicator>` already in the tree. Mission alternate CTA targets `/drill` (the diagnostic gate makes `/diagnostic` unreachable from `/`). Mistakes tile keeps but drops spaced-review framing. `/lessons`, `/stats`, `/review` ship as minimal stub pages. Goal value in the ScoreStrip is a raw-score stub, not a percentile read.
 
 ---
 
 ## 1. Context
 
-**Product.** 18seconds is a CCAT practice app focused on hitting the user's target percentile by training Verbal and Numerical questions to reflex speed. The name comes from the test's pace: roughly 18 seconds per question. The app frames practice as climbing 14 belts (5 verbal sub-types + 9 numerical sub-types per `src/config/sub-types.ts`), white → blue → brown → black, calculated independently per sub-type.
+**Product.** 18seconds is a CCAT practice app focused on hitting the user's target score by training Verbal and Numerical questions to reflex speed. The name comes from the test's pace: roughly 18 seconds per question. The app frames practice as climbing 14 belts (5 verbal sub-types + 9 numerical sub-types per `src/config/sub-types.ts`), white → blue → brown → black, calculated independently per sub-type.
 
 **Stack.** Next.js 16 (App Router, Bun, `cacheComponents` on), Drizzle ORM (PostgreSQL 18 with native `uuidv7()`), Tailwind CSS v4 (no `tailwind.config.ts` — theme tokens live in `src/styles/unstyled/globals.css` via `@theme inline`), shadcn/ui primitives, lucide-react for icons, Pino via `@/logger`, Auth.js v5 (NextAuth) via `@/auth`, Superbuilder error handling via `@superbuilders/errors`.
 
-**Scope of this PRD.** Just the dashboard at `/` (which under the App Router lives at `src/app/(app)/page.tsx`, replacing the current Mastery Map placeholder there). The data layer is implemented as a typed contract whose helpers are a mix of **real reads** (against existing tables) and **stubs** (returning sensible mock values where the upstream feature isn't built yet). Every stub is labeled and scheduled against a follow-up PRD in §19.
+**Scope of this PRD.** The dashboard at `/` (which under the App Router lives at `src/app/(app)/page.tsx`, replacing the current Mastery Map content there); the migration of the current Mastery Map content to `/drill` as a sub-type picker (§11.5); minimal stub pages at `/lessons`, `/stats`, `/review` so nav links don't 404. The data layer is implemented as a typed contract whose helpers are a mix of **real reads** (against existing tables) and **stubs** (returning sensible mock values where the upstream feature isn't built yet). Every stub is labeled and scheduled against a follow-up PRD in §19.
 
 ---
 
@@ -20,10 +22,10 @@ This rev of the PRD has been reconciled against the actual codebase as of 2026-0
 
 A single, server-rendered screen that answers, on landing, in this order of importance:
 
-1. **Where am I vs the goal?** Current estimated CCAT score, trend vs last sim, goal (default 40), days to test.
+1. **Where am I vs the goal?** Current estimated CCAT score, trend vs last sim, goal score, days to test.
 2. **What should I do today?** A smart-picked mission with a one-tap primary CTA and an "alternate" escape hatch.
 3. **Where are my belts?** 14 sub-type rows split into Verbal Dojo and Numerical Dojo, each with a belt indicator, progress bar, and link to the drill.
-4. **How's my pace and what's queued?** Median time per question this week, count of mistakes queued for spaced review, last full sim result.
+4. **How's my pace and what's queued?** Median time per question this week, count of mistakes still to review, last full sim result.
 
 Client-side interactivity on this page is limited to navigation. No form state, no mutations from the dashboard itself.
 
@@ -63,7 +65,9 @@ const data = result.data
 
 ## 4. File map
 
-The dashboard replaces the current `(app)/page.tsx` (Mastery Map placeholder). It inherits the existing `(app)/layout.tsx` auth + diagnostic-completed gate.
+The dashboard replaces the current `(app)/page.tsx` content; that content (the Mastery Map) is migrated to `(app)/drill/page.tsx` per §11.5. The dashboard inherits the existing `(app)/layout.tsx` auth + diagnostic-completed gate.
+
+### 4.1 Dashboard surface
 
 | Path | Action | Purpose |
 |---|---|---|
@@ -78,7 +82,9 @@ The dashboard replaces the current `(app)/page.tsx` (Mastery Map placeholder). I
 | `src/server/dashboard/score.ts` | create | `computeScoreEstimate(userId)`, `getLastFullSim(userId)` — STUB (§19) |
 | `src/server/dashboard/streak.ts` | create | `computeStreak(userId)` — STUB (§19) |
 | `src/server/dashboard/pace.ts` | create | `computePaceWeek(userId)` — STUB (§19) |
-| `src/components/dashboard/belt-indicator.tsx` | create | §10.1 |
+| `src/server/dashboard/mistakes.ts` | create | `countMistakes(userId)` — STUB (§19) |
+| `src/components/dashboard/dashboard.tsx` | create | Client wrapper that consumes the data promise (§11) |
+| `src/components/dashboard/belt-stripe.tsx` | create | §10.1 — dashboard belt primitive (renamed from PRD-template `BeltIndicator` to avoid collision; see §10.1 audit note) |
 | `src/components/dashboard/belt-row.tsx` | create | §10.2 |
 | `src/components/dashboard/dojo-card.tsx` | create | §10.3 |
 | `src/components/dashboard/mission-card.tsx` | create | §10.4 |
@@ -90,6 +96,26 @@ The dashboard replaces the current `(app)/page.tsx` (Mastery Map placeholder). I
 | `src/components/dashboard/streak-chip.tsx` | create | §10.10 |
 | `src/components/dashboard/top-nav.tsx` | create | §10.11 |
 | `src/db/schemas/practice/user-sub-type-belts.ts` | create (stub) | §18 — minimal schema for future belt-promotion logic |
+
+### 4.2 Mastery Map migration (§11.5)
+
+| Path | Action | Purpose |
+|---|---|---|
+| `src/app/(app)/drill/page.tsx` | create | New `/drill` index — sub-type picker. Migrated content from current `(app)/page.tsx`. |
+| `src/app/(app)/page.tsx` | replace (see §4.1) | The dashboard takes over the home route. |
+
+The Mastery Map component(s) under `src/components/mastery-map/` (e.g. `mastery-icon.tsx`) stay in place; only the mount point moves.
+
+### 4.3 Stubbed routes (so nav doesn't 404)
+
+These ship as minimal placeholder pages — a heading, one paragraph, and a back link. They use the same TopNav as the dashboard via the existing `(app)/layout.tsx`. Real implementations are out of scope per §16; they're listed as follow-up PRDs in §19.
+
+| Path | Action | Purpose |
+|---|---|---|
+| `src/app/(app)/drill/page.tsx` | (also see §4.2) | Picker — not a stub; ships with real Mastery Map content. |
+| `src/app/(app)/lessons/page.tsx` | create (stub) | "Lessons are coming soon." Placeholder. |
+| `src/app/(app)/stats/page.tsx` | create (stub) | "Stats deep-dive is coming soon." Placeholder. |
+| `src/app/(app)/review/page.tsx` | create (stub) | "Mistakes review is coming soon." Placeholder. Linked from `<MistakesTile>`. |
 
 Domain helpers live under `src/server/dashboard/` because this codebase places server-only domain logic there (`src/server/mastery/`, `src/server/triage/`, `src/server/sessions/`). Avoid `src/lib/dashboard/` — `src/lib/` in this repo is reserved for shared client-safe utilities (today only `cn`).
 
@@ -134,7 +160,7 @@ export interface DashboardData {
     current?: number
     /** Signed delta vs previous full sim; undefined when fewer than 2 sims */
     delta?: number
-    /** Per users.target_percentile, default 40 when null */
+    /** Target raw score (out of 50 questions on a full sim). Stubbed to 40. */
     goal: number
     daysToTest?: number
   }
@@ -158,6 +184,7 @@ export interface DashboardData {
   }
   mistakesQueue: {
     count: number
+    /** Rough estimate; "1 minute per ~3 mistakes" rule of thumb. */
     estimatedMinutes: number
     href: string
   }
@@ -171,7 +198,9 @@ export interface DashboardData {
 }
 ```
 
-`current` and `delta` are now optional because the codebase does not yet store a per-sim score; stub returns `undefined` and the UI renders an em-dash. See §10.6.
+`current` and `delta` are optional because the codebase does not yet store a per-sim score; stub returns `undefined` and the UI renders an em-dash. See §10.6.
+
+`goal` is a raw target score (out of 50), not a percentile. The codebase's `users.target_percentile` column is intentionally NOT consumed by the dashboard. `goal` is stubbed to a constant `40` until a Goal Score PRD lands (§19).
 
 ---
 
@@ -181,12 +210,12 @@ The original draft of this PRD assumed a set of `core_*`-prefixed tables that do
 
 | PRD assumed name | Actual table | Status | Column mapping |
 |---|---|---|---|
-| `core_users` | `users` (`auth/users.ts`) | EXISTS, drift | `firstName` → derive from `name`. `goalScore` → `targetPercentile` (default 40 when null). `testDate` → `targetDateMs` (epoch ms; convert via `new Date(ms)`; days-to-test = `Math.ceil((targetDateMs - Date.now()) / 86_400_000)`). `id` (uuidv7) matches. |
+| `core_users` | `users` (`auth/users.ts`) | EXISTS, drift | `firstName` → derive from `name`. `goalScore` → STUBBED, not read from this table (see §6.1). `testDate` → `targetDateMs` (epoch ms; convert via `new Date(ms)`; days-to-test = `Math.ceil((targetDateMs - Date.now()) / 86_400_000)`). `id` (uuidv7) matches. **`target_percentile` exists on this table but is intentionally NOT read by the dashboard** — Goal in the ScoreStrip is a raw score, not a percentile. |
 | `core_subtypes` | `sub_types` (`catalog/sub-types.ts`) | EXISTS, drift | `id` is `varchar(64)` (e.g. `"verbal.analogies"`), NOT a uuid. `name` matches. `section` matches the `verbal | numerical` split. `latencyThresholdMs` is an additional column the dashboard can ignore. The 14 sub-type defs are duplicated in `src/config/sub-types.ts` (`subTypeIds`, `subTypes`); read display names from there. |
 | `core_practice_sessions` | `practice_sessions` (`practice/practice-sessions.ts`) | EXISTS, drift | `mode = 'full_sim'` → `type = 'simulation'` (the enum value is `simulation`, not `full_sim`). `startedAt` → `startedAtMs` (epoch). `endedAt` → `endedAtMs` (epoch, nullable). No `score` column — the score has to be derived from joined `attempts` rows or stubbed. |
 | `core_question_attempts` | `attempts` (`practice/attempts.ts`) | EXISTS, drift | `correct: boolean`, `latencyMs: integer`, `sessionId`, `itemId`. No standalone `userId` column — join through `practice_sessions.userId`. |
 | `core_user_subtype_ratings` (PRD's belt source) | `mastery_state` (`practice/mastery-state.ts`) | EXISTS, semantic drift | `mastery_state.current_state` is a 4-value enum `learning | fluent | mastered | decayed` — different conceptual axis from belts (`white | blue | brown | black`). Don't try to alias them; treat them as parallel domains. The dashboard reads belts from a new `user_sub_type_belts` table (§18 stub schema), and belt-promotion logic is a future PRD. |
-| `core_user_question_states` (mistakes queue) | — | DOES NOT EXIST | Spaced review is out of scope (§16). The mistakes-tile count is hardcoded to 0 by the stub helper (`countDueMistakes`). Schema for this lands in the spaced-review PRD. |
+| `core_user_question_states` (mistakes queue) | — | DOES NOT EXIST | Spaced review was cut from v1 (see feature-roadmap reconciliation, `064a386`). The mistakes-tile count is stubbed to 0 until a Mistakes PRD lands; the framing in §10.8 is "wrong answers to review", not "spaced review due". |
 
 Tables that exist in the codebase but are not load-bearing for the dashboard: `accounts`, `sessions` (auth), `verification_tokens`, `items`, `strategies`, `candidate_promotion_log`. See appendix "Bonus reads (future)" at the end.
 
@@ -210,7 +239,7 @@ import {
   getLastFullSim
 } from "@/server/dashboard/score"
 import { computeStreak } from "@/server/dashboard/streak"
-import { countDueMistakes } from "@/server/dashboard/mistakes"
+import { countMistakes } from "@/server/dashboard/mistakes"
 import type { DashboardData } from "@/server/dashboard/types"
 
 interface UserProfile {
@@ -226,13 +255,13 @@ interface UserProfile {
  *
  * Helper status as of this PRD:
  *
- *   - loadUserProfile        → real read (auth/users)            §6.1
+ *   - loadUserProfile        → real read (auth/users); goal stubbed §6.1
  *   - loadAllBelts           → STUB                              §19
  *   - pickTodaysMission      → STUB                              §19
  *   - computeScoreEstimate   → STUB                              §19
  *   - computeStreak          → STUB                              §19
  *   - computePaceWeek        → STUB                              §19
- *   - countDueMistakes       → STUB                              §19
+ *   - countMistakes          → STUB                              §19
  *   - getLastFullSim         → STUB                              §19
  */
 export async function getDashboardData(userId: string): Promise<DashboardData> {
@@ -261,7 +290,7 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
     computeScoreEstimate(userId),
     computeStreak(userId),
     computePaceWeek(userId),
-    countDueMistakes(userId),
+    countMistakes(userId),
     getLastFullSim(userId)
   ])
 
@@ -302,23 +331,25 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
 }
 ```
 
-### 6.1 `loadUserProfile` (real read)
+### 6.1 `loadUserProfile` (real read; goal stubbed)
 
-`src/server/dashboard/data.ts` (private to the file). Reads `users` directly. This is the only real-read helper inlined in the orchestrator file because every other concern has its own module.
+`src/server/dashboard/data.ts` (private to the file). Reads `users` directly for `name` and `targetDateMs`. The `goal` field is hardcoded to `40` rather than read from `users.target_percentile`, per the design decision that Goal in the ScoreStrip is a target raw score (out of 50), not a target percentile (out of 100). A Goal Score PRD (§19) introduces the real source field.
 
 ```ts
 import { eq } from "drizzle-orm"
 import { db } from "@/db"
 import { users } from "@/db/schemas/auth/users"
 
-const DEFAULT_GOAL = 40
+// TODO(stub): replace with a real read from users.target_score (or
+// equivalent) once the Goal Score PRD lands. Until then the dashboard
+// shows a default 40 — a sensible passing score on a 50-question full sim.
+const STUB_GOAL_SCORE = 40
 
 async function loadUserProfile(userId: string): Promise<UserProfile> {
   const rows = await db
     .select({
       id: users.id,
       name: users.name,
-      targetPercentile: users.targetPercentile,
       targetDateMs: users.targetDateMs
     })
     .from(users)
@@ -332,13 +363,18 @@ async function loadUserProfile(userId: string): Promise<UserProfile> {
   const fullName = row.name ?? "Friend"
   const firstName = fullName.split(" ")[0] ?? fullName
   const initials = initialsFor(fullName)
-  const goal = row.targetPercentile ?? DEFAULT_GOAL
   const nowMs = Date.now()
   const daysToTest =
     row.targetDateMs === null
       ? undefined
       : Math.max(0, Math.ceil((row.targetDateMs - nowMs) / 86_400_000))
-  return { id: row.id, firstName, initials, goal, daysToTest }
+  return {
+    id: row.id,
+    firstName,
+    initials,
+    goal: STUB_GOAL_SCORE,
+    daysToTest
+  }
 }
 
 function initialsFor(name: string): string {
@@ -351,12 +387,13 @@ function initialsFor(name: string): string {
 }
 ```
 
+> **Audit at implementation:** verify the Auth.js v5 session callback in `@/auth` actually attaches `user.id` to the session object. Auth.js v5 doesn't do this by default; it requires a `session` callback that copies `token.sub` into `session.user.id`. If the project's existing auth flows already work (they do — full-length and drill routes both gate on the same session), the callback is in place and §11's `session?.user?.id` extraction is fine. If a typecheck error surfaces on `session.user.id`, the callback needs widening.
+
 ### 6.2 `loadAllBelts` (stub)
 
 `src/server/dashboard/belts.ts`. Reads belt level + progress for one section. Until belt-promotion logic exists (out of scope per §16), this returns 14 white-belt rows split as 5/9.
 
 ```ts
-import * as errors from "@superbuilders/errors"
 import { logger } from "@/logger"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
 import type { BeltLevel, SubtypeRow } from "@/server/dashboard/types"
@@ -383,11 +420,11 @@ export async function loadAllBelts(
 }
 ```
 
-The drill href is `/drill/<subTypeId>` to match the existing route at `src/app/(app)/drill/[subTypeId]/`. The slug is the dotted form (`verbal.analogies`); URL-encode it on emit.
+The drill href is `/drill/<subTypeId>` to match the existing route at `src/app/(app)/drill/[subTypeId]/`. The slug is the dotted form (`verbal.analogies`); URL-encode it on emit. With §11.5's migration in place, `/drill` (with no sub-type segment) is also a valid route — the index sub-type picker.
 
 ### 6.3 `pickTodaysMission` (stub)
 
-`src/server/dashboard/mission.ts`. Until the weakness-analysis pipeline lands, returns a static "take your baseline simulation" mission.
+`src/server/dashboard/mission.ts`. Until the weakness-analysis pipeline lands, returns a static "take your baseline simulation" mission. The alternate CTA targets `/drill` (the picker introduced by §11.5) rather than `/diagnostic`, because users on `/` are already past the `(app)/layout.tsx` diagnostic-completed gate and `/diagnostic` is unreachable for them.
 
 ```ts
 import { logger } from "@/logger"
@@ -404,13 +441,13 @@ export async function pickTodaysMission(userId: string): Promise<DashboardData["
     body: "We'll calibrate your belts and recommend daily missions from your first sim onward.",
     primaryHref: "/full-length/configure",
     primaryLabel: "Start full sim",
-    alternateHref: "/diagnostic",
-    alternateLabel: "Quick diagnostic"
+    alternateHref: "/drill",
+    alternateLabel: "Pick a drill"
   }
 }
 ```
 
-The primary route maps to the existing full-length flow at `src/app/(app)/full-length/configure/`. The alternate maps to the existing diagnostic flow at `src/app/(diagnostic-flow)/diagnostic/`.
+The primary route maps to the existing full-length flow at `src/app/(app)/full-length/configure/`. The alternate maps to the Mastery Map sub-type picker at `src/app/(app)/drill/page.tsx` (§11.5).
 
 ### 6.4 `computeScoreEstimate` + `getLastFullSim` (stub)
 
@@ -473,25 +510,29 @@ interface PaceWeek {
 // TODO(stub): wire to real data in the Pace-Strip PRD (§19).
 // When real: median(latency_ms) over the last 7 days of attempts joined
 // to practice_sessions.user_id = userId, bucketed by floor((now - id-time)
-// / 86_400_000). Use uuidv7LowerBound() for the time-range filter.
+// / 86_400_000). If a uuidv7-time-bound helper exists in
+// @/db/lib/uuid-time, prefer that for the range filter; otherwise derive
+// the bound from timestampFromUuidv7 inversely.
 export async function computePaceWeek(userId: string): Promise<PaceWeek> {
   logger.debug({ userId }, "computePaceWeek stub: returning zero-week")
   return { medianMs: 0, perDayMs: [0, 0, 0, 0, 0, 0, 0] }
 }
 ```
 
-### 6.7 `countDueMistakes` (stub)
+### 6.7 `countMistakes` (stub)
 
-`src/server/dashboard/mistakes.ts`.
+`src/server/dashboard/mistakes.ts`. Spaced review was cut from v1 (see feature-roadmap reconciliation, `064a386`); this helper is intentionally NOT spaced-review-aware. When the Mistakes PRD lands, this counts wrong attempts the user hasn't yet reviewed in the post-session shell — the simplest interpretation that preserves the tile's value without resurrecting cut scope.
 
 ```ts
 import { logger } from "@/logger"
 
-// TODO(stub): wire to real data in the Spaced Review PRD (§19).
-// When real: count(*) of user_question_states where userId = $1 and
-// next_due_ms <= now_ms.
-export async function countDueMistakes(userId: string): Promise<number> {
-  logger.debug({ userId }, "countDueMistakes stub: returning 0")
+// TODO(stub): wire to real data in the Mistakes PRD (§19).
+// When real: count of wrong attempts (attempts.correct = false) joined
+// through practice_sessions.user_id, optionally filtered to "not yet
+// reviewed" once a review-acknowledgment surface exists. Spaced review
+// is explicitly OUT of scope (cut from v1).
+export async function countMistakes(userId: string): Promise<number> {
+  logger.debug({ userId }, "countMistakes stub: returning 0")
   return 0
 }
 ```
@@ -540,9 +581,16 @@ export function clamp01(n: number): number {
 
 ## 8. Design tokens
 
-This codebase already ships shadcn/ui tokens (`--background`, `--foreground`, `--primary`, `--card`, `--border`, etc.) plus two pre-existing belt tokens (`--belt-blue`, `--belt-brown`). The dashboard adds an additive layer on top of those — never overwriting an existing token.
+This codebase already ships shadcn/ui tokens (`--background`, `--foreground`, `--primary`, `--card`, `--border`, etc.) plus two pre-existing belt tokens (`--belt-blue`, `--belt-brown`) introduced at Phase 5 sub-phase 5 commit 3 (`b31d8cb`) for the post-session `<BeltIndicator>`. The dashboard adds an additive layer on top of those — with one important constraint on the existing belt tokens (audit note below).
 
 Append the block below to `src/styles/unstyled/globals.css` inside the existing `:root { … }` block (and a parallel block under `.dark { … }` for dark-mode overrides). The existing `@theme inline` block also needs new entries to surface the new tokens to Tailwind v4 (§9).
+
+> **Audit-against-actual-artifact (§6.14.18 + §6.14.23):** `--belt-blue` and `--belt-brown` are **shared** with the post-session `<BeltIndicator>` (drill-mode session-end heading). Any change to those values affects both surfaces. Earlier drafts of this PRD called for an "in-place upgrade" of those values; that claim is incorrect — it would silently retune the post-session indicator alongside the dashboard. Implementation must do one of:
+>
+> 1. **Keep existing values.** Use whatever `--belt-blue`/`--belt-brown` resolve to today (set at sub-phase 5 commit 3) for the dashboard belt stripe. Simplest, no regression risk. Recommended.
+> 2. **Namespace dashboard variants.** Introduce `--dashboard-belt-blue`, `--dashboard-belt-brown` for the dashboard stripe; leave the existing tokens untouched. Justified only if visual review of (1) finds the dashboard stripe genuinely under-saturated.
+>
+> Pick by visual diff at the implementation commit, on both surfaces (drill post-session AND dashboard), light + dark. Not a static-trace decision.
 
 ```css
 :root {
@@ -566,14 +614,11 @@ Append the block below to `src/styles/unstyled/globals.css` inside the existing 
   --lavender:      #F5F4FB;
   --lavender-line: #E5E3F5;
 
-  /* Belts — tuned in OKLCH so promotion feels like rising lightness.
-     --belt-blue and --belt-brown already exist in this file (Phase 5
-     sub-phase 5 commit 3). Do NOT redeclare; the values below are the
-     dashboard's targets and should replace the existing values in-place. */
+  /* Belts — white and black are NEW; blue and brown are EXISTING (sub-phase 5).
+     Do NOT redeclare --belt-blue or --belt-brown here without first reading
+     the audit note above. */
   --belt-white:      oklch(94% 0.005 270);
   --belt-white-line: oklch(82% 0.012 270);
-  --belt-blue:       oklch(50% 0.200 260);   /* was 0.55/0.16 */
-  --belt-brown:      oklch(38% 0.100 50);    /* was 0.40/0.07 */
   --belt-black:      oklch(22% 0.020 270);
 
   /* Pace status */
@@ -627,13 +672,13 @@ Dark-mode block (mirrors the existing `.dark` rule):
   --text-2:        oklch(72% 0.012 270);
   --text-3:        oklch(55% 0.012 270);
   --belt-white:    oklch(68% 0.012 270);
-  --belt-blue:     oklch(64% 0.180 260);   /* in-place upgrade */
-  --belt-brown:    oklch(55% 0.100 50);    /* in-place upgrade */
   --belt-black:    oklch(78% 0.012 270);   /* inverts to off-white */
+  /* Do NOT redeclare --belt-blue or --belt-brown here either; the
+     existing dark-mode values were tuned at sub-phase 5. */
 }
 ```
 
-The reduced-motion media query and the `body { font-family … }` rule from the original draft already exist in this file (Tailwind's `bg-background text-foreground` reset at the bottom). Reuse those rather than re-adding them. Add `.tabular { font-variant-numeric: tabular-nums; }` if it isn't present.
+The reduced-motion media query and the `body { font-family … }` rule from the original draft already exist in this file. Reuse those rather than re-adding them. Add `.tabular { font-variant-numeric: tabular-nums; }` if it isn't present.
 
 ### 8.1 Token alias table
 
@@ -646,9 +691,9 @@ The dashboard does not introduce a competing color system; it bridges to the exi
 | `--text-1` | `--foreground` | Reference `text-text-1` for new components; existing components keep `text-foreground`. |
 | `--text-2` / `--text-3` | `--muted-foreground` | Replace shadcn's single muted with the dashboard's two-tier hierarchy in new components only. |
 | `--border-soft` | `--border` | New components use `border-border-soft`; shadcn's existing `border-border` reset stays. |
-| `--alpha-accent` | `--accent` | The PRD's accent indigo (`#4F46E5`) collides with shadcn's neutral `--accent`. Renamed `--alpha-accent` so the existing accent (used by the focus shell, mastery map, etc.) stays correct. The mission card's progress bar references `bg-alpha-accent`. |
-| `--belt-blue`, `--belt-brown` | same names | Already in `globals.css`. The dashboard's values are an in-place upgrade per the table above; visual diff the existing belt-indicator component (`mastery-icon.tsx` does NOT use these tokens, so no regression risk there) before merging. |
-| `--belt-white`, `--belt-black` | — | New. |
+| `--alpha-accent` | `--accent` | The PRD's accent indigo (`#4F46E5`) collides with shadcn's neutral `--accent`. Renamed `--alpha-accent` so the existing accent (used by the focus shell, mastery map, etc.) stays correct. The `<BeltRow>` progress bar references `bg-alpha-accent`. |
+| `--belt-blue`, `--belt-brown` | same names | **Already in `globals.css` (sub-phase 5).** Do NOT redeclare. The dashboard `<BeltStripe>` consumes the existing values via `bg-belt-blue` / `bg-belt-brown`. See §8 audit note. |
+| `--belt-white`, `--belt-white-line`, `--belt-black` | — | New. |
 | `--cobalt`, `--indigo`, `--pale`, `--lavender`, `--pace-*`, `--good` | — | New. No collisions. |
 
 There is no `tailwind.config.ts` in this repo (Tailwind v4); §9 explains how to surface these tokens to the JIT.
@@ -661,7 +706,7 @@ This codebase uses Tailwind v4 via `@tailwindcss/postcss`. Theme extension lives
 
 ```css
 @theme inline {
-  /* …existing entries unchanged… */
+  /* …existing entries unchanged, including --color-belt-blue, --color-belt-brown… */
 
   /* Dashboard tokens (Dashboard PRD §9) */
   --color-bg: var(--bg);
@@ -698,20 +743,20 @@ Tailwind v4 derives `bg-*`, `text-*`, `border-*` etc. utilities from `--color-*`
 
 ## 10. Components
 
-All components are server components unless explicitly marked `"use client"`. Only `TopNav` (§10.11) needs to be a client component because it reads `usePathname` for active-route detection.
+All components are server components unless explicitly marked `"use client"`. Only `TopNav` (§10.11) and the `Dashboard` wrapper (§11) need to be client components — `TopNav` because it reads `usePathname` for active-route detection, `Dashboard` because it consumes the data promise via `React.use()`.
 
-### 10.1 BeltIndicator
+### 10.1 BeltStripe
 
-`src/components/dashboard/belt-indicator.tsx`
+`src/components/dashboard/belt-stripe.tsx`
 
-The defining visual primitive. A 22×6 colored stripe with a 4px-wide light cap on the right edge, mirroring the actual martial-arts belt-tip motif. The cap is what makes it read as a belt rather than a generic colored bar — keep it.
+> **Naming note (audit-against-actual-artifact).** Earlier drafts of this PRD named this component `<BeltIndicator>`. There is **already** a `<BeltIndicator>` component in the tree at `src/components/post-session/belt-indicator.tsx` (Phase 5 sub-phase 5, `b31d8cb`) — a heading-attached indicator that maps a session's effective difficulty tier (easy/medium/hard/brutal) to a belt color. The dashboard component is a different visual primitive (22×6 colored stripe with right-edge cap) operating on a different semantic axis (per-sub-type mastery progression: white → blue → brown → black). Two distinct components, two distinct names. The dashboard variant is `<BeltStripe>`. The post-session variant is unchanged.
 
-Note: the existing `src/components/mastery-map/mastery-icon.tsx` is a different visual language (filled / half-filled book/calculator icons mapped from `mastery_state`). Do not unify the two — they serve different surfaces (Mastery Map vs Dashboard) and the Mastery Map remains in place as its own internal page.
+The defining visual primitive on the dashboard. A 22×6 colored stripe with a 4px-wide light cap on the right edge, mirroring the actual martial-arts belt-tip motif. The cap is what makes it read as a belt rather than a generic colored bar — keep it.
 
 Props:
 
 ```ts
-interface BeltIndicatorProps {
+interface BeltStripeProps {
   belt: BeltLevel
   /** Sentence-cased category name for the aria-label, e.g. "Analogies" */
   ariaContext?: string
@@ -731,13 +776,13 @@ const BELT_BG: Record<BeltLevel, string> = {
   black: "bg-belt-black"
 }
 
-interface BeltIndicatorProps {
+interface BeltStripeProps {
   belt: BeltLevel
   ariaContext?: string
   className?: string
 }
 
-export function BeltIndicator({ belt, ariaContext, className }: BeltIndicatorProps) {
+export function BeltStripe({ belt, ariaContext, className }: BeltStripeProps) {
   const label = ariaContext ? `${ariaContext}: ${belt} belt` : `${belt} belt`
   return (
     <span
@@ -769,7 +814,7 @@ import Link from "next/link"
 import { ChevronRight } from "lucide-react"
 import type { SubtypeRow } from "@/server/dashboard/types"
 import { clamp01 } from "@/server/dashboard/helpers"
-import { BeltIndicator } from "@/components/dashboard/belt-indicator"
+import { BeltStripe } from "@/components/dashboard/belt-stripe"
 
 interface BeltRowProps {
   row: SubtypeRow
@@ -782,7 +827,7 @@ export function BeltRow({ row }: BeltRowProps) {
       href={row.href}
       className="grid grid-cols-[24px_1fr_64px_16px] items-center gap-[10px] border-b border-border-soft px-4 py-[9px] text-sm transition-colors duration-150 ease-out last:border-b-0 hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-cobalt"
     >
-      <BeltIndicator belt={row.belt} ariaContext={row.name} />
+      <BeltStripe belt={row.belt} ariaContext={row.name} />
       <span className="flex items-center gap-[6px] font-medium text-text-1">
         <span>{row.name}</span>
         {row.atRisk ? (
@@ -919,6 +964,8 @@ The serif/tabular-nums treatment lives on `value` itself; consumers decide. Impl
 
 The "greeting + 3 stats" row directly below the nav. Renders the editorial date eyebrow, the headline (with italic emphasis), and three `StatTile`s right-aligned: estimated score (with delta), goal (cobalt), days to test.
 
+`goal` is rendered as a raw integer (e.g. `40`) — a target score out of 50, not a percentile out of 100. No "%" suffix. The `Goal` label is sufficient; the unit is implicit from sitting next to "Est. score".
+
 Empty-state behavior: when `score.current === undefined` (the stub case), the value renders as an em-dash (`—`) in the same serif-tabular slot, and the delta tile is omitted.
 
 ```tsx
@@ -1038,9 +1085,9 @@ export function PaceMetric({ pace }: PaceMetricProps) {
 
 `src/components/dashboard/mistakes-tile.tsx`
 
-Small tile linking to `/review`. Shows count and estimated minutes.
+Small tile linking to `/review`. Shows the count of wrong answers the user hasn't reviewed yet, and a rough estimated minutes to clear. **Not spaced-review** — that scope was cut from v1. The tile's value is "you got these wrong; revisit them"; it does not imply due-dates, review intervals, or a queue scheduler.
 
-When the stub returns `count = 0`, render an empty-state copy ("No mistakes queued") in place of the count; the tile is still a link to `/review` so the route remains discoverable.
+When the stub returns `count = 0`, render an empty-state copy ("No mistakes to review") in place of the count; the tile is still a link to `/review` so the route remains discoverable.
 
 ```tsx
 import Link from "next/link"
@@ -1057,9 +1104,9 @@ export function MistakesTile({ data }: MistakesTileProps) {
         href={data.href}
         className="block rounded-md bg-surface-2 px-4 py-[14px] transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cobalt"
       >
-        <p className="mb-1 text-[12px] uppercase tracking-[0.05em] text-text-3">Mistakes due</p>
-        <p className="font-serif text-[16px] font-medium leading-tight text-text-1">No mistakes queued</p>
-        <p className="mt-1 text-[12px] text-text-2">Spaced review unlocks after your first sim</p>
+        <p className="mb-1 text-[12px] uppercase tracking-[0.05em] text-text-3">Mistakes to review</p>
+        <p className="font-serif text-[16px] font-medium leading-tight text-text-1">No mistakes to review</p>
+        <p className="mt-1 text-[12px] text-text-2">Wrong answers from past sessions land here</p>
       </Link>
     )
   }
@@ -1068,12 +1115,12 @@ export function MistakesTile({ data }: MistakesTileProps) {
       href={data.href}
       className="block rounded-md bg-surface-2 px-4 py-[14px] transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cobalt"
     >
-      <p className="mb-1 text-[12px] uppercase tracking-[0.05em] text-text-3">Mistakes due</p>
+      <p className="mb-1 text-[12px] uppercase tracking-[0.05em] text-text-3">Mistakes to review</p>
       <p className="font-serif tabular text-[22px] font-medium leading-none text-text-1">
         {data.count}
       </p>
       <p className="mt-1 text-[12px] text-text-2">
-        Spaced review · {data.estimatedMinutes} min
+        Wrong answers · ~{data.estimatedMinutes} min
       </p>
     </Link>
   )
@@ -1173,7 +1220,15 @@ Three-column header: brand on the left, primary nav in the middle, streak + avat
 
 Use Next.js `usePathname` for active-route detection. This component must be a client component (`"use client"` at the top) because of pathname access.
 
-The nav links currently include routes that are not yet built (Lessons, Stats, Review). They render as quiet links but lead to placeholder/404 pages. Out-of-scope per §16; do not add scaffolding pages here.
+All five nav targets resolve to a real page after this PRD ships:
+
+- `/` — dashboard (this PRD)
+- `/drill` — sub-type picker (Mastery Map content migrated per §11.5)
+- `/lessons` — stub page (§4.3)
+- `/review` — stub page (§4.3); also linked from `<MistakesTile>`
+- `/stats` — stub page (§4.3)
+
+No 404s in nav. Lessons, Review, and Stats display "coming soon" placeholders; full implementations are queued in §19.
 
 ```tsx
 "use client"
@@ -1243,7 +1298,7 @@ export function TopNav({ streakDays, initials }: TopNavProps) {
 
 ## 11. Page composition
 
-`src/app/(app)/page.tsx` — server component, no `"use client"`. Replaces the current Mastery Map content at this path. The page sits behind the `(app)/layout.tsx` gate, which is already enforcing both auth and "diagnostic completed". No new gating is required from this PRD.
+`src/app/(app)/page.tsx` — server component, no `"use client"`. Replaces the current Mastery Map at this path; that content moves to `(app)/drill/page.tsx` per §11.5. The page sits behind the `(app)/layout.tsx` gate, which is already enforcing both auth and "diagnostic completed". No new gating is required from this PRD.
 
 The page follows the project's RSC pattern: it stays non-async, initiates the data promise, and consumes it inside a Suspense boundary via a client wrapper.
 
@@ -1339,9 +1394,30 @@ The meta string is computed off `data.verbal.length` / `data.numerical.length` r
 
 ---
 
+## 11.5 Mastery Map migration to `/drill`
+
+The current `(app)/page.tsx` ships a functional Mastery Map — primary CTA "Enter dojo: {sub-type}" (drill) + secondary CTA "Take a full-length test" (full sim). It is the home-route entry point as of `8a10fb1`. With this PRD it relocates so the dashboard can take `/`.
+
+**Why move it rather than scrap it.** The Mastery Map is a useful sub-type picker. Killing it would create a UX gap for "I want to drill X" — and would leave `/drill` (referenced in nav) as a 404. Moving it to `/drill/page.tsx` solves both.
+
+**What moves.** The page contents at `src/app/(app)/page.tsx` move to `src/app/(app)/drill/page.tsx`. The components under `src/components/mastery-map/*` (e.g. `mastery-icon.tsx`) stay where they are — only the mount point changes. Any internal links that point at `/` expecting the Mastery Map should be updated to point at `/drill`; this is a project-wide audit at the implementation commit.
+
+**Internal links to verify and rewrite.** Search for in-app navigation that targeted the home route as the picker. Candidates likely include:
+
+- Diagnostic post-session "Continue" CTA — currently lands on `/` after the diagnostic completes. After this migration, it should still land on `/` (the dashboard) — the dashboard is the natural post-diagnostic landing. **No rewrite needed; verify the current target is correct.**
+- Drill post-session "Continue" CTA — same: continues to `/` (dashboard). **No rewrite needed.**
+- Full-length post-session "Continue" CTA — same. **No rewrite needed.**
+- Anywhere a "back to picker" or similar UI references `/`. **Rewrite to `/drill`.**
+
+The only structural rewrite is internal links that semantically meant "the picker." Post-session "Continue" CTAs go to the new home (the dashboard) — that's correct, not a regression.
+
+**No-deploy implication.** The `/drill` 404 in nav was a known issue; the migration closes it. Implementation should verify by clicking through every nav link before commit close.
+
+---
+
 ## 12. Layout / fonts
 
-Modify `src/app/layout.tsx` to load Plus Jakarta Sans + Newsreader via `next/font/google` and assign them to CSS variables. The existing `Inter` and `Geist` loaders should be removed (they were superstarter defaults; nothing else uses them after this PRD lands — verify before deleting).
+Modify `src/app/layout.tsx` to load Plus Jakarta Sans + Newsreader via `next/font/google` and assign them to CSS variables. The existing `Inter` and `Geist` loaders should be removed (they were superstarter defaults; verify nothing else uses them after this PRD lands before deleting).
 
 ```tsx
 // src/app/layout.tsx
@@ -1391,7 +1467,7 @@ In `globals.css`, redefine the font tokens to consume the loaded variables (over
 }
 ```
 
-The existing `--font-sans` declaration in `globals.css` (which currently aliases shadcn's `--font-sans`) will need to be reconciled — the dashboard tokens use the same name. If any non-dashboard surface still depends on the Geist/Inter wiring, namespace the fonts as `--font-sans-dashboard` instead.
+The existing `--font-sans` declaration in `globals.css` (which currently aliases shadcn's `--font-sans`) will need to be reconciled — the dashboard tokens use the same name. If any non-dashboard surface still depends on the Geist/Inter wiring, namespace the fonts as `--font-sans-dashboard` instead. Audit at implementation.
 
 ---
 
@@ -1412,7 +1488,7 @@ A real mobile pass is a follow-up PRD.
 
 Required, not nice-to-have:
 
-- `BeltIndicator` carries `role="img"` with a meaningful `aria-label` ("Analogies: blue belt"). Don't hide it from assistive tech — it's a meaningful state, not decoration.
+- `BeltStripe` carries `role="img"` with a meaningful `aria-label` ("Analogies: blue belt"). Don't hide it from assistive tech — it's a meaningful state, not decoration.
 - All interactive elements (rows, buttons, tiles, chips) have a `:focus-visible` ring in cobalt at 2px. Inset where the row's border can't shift.
 - The "at-risk" dot has both `aria-label="at risk"` and a `title` for hover context. Pure color is not the only signal — atypical row state is also conveyed by the dot's existence.
 - All icons (`ChevronRight`, `Flame`) are `aria-hidden="true"`; they're decorative because adjacent text carries the meaning.
@@ -1431,17 +1507,22 @@ This PRD is "done" when all of the following are true.
 - [ ] Cobalt accent appears in exactly four places on first paint (with stubs returning empty state, two of them — the delta arrow and the today pace bar — fall back to the cobalt-only goal value and greeting italic; both still cobalt)
 - [ ] Serif (Newsreader) renders on: brand wordmark, greeting headline, every numeric value in stats and tiles, dojo card titles, mission title
 - [ ] All other text is sans (Plus Jakarta Sans)
-- [ ] Belt indicators render with the right-edge cap visible against `--bg` (all 14 white in the stub case)
+- [ ] Belt stripes render with the right-edge cap visible against `--bg` (all 14 white in the stub case)
 - [ ] Both light and dark modes render without contrast violations against WCAG AA on body text
+- [ ] Drill post-session `<BeltIndicator>` looks unchanged from `8a10fb1` baseline (audit: blue and brown belts render the same)
 
 **Behavior.**
 - [ ] Clicking any belt row navigates to `/drill/{subTypeId}` (URL-encoded)
 - [ ] Clicking the mission's primary CTA navigates to `/full-length/configure`
-- [ ] Clicking the mission's alternate CTA navigates to `/diagnostic`
+- [ ] Clicking the mission's alternate CTA navigates to `/drill` (the sub-type picker)
 - [ ] Active nav item is highlighted; others are quiet
 - [ ] Streak chip hides the flame icon and shows neutral copy when `streakDays === 0` (the default stub state)
 - [ ] LastSim tile shows an empty state when `lastSim` is undefined (the default stub state)
 - [ ] ScoreStrip renders em-dashes for `current` and `daysToTest` when those are undefined
+- [ ] `Goal` tile renders `40` (raw integer, no "%" suffix)
+- [ ] MistakesTile copy contains no reference to "spaced review", "due", or scheduling-implying language
+- [ ] All five nav items resolve to a 200 page (`/`, `/drill`, `/lessons`, `/review`, `/stats`)
+- [ ] `/drill` (no segment) renders the migrated Mastery Map content
 
 **Constraints (non-negotiable).**
 - [ ] `bun lint:all` passes (Biome + super-lint + GritQL)
@@ -1451,12 +1532,13 @@ This PRD is "done" when all of the following are true.
 - [ ] Zero `null` types in new files (only `?:` optional fields)
 - [ ] All new files keep one component per file under `src/components/dashboard/` and one helper per file under `src/server/dashboard/`
 - [ ] No new database migrations are run as part of this PRD (the stub schema in §18 is added to `src/db/schemas/practice/` but `db:generate`/`db:push` is left for the follow-up PRD that wires real reads)
+- [ ] No collision between dashboard `<BeltStripe>` and post-session `<BeltIndicator>` (different file names, different exports, different visual primitives)
 
 **Motion + a11y.**
 - [ ] All transitions use `--ease-out`; durations are `--d-fast` or `--d-base`
 - [ ] `prefers-reduced-motion: reduce` is honored (CSS in §8 + existing rule in `globals.css`)
 - [ ] Every interactive element has a visible `:focus-visible` outline
-- [ ] `aria-label` is set on `BeltIndicator` and on the avatar
+- [ ] `aria-label` is set on `BeltStripe` and on the avatar
 - [ ] Visually-hidden `<h1>Dashboard</h1>` exists at the top of `<main>`
 
 ---
@@ -1468,10 +1550,11 @@ These are intentionally deferred. If you find yourself reaching for them, stop a
 - **Real-data wiring of every helper.** The PRD ships with a defined contract and stubbed helpers (§19). Replacing each stub with a real read is a follow-up PRD, listed in §19 by name.
 - **Belt promotion/demotion logic.** Sliding-window evaluation over last 30 attempts, accuracy + median-time gates. Lives in `src/server/belts/` in a follow-up.
 - **Mission picker logic.** Weakness analysis (`frequency_on_real_test × (1 - accuracy_at_pace)`) tied to belt-promotion proximity. Follow-up.
+- **Goal score persistence.** Goal in §6.1 is hardcoded to 40. The Goal Score PRD adds a settable field and wires the read.
 - **Active session screen.** `/full-length/run` and `/drill/[subTypeId]/run` already exist and are linked-to from the dashboard; they are not modified by this PRD.
-- **Post-sim review and post-session UI.** Already exists at `(diagnostic-flow)/post-session/[sessionId]` for the diagnostic, and extends to full-length in a separate post-session round. Linked-to from the dashboard but not changed here.
-- **Lessons / pattern library, Stats deep-dive, Review.** `/lessons`, `/stats`, `/review` are in the nav but their pages are not built here. Clicking them today returns a 404; a follow-up PRD adds at least an empty state.
-- **Spaced review.** No `user_question_states` schema yet; the mistakes count is hard-stubbed to 0. Spaced-review PRD adds the schema and the real read.
+- **Post-sim review and post-session UI.** Already exists at `(diagnostic-flow)/post-session/[sessionId]` for the diagnostic, and extends to drill + full-length per Phase 5 sub-phases 1, 4, 3. Linked-to from the dashboard but not changed here.
+- **Lessons content, Stats deep-dive, Review surface.** `/lessons`, `/stats`, `/review` ship as stub pages so nav doesn't 404 (§4.3). Real implementations are follow-up PRDs.
+- **Spaced review.** Cut from v1 (`064a386`). Mistakes tile in §10.8 is intentionally framed as "wrong answers to review", not "spaced review due." A future PRD may reintroduce spaced scheduling; this one does not.
 - **Streak persistence and computation.** Out-of-scope; stubbed to 0.
 - **Mobile design polish.** §13 covers "doesn't break"; full mobile design comes later.
 - **Settings, profile, onboarding flows.** Not on the dashboard.
@@ -1483,17 +1566,20 @@ These are intentionally deferred. If you find yourself reaching for them, stop a
 
 Recommended sequence. Not strict, but minimizes thrash:
 
-1. Add design tokens to `src/styles/unstyled/globals.css` (§8) and the `@theme inline` extensions (§9) — do this first so component styling works as you build.
+1. Add design tokens to `src/styles/unstyled/globals.css` (§8) and the `@theme inline` extensions (§9) — do this first so component styling works as you build. Per §8 audit note, do NOT redeclare `--belt-blue` / `--belt-brown`.
 2. Swap fonts in `src/app/layout.tsx` (§12).
-3. Create `src/server/dashboard/types.ts` and `helpers.ts` (§5, §7).
-4. Create the helper stubs (§6.2–§6.7) — each in its own file under `src/server/dashboard/`.
-5. Create `src/server/dashboard/data.ts` and `loadUserProfile` (§6, §6.1) — the only real-read entry point.
-6. Add the stub schema `src/db/schemas/practice/user-sub-type-belts.ts` (§18) and register it in `src/db/schema.ts`. Do NOT run `db:generate` or `db:push`.
-7. Build leaf components first: `BeltIndicator`, `StreakChip`, `StatTile`.
-8. Then composite components: `BeltRow`, `DojoCard`, `MissionCard`, `ScoreStrip`, `PaceMetric`, `MistakesTile`, `LastSimTile`, `TopNav`.
-9. Build the client wrapper `src/components/dashboard/dashboard.tsx` and replace `src/app/(app)/page.tsx` (§11).
-10. Run `bun lint:all` and `bun typecheck`. Fix anything that surfaces. Iterate until both pass.
-11. Visual diff against the mockup. Pay attention to: cobalt-accent count, serif vs sans split, belt-cap visibility, dojo row spacing.
+3. Migrate Mastery Map: copy the existing `(app)/page.tsx` content to `(app)/drill/page.tsx` (§11.5). Verify `/drill` renders identically to current `/`. Do this before step 9 so the dashboard's mission alternate CTA has a target.
+4. Stub pages: create `(app)/lessons/page.tsx`, `(app)/stats/page.tsx`, `(app)/review/page.tsx` (§4.3). Each is ~10 lines: heading + paragraph + `<Link>` back to `/`.
+5. Create `src/server/dashboard/types.ts` and `helpers.ts` (§5, §7).
+6. Create the helper stubs (§6.2–§6.7) — each in its own file under `src/server/dashboard/`.
+7. Create `src/server/dashboard/data.ts` and `loadUserProfile` (§6, §6.1) — the only real-read entry point.
+8. Add the stub schema `src/db/schemas/practice/user-sub-type-belts.ts` (§18) and register it in `src/db/schema.ts`. Do NOT run `db:generate` or `db:push`.
+9. Build leaf components first: `BeltStripe`, `StreakChip`, `StatTile`.
+10. Then composite components: `BeltRow`, `DojoCard`, `MissionCard`, `ScoreStrip`, `PaceMetric`, `MistakesTile`, `LastSimTile`, `TopNav`.
+11. Build the client wrapper `src/components/dashboard/dashboard.tsx` and replace `src/app/(app)/page.tsx` (§11).
+12. Run `bun lint:all` and `bun typecheck`. Fix anything that surfaces. Iterate until both pass.
+13. Click-through audit: every nav link, every CTA, every belt row, the alternate CTA on the mission card. Confirm zero 404s. Confirm post-session `<BeltIndicator>` (drill) is visually unchanged.
+14. Visual diff against the mockup. Pay attention to: cobalt-accent count, serif vs sans split, belt-cap visibility, dojo row spacing.
 
 Once §15 acceptance is fully checked, this PRD is shipped.
 
@@ -1565,8 +1651,9 @@ const dbSchema = {
 
 ### Schemas deliberately NOT added by this PRD
 
-- **`user_question_states`** (spaced-review queue). Out of scope per §16. Schema lands with the Spaced Review PRD; until then, `countDueMistakes` returns 0 and the mistakes tile renders its empty state.
+- **`user_question_states`** (spaced-review queue). Cut from v1 per `064a386`. The dashboard doesn't claim to do spaced review; the Mistakes tile is a "wrong answers to review" surface (§10.8). If a future round wants spaced scheduling, that PRD would reintroduce both the schema and the framing.
 - **A "score per sim" column or table.** The codebase's `practice_sessions` table has no score field today. Whether the score lives as a derived view, a denormalized column, or a separate `sim_results` table is a Sim Scoring PRD decision; this PRD declines to pre-empt it.
+- **A "target score" column on `users`.** The codebase has `target_percentile` (default 40); this PRD intentionally does not read it. The Goal Score PRD decides whether to add `target_score` alongside, replace `target_percentile`, or alias.
 
 ---
 
@@ -1592,7 +1679,13 @@ Auth is real. The dashboard reads the signed-in user via `auth()` from `@/auth` 
 
 | Helper | Returns | Follow-up |
 |---|---|---|
-| `pickTodaysMission(userId)` | static `{ eyebrow: "Today's mission", title: "Take your baseline simulation", body: "We'll calibrate your belts and recommend daily missions from your first sim onward.", primaryHref: "/full-length/configure", primaryLabel: "Start full sim", alternateHref: "/diagnostic", alternateLabel: "Quick diagnostic" }` | **Mission Picker PRD** — weakness-analysis ranking |
+| `pickTodaysMission(userId)` | static `{ eyebrow: "Today's mission", title: "Take your baseline simulation", body: "We'll calibrate your belts and recommend daily missions from your first sim onward.", primaryHref: "/full-length/configure", primaryLabel: "Start full sim", alternateHref: "/drill", alternateLabel: "Pick a drill" }` | **Mission Picker PRD** — weakness-analysis ranking |
+
+### Goal score (inline stub in `loadUserProfile`)
+
+| Source | Returns | Follow-up |
+|---|---|---|
+| `STUB_GOAL_SCORE` constant in `src/server/dashboard/data.ts` | `40` | **Goal Score PRD** — adds a settable goal-score field on `users` (or equivalent) and wires `loadUserProfile` to read it. Decides shape (replace `target_percentile`, alias to it, or add new column). |
 
 ### Attempts / sessions (stub)
 
@@ -1600,9 +1693,9 @@ Auth is real. The dashboard reads the signed-in user via `auth()` from `@/auth` 
 |---|---|---|
 | `computeScoreEstimate(userId)` | `{ current: undefined, delta: undefined }` | **Sim Scoring PRD** — defines how a sim turns into a 0–50 score and whether it's stored or derived |
 | `getLastFullSim(userId)` | `undefined` | **Sim Scoring PRD** — most recent `practice_sessions` row where `type = 'simulation'` AND `endedAtMs IS NOT NULL`, with computed score |
-| `computePaceWeek(userId)` | `{ medianMs: 0, perDayMs: [0, 0, 0, 0, 0, 0, 0] }` | **Pace-Strip PRD** — median over 7 days of attempts joined to `practice_sessions.user_id`, bucketed via `uuidv7LowerBound` |
+| `computePaceWeek(userId)` | `{ medianMs: 0, perDayMs: [0, 0, 0, 0, 0, 0, 0] }` | **Pace-Strip PRD** — median over 7 days of attempts joined to `practice_sessions.user_id`, bucketed via uuidv7 time bound |
 | `computeStreak(userId)` | `0` | **Streaks PRD** — defines what counts as a "practice day" and the consecutive-day count |
-| `countDueMistakes(userId)` | `0` | **Spaced Review PRD** — adds `user_question_states` schema + due-row count |
+| `countMistakes(userId)` | `0` | **Mistakes PRD** — adds a count of unreviewed wrong attempts joined through `practice_sessions.user_id`. Not spaced review. |
 
 ### Schema (one stub)
 
@@ -1610,16 +1703,27 @@ Auth is real. The dashboard reads the signed-in user via `auth()` from `@/auth` 
 |---|---|---|
 | `user_sub_type_belts` (§18) | Defined in `src/db/schemas/practice/`, registered in barrel, but no migration run, no rows read | **Belts PRD** — runs `db:generate`/`db:push`, seeds initial white-belt rows, wires the real `loadAllBelts` |
 
+### Stub pages (three)
+
+| Path | Status | Follow-up |
+|---|---|---|
+| `/lessons` | Placeholder page: heading + 1 sentence + back link | **Lessons PRD** — content authoring, lesson framework |
+| `/stats` | Placeholder page: heading + 1 sentence + back link | **Stats PRD** — analytics surface design + queries |
+| `/review` | Placeholder page: heading + 1 sentence + back link | **Mistakes PRD** — wrong-answer review UI; lands alongside `countMistakes` real read |
+
 ### Stub-removal order (suggested)
 
 1. **Sim Scoring PRD** — unblocks the score strip and the LastSim tile. Two helpers replaced.
 2. **Pace-Strip PRD** — unblocks the bottom-strip pace tile. One helper replaced.
 3. **Belts PRD** — runs the migration for `user_sub_type_belts`, replaces `loadAllBelts`. The dashboard now shows real belts.
-4. **Mission Picker PRD** — replaces `pickTodaysMission`. The dashboard's mission becomes dynamic.
-5. **Streaks PRD** — replaces `computeStreak`.
-6. **Spaced Review PRD** — adds `user_question_states` schema and replaces `countDueMistakes`.
+4. **Goal Score PRD** — replaces the inline `STUB_GOAL_SCORE`. Small, high-value.
+5. **Mission Picker PRD** — replaces `pickTodaysMission`. The dashboard's mission becomes dynamic.
+6. **Streaks PRD** — replaces `computeStreak`.
+7. **Mistakes PRD** — replaces `countMistakes` and stubbed `/review` page.
+8. **Lessons PRD** — replaces stubbed `/lessons` page.
+9. **Stats PRD** — replaces stubbed `/stats` page.
 
-After all six follow-ups land, the dashboard is fully real-data — no stubs remain.
+After all nine follow-ups land, the dashboard is fully real-data and every nav link is a real surface — no stubs remain.
 
 ---
 
@@ -1629,7 +1733,8 @@ Tables present in the codebase that the dashboard *could* use but does not in v1
 
 - **`mastery_state`** (`practice/mastery-state.ts`) — 4-level mastery (`learning | fluent | mastered | decayed`) per (user, sub_type). Already populated by the diagnostic flow. Could feed an "early signal" version of `loadAllBelts` before the belts table is wired (e.g. learning → white, fluent → blue, mastered → black, decayed → brown), but the semantics aren't a clean 1:1 — flagged as a Belts PRD discussion.
 - **`candidate_promotion_log`** (`ops/candidate-promotion-log.ts`) — item-level promotion log (whether an item entered the live bank). Useful for an admin surface; not for the dashboard.
-- **`strategies`** (`catalog/strategies.ts`) — sub-type-scoped recognition/technique/trap blurbs. Could power a "today's strategy" tile in a future dashboard rev.
+- **`strategies`** (`catalog/strategies.ts`) — sub-type-scoped recognition/technique/trap blurbs (42 entries × 14 sub-types as of strategy-authoring round close `9c13d68`). Could power a "today's strategy" tile in a future dashboard rev.
 - **`accounts` / `sessions` / `verification_tokens`** — Auth.js plumbing. Read only by the auth library.
-- **`items`** (`catalog/items.ts`) — the question bank. The dashboard does not read items directly; it reads attempts.
+- **`items`** (`catalog/items.ts`) — the question bank (439 live items, 88.6% with structuredExplanation). The dashboard does not read items directly; it reads attempts.
 - **`practiceSessions.recencyExcludedItemIds`** — useful for the mission picker (avoid re-serving recent items) but not for the dashboard.
+- **`users.target_percentile`** — exists; intentionally not read by the dashboard (Goal is a raw score, see §6.1).
