@@ -17,11 +17,14 @@
 //   - Empty state ("No wrong items this session.") when items.length
 //     === 0.
 //
-// The §15.2 amendment in the plan is load-bearing: WrongItem here
-// carries NO structuredExplanation field. Sub-phase 4 will extend
-// WrongItem (and the page query) atomically with the click-to-
-// highlight UI. Today the renderer reads `items.explanation` (the
-// prose column) only.
+// The §15.2-amendment seam shipped end-to-end at sub-phase 4 — the
+// page query + WrongItem field landed at commit 2; <WrongItemCard>'s
+// strike/highlight Set state + <StructuredExplanation> render landed
+// at commit 4 (this commit). When structuredExplanation is present
+// the card renders it via <StructuredExplanation> + <OptionLine>'s
+// isStruck / isHighlighted props; when absent (the 50 NULL-
+// source_folder seed items) the card falls back to items.explanation
+// prose per plan §3.6 + §11.7.
 //
 // Body + options shapes are validated at the boundary using the
 // existing `itemBody` Zod schema from @/server/items/body-schema and
@@ -53,10 +56,11 @@
 // surface audit surfaces a third occurrence elsewhere, that's the
 // signal for a structural token addition.
 
-import type * as React from "react"
+import * as React from "react"
 import { z } from "zod"
 import type { WrongItem } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { TextBody } from "@/components/item/body-renderers/text"
+import { StructuredExplanation } from "@/components/post-session/structured-explanation"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
 import { logger } from "@/logger"
 import { itemBody, type ItemBody } from "@/server/items/body-schema"
@@ -138,6 +142,8 @@ interface OptionLineProps {
 	text: string
 	isCorrect: boolean
 	isSelected: boolean
+	isStruck?: boolean
+	isHighlighted?: boolean
 }
 
 function OptionLine(props: OptionLineProps) {
@@ -176,6 +182,31 @@ function OptionLine(props: OptionLineProps) {
 		)
 	} else {
 		textClass = "flex-1 text-foreground/80"
+	}
+
+	// Click-to-highlight composition (sub-phase 4 commit 4):
+	//   - isStruck adds line-through. Idempotent with isSelected's
+	//     line-through (the user's selected-incorrect option already
+	//     carries it); for non-selected options this is the elimination
+	//     part's effect. Dimmer text tint at /60 conveys "eliminated
+	//     by explanation" vs the selected /80 baseline. The
+	//     line-through composition is CSS-idempotent — adding it twice
+	//     renders identically to once.
+	//   - isHighlighted adds bg-foreground/5 + ring-1 ring-foreground/15.
+	//     bg-foreground/5 may already be present from isCorrect (the
+	//     correct-option marker also uses it); the ring carries the
+	//     visual disambiguation per plan §3.2 + §11.5. When the
+	//     highlighted option IS the correct option, the ring stacks
+	//     on the ✓ marker and reads as "the tie-breaker considered
+	//     this; here's the correct answer."
+	if (props.isStruck === true && props.isSelected !== true) {
+		textClass = `${textClass} line-through text-foreground/60`
+	}
+	if (props.isHighlighted === true) {
+		if (props.isCorrect !== true) {
+			containerClass = `${containerClass} bg-foreground/5`
+		}
+		containerClass = `${containerClass} ring-1 ring-foreground/15`
 	}
 
 	return (
@@ -245,6 +276,8 @@ interface WrongItemCardProps {
 
 function WrongItemCard(props: WrongItemCardProps) {
 	const parsed = parseItem(props.item)
+	const [struck, setStruck] = React.useState<ReadonlyArray<string>>([])
+	const [highlighted, setHighlighted] = React.useState<ReadonlyArray<string>>([])
 	if (parsed === null) {
 		return (
 			<li
@@ -257,6 +290,33 @@ function WrongItemCard(props: WrongItemCardProps) {
 	}
 
 	const { body, options } = parsed
+	const struckSet = new Set(struck)
+	const highlightedSet = new Set(highlighted)
+
+	// Explanation render branch per plan §4.3:
+	//   - structuredExplanation present → <StructuredExplanation>
+	//     with prose fallback inside the component (handles its own
+	//     parse-failure path).
+	//   - structuredExplanation absent + explanation present → prose
+	//     <p> directly (the 50 NULL-source_folder seed-item path).
+	//   - both absent → render nothing (degraded but not crashing).
+	let explanationNode: React.ReactNode = null
+	if (props.item.structuredExplanation !== undefined) {
+		explanationNode = (
+			<StructuredExplanation
+				raw={props.item.structuredExplanation}
+				fallbackProse={props.item.explanation}
+				onActiveStrikeChange={setStruck}
+				onActiveHighlightChange={setHighlighted}
+			/>
+		)
+	} else if (props.item.explanation !== undefined) {
+		explanationNode = (
+			<p className="text-foreground/70 text-sm leading-relaxed">
+				{props.item.explanation}
+			</p>
+		)
+	}
 
 	return (
 		<li
@@ -271,6 +331,8 @@ function WrongItemCard(props: WrongItemCardProps) {
 					const isSelected =
 						props.item.selectedAnswer !== undefined &&
 						option.id === props.item.selectedAnswer
+					const isStruck = struckSet.has(option.id)
+					const isHighlighted = highlightedSet.has(option.id)
 					return (
 						<OptionLine
 							key={option.id}
@@ -278,15 +340,13 @@ function WrongItemCard(props: WrongItemCardProps) {
 							text={option.text}
 							isCorrect={isCorrect}
 							isSelected={isSelected}
+							isStruck={isStruck}
+							isHighlighted={isHighlighted}
 						/>
 					)
 				})}
 			</ol>
-			{props.item.explanation === undefined ? null : (
-				<p className="text-foreground/70 text-sm leading-relaxed">
-					{props.item.explanation}
-				</p>
-			)}
+			{explanationNode}
 		</li>
 	)
 }

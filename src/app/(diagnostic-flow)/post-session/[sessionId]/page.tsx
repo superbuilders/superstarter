@@ -101,17 +101,15 @@ const getPerSubTypeLatency = db
 	.prepare("app_dgflow_post_session_id_per_sub_type_latency")
 
 // Wrong items for the session, chronologically ordered. The §15.2-
-// amendment seam shipped at sub-phase 4 commit 2 (this commit) by
-// adding the metadata_json->'structuredExplanation' projection here
-// and the matching field on the WrongItem interface below; consumer
-// wiring (the <StructuredExplanation> component + <WrongItemCard>
-// strike/highlight state) lands at sub-phase 4 commit 4 per plan §6.
-// Until commit 4, the projection is dormant — <WrongItemsBrowser>
-// continues to render items.explanation (the prose column) only.
-// The 50 NULL-source_folder seed items lack the structured form;
-// metadata_json->'structuredExplanation' returns NULL for those rows
-// and the boundary normalize maps NULL → undefined per
-// rules/no-null-undefined-union.md.
+// amendment seam shipped end-to-end at sub-phase 4 — commit 2 landed
+// the metadata_json->'structuredExplanation' projection here plus the
+// matching field on the WrongItem interface below; commit 4 wired the
+// consumer (the <StructuredExplanation> component + <WrongItemCard>'s
+// strike/highlight Set state). The 50 NULL-source_folder seed items
+// lack the structured form; metadata_json->'structuredExplanation'
+// returns NULL for those rows and the boundary normalize maps
+// NULL → undefined per rules/no-null-undefined-union.md, then
+// <WrongItemCard> falls back to items.explanation prose per plan §3.6.
 const getWrongItemsForSession = db
 	.select({
 		attemptId: attempts.id,
@@ -164,13 +162,12 @@ type PerSubTypeLatency = Awaited<ReturnType<typeof getPerSubTypeLatency.execute>
 // NULL-source_folder seed items that predate the testbank-re-
 // extraction round; downstream renderers treat undefined as absent.
 //
-// structuredExplanation is added at sub-phase 4 commit 2 (this
-// commit) but is consumed by the renderer at commit 4. Until then
-// the field flows through page-query → page → content → shell →
-// wrong-items-browser → wrong-item-card without being read. Typed
-// `unknown` here because the page-query boundary does not validate
-// the JSON shape; the renderer parses with Zod at the render
-// boundary per rules/zod-usage.md.
+// structuredExplanation flows through page-query → page → content →
+// shell → wrong-items-browser → wrong-item-card and is consumed by
+// <StructuredExplanation> (sub-phase 4 commit 3 component + commit 4
+// wire-up). Typed `unknown` here because the page-query boundary
+// does not validate the JSON shape; the renderer parses with Zod at
+// the render boundary per rules/zod-usage.md.
 interface WrongItem {
 	attemptId: string
 	itemId: string
