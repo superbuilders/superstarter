@@ -1,4 +1,5 @@
-import type { Difficulty } from "@/config/sub-types"
+import { mulberry32, xmur3 } from "@/config/diagnostic-mix"
+import { type Difficulty, type SubTypeId, subTypeIds } from "@/config/sub-types"
 
 type DecileDistribution = Readonly<Record<Difficulty, number>>
 
@@ -65,5 +66,117 @@ function roundDecile(distribution: DecileDistribution, totalCount: number): Reco
 	return result
 }
 
-export type { CurveKey, DecileDistribution }
-export { difficultyCurves, roundDecile, standardCurve }
+// generateFullLengthSlots — pure function returning a deterministic
+// 50-tuple sequence of (subTypeId, difficulty) tuples for a full-length
+// test seeded by `sessionId`. Same sessionId always returns the same
+// 50-slot order; different sessionIds produce independently-shuffled
+// sequences with overwhelming probability.
+//
+// Algorithm per docs/plans/phase5-full-length-test.md §3:
+//   1. For each decile k ∈ [0..4], compute per-tier integer counts via
+//      `roundDecile(standardCurve[k], 10)` — sums to 10 by construction.
+//   2. For each (decileIndex, tier) pair with count n, deterministically
+//      pick n sub-type-ids from the 14-pool with replacement, seeded by
+//      `${sessionId}:d${decileIndex}:${tier}`. Uniform draws (Q12.3 v1
+//      shape — empirical-anchor weighting deferred).
+//   3. Within each decile's 10-slot block, Fisher-Yates shuffle the
+//      tuples deterministically, seeded by
+//      `${sessionId}:d${decileIndex}:order`. Decouples within-decile
+//      order from the per-tier draw order so sub-types interleave.
+//   4. Concatenate the 5 deciles' 10-slot blocks → 50 slots.
+//
+// Pure: no I/O, no DB reads. Consumed by getNextFixedCurve in
+// src/server/items/selection.ts at full-length sub-phase 3 commit 3
+// (dormant until then).
+const FULL_LENGTH_SLOT_COUNT = 50
+const DECILE_SIZE = 10
+
+interface FullLengthSlot {
+	subTypeId: SubTypeId
+	difficulty: Difficulty
+}
+
+// seededRand — string seed → mulberry32 PRNG. Independent streams per
+// distinct seed string, enabling per-(decileIndex, tier) and
+// per-(decileIndex, order) decoupling.
+function seededRand(seed: string): () => number {
+	const seedFn = xmur3(seed)
+	return mulberry32(seedFn())
+}
+
+// pickSubTypesWithReplacement — n uniform with-replacement draws from
+// the 14-pool. Per Q12.3 v1 ships uniform; empirical-anchor weighting
+// is a follow-up edit if dogfood signal demands.
+function pickSubTypesWithReplacement(rand: () => number, count: number): SubTypeId[] {
+	const picks: SubTypeId[] = []
+	for (let i = 0; i < count; i += 1) {
+		const idx = Math.floor(rand() * subTypeIds.length)
+		const picked = subTypeIds[idx]
+		// Defensive narrowing: idx is in-range by construction
+		// (Math.floor of [0,1) * length); this guard satisfies
+		// noUncheckedIndexedAccess without the banned non-null
+		// assertion.
+		if (picked === undefined) continue
+		picks.push(picked)
+	}
+	return picks
+}
+
+// shuffleInPlace — Fisher-Yates over a mutable array, seeded by `rand`.
+function shuffleInPlace<T>(rand: () => number, arr: T[]): void {
+	for (let i = arr.length - 1; i > 0; i -= 1) {
+		const j = Math.floor(rand() * (i + 1))
+		const tmp = arr[i]
+		const swap = arr[j]
+		if (tmp === undefined || swap === undefined) continue
+		arr[i] = swap
+		arr[j] = tmp
+	}
+}
+
+// buildDecileSlots — construct the 10-slot block for one decile.
+// Per-tier integer counts come from `roundDecile`; sub-types per tier
+// are drawn via `pickSubTypesWithReplacement` seeded by
+// `${sessionId}:d${decileIndex}:${tier}`; in-decile order is shuffled
+// by Fisher-Yates seeded `${sessionId}:d${decileIndex}:order`.
+function buildDecileSlots(
+	sessionId: string,
+	decileIndex: number,
+	distribution: DecileDistribution
+): FullLengthSlot[] {
+	const tierCounts = roundDecile(distribution, DECILE_SIZE)
+	const decileSlots: FullLengthSlot[] = []
+	for (const tier of DIFFICULTY_ORDER) {
+		const count = tierCounts[tier]
+		if (count === 0) continue
+		const tierRand = seededRand(`${sessionId}:d${decileIndex}:${tier}`)
+		const picks = pickSubTypesWithReplacement(tierRand, count)
+		for (const subTypeId of picks) {
+			decileSlots.push({ subTypeId, difficulty: tier })
+		}
+	}
+	const orderRand = seededRand(`${sessionId}:d${decileIndex}:order`)
+	shuffleInPlace(orderRand, decileSlots)
+	return decileSlots
+}
+
+function generateFullLengthSlots(sessionId: string): ReadonlyArray<FullLengthSlot> {
+	const result: FullLengthSlot[] = []
+	for (const [decileIndex, distribution] of standardCurve.entries()) {
+		const decileSlots = buildDecileSlots(sessionId, decileIndex, distribution)
+		for (const slot of decileSlots) {
+			result.push(slot)
+		}
+	}
+	return result
+}
+
+export type { CurveKey, DecileDistribution, FullLengthSlot }
+export {
+	DECILE_SIZE,
+	FULL_LENGTH_SLOT_COUNT,
+	difficultyCurves,
+	generateFullLengthSlots,
+	roundDecile,
+	standardCurve
+}

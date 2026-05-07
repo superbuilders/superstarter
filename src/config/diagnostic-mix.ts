@@ -181,4 +181,4 @@ function shuffledDiagnosticOrder(sessionId: string): ReadonlyArray<DiagnosticEnt
 }
 
 export type { DiagnosticEntry }
-export { diagnosticMix, shuffledDiagnosticOrder }
+export { diagnosticMix, mulberry32, shuffledDiagnosticOrder, xmur3 }
