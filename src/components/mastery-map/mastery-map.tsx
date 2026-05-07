@@ -88,6 +88,13 @@ function MasteryMap(props: MasteryMapProps) {
 
 			<div className="flex flex-col items-center gap-3">
 				<StartSessionButton subTypeId={recommendedId} displayName={recommendedDisplay} />
+				<a
+					href="/full-length/configure"
+					className="text-foreground/60 text-sm underline-offset-4 hover:underline"
+					data-testid="mastery-map-full-length-cta"
+				>
+					Take a full-length test
+				</a>
 			</div>
 
 			<footer className="mt-auto pt-6">
