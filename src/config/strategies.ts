@@ -7,13 +7,12 @@ interface StrategyEntry {
 	text: string
 }
 
-// Partial<Record<...>> per Q4 of the taxonomy-restructuring round:
-// numerical.workrate, numerical.speed_distance_time, and
-// numerical.lowest_values are intentionally omitted until a separate
-// strategy-authoring round populates them. The post-session
-// strategy-selection consumer guards against missing keys with a
-// length-zero / undefined check.
-const strategies: Partial<Record<SubTypeId, ReadonlyArray<StrategyEntry>>> = {
+// All 14 sub-types authored per the strategy-authoring round
+// (docs/plans/strategy-authoring.md). Type tightened from
+// Partial<Record<...>> to full Record<...> so any future taxonomy add
+// fails at typecheck if its strategies are not authored. The seed
+// script's `if (!entries) continue` guard remains as defense-in-depth.
+const strategies: Record<SubTypeId, ReadonlyArray<StrategyEntry>> = {
 	"verbal.antonyms": [
 		{
 			kind: "recognition",
@@ -166,6 +165,48 @@ const strategies: Partial<Record<SubTypeId, ReadonlyArray<StrategyEntry>>> = {
 		{
 			kind: "trap",
 			text: "A ratio of 7:9 is not 'split into 7 and 9'; it's 'split into 16 parts'. Setting up 7x + 9x = total before solving prevents the most common error."
+		}
+	],
+	"numerical.workrate": [
+		{
+			kind: "recognition",
+			text: "Workrate splits two ways: scale-one-rate ('8 parts in 20 min, how long for 6?') and combine-two-rates ('A in 6h, B in 12h, together?'). Spot the shape first — they need different setups."
+		},
+		{
+			kind: "technique",
+			text: "For two-worker combined-work, T = (A × B) / (A + B). 6h and 12h together → 72 / 18 = 4h. Faster than 1/A + 1/B = 1/T from scratch."
+		},
+		{
+			kind: "trap",
+			text: "Don't average the times when two workers combine — '6h and 12h → 9h' is the classic wrong answer; rates add, times don't, so T = (6 × 12)/(6+12) = 4h."
+		}
+	],
+	"numerical.speed_distance_time": [
+		{
+			kind: "recognition",
+			text: "Every SDT problem is d = s × t with one missing variable. Find what the question asks for — that's the missing one; the other two are stated in the body."
+		},
+		{
+			kind: "technique",
+			text: "Normalize units before plugging into d = s × t. If km/h mixes with minutes (or mph with seconds), convert to match the unit asked for — most SDT errors are unit mismatches, not arithmetic."
+		},
+		{
+			kind: "trap",
+			text: "Upstream/downstream is not still-water — surface_rate = vehicle_rate ± medium_rate. A boat going 120 km / 4h downstream with a 5 km/h stream has still-water speed 30 − 5 = 25 km/h, not 30."
+		}
+	],
+	"numerical.lowest_values": [
+		{
+			kind: "recognition",
+			text: "The stem is fixed — 'Which has the lowest (or highest) value?' — so the work is in the options. Scan the notation mix first (decimals, fractions, '1/8 of 32') before choosing how to compare."
+		},
+		{
+			kind: "technique",
+			text: "Anchor against ½, 1, or a known integer to discard candidates without computing each in full. For '0.6, 2/3, 5/6, 0.5, 0.674' the lowest is 0.5 by inspection — only it falls below ½."
+		},
+		{
+			kind: "trap",
+			text: "Re-read the stem before picking — 'highest' instead of 'lowest' flips the answer, and the test mixes both. Watch notation slips too: 0.03 ≠ 0.3; 1/9 < 1/8 (a bigger denominator means a smaller fraction)."
 		}
 	]
 }
