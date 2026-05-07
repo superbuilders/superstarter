@@ -22,16 +22,16 @@ const items: SeedItemInput[] = [
 		difficulty: "easy",
 		body: {
 			kind: "text",
-			text: "A pen costs $3. How much do 7 pens cost?"
+			text: "A bus has 47 passengers; 12 get off and 8 get on. How many passengers are on the bus now?"
 		},
 		options: [
-			{ text: "$18" },
-			{ text: "$21" },
-			{ text: "$24" },
-			{ text: "$28" }
+			{ text: "35" },
+			{ text: "43" },
+			{ text: "51" },
+			{ text: "67" }
 		],
 		correctAnswerIndex: 1,
-		explanation: "$3 × 7 = $21."
+		explanation: "47 − 12 + 8 = 43."
 	},
 	{
 		subTypeId: "numerical.word_problems",

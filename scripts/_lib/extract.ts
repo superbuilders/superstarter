@@ -79,8 +79,8 @@ Disambiguation for numerical items — classify by the dominant operation, not s
 - "%" symbol or the word "percent" → numerical.percentages.
 - a/b fraction notation as operands → numerical.fractions.
 - "average"/"mean" of a value set → numerical.averages.
-- a:b ratio notation, OR proportional/unit-rate reasoning involving objects, money, or static quantities ("X items cost Y, what about Z items?"; "A is k times B, given A+B, find A or B"; "scale up/down by factor") → numerical.ratios. Time/work/speed/distance scenarios — even when proportional in shape — go to numerical.workrate or numerical.speed_distance_time per their rules below.
-- combined-work or rate-of-completion ("A and B together can…") → numerical.workrate.
+- Time/work/speed/distance scenarios go to numerical.workrate or numerical.speed_distance_time per their rules below — never numerical.ratios, even when proportional in shape. Otherwise: a:b ratio notation, OR proportional/unit-rate reasoning involving objects, money, or static quantities ("X items cost Y, what about Z items?"; "A is k times B, given A+B, find A or B"; "scale up/down by factor") → numerical.ratios.
+- combined-work, rate-of-completion, OR single-actor/uniform-rate work scenarios involving a quantity-of-work and a time ("8 parts take 20 min, how long for 6?"; "N identical machines produce X/min, what for M machines?"; "A and B together can…") → numerical.workrate.
 - speed / distance / time scenario → numerical.speed_distance_time.
 - compare a small set of numeric expressions → numerical.lowest_values.
 - Otherwise prose arithmetic without those markers → numerical.word_problems.
