@@ -23,6 +23,23 @@
 	--border: oklch(0.922 0 0);
 	--input: oklch(0.922 0 0);
 	--ring: oklch(0.708 0 0);
+	/*
+	 * Belt-indicator color tokens (Phase 5 sub-phase 5 commit 3).
+	 * Used only by <BeltIndicator> for the medium / hard belt
+	 * colors. White / black belts reuse existing tokens (--card,
+	 * --foreground). Per plan §6.3 the brown token was the only
+	 * originally-anticipated addition; the audit-against-actual-
+	 * artifact pattern (SPEC §6.14.18) surfaced that the
+	 * "established Alpha Style accent blue" referenced by plan
+	 * §5.2 does not exist as a structural token (closest blue is
+	 * --chart-2, which is chart-namespaced and would leak chart
+	 * semantics into the belt domain). Belt-namespaced tokens
+	 * make the indicator's color domain explicit. Both stay
+	 * single-occurrence (used only in <BeltIndicator>); below the
+	 * .alpha-style.md "below-3 systemic-token" threshold.
+	 */
+	--belt-blue: oklch(0.55 0.16 245);
+	--belt-brown: oklch(0.4 0.07 50);
 	--chart-1: oklch(0.809 0.105 251.813);
 	--chart-2: oklch(0.623 0.214 259.815);
 	--chart-3: oklch(0.546 0.245 262.881);
@@ -58,6 +75,9 @@
 	--border: oklch(1 0 0 / 10%);
 	--input: oklch(1 0 0 / 15%);
 	--ring: oklch(0.556 0 0);
+	/* Belt-indicator dark-mode counterparts; see :root for rationale. */
+	--belt-blue: oklch(0.65 0.18 245);
+	--belt-brown: oklch(0.55 0.09 50);
 	--chart-1: oklch(0.809 0.105 251.813);
 	--chart-2: oklch(0.623 0.214 259.815);
 	--chart-3: oklch(0.546 0.245 262.881);
@@ -92,6 +112,8 @@
 	--color-input: var(--input);
 	--color-border: var(--border);
 	--color-destructive: var(--destructive);
+	--color-belt-blue: var(--belt-blue);
+	--color-belt-brown: var(--belt-brown);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-accent: var(--accent);
 	--color-muted-foreground: var(--muted-foreground);
