@@ -36,7 +36,7 @@ import { and, eq, sql } from "drizzle-orm"
 import { redirect } from "next/navigation"
 import * as React from "react"
 import { auth } from "@/auth"
-import type { SubTypeId } from "@/config/sub-types"
+import { type SubTypeId, subTypes } from "@/config/sub-types"
 import { db } from "@/db"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { items } from "@/db/schemas/catalog/items"
@@ -47,6 +47,10 @@ import { logger } from "@/logger"
 import { triageScoreForSession, type TriageScore } from "@/server/triage/score"
 import { PostSessionContent } from "@/app/(diagnostic-flow)/post-session/[sessionId]/content"
 import type { SessionTypeForShell } from "@/components/post-session/post-session-shell"
+import {
+	getEndSessionTierForDrill,
+	type TierForDrillSession
+} from "@/server/post-session/end-session-tier"
 import {
 	deriveStruggledSubTypes,
 	selectStrategiesForStruggledSubTypes
@@ -162,8 +166,18 @@ interface WrongItem {
 
 type SurfacedStrategy = Awaited<ReturnType<typeof getStrategiesForSubTypes.execute>>[number]
 
+// Drill-only: end-session adaptive walker tier + the displayName the
+// belt indicator reads for its copy. Sub-phase 5 commit 4 wires it.
+// The page resolves the displayName here so the shell stays config-
+// import-free; the BeltIndicator props (tier, subTypeDisplayName,
+// isPreFloor) match this shape 1:1.
+interface EndSessionTierForRender extends TierForDrillSession {
+	subTypeDisplayName: string
+}
+
 // Bundle returned to content.tsx. Five new fields layered onto the
-// existing { sessionId, sessionType, pacingMinutes? } meta.
+// existing { sessionId, sessionType, pacingMinutes? } meta plus the
+// drill-only endSessionTier (sub-phase 5 commit 4).
 interface SessionInfo {
 	sessionId: string
 	sessionType: SessionTypeForShell
@@ -173,6 +187,7 @@ interface SessionInfo {
 	wrongItems: WrongItem[]
 	triageScore: TriageScore
 	surfacedStrategies: SurfacedStrategy[]
+	endSessionTier: EndSessionTierForRender | null
 }
 
 // "Struggled" sub-type derivation, failure-mode classification, and
@@ -181,6 +196,60 @@ interface SessionInfo {
 // at the top of this file. Numeric anchors (0.7 accuracy floor,
 // per-sub-type threshold) live there, not in a config file — v1 has
 // one consumer, sub-phase 5's dojo work can refactor if needed.
+
+// Drill-only resolution of the adaptive walker's session-end tier
+// plus the sub-type displayName the belt indicator copy reads. Gated
+// on row.type === 'drill' at the call site so non-drill sessions pay
+// zero query cost. Drill is sub-type-locked (PRD §4.2 / SPEC §9.1),
+// so row.subTypeId is non-null on row.type === 'drill' by
+// construction; the null check is defensive — surfacing the
+// invariant violation explicitly per the project's no-fallbacks
+// discipline.
+async function resolveEndSessionTier(row: {
+	id: string
+	type: SessionTypeForShell
+	subTypeId: string | null
+}): Promise<EndSessionTierForRender | null> {
+	if (row.type !== "drill") {
+		return null
+	}
+	if (row.subTypeId === null) {
+		logger.error(
+			{ sessionId: row.id },
+			"/post-session: drill session has null sub_type_id (impossible)"
+		)
+		throw errors.new("drill session missing sub_type_id")
+	}
+	const drillSubTypeId = row.subTypeId
+	const tierResult = await errors.try(getEndSessionTierForDrill(row.id))
+	if (tierResult.error) {
+		logger.error(
+			{ error: tierResult.error, sessionId: row.id },
+			"/post-session: end-session-tier query failed"
+		)
+		throw errors.wrap(tierResult.error, "end-session-tier")
+	}
+	const tier = tierResult.data
+	if (tier === null) {
+		return null
+	}
+	const meta = subTypes.find(function bySubTypeId(t) {
+		return t.id === drillSubTypeId
+	})
+	if (!meta) {
+		logger.error(
+			{ sessionId: row.id, subTypeId: drillSubTypeId },
+			"/post-session: drill sub_type_id not in canonical config"
+		)
+		throw errors.new("drill sub_type_id not in canonical config")
+	}
+	return {
+		tier: tier.tier,
+		attemptCount: tier.attemptCount,
+		isPreFloor: tier.isPreFloor,
+		subTypeDisplayName: meta.displayName
+	}
+}
 
 async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionInfo> {
 	const sessionId = await sessionIdPromise
@@ -196,6 +265,7 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			id: practiceSessions.id,
 			userId: practiceSessions.userId,
 			type: practiceSessions.type,
+			subTypeId: practiceSessions.subTypeId,
 			startedAtMs: practiceSessions.startedAtMs,
 			endedAtMs: practiceSessions.endedAtMs
 		})
@@ -327,6 +397,12 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		)
 	}
 
+	// Drill-only end-session walker tier (sub-phase 5 commit 4, plan
+	// §5.4). Extracted to keep loadSession under the cyclomatic-
+	// complexity cap; the per-session-type branch already pushed the
+	// fetch+chain+derive function near the limit.
+	const endSessionTier = await resolveEndSessionTier(row)
+
 	return {
 		sessionId: row.id,
 		sessionType: row.type,
@@ -335,7 +411,8 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		latency,
 		wrongItems,
 		triageScore,
-		surfacedStrategies
+		surfacedStrategies,
+		endSessionTier
 	}
 }
 
@@ -359,5 +436,12 @@ function PostSessionSkeleton() {
 	)
 }
 
-export type { PerSubTypeAccuracy, PerSubTypeLatency, SessionInfo, SurfacedStrategy, WrongItem }
+export type {
+	EndSessionTierForRender,
+	PerSubTypeAccuracy,
+	PerSubTypeLatency,
+	SessionInfo,
+	SurfacedStrategy,
+	WrongItem
+}
 export default Page

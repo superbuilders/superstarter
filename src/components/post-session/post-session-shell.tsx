@@ -38,12 +38,14 @@
 import { useRouter } from "next/navigation"
 import type * as React from "react"
 import type {
+	EndSessionTierForRender,
 	PerSubTypeAccuracy,
 	PerSubTypeLatency,
 	SurfacedStrategy,
 	WrongItem
 } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { AccuracySummary } from "@/components/post-session/accuracy-summary"
+import { BeltIndicator } from "@/components/post-session/belt-indicator"
 import { LatencySummary } from "@/components/post-session/latency-summary"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
@@ -62,6 +64,17 @@ interface PostSessionShellProps {
 	wrongItems: WrongItem[]
 	triageScore: TriageScore
 	surfacedStrategies: SurfacedStrategy[]
+	// Drill-mode adaptive walker tier reached at session end. Sub-phase
+	// 5 commit 4 wires this; per plan §5.5 the value is null on:
+	//   - non-drill sessions (page-level passes null defensively)
+	//   - drill sessions with zero attempts (component renders nothing
+	//     — heading falls back to the unchanged "Session complete"
+	//     surface)
+	// The shell guards on sessionType === "drill" AND endSessionTier
+	// non-null before rendering the belt; either gate failing keeps
+	// the heading bit-for-bit unchanged for diagnostic / full-length /
+	// simulation render paths.
+	endSessionTier: EndSessionTierForRender | null
 }
 
 function PostSessionShell(props: PostSessionShellProps) {
@@ -106,11 +119,31 @@ function PostSessionShell(props: PostSessionShellProps) {
 		trailingSection = <ContinueButton />
 	}
 
+	// Heading-area belt indicator (sub-phase 5 commit 4, plan §5.3).
+	// Renders only when the session is drill-mode AND the walker has
+	// produced a tier (non-null). Diagnostic / full-length / simulation
+	// keep the unchanged heading; drill sessions with zero attempts
+	// (endSessionTier === null per plan §5.5 zero-attempt branch) also
+	// keep the unchanged heading. Per plan §2.6 / §5.3 audit (F)
+	// recommendation, this is a heading expansion (slot 1), NOT a new
+	// slot — the slot 2-9 ordering stays untouched.
+	let beltSection: React.ReactNode = null
+	if (props.sessionType === "drill" && props.endSessionTier !== null) {
+		beltSection = (
+			<BeltIndicator
+				tier={props.endSessionTier.tier}
+				subTypeDisplayName={props.endSessionTier.subTypeDisplayName}
+				isPreFloor={props.endSessionTier.isPreFloor}
+			/>
+		)
+	}
+
 	return (
 		<main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-8 px-6 py-12">
-			<header className="space-y-2" data-testid="post-session-heading">
+			<header className="space-y-3" data-testid="post-session-heading">
 				<h1 className="font-semibold text-2xl tracking-tight">{heading}</h1>
 				{subhead}
+				{beltSection}
 			</header>
 
 			{/* Slot 2: <TriageScoreLine> — filled in commit 3 (plan §7). */}

@@ -30,6 +30,7 @@ function PostSessionContent(props: PostSessionContentProps) {
 			wrongItems={info.wrongItems}
 			triageScore={info.triageScore}
 			surfacedStrategies={info.surfacedStrategies}
+			endSessionTier={info.endSessionTier}
 		/>
 	)
 }
