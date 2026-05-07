@@ -7,6 +7,12 @@
 // CTA back to the Mastery Map; no retry button (the bank doesn't fill
 // on user request); no auto-poll (the testbank workstream is async
 // authoring, not a workflow this page can wait on).
+//
+// Link target: `/drill` (the Mastery Map sub-type picker, mounted at
+// the /drill index since dashboard round commit 3 — see
+// `docs/plans/dashboard.md` §5 commit 3 + Dashboard PRD §11.5). Was
+// `/` pre-migration; rewritten because the link semantically meant
+// "go to the picker," and the picker now lives at /drill.
 
 import type * as React from "react"
 import { Button } from "@/components/ui/button"
@@ -32,7 +38,7 @@ function EmptyBankPane(props: EmptyBankPaneProps) {
 			</header>
 			<div>
 				<Button asChild size="lg">
-					<Anchor href="/">Back to Mastery Map</Anchor>
+					<Anchor href="/drill">Back to Mastery Map</Anchor>
 				</Button>
 			</div>
 		</main>
