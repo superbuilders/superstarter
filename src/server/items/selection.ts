@@ -197,6 +197,14 @@ function stepDown(tier: Difficulty): Difficulty {
 	return next
 }
 
+// PRD §4.2 + SPEC §9.1 last-10-attempts running-window floor. The
+// walker holds at the initial tier until this many in-session attempts
+// accumulate, then begins stepping. Exported so consumers outside the
+// walker can reference the same threshold — sub-phase 5's belt-
+// indicator labels its pre-floor branch ("calibrating") off this
+// constant.
+const ADAPTIVE_FLOOR_ATTEMPTS = 10
+
 // SPEC §9.1 adaptive difficulty stepper. Pure function over the last
 // 10 in-session attempts: holds before the 10-attempt floor; steps up
 // on (accuracy ≥ 0.9 AND median latency < 0.8× threshold); steps down
@@ -205,7 +213,7 @@ function stepDown(tier: Difficulty): Difficulty {
 // under"/"well above" framing. Sub-phase 2 commit 1 lands the function
 // dormant; commit 2 wires it into the drill arm of getNextItem.
 function nextDifficultyTier(ctx: AdaptiveContext): Difficulty {
-	if (ctx.last10Correct.length < 10) {
+	if (ctx.last10Correct.length < ADAPTIVE_FLOOR_ATTEMPTS) {
 		return ctx.currentTier
 	}
 	const correctCount = ctx.last10Correct.filter(function isTrue(b) {
@@ -496,7 +504,7 @@ async function readInSessionAttemptWindow(sessionId: string): Promise<InSessionW
 			.from(attempts)
 			.where(eq(attempts.sessionId, sessionId))
 			.orderBy(desc(attempts.id))
-			.limit(10)
+			.limit(ADAPTIVE_FLOOR_ATTEMPTS)
 	)
 	if (result.error) {
 		logger.error(
@@ -619,6 +627,7 @@ export type {
 	SessionType
 }
 export {
+	ADAPTIVE_FLOOR_ATTEMPTS,
 	ErrDiagnosticMixOutOfRange,
 	ErrInvalidItemBody,
 	ErrInvalidOptions,
