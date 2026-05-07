@@ -112,7 +112,7 @@ async function DrillConfigure(props: {
 			<header className="space-y-2">
 				<h1 className="font-semibold text-2xl tracking-tight">{init.config.displayName}</h1>
 				<p className="text-muted-foreground text-sm">
-					Standard timing. Pick a length and start.
+					Standard timing. Pick a session length and enter the dojo.
 				</p>
 			</header>
 			<form action={runPath} method="get" className="space-y-6">
@@ -126,7 +126,7 @@ async function DrillConfigure(props: {
 				</fieldset>
 				<div className="flex justify-end">
 					<Button type="submit" size="lg">
-						Start drill
+						Enter dojo
 					</Button>
 				</div>
 			</form>

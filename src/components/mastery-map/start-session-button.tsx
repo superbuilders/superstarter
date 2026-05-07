@@ -23,7 +23,7 @@ function StartSessionButton(props: StartSessionButtonProps) {
 	const href = `/drill/${props.subTypeId}`
 	return (
 		<Button asChild size="lg">
-			<a href={href}>Start drill: {props.displayName}</a>
+			<a href={href}>Enter dojo: {props.displayName}</a>
 		</Button>
 	)
 }

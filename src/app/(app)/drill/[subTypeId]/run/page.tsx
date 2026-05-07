@@ -87,7 +87,7 @@ function Page(props: PageProps) {
 function RunSkeleton() {
 	return (
 		<main className="mx-auto flex min-h-dvh max-w-xl items-center justify-center px-6">
-			<p className="text-muted-foreground text-sm">Preparing your drill…</p>
+			<p className="text-muted-foreground text-sm">Preparing your dojo session…</p>
 		</main>
 	)
 }
