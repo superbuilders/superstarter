@@ -3,42 +3,53 @@
 // <TopNav> — three-column header for the dashboard. Brand wordmark
 // on the left, primary nav in the middle, streak chip + avatar on
 // the right. Dashboard PRD §10.11 + `docs/plans/dashboard.md` §5
-// commit 9.
+// commit 9 + `docs/plans/practice-round.md` §5 commit 1 (NAV rename
+// "Practice" → "Practice Test", relink `/drill` → `/full-length/
+// configure` per ask 1; the Mastery Map picker at /drill was deleted
+// in this same commit because the dashboard's dojo cards are now
+// the picker).
 //
 // "use client" because of usePathname() — active-route highlighting
 // is the only client-side concern here. Next.js 16's usePathname
 // .d.ts signature claims `string`, but at SSR the runtime returns
 // `null` (the route segment isn't associated yet on the server tick
 // before client hydration). Audit-against-actual-artifact at
-// commit 9 (per SPEC §6.14.18 + §6.14.23 — runtime verification,
-// not static-trace) caught a TypeError on `pathname.startsWith` when
-// the throwaway streaming render hit the server-side null path.
-// Optional-chain `pathname?.startsWith(...) === true` matches PRD
-// §10.11's verbatim shape and tolerates the SSR-null case without
-// fighting the .d.ts type. The active-class for "/" uses
-// `pathname === "/"`; comparing null !== "/" yields false (correct
-// inactive default during SSR).
+// dashboard round commit 9 (per SPEC §6.14.18 + §6.14.23 — runtime
+// verification, not static-trace) caught a TypeError on
+// `pathname.startsWith` when the throwaway streaming render hit the
+// server-side null path. Optional-chain `pathname?.startsWith(...)
+// === true` tolerates the SSR-null case without fighting the .d.ts
+// type. The active-class for "/" uses `pathname === "/"`; comparing
+// null !== "/" yields false (correct inactive default during SSR).
 //
 // All five nav hrefs are static literals; <Link> works under
 // next.config.ts's `typedRoutes: true` without the dynamic-href <a>
-// reconciliation that commits 7+8 applied for runtime-derived
-// hrefs. The five routes were established earlier in the round:
-//   - "/"        → dashboard (commit 10 mounts; commits 3-9 still
-//                 render the Mastery Map, which migrated to /drill
-//                 at commit 3)
-//   - "/drill"   → Mastery Map sub-type picker (commit 3)
-//   - "/lessons" → stub page (commit 4)
-//   - "/review"  → stub page (commit 4)
-//   - "/stats"   → stub page (commit 4)
+// reconciliation that dashboard round commits 7+8 applied for
+// runtime-derived hrefs. The five routes resolve as:
+//   - "/"                     → dashboard (commit 10 of the dashboard
+//                                round mounted it; this round's commit 1
+//                                deleted the /drill picker so the
+//                                dashboard's dojo cards are the picker)
+//   - "/full-length/configure" → full-length practice test configure
+//                                (Phase 5 sub-phase 3); ask 1's relink
+//                                target. "Practice Test" highlight
+//                                applies on `/full-length/*` routes
+//                                via `pathname?.startsWith("/full-length")`
+//   - "/lessons"              → stub page (dashboard round commit 4)
+//   - "/review"               → stub page (dashboard round commit 4)
+//   - "/stats"                → stub page (dashboard round commit 4)
 // All five resolve to a 200 by the time this nav renders.
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { StreakChip } from "@/components/dashboard/streak-chip"
 
-const NAV: ReadonlyArray<{ href: "/" | "/drill" | "/lessons" | "/review" | "/stats"; label: string }> = [
+const NAV: ReadonlyArray<{
+	href: "/" | "/full-length/configure" | "/lessons" | "/review" | "/stats"
+	label: string
+}> = [
 	{ href: "/", label: "Dashboard" },
-	{ href: "/drill", label: "Practice" },
+	{ href: "/full-length/configure", label: "Practice Test" },
 	{ href: "/lessons", label: "Lessons" },
 	{ href: "/review", label: "Review" },
 	{ href: "/stats", label: "Stats" }
