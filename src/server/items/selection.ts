@@ -20,6 +20,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { z } from "zod"
 import { type Difficulty, type SubTypeId, subTypeIds, subTypes } from "@/config/sub-types"
 import { shuffledDiagnosticOrder } from "@/config/diagnostic-mix"
+import { generateFullLengthSlots } from "@/config/difficulty-curves"
 import { db } from "@/db"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { masteryState } from "@/db/schemas/practice/mastery-state"
@@ -350,34 +351,44 @@ async function getNextFixedCurve(
 	ctx: SessionContext,
 	attemptIndex: number
 ): Promise<ItemForRender | undefined> {
-	if (ctx.type !== "diagnostic") {
-		// Phase 3 only ships diagnostic on the fixed_curve path — full_length
-		// and simulation reuse this branch in Phase 5 against
-		// difficulty-curves.ts. Throwing here is deliberate.
+	// Per-session deterministic slot resolution by session type:
+	//   - diagnostic  → shuffledDiagnosticOrder (50-entry curated mix from
+	//                   src/config/diagnostic-mix.ts; same sessionId →
+	//                   same permutation per phase-3-polish §3.3 / §4.1).
+	//   - full_length → generateFullLengthSlots (50-slot per-decile
+	//                   cross-sub-type-interleaved generator from
+	//                   src/config/difficulty-curves.ts; phase5-full-
+	//                   length-test plan §3 / Q12.1; sub-types repeat
+	//                   across slots, item-ids never repeat per the
+	//                   downstream pickWithFallback's sessionAttemptedIds
+	//                   exclusion).
+	//   - simulation  → not yet supported (phase 6); throws.
+	//   - drill       → unreachable here; getNextItem dispatches drill to
+	//                   getNextAdaptive (selectionStrategyForSession returns
+	//                   'adaptive' for drill). Throws defensively.
+	let slot: { subTypeId: SubTypeId; difficulty: Difficulty } | undefined
+	let mixSize: number
+	if (ctx.type === "diagnostic") {
+		const order = shuffledDiagnosticOrder(ctx.id)
+		mixSize = order.length
+		slot = order[attemptIndex]
+	} else if (ctx.type === "full_length") {
+		const order = generateFullLengthSlots(ctx.id)
+		mixSize = order.length
+		slot = order[attemptIndex]
+	} else {
 		logger.error(
 			{ sessionId: ctx.id, type: ctx.type },
-			"getNextFixedCurve: only diagnostic supported in phase 3"
+			"getNextFixedCurve: type not yet supported on fixed_curve path"
 		)
-		throw errors.new("fixed_curve only supports diagnostic in phase 3")
+		throw errors.new("fixed_curve does not support session type")
 	}
-
-	// Per-session deterministic shuffle: same sessionId always returns the
-	// same permutation; different sessionIds produce different orders. The
-	// `(subTypeId, difficulty)` multiset is identical to `diagnosticMix` —
-	// only the order changes. Reversal of the implicit Phase 3 array-order
-	// contract per docs/plans/phase-3-polish-practice-surface-features.md
-	// §3.3 / §4.1.
-	const order = shuffledDiagnosticOrder(ctx.id)
-	const slot = order[attemptIndex]
 	if (!slot) {
 		logger.error(
-			{ sessionId: ctx.id, attemptIndex, mixSize: order.length },
+			{ sessionId: ctx.id, attemptIndex, mixSize },
 			"getNextFixedCurve: mix index out of range"
 		)
-		throw errors.wrap(
-			ErrDiagnosticMixOutOfRange,
-			`attemptIndex ${attemptIndex} >= ${order.length}`
-		)
+		throw errors.wrap(ErrDiagnosticMixOutOfRange, `attemptIndex ${attemptIndex} >= ${mixSize}`)
 	}
 
 	const sessionAttemptedIds = await readSessionAttemptedItemIds(ctx.id)

@@ -29,6 +29,12 @@ import { expect, test } from "bun:test"
 import * as errors from "@superbuilders/errors"
 import { and, count, eq } from "drizzle-orm"
 import { diagnosticMix } from "@/config/diagnostic-mix"
+import {
+	generateFullLengthSlots,
+	roundDecile,
+	standardCurve
+} from "@/config/difficulty-curves"
+import { type Difficulty, type SubTypeId, subTypeIds } from "@/config/sub-types"
 import { createAdminDb } from "@/db/admin"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { items } from "@/db/schemas/catalog/items"
@@ -429,3 +435,251 @@ test("getNextAdaptive: walker steps up after 10 attempts at high performance —
 	const eleventh = lastSubmitResult.nextItem
 	expect(requestedTierForItem(eleventh)).toBe("medium")
 }, 60_000)
+
+// Phase 5 sub-phase 3 commit 3 — full-length engine integration tests
+// (plan §3 verification scenarios 6-8). Drive a 50-attempt full-length
+// session via startSession + submitAttempt; verify the per-decile
+// requested-tier distribution matches roundDecile(standardCurve[k], 10);
+// verify slot-by-slot integrity (sub-type matches generator, served
+// tier matches request OR is recorded as tier-degraded with the right
+// shape); verify all 50 served item ids are distinct.
+//
+// Bank state at write-time: 439 live items / 14 sub-types. Twelve
+// (subTypeId, difficulty) cells have 0 live items: 11 brutal-tier cells
+// (subtypes without any brutal items) + 1 hard-tier cell
+// (numerical.ratios.hard = 0 per commit 1's audit-surfaced finding).
+// The slot generator's deciles 3-5 request hard + brutal heavily, so
+// most 50-slot sessions will hit at least one zero cell and tier-
+// degrade. Test 2 asserts ≥ 1 tier-degraded attempt across the
+// session — relies on the bank's current zero-cell distribution; if a
+// future round populates every cell, the assertion would need to be
+// downgraded to "no tier-degraded attempts is acceptable" or to drive
+// multiple sessions to produce a hit.
+
+const ErrFullLengthRowMissing = errors.new("full-length-test: attempt row missing for slot")
+const ErrFullLengthSubTypeMismatch = errors.new("full-length-test: attempt sub_type_id != predicted")
+const ErrFullLengthRequestedTierMismatch = errors.new(
+	"full-length-test: attempt requested-tier != predicted"
+)
+
+interface FullLengthAttemptRow {
+	itemId: string
+	subTypeId: SubTypeId
+	itemDifficulty: Difficulty
+	servedAtTier: Difficulty
+	fallbackFromTier: Difficulty | null
+}
+
+const subTypeIdSet: ReadonlySet<string> = new Set<string>(subTypeIds)
+function asSubTypeIdForTest(s: string): SubTypeId {
+	if (!subTypeIdSet.has(s)) {
+		logger.error({ subTypeId: s }, "full-length-test: unknown sub_type_id")
+		throw errors.new("unknown sub_type_id")
+	}
+	const matched = subTypeIds.find(function eq(known) {
+		return known === s
+	})
+	if (!matched) {
+		logger.error({ subTypeId: s }, "full-length-test: post-guard miss (impossible)")
+		throw errors.new("sub_type_id post-guard miss")
+	}
+	return matched
+}
+
+async function readFullLengthAttempts(sessionId: string): Promise<FullLengthAttemptRow[]> {
+	await using adminDb = await createAdminDb()
+	const result = await errors.try(
+		adminDb.db
+			.select({
+				itemId: attempts.itemId,
+				subTypeId: items.subTypeId,
+				itemDifficulty: items.difficulty,
+				servedAtTier: attempts.servedAtTier,
+				fallbackFromTier: attempts.fallbackFromTier
+			})
+			.from(attempts)
+			.innerJoin(items, eq(attempts.itemId, items.id))
+			.where(eq(attempts.sessionId, sessionId))
+			.orderBy(attempts.id)
+	)
+	if (result.error) {
+		logger.error(
+			{ error: result.error, sessionId },
+			"full-length-test: attempts read failed"
+		)
+		throw errors.wrap(result.error, "read attempts")
+	}
+	return result.data.map(function narrowRow(r): FullLengthAttemptRow {
+		return {
+			itemId: r.itemId,
+			subTypeId: asSubTypeIdForTest(r.subTypeId),
+			itemDifficulty: r.itemDifficulty,
+			servedAtTier: r.servedAtTier,
+			fallbackFromTier: r.fallbackFromTier
+		}
+	})
+}
+
+async function runFullLengthSession(suffix: string): Promise<{
+	userId: string
+	sessionId: string
+	rows: FullLengthAttemptRow[]
+}> {
+	const userId = await createTestUser(suffix)
+	const start = await startSession({ userId, type: "full_length" })
+	const sessionId = start.sessionId
+
+	let next: ItemForRender = start.firstItem
+	for (let i = 1; i < 50; i += 1) {
+		const r = await errors.try(
+			submitAttempt({
+				sessionId,
+				itemId: next.id,
+				selectedAnswer: next.options[0]?.id,
+				latencyMs: 5_000,
+				triagePromptFired: false,
+				triageTaken: false,
+				selection: next.selection
+			})
+		)
+		if (r.error) {
+			logger.error({ error: r.error, sessionId, i }, "full-length-test: submit failed")
+			throw errors.wrap(r.error, "submit")
+		}
+		const data = r.data
+		if (data.nextItem === undefined) {
+			logger.error(
+				{ sessionId, i },
+				"full-length-test: nextItem undefined before quota; full-length exhausted early"
+			)
+			throw ErrUnexpectedNextItemAbsence
+		}
+		next = data.nextItem
+	}
+	// 50th submit — engine returns nextItem: undefined cleanly because
+	// target_question_count = 50 (per start.ts targetQuestionCountFor).
+	const finalResult = await errors.try(
+		submitAttempt({
+			sessionId,
+			itemId: next.id,
+			selectedAnswer: next.options[0]?.id,
+			latencyMs: 5_000,
+			triagePromptFired: false,
+			triageTaken: false,
+			selection: next.selection
+		})
+	)
+	if (finalResult.error) {
+		logger.error(
+			{ error: finalResult.error, sessionId },
+			"full-length-test: final submit failed"
+		)
+		throw errors.wrap(finalResult.error, "final submit")
+	}
+	expect(finalResult.data.nextItem).toBeUndefined()
+
+	const rows = await readFullLengthAttempts(sessionId)
+	expect(rows.length).toBe(50)
+	return { userId, sessionId, rows }
+}
+
+test("full_length: engine completes 50 attempts; per-decile requested-tier distribution matches roundDecile", async function fullLengthCompletes50AndMatchesPerDecileDistribution() {
+	const { sessionId, rows } = await runFullLengthSession("fl-complete")
+	const predicted = generateFullLengthSlots(sessionId)
+	expect(predicted.length).toBe(50)
+
+	for (const [k, distribution] of standardCurve.entries()) {
+		const expected: Record<Difficulty, number> = roundDecile(distribution, 10)
+		const actual: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0, brutal: 0 }
+		for (let i = k * 10; i < (k + 1) * 10; i += 1) {
+			const row = rows[i]
+			if (!row) {
+				logger.error({ sessionId, k, i }, "full-length-test: attempt row missing")
+				throw errors.wrap(ErrFullLengthRowMissing, `slot ${i}`)
+			}
+			// REQUESTED tier per SPEC §9.2 verification clarification:
+			// fallback_from_tier when degraded; otherwise
+			// served_at_tier. Same shape as requestedTierForRow below.
+			const requested = requestedTierForRow(row)
+			actual[requested] += 1
+		}
+		expect(actual).toEqual(expected)
+	}
+}, 120_000)
+
+function tierRank(tier: Difficulty): number {
+	if (tier === "easy") return 0
+	if (tier === "medium") return 1
+	if (tier === "hard") return 2
+	return 3
+}
+
+function requestedTierForRow(row: FullLengthAttemptRow): Difficulty {
+	if (row.fallbackFromTier !== null) {
+		return row.fallbackFromTier
+	}
+	return row.servedAtTier
+}
+
+test("full_length: slot-by-slot integrity — predicted slot matches attempt sub_type_id + requested tier; tier-degraded attempts record correct shape", async function fullLengthSlotByIntegrity() {
+	const { sessionId, rows } = await runFullLengthSession("fl-integrity")
+	const predicted = generateFullLengthSlots(sessionId)
+	let degradedSeen = 0
+	for (let i = 0; i < 50; i += 1) {
+		const row = rows[i]
+		const slot = predicted[i]
+		if (!row || !slot) {
+			logger.error({ sessionId, i }, "full-length-test: row or slot missing")
+			throw errors.wrap(ErrFullLengthRowMissing, `slot ${i}`)
+		}
+		// Sub-type always matches the slot generator's request —
+		// pickWithFallback only varies tier, not sub-type.
+		if (row.subTypeId !== slot.subTypeId) {
+			logger.error(
+				{ sessionId, i, expected: slot.subTypeId, actual: row.subTypeId },
+				"full-length-test: sub_type_id mismatch"
+			)
+			throw errors.wrap(ErrFullLengthSubTypeMismatch, `slot ${i}`)
+		}
+		expect(row.subTypeId).toBe(slot.subTypeId)
+
+		// Requested tier (fallback_from_tier when degraded; otherwise
+		// served_at_tier) always matches slot.difficulty per SPEC §9.2.
+		const requested = requestedTierForRow(row)
+		if (requested !== slot.difficulty) {
+			logger.error(
+				{ sessionId, i, expected: slot.difficulty, actual: requested },
+				"full-length-test: requested-tier mismatch"
+			)
+			throw errors.wrap(ErrFullLengthRequestedTierMismatch, `slot ${i}`)
+		}
+		expect(requested).toBe(slot.difficulty)
+
+		// Served-tier matches the actual item's difficulty (DB-truth).
+		expect(row.servedAtTier).toBe(row.itemDifficulty)
+
+		if (row.fallbackFromTier !== null) {
+			degradedSeen += 1
+			// Tier-degraded must record a STRICTLY lower served tier
+			// than the requested tier (per pickWithFallback's
+			// tiersDownFrom walk).
+			expect(tierRank(row.servedAtTier)).toBeLessThan(tierRank(slot.difficulty))
+		}
+	}
+	// Bank has 12 zero cells (11 brutal + 1 hard); deciles 3-5 request
+	// hard + brutal heavily; near-certain (~99% per session) that at
+	// least one slot tier-degrades. If this assertion ever flakes, the
+	// bank's zero-cell distribution likely changed — adjust to drive
+	// multiple sessions or scope to specific zero cells.
+	expect(degradedSeen).toBeGreaterThanOrEqual(1)
+}, 120_000)
+
+test("full_length: no re-serve within session — 50 served item.id values are all distinct", async function fullLengthNoReServe() {
+	const { rows } = await runFullLengthSession("fl-no-reserve")
+	const itemIds = rows.map(function pickItemId(r) {
+		return r.itemId
+	})
+	expect(itemIds.length).toBe(50)
+	const distinct = new Set(itemIds)
+	expect(distinct.size).toBe(50)
+}, 120_000)
