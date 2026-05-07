@@ -11,6 +11,7 @@ import * as opsCandidatePromotionLogSchema from "@/db/schemas/ops/candidate-prom
 import * as practiceAttemptsSchema from "@/db/schemas/practice/attempts"
 import * as practiceMasteryStateSchema from "@/db/schemas/practice/mastery-state"
 import * as practicePracticeSessionsSchema from "@/db/schemas/practice/practice-sessions"
+import * as practiceUserSubTypeBeltsSchema from "@/db/schemas/practice/user-sub-type-belts"
 
 const dbSchema = {
 	...authUsersSchema,
@@ -23,6 +24,7 @@ const dbSchema = {
 	...practicePracticeSessionsSchema,
 	...practiceAttemptsSchema,
 	...practiceMasteryStateSchema,
+	...practiceUserSubTypeBeltsSchema,
 	...opsCandidatePromotionLogSchema
 }
 
