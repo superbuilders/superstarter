@@ -1,6 +1,16 @@
 # Plan — Tagger improvement (Phase 5 fourth operational round)
 
-> **Status: planning.** Round opens against `main` at HEAD `58b2b10` post-adaptive-walker-close. This is the fourth operational round in Phase 5: taxonomy-restructure (`1710a91`) → data-wipe (`54775a9`) → testbank-re-extraction (six commits ending `9c99103`+round-close) → adaptive-walker (`58b2b10`) → this round.
+> **Status: shipped 2026-05-06.** The five-commit sequence below landed on `main` cleanly:
+>
+>   - Commit 1 (open round + capture pre-fix audit baseline) — `807635e` — `docs+chore: open phase5-tagger-improvement round; capture pre-fix audit baseline`
+>   - Commit 2 (sharpen sub-type disambiguation rules + tier-boundary cues; sync taxonomy count) — `65e8af4` — `feat(ingest+tagger): sharpen sub-type disambiguation rules + tier-boundary cues; sync taxonomy count`
+>   - Commit 3.5 (rubric iteration: canonical example, precedence ordering, ratios rule scope; export classifier prompt for script reuse) — `53604be` — `feat(ingest+tagger): iterate disambiguation rules — canonical example, precedence ordering, ratios rule scope; export classifier prompt for script reuse`
+>   - Commit 3.6 (broaden workrate rule, sharpen ratios carve-out leading, replace pen seed with non-proportional additive; full bank re-tag) — `4b84299` — `feat(ingest+tagger+items): broaden workrate rule, sharpen ratios carve-out leading, replace pen seed with non-proportional additive; full bank re-tag`
+>   - Commit 4 (round-close docs reconcile) — *this commit* — `docs(plan): close phase5-tagger-improvement round; reconcile round findings`
+>
+> **Round-close summary.** The round closes both finding (a) and finding (e) from the testbank-re-extraction round-close. `12min_workrate` per-folder correctness moves 85.7% (6/7) → 100% (7/7); `12min_ratios` moves 45.5% (5/11) → 63.6% raw (7/11) / 77.8% adjusted (7/9 against the achievable denominator per §2(c)+§8.5, with marathon and wedding equalization-boundary items documented as accepted exceptions). The two non-brutal zero cells named in §2(b) are populated by the re-tag: `numerical.workrate.easy` from 0 → 2 (single-rate work problems newly captured by the broadened workrate rule); `numerical.lowest_values.hard` from 0 → 8 (taxonomic re-tagging of "highest value" comparison items previously labeled fractions). The 152 sub-type-or-difficulty changes applied in commit 3.6 (out of 439 items) settled at a 2.6% manual-correction rate (4 reverts: 2 from dry-run case-by-case audit rejection — probability item without "%", and an analogy item where options reveal an analogy-with-antonym-relationship structure; 2 from stochastic apply-vs-dry-run divergence — a critical_reasoning logic-puzzle and a clean SDT item). All 12 other ground-truth folders held at ≥90%. Cumulative LLM cost across the round was ~$18.96 across three dry-runs and one apply (Sonnet-4.6 at $3/$15 per Mtok). Test count holds at 49/49 across all five commits. Two operational lessons surfaced for downstream rounds — see §11 below.
+
+> **Original status at plan-write.** "Status: planning. Round opens against `main` at HEAD `58b2b10` post-adaptive-walker-close. This is the fourth operational round in Phase 5: taxonomy-restructure (`1710a91`) → data-wipe (`54775a9`) → testbank-re-extraction (six commits ending `9c99103`+round-close) → adaptive-walker (`58b2b10`) → this round."
 
 The round closes the empirical-classification gaps surfaced by the testbank-re-extraction round-close (findings (a) and (e)) and re-confirmed by the adaptive-walker sub-phase 2 commit-2 audit (the 56-cell snapshot). It is bounded, operational, and data-quality only: prompt-engineering at the classifier and a full-bank re-tag. No SPEC changes, no schema migrations, no walker behavior changes, no taxonomy edits.
 
@@ -407,4 +417,26 @@ This round inherits §6.14.18 (audit-against-actual-artifact) cleanly — §2 re
 - **From adaptive-walker round** (`58b2b10`): the walker's tier-degradation behavior under empty (sub-type × tier) cells; the 56-cell snapshot in `88335b5`'s commit body (used by §2(b)'s zero-cell baseline). The walker's `served_at_tier` write path on `attempts.ts` (referenced in §5.4 — the re-tag does not interact with this).
 - **From data-wipe round** (`54775a9`): the `targetQuestionCountFor` derivation from `diagnosticMix.length` (untouched by this round; the diagnostic mix is invariant under re-tagging).
 - **From OCR-import-screenshots round** (predecessor pipeline): the script-ruleset-exemption convention (the new `scripts/dev/retag-items.ts` falls under this — `scripts/` files use `console.log` + native try/catch + inline ternaries per the predecessor convention).
+
+## 11. Round-close findings (appended at commit 4)
+
+Three findings surfaced during the round that did NOT exist at plan-time and that affect future operational rounds. Captured here as the durable round-close record. None are §6.14 SPEC candidates (they describe operational workflow, not invariants of the system); they are guidance for the next operational round of the same shape.
+
+### 11.1 Stochastic LLM noise at `temperature=0` is real and material
+
+The commit-3.6 dry-run and apply runs used identical prompts at `temperature=0` against the same 439 items, but the apply produced 2 sub-type changes that did NOT appear in the dry-run (`019dfdaf-94e0` critical_reasoning → word_problems; `019dfdb3-a9c5` speed_distance_time → ratios). Both required manual UPDATE corrections post-apply. The divergence rate was 2/22 sub-type changes (~9%) and 2/439 items (~0.5%), but the items affected were taxonomically high-confidence (a clean SDT stem and a logic-puzzle critical_reasoning stem) — divergence isn't confined to borderline items.
+
+**Operational lesson.** Dry-run output is a *projection*, not a *commitment*. The case-by-case audit per option (c) framing must run against the apply-mode output, not just the dry-run output. Future operational rounds with apply-mode LLM passes should treat the dry-run as a sufficiency check (does the prompt produce the right shape of changes?) and reserve final accept/reject judgment for the post-apply audit. Plan §5.1 + §5.2 verification protocols should be re-read with this distinction.
+
+### 11.2 Folder-content vs folder-name mismatches are intrinsic at the per-item level
+
+Plan §2(c) anticipated 1-2 borderline items in `12min_ratios` that taxonomically belong outside ratios per their dominant operation (the q09+q10 equalization items). The empirical full-folder audit at commit 3.6 confirmed both items (`019dfdae-7b3f` Andrea marathon donations, `019dfdae-97a8` Jack/Megan wedding contributions): both ask for an equal-split redistribution amount, which is taxonomically `numerical.averages` per the dominant-operation rubric, not `numerical.ratios`. The folder name is a folder-level proxy for ground truth, not a per-item gate. This is why §5.1's pass criterion accommodated `12min_ratios ≥75%` against the achievable denominator (9 of 11 = 82% ceiling per §2(c)) rather than a flat 80%/11.
+
+**Operational lesson.** Folder-convention thresholds must be expressed against the achievable denominator (folder size minus documented intrinsic exceptions), not the raw folder size. The case-by-case audit's accept/reject framing per option (c) is the documentation seam: each accepted exception's taxonomic justification per SPEC §4.1 lives in the apply-commit body. Future per-folder-correctness rounds should anticipate this carve-out at plan-time and define "achievable denominator" alongside "raw threshold" in §5.1 explicitly.
+
+### 11.3 Cost-estimate envelope at plan-time was ~10× low
+
+Plan §1 + §3.2 envelope was ~$1-2 (one full re-tag at 439 items × Sonnet-4.6 text-only). Actual cumulative cost across the round was ~$18.96 — driven by three dry-run iterations (one per rubric revision) plus the final apply, each at ~$4.7-4.8. The envelope assumed a one-shot rubric revision; the empirical reality required two rubric iterations (commits 3.5 + 3.6) plus the original commit 2 prompt edits, each requiring a fresh dry-run to verify regression-clearing.
+
+**Operational lesson.** Cost envelopes for LLM-bearing rounds should be expressed per-iteration ("one full pass = $4.50; budget for N iterations") rather than as a flat round total. The `retag-items.ts` script's per-row cost is stable and predictable; the round's iteration count is the variable. Future rounds with iterative-rubric shapes should plan for 2-4 iterations as the default, not 1, with explicit halt-and-report gates per iteration (the gate convention this round used: "if any named regression persists, halt and propose next iteration scope"). This convention worked well — three iteration rounds (commit 2, 3.5, 3.6) each closed cleanly at gate, with no false starts or rollbacks.
 
