@@ -1,25 +1,31 @@
 import type { Metadata } from "next"
-import { Geist, Inter } from "next/font/google"
+import { Newsreader, Plus_Jakarta_Sans } from "next/font/google"
 import type * as React from "react"
 import "@/styles/unstyled/index.css"
 import { cn } from "@/lib/utils"
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
+const sans = Plus_Jakarta_Sans({
+	subsets: ["latin"],
+	display: "swap",
+	variable: "--font-sans-loaded"
+})
+
+const serif = Newsreader({
+	subsets: ["latin"],
+	display: "swap",
+	style: ["normal", "italic"],
+	variable: "--font-serif-loaded"
+})
 
 const metadata: Metadata = {
-	title: "Todos",
-	description: "A todo list app",
+	title: "18seconds",
+	description: "CCAT mastery training",
 	icons: [{ rel: "icon", url: "/favicon.svg", type: "image/svg+xml" }]
 }
 
-const geist = Geist({
-	subsets: ["latin"],
-	variable: "--font-geist-sans"
-})
-
 function RootLayout({ children }: { readonly children: React.ReactNode }) {
 	return (
-		<html lang="en" className={cn(geist.variable, inter.variable)}>
+		<html lang="en" className={cn(sans.variable, serif.variable)}>
 			<body>{children}</body>
 		</html>
 	)

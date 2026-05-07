@@ -40,6 +40,62 @@
 	 */
 	--belt-blue: oklch(0.55 0.16 245);
 	--belt-brown: oklch(0.4 0.07 50);
+	/*
+	 * Dashboard tokens (Dashboard PRD §8). Additive layer on top of the
+	 * existing shadcn neutrals + sub-phase-5 belt tokens. The shadcn
+	 * neutrals (--background, --foreground, --card, --border, --muted,
+	 * --accent, --primary, etc.) are NOT touched — the dashboard
+	 * components reference these new --bg, --surface, --text-1, etc.
+	 * tokens directly, leaving the existing surfaces (post-session
+	 * shell, mastery map, focus shell, full-length flow) on the shadcn
+	 * tokens unchanged. See `docs/plans/dashboard.md` §2.9 + §4 for the
+	 * audit trail; `--belt-blue` / `--belt-brown` are intentionally
+	 * NOT redeclared (see `docs/plans/DASHBOARD_PRD.md` §8 audit note).
+	 */
+	--bg: oklch(98% 0.005 270);
+	--surface: oklch(100% 0 0);
+	--surface-2: oklch(96% 0.008 270);
+	--border-soft: oklch(91% 0.012 270);
+	--border-strong: oklch(82% 0.018 270);
+	--text-1: oklch(20% 0.020 270);
+	--text-2: oklch(45% 0.020 270);
+	--text-3: oklch(62% 0.015 270);
+	--cobalt: #1e00ff;
+	--indigo: #0d0050;
+	--indigo-deep: #110068;
+	--alpha-accent: #4f46e5;
+	--pale: #a5b4fc;
+	--lavender: #f5f4fb;
+	--lavender-line: #e5e3f5;
+	--belt-white: oklch(94% 0.005 270);
+	--belt-white-line: oklch(82% 0.012 270);
+	--belt-black: oklch(22% 0.020 270);
+	--pace-on: oklch(55% 0.180 240);
+	--pace-warn: oklch(70% 0.160 70);
+	--pace-over: oklch(58% 0.200 25);
+	--good: oklch(58% 0.160 145);
+	--font-sans: var(--font-sans-loaded), "Plus Jakarta Sans", "Onest", system-ui, sans-serif;
+	--font-serif: var(--font-serif-loaded), "Newsreader", "Fraunces", Georgia, serif;
+	--t-xs: 0.75rem;
+	--t-sm: 0.875rem;
+	--t-base: 1rem;
+	--t-lg: 1.25rem;
+	--t-xl: 1.563rem;
+	--t-display: clamp(1.75rem, 1.4rem + 1.5vw, 2.5rem);
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 12px;
+	--sp-4: 16px;
+	--sp-6: 24px;
+	--sp-8: 32px;
+	--sp-12: 48px;
+	--r-sm: 6px;
+	--r-md: 10px;
+	--r-lg: 14px;
+	--ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+	--d-fast: 120ms;
+	--d-base: 240ms;
+	--d-slow: 380ms;
 	--chart-1: oklch(0.809 0.105 251.813);
 	--chart-2: oklch(0.623 0.214 259.815);
 	--chart-3: oklch(0.546 0.245 262.881);
@@ -78,6 +134,24 @@
 	/* Belt-indicator dark-mode counterparts; see :root for rationale. */
 	--belt-blue: oklch(0.65 0.18 245);
 	--belt-brown: oklch(0.55 0.09 50);
+	/*
+	 * Dashboard dark-mode tokens (Dashboard PRD §8). Mirrors the :root
+	 * additions; only surface/text/border tokens flip (depth via lighter
+	 * surfaces per ALPHA §3, not via shadows). Brand, pace, sizing,
+	 * motion, type-scale, and spacing tokens are mode-agnostic and are
+	 * inherited from :root. `--belt-blue` / `--belt-brown` are
+	 * intentionally NOT redeclared.
+	 */
+	--bg: oklch(15% 0.015 270);
+	--surface: oklch(18% 0.018 270);
+	--surface-2: oklch(22% 0.018 270);
+	--border-soft: oklch(28% 0.018 270);
+	--border-strong: oklch(36% 0.018 270);
+	--text-1: oklch(95% 0.005 270);
+	--text-2: oklch(72% 0.012 270);
+	--text-3: oklch(55% 0.012 270);
+	--belt-white: oklch(68% 0.012 270);
+	--belt-black: oklch(78% 0.012 270);
 	--chart-1: oklch(0.809 0.105 251.813);
 	--chart-2: oklch(0.623 0.214 259.815);
 	--chart-3: oklch(0.546 0.245 262.881);
@@ -114,6 +188,38 @@
 	--color-destructive: var(--destructive);
 	--color-belt-blue: var(--belt-blue);
 	--color-belt-brown: var(--belt-brown);
+	/*
+	 * Dashboard color tokens (Dashboard PRD §9). Surfaced after the
+	 * existing entries, never interleaved. Each entry maps a Tailwind
+	 * v4 color-token name to its underlying CSS variable from :root /
+	 * .dark. This is what makes utilities like `bg-bg`, `text-text-1`,
+	 * `border-border-soft` resolve at JIT time. `--font-sans` is NOT
+	 * duplicated here — the existing `--font-sans: var(--font-sans);`
+	 * mapping above already covers it.
+	 */
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-border-soft: var(--border-soft);
+	--color-border-strong: var(--border-strong);
+	--color-text-1: var(--text-1);
+	--color-text-2: var(--text-2);
+	--color-text-3: var(--text-3);
+	--color-cobalt: var(--cobalt);
+	--color-indigo: var(--indigo);
+	--color-indigo-deep: var(--indigo-deep);
+	--color-alpha-accent: var(--alpha-accent);
+	--color-pale: var(--pale);
+	--color-lavender: var(--lavender);
+	--color-lavender-line: var(--lavender-line);
+	--color-belt-white: var(--belt-white);
+	--color-belt-white-line: var(--belt-white-line);
+	--color-belt-black: var(--belt-black);
+	--color-pace-on: var(--pace-on);
+	--color-pace-warn: var(--pace-warn);
+	--color-pace-over: var(--pace-over);
+	--color-good: var(--good);
+	--font-serif: var(--font-serif);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-accent: var(--accent);
 	--color-muted-foreground: var(--muted-foreground);
@@ -277,4 +383,19 @@
 	 * animation ends.
 	 */
 	--animate-fill-bar-after-target: fill-bar 18000ms linear 18000ms both;
+}
+
+/*
+ * Dashboard utilities (Dashboard PRD §8). `.tabular` opts into
+ * `font-variant-numeric: tabular-nums` so numeric values in the
+ * ScoreStrip / PaceMetric / MistakesTile / LastSimTile align column-
+ * style across rows (e.g. estimated score | goal | days-to-test all
+ * occupy the same per-glyph width regardless of digit). Plus Jakarta
+ * Sans and Newsreader both ship `tnum` OpenType features; the utility
+ * is a feature flip, not a font swap.
+ */
+@layer utilities {
+	.tabular {
+		font-variant-numeric: tabular-nums;
+	}
 }

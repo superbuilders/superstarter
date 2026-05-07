@@ -1,6 +1,6 @@
 # Plan — Dashboard ("Dojo home")
 
-> **Status: draft, planning, not-yet-implemented.** This plan was drafted audit-first against `main` HEAD `8ab7b40` (2026-05-07; one commit past Phase 5 v1 feature-complete at `8a10fb1`). The PRD at `docs/plans/DASHBOARD_PRD.md` is the source of truth for the *what*; this plan is the source of truth for the *how* — commit sequencing, audit findings against `main`, decisions surfaced for Leo, and acceptance criteria. Closed-plans-immutable per SPEC §6.14.20 once written.
+> **Status: planning, approved, not yet implemented.** This plan was drafted audit-first against `main` HEAD `8ab7b40` (2026-05-07; one commit past Phase 5 v1 feature-complete at `8a10fb1`). The PRD at `docs/plans/DASHBOARD_PRD.md` is the source of truth for the *what*; this plan is the source of truth for the *how* — commit sequencing, audit findings against `main`, decisions surfaced for Leo, and acceptance criteria. Closed-plans-immutable per SPEC §6.14.20 once written.
 
 This plan covers shipping the "Dojo" dashboard at `/`, migrating the current Mastery Map at `(app)/page.tsx` to `/drill`, and stubbing out `/lessons`, `/stats`, `/review` so the new TopNav has zero 404 targets. The dashboard is a server-rendered, read-only screen behind the existing `(app)/layout.tsx` auth + diagnostic-completed gate; client-side interactivity is limited to navigation. No mutations, no form state.
 
@@ -196,44 +196,31 @@ Surfaced for Leo as **decision H** in §3.
 
 These are points where the audit found the PRD ambiguous, self-inconsistent, or contradicted by the codebase. Numbered E onward (decisions A–D were resolved by the audit findings above; A–D = "PRD claim verified, no decision needed").
 
-### Decision E — fix the `getLastFullSim` comment to use `'full_length'` not `'simulation'`?
+### Decision E — fix the `getLastFullSim` comment to use `'full_length'` not `'simulation'`? **RESOLVED: option 2.**
 
 **Context.** Audit checkpoint E (§2.5) showed the PRD's claim that full sims are stored with `type = 'simulation'` is wrong — they're stored with `type = 'full_length'`. The helper is stubbed in this round, but the inline comment that names the future query shape is a load-bearing breadcrumb for the Sim Scoring PRD.
 
-**Options.**
-1. Update the PRD comment to say `type = 'full_length'`.
-2. Update the PRD comment to say `type IN ('full_length', 'simulation')` — covers a future test-day-sim surface.
-3. Leave the PRD comment as-is and rely on the Sim Scoring PRD to audit-and-correct.
+**Resolution.** Option 2 — the helper comment in `score.ts` reads `type IN ('full_length', 'simulation')`. Covers a future test-day-sim surface without re-litigation. Lands at the (re-numbered) commit that creates the data layer (former §5 commit 6, now commit 5 post-merge).
 
-**Recommendation: option 2.** When the Sim Scoring PRD lands, "full-length OR simulation" is the broader and more defensible target (a test-day simulation is a full sim's score-relevant variant). Costs nothing today; saves a re-litigation later. Commit 6 of this round writes the helper with the corrected comment.
-
-### Decision F — sub-type display name case
+### Decision F — sub-type display name case. **RESOLVED: keep Title Case.**
 
 See finding 1 in §2.12. Title Case (status quo) vs sentence case (PRD's prose).
 
-**Recommendation: keep Title Case** — preserves cross-surface consistency. If sentence case is a product preference, fix it at the config source, not at the dashboard transformer. (No change to the dashboard implementation in either case.)
+**Resolution.** Keep Title Case. `loadAllBelts` returns `s.displayName` directly with no transformer. Cross-surface consistency with `<MasteryMap>` preserved. If sentence case is desired later, fix at `src/config/sub-types.ts` source.
 
-### Decision G — `users.name` nullable handling
+### Decision G — `users.name` nullable handling. **RESOLVED: option 3 (validate-and-throw).**
 
-See finding 2 in §2.12. Three options:
+See finding 2 in §2.12.
 
-1. Use the PRD's `??` example as-is (violates `no-nullish-coalescing`; lint will flag).
-2. Replace `??` with an explicit ternary: `row.name === null ? "Friend" : row.name`.
-3. Validate-and-throw if `row.name === null` (treat it as a broken auth invariant).
+**Resolution.** Validate-and-throw if `row.name === null`. The Google adapter always populates `name`; null is a data-integrity violation, not a legitimate empty state. `loadUserProfile` logs `error` + throws via `errors.new("user has no name")` per the project's error-handling convention. No "Friend" fallback. No `??`.
 
-**Recommendation: option 3.** The Google adapter always populates `name`; a null is a sign of data corruption, not a legitimate empty state. Throw is more honest than "Friend". If Leo prefers a graceful fallback to keep the dashboard reachable in pathological states, option 2 is the cheapest correct middle ground.
+### Decision H — root `layout.tsx` `metadata.title`. **RESOLVED: change to `"18seconds"` in commit 1 (post-merge).**
 
-### Decision H — root `layout.tsx` `metadata.title`
+See finding 3 in §2.12. Current value: `"Todos"` (starter leftover). One-line edit, no scope risk.
 
-See finding 3 in §2.12. Current value: `"Todos"` (starter leftover). Correct value: `"18seconds"`.
+### Decision I — visual reference. **RESOLVED: Leo eyeballs at commit 11 (page mount, post-merge).**
 
-**Recommendation: change to `"18seconds"` as part of commit 2** (the font swap). One-line edit, no scope risk. The PRD doesn't mention this; surfacing so the dashboard ships with a correct browser-tab title.
-
-### Decision I — visual reference
-
-See finding 4 in §2.12. I couldn't open `dashboard_reference.png` due to a session-level hook. The PRD prose is my only input.
-
-**Recommendation: Leo eyeballs the implementation against the mockup at commit 13** (the visual-diff step in §5 below). I'll match the PRD's prose as closely as possible; any place where the prose under-specifies, the implementation defaults to Alpha defaults from `docs/ALPHA_DESIGN.md`. If commit 13 surfaces a regression vs the mockup that the PRD prose didn't catch, that's a PRD bug to fix in a follow-up — not a re-architect.
+See finding 4 in §2.12. The implementation matches the PRD's prose closely; any place where the prose under-specifies, the implementation defaults to Alpha defaults from `docs/ALPHA_DESIGN.md`. If commit 11 surfaces a mockup regression that PRD prose didn't catch, that's a PRD bug to fix in a follow-up — not a re-architect. Visual diff is Leo's responsibility at commit 11 (post-merge re-numbering).
 
 ## 4. Things `docs/ALPHA_DESIGN.md` specifies that the PRD under-specifies
 
@@ -253,25 +240,26 @@ Read against `docs/ALPHA_DESIGN.md` (the Alpha design system reference distilled
 
 ## 5. Commit sequence
 
-This round is best sequenced as a 13-commit chain. Each commit is independently reviewable, lint-clean, typecheck-clean, and ships a coherent slice of the dashboard. The order minimizes thrash — design tokens land first so component styling works as components are built; stub helpers land before the data orchestrator; the orchestrator lands before the page; the click-through audit is the last commit before round-close.
+This round is best sequenced as a 12-commit chain. Each commit is independently reviewable, lint-clean, typecheck-clean, and ships a coherent slice of the dashboard. The order minimizes thrash — design tokens land first so component styling works as components are built; stub helpers land before the data orchestrator; the orchestrator lands before the page; the click-through audit is the last commit before round-close.
+
+The original draft of this plan named 13 commits with a separate "round-open docs" commit ahead of the tokens commit. At plan approval, those two were merged: commit 1 ships the plan-doc with redlines applied, the design tokens, the `@theme inline` extensions, the font swap, and the `metadata.title` fix as a single atomic round-open. The plan-doc itself was committed as a draft at `e1d135d` (the commit that created `docs/plans/dashboard.md`); commit 1 (post-merge) re-opens it via `Edit` to apply the four approval-time redlines (status block, decisions E–I resolutions, and this very re-numbered commit table) and lands the code in the same commit.
 
 | # | Title | Files touched | Verifies |
 |---|---|---|---|
-| 1 | round-open docs (this plan-doc, SPEC §6.x note if any) | `docs/plans/dashboard.md`, possibly `docs/SPEC.md` | plan-doc lands before code per the §6.14.20 closed-plans-immutable convention |
-| 2 | tokens + theme: append dashboard tokens to `globals.css`, register `@theme inline` entries; swap fonts in `src/app/layout.tsx` to PJS+Newsreader; fix `metadata.title` per decision H | `src/styles/unstyled/globals.css`, `src/app/layout.tsx` | `bun lint:all` + `bun typecheck`; existing post-session `<BeltIndicator>` visually unchanged (manual diff against `/drill/[subTypeId]` post-session) |
-| 3 | stub schema + barrel registration | `src/db/schemas/practice/user-sub-type-belts.ts`, `src/db/schema.ts` | typecheck (no migration runs) |
-| 4 | Mastery Map migration: copy `(app)/page.tsx` to `(app)/drill/page.tsx`; verify `/drill` renders identically to current `/` | `src/app/(app)/drill/page.tsx` (new) | route-level click-through; `/drill` index renders the Mastery Map; `(app)/page.tsx` is now stale-but-not-yet-deleted |
-| 5 | stub pages: `/lessons`, `/stats`, `/review` | `src/app/(app)/lessons/page.tsx`, `src/app/(app)/stats/page.tsx`, `src/app/(app)/review/page.tsx` (all new) | typecheck; 200 status on all three |
-| 6 | data layer: types, helpers, stub helpers, orchestrator | `src/server/dashboard/types.ts`, `helpers.ts`, `belts.ts`, `mission.ts`, `score.ts`, `streak.ts`, `pace.ts`, `mistakes.ts`, `data.ts` (all new) | typecheck; per-helper stub returns deterministic empty values; orchestrator type-checks against `DashboardData` |
-| 7 | leaf components: `BeltStripe`, `StatTile`, `StreakChip` | `src/components/dashboard/belt-stripe.tsx`, `stat-tile.tsx`, `streak-chip.tsx` (all new) | typecheck; ad-hoc visual check |
-| 8 | composite components 1: `BeltRow`, `DojoCard`, `MissionCard` | `src/components/dashboard/belt-row.tsx`, `dojo-card.tsx`, `mission-card.tsx` (all new) | typecheck |
-| 9 | composite components 2: `ScoreStrip`, `PaceMetric`, `MistakesTile`, `LastSimTile` | `src/components/dashboard/score-strip.tsx`, `pace-metric.tsx`, `mistakes-tile.tsx`, `last-sim-tile.tsx` (all new) | typecheck; empty-state branches render correctly against stub values |
-| 10 | nav + client wrapper: `TopNav`, `Dashboard` | `src/components/dashboard/top-nav.tsx`, `dashboard.tsx` (all new) | typecheck; `usePathname` active-route highlights correctly |
-| 11 | page mount: replace `(app)/page.tsx` content with the dashboard server component | `src/app/(app)/page.tsx` | dashboard renders at `/`; Mastery Map at `/drill` is unchanged |
-| 12 | full-surface Alpha Style audit + polish (parallels Phase 5 sub-phase 3 commit 5) | varies — typically 1–2 surfaces touched | ad-hoc visual audit; cobalt-rule-of-4, serif/sans split, belt-cap visibility, dojo row spacing |
-| 13 | round-close: full lint pass; PR-quality click-through audit; reconcile this plan-doc to past-tense per §6.14.20 (wholesale-replacement-with-quote-preservation) | this plan-doc + possibly SPEC | every nav target, every CTA, every belt row, alternate CTA on mission card; light + dark mode; both Suspense states |
+| 1 | plan-doc redlines + design tokens + `@theme inline` + font swap + `metadata.title` (decision H) | `docs/plans/dashboard.md`, `src/styles/unstyled/globals.css`, `src/app/layout.tsx` | `bun lint:all` + `bun typecheck`; `bun test` count unchanged (79); existing post-session `<BeltIndicator>` visually unchanged (manual diff against `/drill/[subTypeId]` post-session); browser tab title shows "18seconds" |
+| 2 | stub schema + barrel registration | `src/db/schemas/practice/user-sub-type-belts.ts`, `src/db/schema.ts` | typecheck (no migration runs) |
+| 3 | Mastery Map migration: copy `(app)/page.tsx` to `(app)/drill/page.tsx`; verify `/drill` renders identically to current `/` | `src/app/(app)/drill/page.tsx` (new) | route-level click-through; `/drill` index renders the Mastery Map; `(app)/page.tsx` is now stale-but-not-yet-deleted |
+| 4 | stub pages: `/lessons`, `/stats`, `/review` | `src/app/(app)/lessons/page.tsx`, `src/app/(app)/stats/page.tsx`, `src/app/(app)/review/page.tsx` (all new) | typecheck; 200 status on all three |
+| 5 | data layer: types, helpers, stub helpers, orchestrator | `src/server/dashboard/types.ts`, `helpers.ts`, `belts.ts`, `mission.ts`, `score.ts`, `streak.ts`, `pace.ts`, `mistakes.ts`, `data.ts` (all new) | typecheck; per-helper stub returns deterministic empty values; orchestrator type-checks against `DashboardData` |
+| 6 | leaf components: `BeltStripe`, `StatTile`, `StreakChip` | `src/components/dashboard/belt-stripe.tsx`, `stat-tile.tsx`, `streak-chip.tsx` (all new) | typecheck; ad-hoc visual check |
+| 7 | composite components 1: `BeltRow`, `DojoCard`, `MissionCard` | `src/components/dashboard/belt-row.tsx`, `dojo-card.tsx`, `mission-card.tsx` (all new) | typecheck |
+| 8 | composite components 2: `ScoreStrip`, `PaceMetric`, `MistakesTile`, `LastSimTile` | `src/components/dashboard/score-strip.tsx`, `pace-metric.tsx`, `mistakes-tile.tsx`, `last-sim-tile.tsx` (all new) | typecheck; empty-state branches render correctly against stub values |
+| 9 | nav + client wrapper: `TopNav`, `Dashboard` | `src/components/dashboard/top-nav.tsx`, `dashboard.tsx` (all new) | typecheck; `usePathname` active-route highlights correctly |
+| 10 | page mount: replace `(app)/page.tsx` content with the dashboard server component | `src/app/(app)/page.tsx` | dashboard renders at `/`; Mastery Map at `/drill` is unchanged |
+| 11 | full-surface Alpha Style audit + polish (parallels Phase 5 sub-phase 3 commit 5) | varies — typically 1–2 surfaces touched | ad-hoc visual audit; cobalt-rule-of-4, serif/sans split, belt-cap visibility, dojo row spacing; **decision I visual diff** vs `dashboard_reference.png` |
+| 12 | round-close: full lint pass; PR-quality click-through audit; reconcile this plan-doc to past-tense per §6.14.20 (wholesale-replacement-with-quote-preservation) | this plan-doc + possibly SPEC | every nav target, every CTA, every belt row, alternate CTA on mission card; light + dark mode; both Suspense states |
 
-**Commit-message convention.** Per the Phase 5 sub-phases' precedent: `feat(<surface>): <terse summary>` for code commits, `docs(spec+plan): <terse summary>` for the round-close. Each commit message body names the audit findings or decisions it consumes (e.g. commit 2's body: "applies decisions H + I from `docs/plans/dashboard.md` §3"). Co-author trailer per the user's git convention.
+**Commit-message convention.** Per the Phase 5 sub-phases' precedent: `feat(<surface>): <terse summary>` for code commits, `docs(spec+plan): <terse summary>` for the round-close. Each commit message body names the audit findings or decisions it consumes (e.g. commit 1's body: "applies decisions E–I from `docs/plans/dashboard.md` §3 + audit-first findings 1–5"). Co-author trailer per the user's git convention.
 
 **Branching.** This is a single-branch round (no nested feature branches). Commits land on `main` after each one is lint+typecheck-clean. No remote pushes from Claude.
 
@@ -280,51 +268,51 @@ This round is best sequenced as a 13-commit chain. Each commit is independently 
 Mirrors PRD §15. The PRD's checklist is canonical; this section names how each item is verified during the round.
 
 **Visual.**
-- [ ] Dashboard renders at `/` matching the mockup. *Verified at commit 13 by Leo (per decision I).*
-- [ ] Cobalt accent appears in exactly four places on first paint. *Verified at commit 13 by visual count: mission eyebrow, greeting italic, Goal value, today pace bar.*
-- [ ] Serif (Newsreader) on: brand wordmark, greeting headline, every numeric value in stats and tiles, dojo card titles, mission title. *Verified at commit 13.*
-- [ ] All other text is sans (Plus Jakarta Sans). *Verified at commit 13.*
-- [ ] Belt stripes render with the right-edge cap visible against `--bg` (all 14 white in stub). *Verified at commit 13 in light + dark.*
-- [ ] Both light and dark modes render without WCAG AA violations. *Verified at commit 13 via DevTools accessibility audit.*
-- [ ] Drill post-session `<BeltIndicator>` looks unchanged from `8a10fb1` baseline. *Verified at commit 2 (after font swap) and commit 13 (after full polish) by side-by-side comparison.*
+- [ ] Dashboard renders at `/` matching the mockup. *Verified at commit 11 by Leo (per decision I).*
+- [ ] Cobalt accent appears in exactly four places on first paint. *Verified at commit 11 by visual count: mission eyebrow, greeting italic, Goal value, today pace bar.*
+- [ ] Serif (Newsreader) on: brand wordmark, greeting headline, every numeric value in stats and tiles, dojo card titles, mission title. *Verified at commit 11.*
+- [ ] All other text is sans (Plus Jakarta Sans). *Verified at commit 11.*
+- [ ] Belt stripes render with the right-edge cap visible against `--bg` (all 14 white in stub). *Verified at commit 11 in light + dark.*
+- [ ] Both light and dark modes render without WCAG AA violations. *Verified at commit 11 via DevTools accessibility audit.*
+- [ ] Drill post-session `<BeltIndicator>` looks unchanged from `8a10fb1` baseline. *Verified at commit 1 (after font swap) and commit 11 (after full polish) by side-by-side comparison.*
 
 **Behavior.**
-- [ ] Belt row → `/drill/{subTypeId}` (URL-encoded). *Verified at commit 8.*
-- [ ] Mission primary → `/full-length/configure`. *Verified at commit 11.*
-- [ ] Mission alternate → `/drill`. *Verified at commit 11.*
-- [ ] Active nav highlighted; others quiet. *Verified at commit 10.*
-- [ ] Streak chip neutral copy when `streakDays === 0`. *Verified at commit 7.*
-- [ ] LastSim tile empty state when `lastSim` undefined. *Verified at commit 9.*
-- [ ] ScoreStrip em-dashes for `current` and `daysToTest` when undefined. *Verified at commit 9.*
-- [ ] Goal renders `40` (no `%`). *Verified at commit 9.*
-- [ ] MistakesTile copy contains no spaced-review framing. *Verified at commit 9 via grep on the rendered text.*
-- [ ] All five nav items resolve to a 200. *Verified at commit 5 (stubs) + commit 11 (dashboard) + commit 13 (click-through).*
-- [ ] `/drill` (no segment) renders the migrated Mastery Map. *Verified at commit 4.*
+- [ ] Belt row → `/drill/{subTypeId}` (URL-encoded). *Verified at commit 7.*
+- [ ] Mission primary → `/full-length/configure`. *Verified at commit 10.*
+- [ ] Mission alternate → `/drill`. *Verified at commit 10.*
+- [ ] Active nav highlighted; others quiet. *Verified at commit 9.*
+- [ ] Streak chip neutral copy when `streakDays === 0`. *Verified at commit 6.*
+- [ ] LastSim tile empty state when `lastSim` undefined. *Verified at commit 8.*
+- [ ] ScoreStrip em-dashes for `current` and `daysToTest` when undefined. *Verified at commit 8.*
+- [ ] Goal renders `40` (no `%`). *Verified at commit 8.*
+- [ ] MistakesTile copy contains no spaced-review framing. *Verified at commit 8 via grep on the rendered text.*
+- [ ] All five nav items resolve to a 200. *Verified at commit 4 (stubs) + commit 10 (dashboard) + commit 12 (click-through).*
+- [ ] `/drill` (no segment) renders the migrated Mastery Map. *Verified at commit 3.*
 
 **Constraints (non-negotiable).**
-- [ ] `bun lint:all` passes (Biome + super-lint + GritQL). *Verified at commit 13.*
-- [ ] `bun typecheck` passes. *Verified at commit 13.*
+- [ ] `bun lint:all` passes (Biome + super-lint + GritQL). *Verified at commit 12.*
+- [ ] `bun typecheck` passes. *Verified at commit 12.*
 - [ ] Zero `try…catch` in new files. *Enforced by `rules/no-try.md`; lint-verified.*
 - [ ] Zero `as` casts (other than `as const`). *Enforced by `rules/no-as-type-assertion.md`; lint-verified.*
 - [ ] Zero `null` types in new files (only `?:` optional). *Enforced by `rules/no-null-undefined-union.md`; lint-verified.*
 - [ ] One component per file under `src/components/dashboard/`; one helper per file under `src/server/dashboard/`. *Enforced by code review.*
-- [ ] No `db:generate` / `db:push` / `db:migrate` run. *Verified at commit 3 — schema is added but not migrated.*
-- [ ] No collision between `<BeltStripe>` and post-session `<BeltIndicator>`. *Verified at commit 7 (filename/export-name distinct).*
+- [ ] No `db:generate` / `db:push` / `db:migrate` run. *Verified at commit 2 — schema is added but not migrated.*
+- [ ] No collision between `<BeltStripe>` and post-session `<BeltIndicator>`. *Verified at commit 6 (filename/export-name distinct).*
 
 **Motion + a11y.**
-- [ ] All transitions use `--ease-out`; durations `--d-fast` or `--d-base`. *Verified at commit 12.*
-- [ ] `prefers-reduced-motion: reduce` honored (existing rule in `globals.css` carries). *Verified at commit 13.*
-- [ ] Every interactive element has visible `:focus-visible` outline. *Verified at commit 13 via keyboard tab-through.*
-- [ ] `aria-label` on `<BeltStripe>` and avatar. *Verified at commit 7 (BeltStripe) + commit 10 (avatar).*
-- [ ] Visually-hidden `<h1>Dashboard</h1>` at top of `<main>`. *Verified at commit 11.*
+- [ ] All transitions use `--ease-out`; durations `--d-fast` or `--d-base`. *Verified at commit 11.*
+- [ ] `prefers-reduced-motion: reduce` honored (existing rule in `globals.css` carries). *Verified at commit 12.*
+- [ ] Every interactive element has visible `:focus-visible` outline. *Verified at commit 12 via keyboard tab-through.*
+- [ ] `aria-label` on `<BeltStripe>` and avatar. *Verified at commit 6 (BeltStripe) + commit 9 (avatar).*
+- [ ] Visually-hidden `<h1>Dashboard</h1>` at top of `<main>`. *Verified at commit 10.*
 
 ## 7. Risks and known unknowns
 
-- **Mockup divergence (decision I).** I haven't seen `dashboard_reference.png`. Commit 13 visual diff is the safety net; if a regression vs the mockup surfaces that the PRD prose didn't catch, it's a PRD bug, not a re-architect.
-- **Font loading visual shift.** Swapping fonts at commit 2 is a global change; if Plus Jakarta Sans's metrics differ from Inter enough that any non-dashboard surface looks visibly different, fix at commit 12 (full-surface polish). PRD §12 names the audit ("If any non-dashboard surface still depends on the Geist/Inter wiring, namespace the fonts as `--font-sans-dashboard` instead").
-- **`<MasteryMap>` link audit (PRD §11.5).** PRD names "anywhere a 'back to picker' or similar UI references `/`" as a rewrite target. Commit 4's verification step includes a grep across `src/` for in-app links to `/` whose semantic intent is "the picker." Post-session "Continue" CTAs land on `/` (= dashboard) — not a regression per PRD §11.5.
-- **Token alias collisions (PRD §8.1).** The PRD's `--alpha-accent` rename (vs shadcn's `--accent`) avoids one collision but the broader audit at commit 2 should grep for any utility class that the new tokens inadvertently shadow. `bg-bg` (the `--bg` utility) in particular needs verification — Tailwind v4's JIT may have an opinion about a utility class named `bg-bg`. If it doesn't render, fall back to `bg-[var(--bg)]` arbitrary syntax for the affected surfaces.
-- **Dark-mode pacing of the visual diff.** PRD requires both light and dark to be WCAG-AA-clean. Commit 13's diff covers this, but if the round-close finds dark-mode contrast issues that need a token retune, the retune of `--text-2` / `--text-3` / `--border-soft` is in dark-mode-only and doesn't risk the post-session `<BeltIndicator>` — those four tokens are dashboard-namespaced.
+- **Mockup divergence (decision I).** I haven't seen `dashboard_reference.png`. Commit 11 visual diff is the safety net; if a regression vs the mockup surfaces that the PRD prose didn't catch, it's a PRD bug, not a re-architect.
+- **Font loading visual shift.** Swapping fonts at commit 1 is a global change; if Plus Jakarta Sans's metrics differ from Inter enough that any non-dashboard surface looks visibly different, fix at commit 11 (full-surface polish). PRD §12 names the audit ("If any non-dashboard surface still depends on the Geist/Inter wiring, namespace the fonts as `--font-sans-dashboard` instead").
+- **`<MasteryMap>` link audit (PRD §11.5).** PRD names "anywhere a 'back to picker' or similar UI references `/`" as a rewrite target. Commit 3's verification step includes a grep across `src/` for in-app links to `/` whose semantic intent is "the picker." Post-session "Continue" CTAs land on `/` (= dashboard) — not a regression per PRD §11.5.
+- **Token alias collisions (PRD §8.1).** The PRD's `--alpha-accent` rename (vs shadcn's `--accent`) avoids one collision but the broader audit at commit 1 should grep for any utility class that the new tokens inadvertently shadow. `bg-bg` (the `--bg` utility) in particular needs verification — Tailwind v4's JIT may have an opinion about a utility class named `bg-bg`. If it doesn't render, fall back to `bg-[var(--bg)]` arbitrary syntax for the affected surfaces.
+- **Dark-mode pacing of the visual diff.** PRD requires both light and dark to be WCAG-AA-clean. Commit 12's diff covers this, but if the round-close finds dark-mode contrast issues that need a token retune, the retune of `--text-2` / `--text-3` / `--border-soft` is in dark-mode-only and doesn't risk the post-session `<BeltIndicator>` — those four tokens are dashboard-namespaced.
 - **Decision G (users.name nullable).** Pending Leo's pick. If "validate-and-throw" is chosen, the dashboard surface is one redirect-or-throw away from a broken first-name read. If the upstream Auth.js Google adapter ever emits `null` for `name`, the dashboard 500s. This is a strict-correctness vs graceful-degradation tradeoff; my recommendation is throw, but Leo may prefer "Friend" for resilience.
 
 ## 8. Out of scope
