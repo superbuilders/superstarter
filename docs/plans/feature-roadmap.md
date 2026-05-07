@@ -162,18 +162,23 @@ What Leo's request adds:
 
 ## 7. Dojo mode (adaptive drill that escalates)
 
-**Status: PRD §4.2 already specifies adaptive drills. Leo's request mostly renames + extends UI.** *PRD update required* (rename "drill" → "dojo" + belt-indicator UI extends §4.2's drill-mode framing).
+**Status: shipped 2026-05-06 across Phase 5 sub-phase 5 (six commits).** PRD §4.2 + SPEC §10.2 + §10.7 reconciled past-tense at round close.
 
-The PRD's adaptive drill mode already does this: `selectionStrategy: "adaptive"` recomputes the difficulty tier per item based on in-session performance. Items get harder as the user demonstrates competence.
+Six-commit round ledger:
+- Commit 1 — `8fc6957` — round-open docs (PRD §4.2 + SPEC §10.2 + §10.7 dojo + belt-indicator narrative).
+- Commit 2 — `b53d2c2` — `getEndSessionTierForDrill` query + types (dormant; sibling-module placement at `src/server/post-session/end-session-tier.ts`; +5 integration tests).
+- Commit 3 — `b31d8cb` — `<BeltIndicator>` component + `tierToBeltColor` helper (dormant; +6 unit tests; two new belt-namespaced tokens `--belt-blue` / `--belt-brown`).
+- Commit 4 — `c3c5a88` — wire BeltIndicator into shell heading; drill heading expansion (dormancy chain unblocks atomically; real-DB harness 5/5 scenarios pass).
+- Commit 5 — `c32a7fb` — dojo rename across drill route + Mastery Map CTA + run skeleton; full-surface audit + polish (4 copy strings across 3 files; full-surface Alpha Style audit clean; polish no-op).
+- Commit 6 — *this commit* — round-close doc reconciliation.
 
-**What Leo's request adds**:
-- **Naming**: "Dojo mode" instead of "drill" — clearer mental model. The dojo framing implies practice-with-resistance, which matches the adaptive escalation.
-- **Visual feedback**: a small indicator showing the current "difficulty belt" (white belt → yellow → green → blue → brown → black, mapping to easy / medium / hard / brutal / etc.). Subtle gamification.
-- **Session-end summary**: "you reached [tier] on [sub-type]" framing instead of generic accuracy stats.
+**What landed**:
+- **Naming**: User-facing "drill" copy renamed to "dojo" — Mastery Map CTA "Enter dojo: {sub-type}", drill configure subhead "Standard timing. Pick a session length and enter the dojo." + submit "Enter dojo", run skeleton "Preparing your dojo session…". Code-internal vocabulary (`'drill'` session-type, `/drill/[subTypeId]` URL, `DrillConfigure`/`DrillRunContent` identifiers, `data-testid="drill-empty-bank-pane"`) stays.
+- **Visual feedback**: `<BeltIndicator>` at slot 1 of the post-session shell (heading-area expansion, drill-mode only). 4-color compressed mapping: white = easy, blue = medium, brown = hard, black = brutal. Audit (D) of the plan recommended 4-color over the original 6-color sketch — the walker has 4 tiers; compressing the canonical white→yellow→green→blue→brown→black palette to 4 keeps each color's signal high and matches the walker's tier domain exactly. The belt body is an SVG rounded-rectangle in the tier color with a contrast textile-stripe at the right end; ARIA carries the full readable phrasing for SR / colorblind parity.
+- **Session-end summary**: "You reached the {color} belt on {sub-type}." copy lives inside `<BeltIndicator>`. Pre-floor (fewer than `ADAPTIVE_FLOOR_ATTEMPTS=10` attempts) appends "(calibrating)" so the user knows the walker hasn't stepped yet.
+- **Walker output sourcing**: the indicator reads `(fallback_from_tier ?? served_at_tier)` of the most-recent attempt — the tier the walker REQUESTED, not what the bank served — per SPEC §9.2 verification clarification.
 
-**What's already in place**: the adaptive logic itself works (PRD §4.2 + Phase 5 scope). What's net-new is the UI framing.
-
-**Scope estimate**: ~2-3 commits (rename in UI copy, belt-indicator component, post-session-summary copy). Small round; can fold into the Phase 5 drill mode work.
+**Test count**: 49 → 60 (+11) across commits 2 + 3. Holds at 60 across commits 4 + 5 + 6 (commit-render integration verified via real-DB harness + Playwright headless visual spot-check, not committed component tests — the codebase has no component-test infrastructure per the audit-against-actual-artifact finding).
 
 ---
 
