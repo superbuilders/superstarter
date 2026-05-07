@@ -333,7 +333,7 @@ After every session (drill, full-length test, simulation, diagnostic), the user 
 - Triage score for the session (rendered first per the calibration-discipline framing in §1).
 - Accuracy summary by sub-type (categorical: ✓ / ✗ counts, no percentages on this screen).
 - Median latency by sub-type, with the threshold marked.
-- Any wrong items, browsable. Each shows the prompt, options, correct answer, explanation.
+- Any wrong items, browsable. Each shows the prompt, options, correct answer, explanation. The explanation renders as structured parts (recognition / elimination / [optional] tie-breaker); clicking the elimination part strikes through the options it eliminates, clicking the tie-breaker part highlights the options it considers, with state toggling per click and resetting per session.
 - Surfaced strategies for sub-types where the user struggled (one strategy per struggled sub-type; failure-mode-driven kind preference: fast-wrong → trap, slow-wrong / slow-but-right → recognition; technique as universal fallback).
 - Diagnostic only: `<OnboardingTargets>` (target percentile + target date capture). Primary "Save and continue"; smaller "Skip for now" link.
 - Diagnostic only, conditional on session duration > 15 minutes: a derived pacing-line sentence ("Your diagnostic took N minutes. The real CCAT is 15 minutes for 50 questions.").
