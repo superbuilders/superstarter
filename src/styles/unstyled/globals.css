@@ -252,6 +252,46 @@
 	}
 }
 
+/*
+ * Reduced-motion preference. WCAG 2.3.3 + ALPHA §6 ("Reduced Motion
+ * (mandatory)"). Squashes both `animation-duration` and
+ * `transition-duration` to a near-zero value when the user has
+ * `prefers-reduced-motion: reduce` set at the OS or browser level.
+ *
+ * Audit-surfaced at dashboard round commit 1: Dashboard PRD §8 prose
+ * claimed this rule already lived in globals.css, but git history
+ * shows it never did. Lands at commit 11 (Alpha Style audit + polish)
+ * to satisfy PRD §15's "prefers-reduced-motion: reduce honored"
+ * acceptance criterion.
+ *
+ * Scope: blanket. Affects every transition + animation in the tree,
+ * including the focus-shell's timer-bar depletion animation. The
+ * focus-shell's animations are functional (they show time remaining
+ * during a session), but WCAG 2.3.3 prioritizes user vestibular-
+ * sensitivity preference over feature-functional UX. If the
+ * focus-shell needs an exemption later, scoping requires a stable
+ * class anchor on <FocusShell>'s root that doesn't exist today; that
+ * refactor is a follow-up.
+ *
+ * Per ALPHA §6 the standard form also resets `animation-iteration-
+ * count` to 1 (so infinite loops stop) and `scroll-behavior` to auto
+ * (so smooth scroll is suppressed).
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override component-level animation/transition durations; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override component-level iteration counts; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		animation-iteration-count: 1 !important;
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override component-level transition durations; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		transition-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override scroll-behavior; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		scroll-behavior: auto !important;
+	}
+}
+
 @theme {
 	/*
 	 * Focus-shell timer-bar depletion animation. Bar starts at scaleX=1
