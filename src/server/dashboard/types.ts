@@ -1,0 +1,88 @@
+// Dashboard data contract. Dashboard PRD §5 +
+// `docs/plans/dashboard.md` §5 commit 5.
+//
+// This file is the structural source of truth for the dashboard's
+// payload. Components consume slices via props (DashboardData["score"],
+// DashboardData["pace"], DashboardData["mission"], etc.); the
+// orchestrator at `data.ts` assembles a full DashboardData from seven
+// helper outputs + loadUserProfile.
+//
+// Pure-types-only file: no imports beyond TypeScript built-ins. Every
+// other file under @/server/dashboard/ imports from this one.
+
+type BeltLevel = "white" | "blue" | "brown" | "black"
+
+interface SubtypeRow {
+	/** sub_types.id (a varchar slug like "verbal.analogies") */
+	id: string
+	/** URL-safe identifier — same string as id today */
+	slug: string
+	/** Display name from src/config/sub-types.ts (Title Case, e.g.
+	 * "Sentence Completion"). Per `docs/plans/dashboard.md` §3
+	 * decision F (resolved 2026-05-07) the dashboard does NOT
+	 * apply a sentence-case transformer; if sentence case is
+	 * desired later, the fix lives at the config source. */
+	name: string
+	belt: BeltLevel
+	/** 0..1, fraction of promotion window met. Clamped at the call site. */
+	progressToNext: number
+	/** True if recent accuracy < 65% or median time > target by 30%+ */
+	atRisk: boolean
+	/** Where "drill this" navigates */
+	href: string
+}
+
+interface DashboardData {
+	user: {
+		firstName: string
+		initials: string
+		streakDays: number
+	}
+	greeting: {
+		today: Date
+		/** Derived editorial line: "You're climbing.", "Steady today.", etc. */
+		headline: string
+	}
+	score: {
+		/** Latest estimate; undefined when no full sim has been taken */
+		current?: number
+		/** Signed delta vs previous full sim; undefined when fewer than 2 sims */
+		delta?: number
+		/** Target raw score (out of 50 questions on a full sim). Stubbed to 40. */
+		goal: number
+		daysToTest?: number
+	}
+	mission: {
+		eyebrow: string
+		title: string
+		body: string
+		primaryHref: string
+		primaryLabel: string
+		alternateHref: string
+		alternateLabel: string
+	}
+	verbal: ReadonlyArray<SubtypeRow>
+	numerical: ReadonlyArray<SubtypeRow>
+	pace: {
+		medianSeconds: number
+		/** Hard target (18) */
+		targetSeconds: number
+		/** Length 7, oldest first */
+		last7Days: ReadonlyArray<{ medianSeconds: number; isToday: boolean }>
+	}
+	mistakesQueue: {
+		count: number
+		/** Rough estimate; "1 minute per ~3 mistakes" rule of thumb. */
+		estimatedMinutes: number
+		href: string
+	}
+	lastSim?: {
+		score: number
+		outOf: number
+		daysAgo: number
+		durationSeconds: number
+		href: string
+	}
+}
+
+export type { BeltLevel, DashboardData, SubtypeRow }
