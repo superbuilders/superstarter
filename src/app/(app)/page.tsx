@@ -1,138 +1,64 @@
-// (app)/page.tsx — Mastery Map home. Plan §6.3.
+// (app)/page.tsx — Dashboard home. Dashboard PRD §11 +
+// `docs/plans/dashboard.md` §5 commit 10.
 //
-// Server component (NOT async per rules/rsc-data-fetching-patterns.md).
-// Initiates four parallel promises and passes them through to the
-// `<MasteryMap>` client component which consumes them via React.use().
+// Server component, NOT async per
+// rules/rsc-data-fetching-patterns.md. Initiates the dashboard data
+// promise via loadUserId() chained into getDashboardData(userId), and
+// passes the promise through to the <Dashboard> client wrapper inside
+// a <React.Suspense> boundary. This is Pattern 2 from the rules
+// document (per-page Suspense) — there's no ViewTransition layout
+// above this route.
 //
-// The four promises:
-//   - masteryStatesPromise: SELECT sub_type_id, current_state FROM
-//     mastery_state WHERE user_id = $1.
-//   - userTargetsPromise: SELECT target_percentile, target_date_ms FROM
-//     users WHERE id = $1.  (passed into nearGoalPromise; not surfaced
-//     directly to the client.)
-//   - nearGoalPromise: derived from masteryStates + targetDate via
-//     deriveNearGoal().
-//   - triagePromise: triageRolling30d(userId).
-//   - recommendedSubTypePromise: lowest-mastery sub-type with
-//     deterministic tie-break.
+// Auth model:
+//   - The (app)/layout.tsx gate already enforces both auth() and
+//     "diagnostic completed" before this page renders. The auth()
+//     call here is for the userId only; redirect-on-null is a
+//     defensive belt-and-suspenders.
+//   - Auth.js v5 with database session strategy attaches user.id to
+//     session.user.id automatically (per the audit at
+//     `docs/plans/dashboard.md` §2.11). No custom session callback
+//     needed.
 //
-// The (app)/layout.tsx gate ensures `auth()` already passed before this
-// page renders, so the auth() call here is for the userId only —
-// redirect-on-null is a defensive belt-and-suspenders.
+// Mastery Map migration: until commit 9 of this round, this file
+// rendered the Mastery Map's data-fetching shape. The Mastery Map
+// content moved to (app)/drill/page.tsx at commit 3; this commit
+// replaces this file's content with the dashboard server component.
+// `/` now renders the dashboard; `/drill` renders the Mastery Map
+// sub-type picker.
 
-import { eq } from "drizzle-orm"
 import { redirect } from "next/navigation"
 import * as React from "react"
 import { auth } from "@/auth"
-import { type SubTypeId, subTypeIds } from "@/config/sub-types"
-import { db } from "@/db"
-import { masteryState } from "@/db/schemas/practice/mastery-state"
-import { users } from "@/db/schemas/auth/users"
-import { logger } from "@/logger"
-import { MasteryMap } from "@/components/mastery-map/mastery-map"
-import type { MasteryLevel } from "@/server/mastery/compute"
-import { deriveNearGoal } from "@/server/mastery/near-goal"
-import { recommendedNextSubType } from "@/server/mastery/recommended-next"
-import { triageRolling30d } from "@/server/triage/score"
-
-const subTypeIdSet: ReadonlySet<string> = new Set<string>(subTypeIds)
-function asSubTypeId(s: string): SubTypeId | undefined {
-	if (!subTypeIdSet.has(s)) return undefined
-	const matched = subTypeIds.find(function eq(known) {
-		return known === s
-	})
-	return matched
-}
+import { Dashboard } from "@/components/dashboard/dashboard"
+import { getDashboardData } from "@/server/dashboard/data"
 
 async function loadUserId(): Promise<string> {
 	const session = await auth()
 	if (!session?.user?.id) {
-		logger.debug({}, "(app)/page: no auth session, redirect /login")
 		redirect("/login")
 	}
 	return session.user.id
 }
 
-async function loadMasteryStates(
-	userIdPromise: Promise<string>
-): Promise<ReadonlyMap<SubTypeId, MasteryLevel>> {
-	const userId = await userIdPromise
-	const rows = await db
-		.select({ subTypeId: masteryState.subTypeId, currentState: masteryState.currentState })
-		.from(masteryState)
-		.where(eq(masteryState.userId, userId))
-	const map = new Map<SubTypeId, MasteryLevel>()
-	for (const row of rows) {
-		const id = asSubTypeId(row.subTypeId)
-		if (id === undefined) {
-			logger.warn(
-				{ subTypeId: row.subTypeId },
-				"(app)/page: unknown sub_type_id in mastery_state, skipping"
-			)
-			continue
-		}
-		map.set(id, row.currentState)
-	}
-	return map
-}
-
-async function loadTargetDateMs(userIdPromise: Promise<string>): Promise<number | undefined> {
-	const userId = await userIdPromise
-	const rows = await db
-		.select({ targetDateMs: users.targetDateMs })
-		.from(users)
-		.where(eq(users.id, userId))
-		.limit(1)
-	const row = rows[0]
-	if (!row || row.targetDateMs === null) return undefined
-	return row.targetDateMs
-}
-
-function Page() {
-	const userIdPromise = loadUserId()
-	const masteryStatesPromise = loadMasteryStates(userIdPromise)
-	const targetDatePromise = loadTargetDateMs(userIdPromise)
-
-	// Date.now() must be called AFTER an uncached / Request data access
-	// when `cacheComponents: true` is on (next.config.ts). Awaiting
-	// userIdPromise (which calls auth() → cookies()) and chaining off of
-	// it satisfies the gate; the actual current time is captured inside
-	// the .then() callback so the read happens after the cookies()
-	// dependency is registered with the framework.
-	const nearGoalPromise = userIdPromise.then(function gate() {
-		const nowMs = Date.now()
-		return Promise.all([masteryStatesPromise, targetDatePromise]).then(
-			function derive([states, targetDateMs]) {
-				return deriveNearGoal({ masteryStates: states, targetDateMs, nowMs })
-			}
-		)
+function DashboardPage() {
+	const dataPromise = loadUserId().then(function load(userId) {
+		return getDashboardData(userId)
 	})
-
-	const triagePromise = userIdPromise.then(function callTriage(userId) {
-		return triageRolling30d(userId)
-	})
-	const recommendedSubTypePromise = masteryStatesPromise.then(function pickRecommended(states) {
-		return recommendedNextSubType(states)
-	})
-
 	return (
-		<React.Suspense fallback={<MasteryMapSkeleton />}>
-			<MasteryMap
-				masteryStatesPromise={masteryStatesPromise}
-				nearGoalPromise={nearGoalPromise}
-				triagePromise={triagePromise}
-				recommendedSubTypePromise={recommendedSubTypePromise}
-			/>
+		<React.Suspense fallback={<DashboardSkeleton />}>
+			<Dashboard dataPromise={dataPromise} />
 		</React.Suspense>
 	)
 }
 
-function MasteryMapSkeleton() {
+function DashboardSkeleton() {
 	return (
-		<main className="mx-auto flex min-h-dvh max-w-2xl items-center justify-center px-6">
-			<p className="text-muted-foreground text-sm">Loading…</p>
-		</main>
+		<div className="min-h-screen bg-bg text-text-1">
+			<main className="mx-auto max-w-[1100px] px-7 pt-12">
+				<p className="text-sm text-text-3">Loading…</p>
+			</main>
+		</div>
 	)
 }
 
-export default Page
+export default DashboardPage
