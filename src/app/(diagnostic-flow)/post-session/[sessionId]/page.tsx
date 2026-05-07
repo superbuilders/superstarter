@@ -100,11 +100,18 @@ const getPerSubTypeLatency = db
 	.groupBy(items.subTypeId)
 	.prepare("app_dgflow_post_session_id_per_sub_type_latency")
 
-// Wrong items for the session, chronologically ordered. Per the §15.2
-// amendment in the plan, structuredExplanation is NOT included this
-// commit — sub-phase 4 will add it atomically with click-to-highlight
-// UI. items.explanation (the prose column) flows through; the
-// renderer in commit 5 reads prose only.
+// Wrong items for the session, chronologically ordered. The §15.2-
+// amendment seam shipped at sub-phase 4 commit 2 (this commit) by
+// adding the metadata_json->'structuredExplanation' projection here
+// and the matching field on the WrongItem interface below; consumer
+// wiring (the <StructuredExplanation> component + <WrongItemCard>
+// strike/highlight state) lands at sub-phase 4 commit 4 per plan §6.
+// Until commit 4, the projection is dormant — <WrongItemsBrowser>
+// continues to render items.explanation (the prose column) only.
+// The 50 NULL-source_folder seed items lack the structured form;
+// metadata_json->'structuredExplanation' returns NULL for those rows
+// and the boundary normalize maps NULL → undefined per
+// rules/no-null-undefined-union.md.
 const getWrongItemsForSession = db
 	.select({
 		attemptId: attempts.id,
@@ -114,7 +121,8 @@ const getWrongItemsForSession = db
 		optionsJson: items.optionsJson,
 		correctAnswer: items.correctAnswer,
 		selectedAnswer: attempts.selectedAnswer,
-		explanation: items.explanation
+		explanation: items.explanation,
+		structuredExplanation: sql<unknown>`${items.metadataJson} -> 'structuredExplanation'`
 	})
 	.from(attempts)
 	.innerJoin(items, eq(attempts.itemId, items.id))
@@ -151,8 +159,18 @@ type PerSubTypeLatency = Awaited<ReturnType<typeof getPerSubTypeLatency.execute>
 
 // WrongItem: normalize null → undefined at the boundary per
 // rules/no-null-undefined-union.md. items.explanation and
-// attempts.selectedAnswer are both nullable in the schema; downstream
-// renderers treat undefined as absent.
+// attempts.selectedAnswer are both nullable in the schema, and
+// metadata_json -> 'structuredExplanation' returns NULL for the 50
+// NULL-source_folder seed items that predate the testbank-re-
+// extraction round; downstream renderers treat undefined as absent.
+//
+// structuredExplanation is added at sub-phase 4 commit 2 (this
+// commit) but is consumed by the renderer at commit 4. Until then
+// the field flows through page-query → page → content → shell →
+// wrong-items-browser → wrong-item-card without being read. Typed
+// `unknown` here because the page-query boundary does not validate
+// the JSON shape; the renderer parses with Zod at the render
+// boundary per rules/zod-usage.md.
 interface WrongItem {
 	attemptId: string
 	itemId: string
@@ -162,6 +180,7 @@ interface WrongItem {
 	correctAnswer: string
 	selectedAnswer?: string
 	explanation?: string
+	structuredExplanation?: unknown
 }
 
 type SurfacedStrategy = Awaited<ReturnType<typeof getStrategiesForSubTypes.execute>>[number]
@@ -356,7 +375,9 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			optionsJson: r.optionsJson,
 			correctAnswer: r.correctAnswer,
 			selectedAnswer: r.selectedAnswer === null ? undefined : r.selectedAnswer,
-			explanation: r.explanation === null ? undefined : r.explanation
+			explanation: r.explanation === null ? undefined : r.explanation,
+			structuredExplanation:
+				r.structuredExplanation === null ? undefined : r.structuredExplanation
 		}
 	})
 
