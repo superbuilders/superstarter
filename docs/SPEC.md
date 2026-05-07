@@ -2079,6 +2079,8 @@ PRD §4.4.
 
 The session-timer toggle does NOT live on the configure page — it's a focus-shell periphery control only. (v1 2026-05-04: timer-toggle UX cut entirely, PRD §5.1 + SPEC §6.6 markers. Sentence preserved as historical reference for the configure-page placement decision.)
 
+**Dojo rename — shipping in Phase 5 sub-phase 5 (v1 user-facing).** The drill route's user-facing copy is being reframed as "dojo mode" per PRD §4.2 — the configure page subhead, submit button, and run skeleton fallback strings adopt the dojo vocabulary. The engine, route paths (`/drill/[subTypeId]`), session-type identifier (`'drill'`), `mastery_state` schema enum values, internal function names, and `data-testid` markers in this section remain unchanged; the rename is a copy-layer reframe scoped to user-visible strings only. See `docs/plans/phase5-dojo-belt-indicator.md` for the round.
+
 ### 10.3 Full-length test — `/test`
 
 > **Partial cut from v1 2026-05-04.** Full-length test stays in v1 (Phase 5 sub-phase 3). Two prefix/suffix elements cut: NarrowingRamp pre-session (PRD §5.3) and strategy-review gate post-session (PRD §6.5). v1 shape: directly → `<FocusShell>` → post-session review (dismissible immediately). On-disk surface: `src/components/narrowing-ramp/*` and `src/components/post-session/strategy-review-gate.tsx` were **never shipped** to tree.
@@ -2174,6 +2176,8 @@ The dismiss path is implicit: the post-session page does NOT render a separate "
 - ~~For full_length only: `<StrategyReviewGate>` — 30-second timer plus a single rendered strategy paired with the user's worst sub-type from this session. Dismiss button is disabled until the gate elapses and the strategy is marked viewed; the gate posts a `strategy_views` row when the strategy first appears.~~ **Cut from v1 2026-05-04** (PRD §6.5 cut marker). `<StrategyReviewGate>` was **never shipped** to tree. v1 full_length post-session is dismissible immediately like every other session type.
 
 For diagnostic ~~and drill and review~~ **and drill** (review session type also cut, §10.5 marker), the dismiss path is enabled immediately. **In v1 (2026-05-04), this applies to all session types** including full_length and simulation.
+
+**Belt-indicator extension — shipping in Phase 5 sub-phase 5.** Slot 1 (Heading + brief one-line summary) is being extended with a belt-indicator render for `'drill'`-typed sessions only. The indicator surfaces the highest tier the adaptive walker reached during the session (PRD §4.2), mapped to a colored belt with text-label parity for accessibility — white = easy, blue = medium, brown = hard, black = brutal. Pre-floor (< 10 attempts in the walker's last-10-attempt running window per PRD §4.2) the indicator renders the initial tier from `initialTierFor` with a "(calibrating)" suffix. Diagnostic / full_length / simulation post-session shells render the heading slot unchanged; the belt indicator is drill-mode only. The walker's existing `nextDifficultyTier` export from `src/server/items/selection.ts` is the data contract; no walker behavior changes. The other eight slots in the locked ordering (TriageScoreLine through Continue CTA) are unchanged. See `docs/plans/phase5-dojo-belt-indicator.md` for the round.
 
 ### 10.8 Heartbeats and abandons
 

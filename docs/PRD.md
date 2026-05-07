@@ -174,6 +174,8 @@ Within a sub-type, the engine selects the next item to keep the user in the 80�
 
 The engine never serves the same item twice in a session. Across sessions, items can repeat per the spaced-repetition rules.
 
+**Dojo framing — shipping in Phase 5 sub-phase 5 (v1 user-facing).** The adaptive walker above is being framed to the user as "dojo mode" — a martial-arts metaphor for practice-with-resistance. The post-session review surface (PRD §6.5) renders a colored belt indicator showing the highest tier the walker reached during the session: white = easy, blue = medium, brown = hard, black = brutal. The metaphor is copy-layer; the engine, tier names, and walker behavior in this section are unchanged. See `docs/plans/phase5-dojo-belt-indicator.md` for the round.
+
 ### 4.3 Spaced-repetition review queue
 
 > **Cut from v1 2026-05-04.** Section preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. v1 ships adaptive difficulty per drill (§4.2) without a cross-session SM-2 ladder; review-queue resurfacing is deferred to a later round.
