@@ -10,22 +10,20 @@
 // renders the assembled DashboardData payload.
 //
 // Pure render composition over already-shipped components — zero
-// state, zero effects, zero data fetching. The eight component
+// state, zero effects, zero data fetching. The five component
 // types it composes (TopNav + ScoreStrip + MissionCard + 2×
-// DojoCard + PaceMetric + MistakesTile + LastSimTile) are all
-// self-contained presentational; Dashboard is just a layout
-// container plus the React.use unwrap.
+// DojoCard) are all self-contained presentational; Dashboard is
+// just a layout container plus the React.use unwrap.
 //
-// Bottom three-tile strip uses md:grid-cols-[1.4fr_1fr_1fr] —
-// PaceMetric gets 1.4× width because its 7-bar chart needs
-// horizontal room; the other two tiles are equal-width.
+// Practice round commit 10: the bottom three-tile strip
+// (<PaceMetric> + <MistakesTile> + <LastSimTile>) was removed
+// atomically. Previous Pace + Mistakes moved into <ScoreStrip>'s
+// 5-stat top panel at commit 9; "last sim" is no longer a
+// dashboard-surface concern (covered by /post-session).
 
 import * as React from "react"
 import { DojoCard } from "@/components/dashboard/dojo-card"
-import { LastSimTile } from "@/components/dashboard/last-sim-tile"
 import { MissionCard } from "@/components/dashboard/mission-card"
-import { MistakesTile } from "@/components/dashboard/mistakes-tile"
-import { PaceMetric } from "@/components/dashboard/pace-metric"
 import { ScoreStrip } from "@/components/dashboard/score-strip"
 import { TopNav } from "@/components/dashboard/top-nav"
 import type { DashboardData } from "@/server/dashboard/types"
@@ -49,7 +47,7 @@ function Dashboard({ dataPromise }: DashboardProps) {
 					mistakesQueue={data.mistakesQueue}
 				/>
 				<MissionCard mission={data.mission} />
-				<div className="mb-[14px] grid grid-cols-1 gap-3 md:grid-cols-2">
+				<div className="grid grid-cols-1 gap-3 md:grid-cols-2">
 					<DojoCard
 						title="Verbal dojo"
 						meta={`${data.verbal.length} sub-types`}
@@ -60,11 +58,6 @@ function Dashboard({ dataPromise }: DashboardProps) {
 						meta={`${data.numerical.length} sub-types`}
 						rows={data.numerical}
 					/>
-				</div>
-				<div className="grid grid-cols-1 gap-3 md:grid-cols-[1.4fr_1fr_1fr]">
-					<PaceMetric pace={data.pace} />
-					<MistakesTile data={data.mistakesQueue} />
-					<LastSimTile data={data.lastSim} />
 				</div>
 			</main>
 		</div>

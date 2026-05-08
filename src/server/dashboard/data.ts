@@ -17,14 +17,13 @@
 // commit 3 with NOT NULL DEFAULT 40, so every existing user row has
 // 40 and the read returns a number unconditionally.
 //
-// Practice round commit 6 (this commit's pace-mapping update): the
-// orchestrator additively maps pace.previousMedianMs +
-// pace.last5SimMedianMs (new helper output) into the new
-// DashboardData["pace"].previousMedianSeconds +
-// DashboardData["pace"].last5SimMedians fields. The deprecated
-// medianSeconds + last7Days mappings stay in place so <PaceMetric>
-// keeps rendering through commits 6-9; commit 10's atomic prune
-// removes the deprecated fields + the component.
+// Practice round commit 10 (atomic bottom-strip removal): the
+// orchestrator no longer assembles transitional pace fields
+// (medianSeconds + last7Days) or the optional `lastSim` block. The
+// pace mapping is the simple ms→seconds conversion of the two real
+// fields the rebuilt <ScoreStrip> at commit 9 consumes; the
+// `getLastFullSim` helper was removed at commit 10 along with its
+// caller.
 //
 // Decision G (`docs/plans/dashboard.md` §3, resolved 2026-05-07):
 // loadUserProfile validates `row.name === null` and throws via
@@ -42,7 +41,7 @@ import { deriveHeadline } from "@/server/dashboard/helpers"
 import { countMistakes } from "@/server/dashboard/mistakes"
 import { pickTodaysMission } from "@/server/dashboard/mission"
 import { computePaceWeek } from "@/server/dashboard/pace"
-import { computeScoreEstimate, getLast5SimScores, getLastFullSim } from "@/server/dashboard/score"
+import { computeScoreEstimate, getLast5SimScores } from "@/server/dashboard/score"
 import { computeStreak } from "@/server/dashboard/streak"
 import type { DashboardData } from "@/server/dashboard/types"
 
@@ -58,21 +57,18 @@ interface UserProfile {
 /**
  * Returns the dashboard payload for the given user.
  *
- * Helper status as of practice round commit 6:
+ * Helper status as of practice round commit 10:
  *   - loadUserProfile        → real read (auth/users; target_score
  *                              wired at practice round commit 4)
  *   - loadAllBelts           → STUB (Belts PRD)
- *   - pickTodaysMission      → STUB (Mission Picker PRD; real impl
- *                              lands at practice round commit 7)
+ *   - pickTodaysMission      → real read (practice round commit 7)
  *   - computeScoreEstimate   → real read (practice round commit 5)
  *   - computeStreak          → STUB (Streaks PRD)
- *   - computePaceWeek        → real read (practice round commit 6,
- *                              this commit; deprecated medianMs +
- *                              perDayMs kept for the transitional
- *                              window through commit 10)
- *   - countMistakes          → STUB (Mistakes PRD; real impl lands
- *                              at practice round commit 8)
- *   - getLastFullSim         → real read (practice round commit 5)
+ *   - computePaceWeek        → real read (practice round commit 6;
+ *                              transitional fields pruned at
+ *                              commit 10)
+ *   - countMistakes          → real read (practice round commit 8)
+ *   - getLast5SimScores      → real read (practice round commit 9)
  */
 async function getDashboardData(userId: string): Promise<DashboardData> {
 	logger.info({ userId }, "dashboard data requested")
@@ -84,34 +80,18 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 	}
 	const profile = profileResult.data
 
-	const [
-		verbal,
-		numerical,
-		mission,
-		score,
-		streakDays,
-		pace,
-		mistakesCount,
-		lastSim,
-		last5SimScores
-	] = await Promise.all([
-		loadAllBelts(userId, "verbal"),
-		loadAllBelts(userId, "numerical"),
-		pickTodaysMission(userId),
-		computeScoreEstimate(userId),
-		computeStreak(userId),
-		computePaceWeek(userId),
-		countMistakes(userId),
-		getLastFullSim(userId),
-		getLast5SimScores(userId)
-	])
+	const [verbal, numerical, mission, score, streakDays, pace, mistakesCount, last5SimScores] =
+		await Promise.all([
+			loadAllBelts(userId, "verbal"),
+			loadAllBelts(userId, "numerical"),
+			pickTodaysMission(userId),
+			computeScoreEstimate(userId),
+			computeStreak(userId),
+			computePaceWeek(userId),
+			countMistakes(userId),
+			getLast5SimScores(userId)
+		])
 
-	const last7Days = pace.perDayMs.map(function toPaceDay(ms, i) {
-		return {
-			medianSeconds: ms / 1000,
-			isToday: i === pace.perDayMs.length - 1
-		}
-	})
 	const previousMedianSeconds =
 		pace.previousMedianMs === undefined ? undefined : pace.previousMedianMs / 1000
 	const last5SimMedians = pace.last5SimMedianMs.map(function msToSeconds(ms) {
@@ -126,7 +106,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 		},
 		greeting: {
 			today: new Date(),
-			headline: deriveHeadline({ delta: score.delta, hasSim: lastSim !== undefined })
+			headline: deriveHeadline({ delta: score.delta, hasSim: score.current !== undefined })
 		},
 		score: {
 			current: score.current,
@@ -140,9 +120,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 		verbal,
 		numerical,
 		pace: {
-			medianSeconds: pace.medianMs / 1000,
 			targetSeconds: 18,
-			last7Days,
 			previousMedianSeconds,
 			last5SimMedians
 		},
@@ -150,8 +128,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 			count: mistakesCount,
 			estimatedMinutes: Math.max(1, Math.round(mistakesCount * 0.35)),
 			href: "/review"
-		},
-		lastSim
+		}
 	}
 }
 

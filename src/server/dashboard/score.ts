@@ -1,11 +1,13 @@
-// Dashboard score-strip + last-sim helpers. Real reads against
-// practice_sessions + attempts; both helpers query the most recent
-// `type='full_length'` sessions for the given user.
+// Dashboard score-strip helpers. Real reads against practice_sessions
+// + attempts; both helpers query the most recent `type='full_length'`
+// sessions for the given user.
 //
 // Practice round commit 5 (`docs/plans/practice-round.md` §5 commit 5)
 // replaced the dashboard-round STUB returns. Practice round commit 9
 // added `getLast5SimScores` to feed the rebuilt <ScoreStrip>'s
-// 5-bar Previous Score sparkline.
+// 5-bar Previous Score sparkline. Practice round commit 10 (atomic
+// bottom-strip removal) removed the `getLastFullSim` helper along
+// with its sole consumer (the deleted <LastSimTile>).
 //
 // Per dashboard round Decision E (`docs/plans/dashboard.md` §3): full
 // sims store as `type='full_length'` (NOT `'simulation'`); the latter
@@ -13,26 +15,25 @@
 // is never written by v1 code. These helpers filter on
 // `type='full_length'` exclusively.
 //
-// **Shared query shape.** All three helpers call the private
+// **Shared query shape.** Both helpers call the private
 // `loadLastSimsWithScores(userId, limit)` which does a single
 // JOIN + GROUP BY + ORDER BY + LIMIT against
 // practice_sessions_user_type_ended_idx. For each returned row,
 // `correctCount` is computed via `SUM(CASE WHEN attempts.correct
 // THEN 1 ELSE 0 END)::int` (cross-DB-portable; SQL-level COALESCE
 // handles the LEFT JOIN's empty-attempts case). computeScoreEstimate
-// consumes 2 rows for {current, delta}; getLastFullSim consumes 1
-// row; getLast5SimScores consumes 5 rows.
+// consumes 2 rows for {current, delta}; getLast5SimScores consumes
+// 5 rows.
 //
 // **Empty-state semantics:**
 //   - 0 prior sims    → computeScoreEstimate {current: undefined,
-//                       delta: undefined}; getLastFullSim undefined;
-//                       getLast5SimScores [u, u, u, u, u].
+//                       delta: undefined}; getLast5SimScores
+//                       [u, u, u, u, u].
 //   - 1 prior sim     → computeScoreEstimate {current: count, delta:
-//                       undefined}; getLastFullSim populated;
-//                       getLast5SimScores [u, u, u, u, score].
+//                       undefined}; getLast5SimScores
+//                       [u, u, u, u, score].
 //   - 2+ prior sims   → computeScoreEstimate {current, delta both
-//                       defined}; getLastFullSim populated with the
-//                       most recent; getLast5SimScores right-aligned
+//                       defined}; getLast5SimScores right-aligned
 //                       array, oldest-to-newest.
 
 import * as errors from "@superbuilders/errors"
@@ -41,7 +42,6 @@ import { db } from "@/db"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
-import type { DashboardData } from "@/server/dashboard/types"
 
 interface ScoreEstimate {
 	current?: number
@@ -50,12 +50,10 @@ interface ScoreEstimate {
 
 interface SimRow {
 	sessionId: string
-	startedAtMs: number
 	endedAtMs: number
 	correctCount: number
 }
 
-const FULL_SIM_QUESTION_COUNT = 50
 const SIM_HISTORY_LENGTH = 5
 
 async function loadLastSimsWithScores(
@@ -66,7 +64,6 @@ async function loadLastSimsWithScores(
 		db
 			.select({
 				sessionId: practiceSessions.id,
-				startedAtMs: practiceSessions.startedAtMs,
 				endedAtMs: practiceSessions.endedAtMs,
 				correctCount: sql<number>`COALESCE(SUM(CASE WHEN ${attempts.correct} THEN 1 ELSE 0 END), 0)::int`
 			})
@@ -101,7 +98,6 @@ async function loadLastSimsWithScores(
 		}
 		return {
 			sessionId: row.sessionId,
-			startedAtMs: row.startedAtMs,
 			endedAtMs: ended,
 			correctCount: row.correctCount
 		}
@@ -134,29 +130,6 @@ async function computeScoreEstimate(userId: string): Promise<ScoreEstimate> {
 	}
 }
 
-async function getLastFullSim(userId: string): Promise<DashboardData["lastSim"]> {
-	const rows = await loadLastSimsWithScores(userId, 1)
-	logger.debug(
-		{ userId, rowCount: rows.length },
-		"getLastFullSim: queried last-1 full-length sim"
-	)
-	if (rows.length === 0) return undefined
-	const row = rows[0]
-	if (row === undefined) return undefined
-	const nowMs = Date.now()
-	const daysAgoRaw = Math.floor((nowMs - row.endedAtMs) / 86_400_000)
-	const daysAgo = daysAgoRaw < 0 ? 0 : daysAgoRaw
-	const durationMsRaw = row.endedAtMs - row.startedAtMs
-	const durationSeconds = durationMsRaw < 0 ? 0 : Math.floor(durationMsRaw / 1000)
-	return {
-		score: row.correctCount,
-		outOf: FULL_SIM_QUESTION_COUNT,
-		daysAgo,
-		durationSeconds,
-		href: `/post-session/${row.sessionId}`
-	}
-}
-
 // Practice round commit 9: feeds the <ScoreStrip>'s Previous Score
 // sparkline. Returns a length-5 array of correct-counts, OLDEST-TO-
 // NEWEST, right-aligned with undefined padding for missing slots.
@@ -178,4 +151,4 @@ async function getLast5SimScores(userId: string): Promise<ReadonlyArray<number |
 	return last5
 }
 
-export { computeScoreEstimate, getLast5SimScores, getLastFullSim }
+export { computeScoreEstimate, getLast5SimScores }

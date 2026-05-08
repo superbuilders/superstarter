@@ -5,22 +5,13 @@
 //
 // Practice round commit 6 (`docs/plans/practice-round.md` §5 commit 6)
 // replaced the dashboard-round STUB return with the queries below.
-// The helper's return shape adds new fields (previousMedianMs +
-// last5SimMedianMs) WITHOUT removing the old fields (medianMs +
-// perDayMs); both shapes co-exist through commits 6-9. The atomic
-// bottom-strip removal at commit 10 prunes <PaceMetric> + the old
-// type fields. This avoids breaking <PaceMetric>'s rendering during
-// the 4-commit window.
+// Commit 6 kept transitional `medianMs` + `perDayMs` fields so
+// <PaceMetric> could keep rendering during the 4-commit window.
+// Commit 10 (this commit's atomic prune) removed those transitional
+// fields along with <PaceMetric> itself; the helper now returns
+// only the two real fields the rebuilt <ScoreStrip> consumes.
 //
-// **Transitional fields (deprecated this round):**
-//   - medianMs: populated as previousMedianMs (or 0 if 0 sims)
-//   - perDayMs: zero-array length 7 (not real "this-week" data
-//     anymore; <PaceMetric> renders zero-bars during the
-//     transitional window)
-// Orchestrator at data.ts continues mapping these to
-// DashboardData["pace"].medianSeconds + last7Days.
-//
-// **New fields (real this round):**
+// **Returned fields:**
 //   - previousMedianMs: median latency over all attempts in the most
 //     recent full_length sim. undefined when 0 sims.
 //   - last5SimMedianMs: ReadonlyArray<number | undefined> of length
@@ -48,11 +39,6 @@ import { logger } from "@/logger"
 const SIM_HISTORY_LENGTH = 5
 
 interface PaceWeek {
-	/** Transitional. Populated as previousMedianMs (or 0 if no sims).
-	 * Pruned at commit 10. */
-	medianMs: number
-	/** Transitional. Length 7, all zeros. Pruned at commit 10. */
-	perDayMs: ReadonlyArray<number>
 	/** Median latency (ms) over all attempts in the most recent
 	 * full_length sim. undefined when the user has zero completed
 	 * full sims. */
@@ -68,8 +54,6 @@ interface SimMedianRow {
 	endedAtMs: number
 	medianMs: number | undefined
 }
-
-const ZERO_PER_DAY_MS: ReadonlyArray<number> = [0, 0, 0, 0, 0, 0, 0]
 
 async function loadLastSimMedians(userId: string): Promise<ReadonlyArray<SimMedianRow>> {
 	const result = await errors.try(
@@ -145,10 +129,7 @@ async function computePaceWeek(userId: string): Promise<PaceWeek> {
 		last5SimMedianMs[slot] = row.medianMs
 	}
 	const previousMedianMs = rows[0]?.medianMs
-	const medianMsTransitional = previousMedianMs === undefined ? 0 : previousMedianMs
 	return {
-		medianMs: medianMsTransitional,
-		perDayMs: ZERO_PER_DAY_MS,
 		previousMedianMs,
 		last5SimMedianMs
 	}

@@ -1,8 +1,11 @@
 // Dashboard data contract. Dashboard PRD §5 +
 // `docs/plans/dashboard.md` §5 commit 5 +
-// `docs/plans/practice-round.md` §5 commit 6 (additive: previousMedianSeconds
-// + last5SimMedians; deprecated medianSeconds + last7Days kept for
-// <PaceMetric> until commit 10's atomic prune).
+// `docs/plans/practice-round.md` §5 commit 6 + commit 10. Practice
+// round commit 10 (atomic bottom-strip removal) pruned the
+// transitional `pace.medianSeconds` + `pace.last7Days` fields and
+// the optional top-level `lastSim?` field; the bottom-row tiles
+// they fed (<PaceMetric>, <LastSimTile>, <MistakesTile>) all moved
+// into the rebuilt <ScoreStrip> at commit 9 or were retired.
 //
 // This file is the structural source of truth for the dashboard's
 // payload. Components consume slices via props (DashboardData["score"],
@@ -83,18 +86,8 @@ interface DashboardData {
 	verbal: ReadonlyArray<SubtypeRow>
 	numerical: ReadonlyArray<SubtypeRow>
 	pace: {
-		/** Transitional. Practice round commit 6: populated as
-		 * `previousMedianSeconds` (or 0 if no sims). Pruned at
-		 * commit 10's atomic bottom-strip removal. <PaceMetric>
-		 * still consumes this through commits 6-9. */
-		medianSeconds: number
 		/** Hard target (18) */
 		targetSeconds: number
-		/** Transitional. Practice round commit 6: populated as
-		 * 7-element zero array (semantically deprecated; not
-		 * "this-week" pace anymore). <PaceMetric> renders zero-bars
-		 * during the transitional window. Pruned at commit 10. */
-		last7Days: ReadonlyArray<{ medianSeconds: number; isToday: boolean }>
 		/** Median seconds-per-question over all attempts in the most
 		 * recent full_length sim. undefined when the user has zero
 		 * completed full sims. New at practice round commit 6;
@@ -111,13 +104,6 @@ interface DashboardData {
 		count: number
 		/** Rough estimate; "1 minute per ~3 mistakes" rule of thumb. */
 		estimatedMinutes: number
-		href: string
-	}
-	lastSim?: {
-		score: number
-		outOf: number
-		daysAgo: number
-		durationSeconds: number
 		href: string
 	}
 }
