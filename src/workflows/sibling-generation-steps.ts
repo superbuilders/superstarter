@@ -176,17 +176,62 @@ function parseSourceOptions(
 interface LoadNearestNeighborsInput {
 	sourceId: string
 	subTypeId: SubTypeId
-	k: number
+	neighborsPerTier: number
+}
+
+interface NeighborRowShape {
+	id: string
+	difficulty: Difficulty
+	body: unknown
+	optionsJson: unknown
+	correctAnswer: string
+}
+
+function mapNeighborRow(row: NeighborRowShape): SiblingNeighbor {
+	const bodyParsed = itemBody.safeParse(row.body)
+	if (!bodyParsed.success) {
+		logger.error(
+			{ neighborId: row.id, issues: bodyParsed.error.issues },
+			"sibling-generation: neighbor body failed itemBody schema"
+		)
+		throw errors.wrap(ErrNeighborBodyMalformed, `neighbor id '${row.id}'`)
+	}
+	if (bodyParsed.data.kind !== "text") {
+		logger.error(
+			{ neighborId: row.id, kind: bodyParsed.data.kind },
+			"sibling-generation: neighbor body kind not text (v1 invariant violated)"
+		)
+		throw errors.wrap(ErrNeighborBodyMalformed, `neighbor id '${row.id}' non-text body`)
+	}
+	const optionsParsed = parseSourceOptions(row.optionsJson, row.id)
+	const correctText = optionsParsed.find((o) => o.id === row.correctAnswer)?.text
+	if (correctText === undefined) {
+		logger.error(
+			{ neighborId: row.id, correctAnswer: row.correctAnswer },
+			"sibling-generation: neighbor correctAnswer not found in options"
+		)
+		throw errors.wrap(
+			ErrNeighborOptionsMalformed,
+			`neighbor id '${row.id}' correctAnswer '${row.correctAnswer}'`
+		)
+	}
+	return {
+		id: row.id,
+		difficulty: row.difficulty,
+		body: { kind: "text", text: bodyParsed.data.text },
+		options: optionsParsed.map((o) => ({ text: o.text })),
+		correctAnswerText: correctText
+	}
 }
 
 async function loadNearestNeighborsStep(
 	input: LoadNearestNeighborsInput
 ): Promise<SiblingNeighbor[]> {
 	"use step"
-	if (input.k <= 0) {
+	if (input.neighborsPerTier <= 0) {
 		logger.info(
-			{ sourceId: input.sourceId, k: input.k },
-			"sibling-generation: loadNearestNeighborsStep skipped (k<=0)"
+			{ sourceId: input.sourceId, neighborsPerTier: input.neighborsPerTier },
+			"sibling-generation: loadNearestNeighborsStep skipped (neighborsPerTier<=0)"
 		)
 		return []
 	}
@@ -220,13 +265,15 @@ async function loadNearestNeighborsStep(
 	}
 	const sourceEmbedding = sourceRow.embedding
 
-	// Step 2 — query nearest neighbors. Filters per sub-round plan §4.3:
-	//   - same sub-type
-	//   - exclude source self
-	//   - exclude existing siblings of source (per parent §4.13's
-	//     exemption — siblings are by-design high-similarity to source)
-	//   - non-NULL embedding
-	// Ordering: cosine distance ASC, LIMIT k.
+	// Step 2 — tier-stratified neighbor query (b1 iteration). Run one
+	// cosine-distance query per difficulty tier and concatenate in
+	// TIER_ORDER (easy → medium → hard → brutal). The shape ensures the
+	// brutal-tier convergence targets (e.g. SANGUINE for verbal.antonyms)
+	// are surfaced into the prompt regardless of where they rank in the
+	// flat-cosine-distance ordering against an easy/medium-tier source.
+	// Filters preserved from sub-round commit 1: same sub-type, exclude
+	// source self, exclude existing siblings of source (parent §4.13
+	// exemption), non-NULL embedding.
 	const existingSiblingIdsSubq = db
 		.select({ id: items.id })
 		.from(items)
@@ -237,79 +284,56 @@ async function loadNearestNeighborsStep(
 			)
 		)
 
-	const neighborsResult = await errors.try(
-		db
-			.select({
-				id: items.id,
-				difficulty: items.difficulty,
-				body: items.body,
-				optionsJson: items.optionsJson,
-				correctAnswer: items.correctAnswer
-			})
-			.from(items)
-			.where(
-				and(
-					eq(items.subTypeId, input.subTypeId),
-					ne(items.id, input.sourceId),
-					notInArray(items.id, existingSiblingIdsSubq),
-					isNotNull(items.embedding)
-				)
-			)
-			.orderBy(cosineDistance(items.embedding, sourceEmbedding))
-			.limit(input.k)
-	)
-	if (neighborsResult.error) {
-		logger.error(
-			{ error: neighborsResult.error, sourceId: input.sourceId, subTypeId: input.subTypeId },
-			"sibling-generation: loadNearestNeighborsStep neighbors query failed"
-		)
-		throw errors.wrap(neighborsResult.error, "loadNearestNeighborsStep neighbors query")
-	}
-
 	const neighbors: SiblingNeighbor[] = []
-	for (const row of neighborsResult.data) {
-		const bodyParsed = itemBody.safeParse(row.body)
-		if (!bodyParsed.success) {
+	const perTierCounts: Record<Difficulty, number> = { easy: 0, medium: 0, hard: 0, brutal: 0 }
+	for (const tier of TIER_ORDER) {
+		const tierResult = await errors.try(
+			db
+				.select({
+					id: items.id,
+					difficulty: items.difficulty,
+					body: items.body,
+					optionsJson: items.optionsJson,
+					correctAnswer: items.correctAnswer
+				})
+				.from(items)
+				.where(
+					and(
+						eq(items.subTypeId, input.subTypeId),
+						eq(items.difficulty, tier),
+						ne(items.id, input.sourceId),
+						notInArray(items.id, existingSiblingIdsSubq),
+						isNotNull(items.embedding)
+					)
+				)
+				.orderBy(cosineDistance(items.embedding, sourceEmbedding))
+				.limit(input.neighborsPerTier)
+		)
+		if (tierResult.error) {
 			logger.error(
-				{ neighborId: row.id, issues: bodyParsed.error.issues },
-				"sibling-generation: neighbor body failed itemBody schema"
+				{
+					error: tierResult.error,
+					sourceId: input.sourceId,
+					subTypeId: input.subTypeId,
+					tier
+				},
+				"sibling-generation: loadNearestNeighborsStep tier query failed"
 			)
-			throw errors.wrap(ErrNeighborBodyMalformed, `neighbor id '${row.id}'`)
+			throw errors.wrap(tierResult.error, `loadNearestNeighborsStep ${tier} query`)
 		}
-		if (bodyParsed.data.kind !== "text") {
-			logger.error(
-				{ neighborId: row.id, kind: bodyParsed.data.kind },
-				"sibling-generation: neighbor body kind not text (v1 invariant violated)"
-			)
-			throw errors.wrap(ErrNeighborBodyMalformed, `neighbor id '${row.id}' non-text body`)
+		for (const row of tierResult.data) {
+			neighbors.push(mapNeighborRow(row))
 		}
-		const optionsParsed = parseSourceOptions(row.optionsJson, row.id)
-		const correctText = optionsParsed.find((o) => o.id === row.correctAnswer)?.text
-		if (correctText === undefined) {
-			logger.error(
-				{ neighborId: row.id, correctAnswer: row.correctAnswer },
-				"sibling-generation: neighbor correctAnswer not found in options"
-			)
-			throw errors.wrap(
-				ErrNeighborOptionsMalformed,
-				`neighbor id '${row.id}' correctAnswer '${row.correctAnswer}'`
-			)
-		}
-		neighbors.push({
-			id: row.id,
-			difficulty: row.difficulty,
-			body: { kind: "text", text: bodyParsed.data.text },
-			options: optionsParsed.map((o) => ({ text: o.text })),
-			correctAnswerText: correctText
-		})
+		perTierCounts[tier] = tierResult.data.length
 	}
 
 	logger.info(
 		{
 			sourceId: input.sourceId,
 			subTypeId: input.subTypeId,
-			k: input.k,
-			retrieved: neighbors.length
+			neighborsPerTier: input.neighborsPerTier,
+			retrieved: neighbors.length,
+			perTier: perTierCounts
 		},
 		"sibling-generation: loadNearestNeighborsStep produced neighbors"
 	)

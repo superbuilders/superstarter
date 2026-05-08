@@ -17,18 +17,19 @@ import {
 	writeSiblingSetStep
 } from "@/workflows/sibling-generation-steps"
 
-const DEFAULT_NEIGHBORS_K = 8
+const DEFAULT_NEIGHBORS_PER_TIER = 2
 
 async function siblingGenerationWorkflow(
-	input: { itemId: string; neighborsK?: number }
+	input: { itemId: string; neighborsPerTier?: number }
 ): Promise<{ insertedIds: string[] }> {
 	"use workflow"
 	const loaded = await loadSourceItemStep(input.itemId)
-	const k = input.neighborsK === undefined ? DEFAULT_NEIGHBORS_K : input.neighborsK
+	const neighborsPerTier =
+		input.neighborsPerTier === undefined ? DEFAULT_NEIGHBORS_PER_TIER : input.neighborsPerTier
 	const neighbors = await loadNearestNeighborsStep({
 		sourceId: loaded.source.id,
 		subTypeId: loaded.source.subTypeId,
-		k
+		neighborsPerTier
 	})
 	const generation = await generateSiblingSetStep({ ...loaded.source, neighbors })
 	const resolvedSiblings = await assignIdsAndValidateStep(generation.siblingSet.siblings)

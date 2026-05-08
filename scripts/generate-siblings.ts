@@ -30,9 +30,11 @@
 //   --reset-source=<id>             Pre-delete ONE source's siblings + JSON;
 //                                   other sources still follow skip-if-exists.
 //   --max-cost-usd=N                Cumulative cost cap per run. Default 50.
-//   --neighbors-k=N                 Vector-similar-context K (sub-round plan
-//                                   §4.2). Integer ≥ 0. Default 8.
-//                                   N=0 disables neighbor injection (ablation).
+//   --neighbors-per-tier=N          Vector-similar-context neighbors per
+//                                   difficulty tier (b1 iteration of sub-round
+//                                   plan §4.2). Integer ≥ 0. Default 2 →
+//                                   2 × 4 tiers = 8 total neighbors. N=0
+//                                   disables neighbor injection (ablation).
 //   --help, -h                      Print usage and exit.
 //
 // Usage:
@@ -63,7 +65,7 @@ import { siblingGenerationWorkflow } from "@/workflows/sibling-generation"
 const SIBLINGS_LOG = "scripts/_logs/siblings-generated.jsonl"
 const COMPARISON_MD = "scripts/_logs/sibling-test-run-comparison.md"
 const DEFAULT_MAX_COST_USD = 50
-const DEFAULT_NEIGHBORS_K = 8
+const DEFAULT_NEIGHBORS_PER_TIER = 2
 
 const ErrCliParseFailed = errors.new("generate-siblings: CLI parse failed")
 const ErrInvalidSubType = errors.new("generate-siblings: --sub-type value not in subTypeIds")
@@ -73,8 +75,8 @@ const ErrInvalidMaxSources = errors.new(
 const ErrInvalidMaxCost = errors.new(
 	"generate-siblings: --max-cost-usd must be positive number"
 )
-const ErrInvalidNeighborsK = errors.new(
-	"generate-siblings: --neighbors-k must be non-negative integer"
+const ErrInvalidNeighborsPerTier = errors.new(
+	"generate-siblings: --neighbors-per-tier must be non-negative integer"
 )
 
 interface CliArgs {
@@ -83,11 +85,11 @@ interface CliArgs {
 	force: boolean
 	resetSource: string | undefined
 	maxCostUsd: number
-	neighborsK: number
+	neighborsPerTier: number
 }
 
 const USAGE_MESSAGE =
-	"Usage: bun run scripts/generate-siblings.ts [--max-sources-per-sub-type=N] [--sub-type=<id>] [--force] [--reset-source=<id>] [--max-cost-usd=N] [--neighbors-k=N]"
+	"Usage: bun run scripts/generate-siblings.ts [--max-sources-per-sub-type=N] [--sub-type=<id>] [--force] [--reset-source=<id>] [--max-cost-usd=N] [--neighbors-per-tier=N]"
 
 function parseValuedFlag(
 	arg: string,
@@ -123,7 +125,7 @@ function parseNonNegativeInt(value: string, label: string): number {
 	const n = Number.parseInt(value, 10)
 	if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
 		logger.error({ value, label }, "generate-siblings: bad non-negative-int flag")
-		throw errors.wrap(ErrInvalidNeighborsK, `${label} value '${value}'`)
+		throw errors.wrap(ErrInvalidNeighborsPerTier, `${label} value '${value}'`)
 	}
 	return n
 }
@@ -157,8 +159,13 @@ function applyArgToCli(arg: string, acc: CliArgs): CliArgs {
 	if (rs.matched) return { ...acc, resetSource: rs.value }
 	const mc = parseValuedFlag(arg, "--max-cost-usd")
 	if (mc.matched) return { ...acc, maxCostUsd: parsePositiveFloat(mc.value, "--max-cost-usd") }
-	const nk = parseValuedFlag(arg, "--neighbors-k")
-	if (nk.matched) return { ...acc, neighborsK: parseNonNegativeInt(nk.value, "--neighbors-k") }
+	const npt = parseValuedFlag(arg, "--neighbors-per-tier")
+	if (npt.matched) {
+		return {
+			...acc,
+			neighborsPerTier: parseNonNegativeInt(npt.value, "--neighbors-per-tier")
+		}
+	}
 	logger.error({ arg }, "generate-siblings: unknown flag")
 	throw errors.wrap(ErrCliParseFailed, `unknown flag '${arg}'`)
 }
@@ -172,7 +179,7 @@ function parseArgs(argv: string[]): CliArgs | { help: true } {
 		force: false,
 		resetSource: undefined,
 		maxCostUsd: DEFAULT_MAX_COST_USD,
-		neighborsK: DEFAULT_NEIGHBORS_K
+		neighborsPerTier: DEFAULT_NEIGHBORS_PER_TIER
 	}
 	for (const arg of args) {
 		acc = applyArgToCli(arg, acc)
@@ -463,7 +470,10 @@ async function processOneSource(
 	}
 
 	const wfResult = await errors.try(
-		siblingGenerationWorkflow({ itemId: source.id, neighborsK: args.neighborsK })
+		siblingGenerationWorkflow({
+			itemId: source.id,
+			neighborsPerTier: args.neighborsPerTier
+		})
 	)
 	if (wfResult.error) {
 		logger.error(
@@ -595,7 +605,7 @@ async function main(): Promise<number> {
 			force: args.force,
 			resetSource: args.resetSource,
 			maxCostUsd: args.maxCostUsd,
-			neighborsK: args.neighborsK
+			neighborsPerTier: args.neighborsPerTier
 		},
 		"generate-siblings: starting run"
 	)
