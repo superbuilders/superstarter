@@ -138,5 +138,23 @@ const subTypes: ReadonlyArray<SubTypeConfig> = [
 	}
 ]
 
+/*
+ * Default drill question count. Practice round commit 2 (ask 7):
+ * "All drills default to 5 questions. Remove the drill configure
+ * page entirely; users land directly on /run." Pre-round: drill
+ * length picker offered 5/10/20 with default 10. Post-round: a
+ * single hardcoded 5 — the configure page deletes; /drill/<id>/run
+ * uses this constant for both startSession's drillLength input AND
+ * the empty-bank pre-check threshold (renders <EmptyBankPane> if a
+ * sub-type has fewer than DEFAULT_DRILL_QUESTIONS live items, since
+ * a drill of N questions cannot start with a bank of <N items).
+ *
+ * Must be a member of start.ts's DrillLength = 5 | 10 | 20 union so
+ * startSession accepts it as input. If the future redesign widens
+ * the default beyond {5, 10, 20}, update DrillLength in
+ * src/server/sessions/start.ts in the same commit.
+ */
+const DEFAULT_DRILL_QUESTIONS = 5
+
 export type { Difficulty, SubTypeConfig, SubTypeId }
-export { subTypeIds, subTypes }
+export { DEFAULT_DRILL_QUESTIONS, subTypeIds, subTypes }

@@ -6,9 +6,16 @@
 //
 // `name` is `s.displayName` directly (Title Case), per
 // `docs/plans/dashboard.md` §3 decision F: cross-surface consistency
-// with <MasteryMap>'s rendering is preserved; if sentence case is a
-// product preference, the fix lives at src/config/sub-types.ts, not
-// at a dashboard-local transformer.
+// with the previous Mastery Map rendering is preserved; if sentence
+// case is a product preference, the fix lives at
+// src/config/sub-types.ts, not at a dashboard-local transformer.
+//
+// `href` points at /drill/<subTypeId>/run since practice round commit
+// 2 (`docs/plans/practice-round.md` §5 commit 2 + ask 7). Pre-round:
+// /drill/<subTypeId> (the configure surface, length picker 5/10/20).
+// Post-round: configure deletes, /run hardcodes drillLength = 5 via
+// DEFAULT_DRILL_QUESTIONS, and the BeltRow href deep-links straight
+// into the run flow.
 
 import { subTypes } from "@/config/sub-types"
 import { logger } from "@/logger"
@@ -35,7 +42,7 @@ async function loadAllBelts(
 				belt: "white",
 				progressToNext: 0,
 				atRisk: false,
-				href: `/drill/${encodeURIComponent(s.id)}`
+				href: `/drill/${encodeURIComponent(s.id)}/run`
 			}
 		})
 }
