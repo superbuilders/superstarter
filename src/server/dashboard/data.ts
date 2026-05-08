@@ -1,6 +1,6 @@
 // Dashboard data orchestrator + loadUserProfile real read. Dashboard
 // PRD §6 + §6.1 + `docs/plans/dashboard.md` §5 commit 5 +
-// `docs/plans/practice-round.md` §5 commit 4.
+// `docs/plans/practice-round.md` §5 commit 4 + commit 6.
 //
 // The orchestrator composes one real read (loadUserProfile) and seven
 // stubbed helpers into a single DashboardData payload. Each helper
@@ -12,11 +12,19 @@
 // for `id`, `name`, `targetDateMs`, and `targetScore`.
 // `target_percentile` is intentionally NOT read
 // (`docs/plans/dashboard.md` §2.4 audit). Practice round commit 4
-// (this commit) replaced the previous STUB_GOAL_SCORE=40 constant
-// with a real read of users.target_score: the column was added at
-// practice round commit 3 with NOT NULL DEFAULT 40, so every
-// existing user row has 40 and the read returns a number
-// unconditionally.
+// replaced the previous STUB_GOAL_SCORE=40 constant with a real read
+// of users.target_score: the column was added at practice round
+// commit 3 with NOT NULL DEFAULT 40, so every existing user row has
+// 40 and the read returns a number unconditionally.
+//
+// Practice round commit 6 (this commit's pace-mapping update): the
+// orchestrator additively maps pace.previousMedianMs +
+// pace.last5SimMedianMs (new helper output) into the new
+// DashboardData["pace"].previousMedianSeconds +
+// DashboardData["pace"].last5SimMedians fields. The deprecated
+// medianSeconds + last7Days mappings stay in place so <PaceMetric>
+// keeps rendering through commits 6-9; commit 10's atomic prune
+// removes the deprecated fields + the component.
 //
 // Decision G (`docs/plans/dashboard.md` §3, resolved 2026-05-07):
 // loadUserProfile validates `row.name === null` and throws via
@@ -49,22 +57,21 @@ interface UserProfile {
 /**
  * Returns the dashboard payload for the given user.
  *
- * Helper status as of practice round commit 4:
+ * Helper status as of practice round commit 6:
  *   - loadUserProfile        → real read (auth/users; target_score
- *                              wired this commit, was STUB_GOAL_SCORE
- *                              pre-practice-round)
+ *                              wired at practice round commit 4)
  *   - loadAllBelts           → STUB (Belts PRD)
  *   - pickTodaysMission      → STUB (Mission Picker PRD; real impl
  *                              lands at practice round commit 7)
- *   - computeScoreEstimate   → STUB (Sim Scoring PRD; real impl
- *                              lands at practice round commit 5)
+ *   - computeScoreEstimate   → real read (practice round commit 5)
  *   - computeStreak          → STUB (Streaks PRD)
- *   - computePaceWeek        → STUB (Pace-Strip PRD; real impl
- *                              lands at practice round commit 6)
+ *   - computePaceWeek        → real read (practice round commit 6,
+ *                              this commit; deprecated medianMs +
+ *                              perDayMs kept for the transitional
+ *                              window through commit 10)
  *   - countMistakes          → STUB (Mistakes PRD; real impl lands
  *                              at practice round commit 8)
- *   - getLastFullSim         → STUB (Sim Scoring PRD; real impl
- *                              lands at practice round commit 5)
+ *   - getLastFullSim         → real read (practice round commit 5)
  */
 async function getDashboardData(userId: string): Promise<DashboardData> {
 	logger.info({ userId }, "dashboard data requested")
@@ -94,6 +101,11 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 			isToday: i === pace.perDayMs.length - 1
 		}
 	})
+	const previousMedianSeconds =
+		pace.previousMedianMs === undefined ? undefined : pace.previousMedianMs / 1000
+	const last5SimMedians = pace.last5SimMedianMs.map(function msToSeconds(ms) {
+		return ms === undefined ? undefined : ms / 1000
+	})
 
 	return {
 		user: {
@@ -117,7 +129,9 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 		pace: {
 			medianSeconds: pace.medianMs / 1000,
 			targetSeconds: 18,
-			last7Days
+			last7Days,
+			previousMedianSeconds,
+			last5SimMedians
 		},
 		mistakesQueue: {
 			count: mistakesCount,

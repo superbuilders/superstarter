@@ -1,5 +1,8 @@
 // Dashboard data contract. Dashboard PRD §5 +
-// `docs/plans/dashboard.md` §5 commit 5.
+// `docs/plans/dashboard.md` §5 commit 5 +
+// `docs/plans/practice-round.md` §5 commit 6 (additive: previousMedianSeconds
+// + last5SimMedians; deprecated medianSeconds + last7Days kept for
+// <PaceMetric> until commit 10's atomic prune).
 //
 // This file is the structural source of truth for the dashboard's
 // payload. Components consume slices via props (DashboardData["score"],
@@ -64,11 +67,29 @@ interface DashboardData {
 	verbal: ReadonlyArray<SubtypeRow>
 	numerical: ReadonlyArray<SubtypeRow>
 	pace: {
+		/** Transitional. Practice round commit 6: populated as
+		 * `previousMedianSeconds` (or 0 if no sims). Pruned at
+		 * commit 10's atomic bottom-strip removal. <PaceMetric>
+		 * still consumes this through commits 6-9. */
 		medianSeconds: number
 		/** Hard target (18) */
 		targetSeconds: number
-		/** Length 7, oldest first */
+		/** Transitional. Practice round commit 6: populated as
+		 * 7-element zero array (semantically deprecated; not
+		 * "this-week" pace anymore). <PaceMetric> renders zero-bars
+		 * during the transitional window. Pruned at commit 10. */
 		last7Days: ReadonlyArray<{ medianSeconds: number; isToday: boolean }>
+		/** Median seconds-per-question over all attempts in the most
+		 * recent full_length sim. undefined when the user has zero
+		 * completed full sims. New at practice round commit 6;
+		 * consumed by the rebuilt <ScoreStrip> at commit 9. */
+		previousMedianSeconds?: number
+		/** Length-5 array of per-sim median seconds-per-question,
+		 * OLDEST-TO-NEWEST. Missing slots padded with undefined. New
+		 * at practice round commit 6; consumed by the sparkline in
+		 * the rebuilt <ScoreStrip> at commit 9. Empty-state (0 sims)
+		 * is `[undefined, undefined, undefined, undefined, undefined]`. */
+		last5SimMedians: ReadonlyArray<number | undefined>
 	}
 	mistakesQueue: {
 		count: number
