@@ -45,7 +45,7 @@ const SIBLING_MODE_APPENDIX = [
 	"- OPTION DISTINCTNESS: each option's text must be lexically distinct from every other option's text within the same sibling. Identical strings across two options will cause the sibling set to be rejected. If two computations or two semantic constructions yield the same surface text (e.g., two arithmetic paths producing '216', or two phrasings yielding 'increase'), choose a different surface for one (different rounding, different unit, different phrasing) OR replace one with a different distractor.",
 	"- Each sibling carries its own structured explanation: 2 or 3 parts in order [recognition, elimination, optional tie-breaker].",
 	"- REFERENCED OPTION EXACT-MATCH: when listing referencedOptionTexts in any structuredExplanation part, each string must be COPY-PASTE EXACT from the same sibling's options[].text field. No paraphrasing. No character substitution (e.g., do NOT substitute em-dash '—' for hyphen-minus '-'; do NOT substitute typographic quotes for straight quotes; do NOT add or drop whitespace). The mismatch will cause the sibling set to be rejected; the server resolves text → id post-assignment via exact-string match.",
-	"- Each sibling has 4 or 5 options.",
+	"- Each sibling has the same number of options as the source (typically 3 to 5).",
 	""
 ].join("\n")
 

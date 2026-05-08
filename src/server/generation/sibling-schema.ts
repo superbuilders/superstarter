@@ -54,7 +54,13 @@ const llmOption = z.object({
 
 const siblingItemSchema = z.object({
 	body: itemBody,
-	options: z.array(llmOption).min(4).max(5),
+	// Real CCAT source items span 3–5 options across sub-types
+	// (verbal.critical_reasoning items are commonly 3-option logic-validity
+	// "Correct / Incorrect / Cannot be determined"; numerical sub-types are
+	// 4–5). The system prompt instructs the LLM to mirror the source's
+	// option count per the "preserve problem structure" rule, so this bound
+	// must match the empirical bank distribution rather than a uniform 4-5.
+	options: z.array(llmOption).min(3).max(5),
 	correctAnswerText: z.string().min(1),
 	structuredExplanation: llmStructuredExplanation
 })
