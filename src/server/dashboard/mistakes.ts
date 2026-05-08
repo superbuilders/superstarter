@@ -1,26 +1,67 @@
-// Dashboard mistakes-tile counter. STUB: returns 0 until the Mistakes
-// PRD lands. See Dashboard PRD §6.7 + `docs/plans/dashboard.md` §5
-// commit 5 + §9 stub-removal table.
+// Dashboard mistakes-tile counter. Real read against attempts joined
+// to practice_sessions. Practice round commit 8
+// (`docs/plans/practice-round.md` §5 commit 8 + decision 6 +
+// audit checkpoint J).
 //
-// This helper is intentionally NOT spaced-review-aware: spaced review
-// was cut from v1 (`064a386`; see `docs/plans/dashboard.md` §2.8 for
-// the audit). The Mistakes PRD will count wrong attempts the user
-// hasn't yet reviewed in the post-session shell — the simplest
-// interpretation that preserves the tile's value without resurrecting
-// cut scope. The Dashboard PRD §10.8 framing ("wrong answers to
-// review") is the v1-correct user-facing copy.
+// Returns the count of DISTINCT items where the user has at least one
+// wrong attempt. The Mistakes Review surface (the /review page itself)
+// stays a stub this round; the count is real so the top-panel
+// "Mistakes to review" stat reflects actual user state instead of
+// "0" for everyone.
+//
+// Spaced review is intentionally NOT modeled (cut from v1 — see
+// `docs/plans/dashboard.md` §2.8). The future Mistakes PRD may add
+// a "still wrong on last attempt" filter; this round's framing is
+// the simplest correct version: "any wrong attempt counts."
+//
+// **Query shape:**
+//   SELECT COUNT(DISTINCT a.item_id)
+//   FROM attempts a
+//   INNER JOIN practice_sessions ps ON ps.id = a.session_id
+//   WHERE ps.user_id = $1 AND a.correct = false
+//
+// `attempts` has no standalone userId column (audit checkpoint K
+// from dashboard round); the join through practice_sessions.user_id
+// is the canonical pattern for "this user's attempts." Index path:
+// practice_sessions_user_id_idx → attempts_session_id_idx → filter
+// on attempts.correct.
+//
+// **Helper signature unchanged.** Returns `Promise<number>` (just the
+// count). The orchestrator at src/server/dashboard/data.ts wraps it
+// into DashboardData["mistakesQueue"] with estimatedMinutes
+// (Math.max(1, Math.round(count * 0.35))) + href ("/review"). Per
+// the existing dashboard-round contract.
 
+import * as errors from "@superbuilders/errors"
+import { and, countDistinct, eq } from "drizzle-orm"
+import { db } from "@/db"
+import { attempts } from "@/db/schemas/practice/attempts"
+import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
 
-// TODO(stub): wire to real data in the Mistakes PRD
-// (`docs/plans/dashboard.md` §9). When real: count of wrong attempts
-// (attempts.correct = false) joined through practice_sessions.user_id,
-// optionally filtered to "not yet reviewed" once a review-
-// acknowledgment surface exists. Spaced review is explicitly OUT of
-// scope.
 async function countMistakes(userId: string): Promise<number> {
-	logger.debug({ userId }, "countMistakes stub: returning 0")
-	return 0
+	const result = await errors.try(
+		db
+			.select({ count: countDistinct(attempts.itemId) })
+			.from(attempts)
+			.innerJoin(practiceSessions, eq(attempts.sessionId, practiceSessions.id))
+			.where(and(eq(practiceSessions.userId, userId), eq(attempts.correct, false)))
+	)
+	if (result.error) {
+		logger.error({ error: result.error, userId }, "countMistakes: query failed")
+		throw errors.wrap(result.error, "countMistakes")
+	}
+	const row = result.data[0]
+	if (row === undefined) {
+		// COUNT always returns one row; this branch is defensive only.
+		logger.error(
+			{ userId },
+			"countMistakes: COUNT query returned no rows (impossible)"
+		)
+		throw errors.new("countMistakes: empty result")
+	}
+	logger.debug({ userId, count: row.count }, "countMistakes: query returned")
+	return row.count
 }
 
 export { countMistakes }
