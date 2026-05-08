@@ -1,32 +1,10 @@
-import { z } from "zod"
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
-
-const BodyText = z.object({
-	kind: z.literal("text"),
-	text: z.string().min(1)
-})
-
-const ItemBody = z.discriminatedUnion("kind", [BodyText])
-
-const Option = z.object({
-	text: z.string().min(1)
-})
-
-const generatedItem = z.object({
-	body: ItemBody,
-	options: z.array(Option).min(2).max(5),
-	correctAnswer: z.string().min(1),
-	explanation: z.string().min(1)
-})
-
-type GeneratedItem = z.infer<typeof generatedItem>
 
 interface ItemTemplate {
 	subTypeId: SubTypeId
 	version: number
 	systemPrompt: string
 	userPromptFor: (difficulty: Difficulty) => string
-	schema: typeof generatedItem
 }
 
 const COMMON_SYSTEM = [
@@ -60,8 +38,7 @@ function buildTemplate(
 		subTypeId,
 		version: 1,
 		systemPrompt: `${COMMON_SYSTEM} ${systemTail}`,
-		userPromptFor: (difficulty) => `${userPromptStem(difficulty)}\n${difficultyHint(difficulty)}`,
-		schema: generatedItem
+		userPromptFor: (difficulty) => `${userPromptStem(difficulty)}\n${difficultyHint(difficulty)}`
 	}
 }
 
@@ -152,5 +129,5 @@ const itemTemplates: Record<SubTypeId, ItemTemplate> = {
 	)
 }
 
-export type { GeneratedItem, ItemTemplate }
-export { generatedItem, itemTemplates }
+export type { ItemTemplate }
+export { itemTemplates }
