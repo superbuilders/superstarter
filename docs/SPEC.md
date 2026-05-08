@@ -1300,6 +1300,13 @@ The audit is cheap. The revision cost — plan-time pin → commit-time revision
 
 **Cross-references.** Phase 5 sub-phase 1 commits: `c1ee435`, `0ec6f4f`, `a0aa1fd`, `c71770c`, `8d4195e`, `eaeb882`, this commit. Commit `eaeb882`'s message documents the Next.js module-boundary revision; commit `0ec6f4f`'s message documents the Drizzle `inArray` workaround. This entry generalizes both into the convention.
 
+**Subsequent invocations across the dashboard + practice rounds (2026-05-07 / 2026-05-08).** The convention has been re-applied with four additional instances, each a specialization of "audit against actual artifact" worth recording inline:
+
+- **PRD-prose claims about CSS state require git-log verification** (dashboard round commit 11, `88417f8`). PRD §8 prose claimed `prefers-reduced-motion: reduce` and a body font-family rule already lived in `globals.css`; `git log -p src/styles/unstyled/globals.css` showed neither ever did. PRD/spec text claims about codebase state are unverified intent until proven against the artifact.
+- **Brief-vs-existing-contract drift — brief is hint, code is contract** (practice round commits 5 + 8, `812292f` + `400168a`). Round briefs are shorthand for what the redirector wants; existing code (Zod schema, type contracts, helper signatures) is the authoritative ground truth. When a brief's helper-shape conflicts with the existing contract, the existing contract wins; the brief's deviation is a finding to surface, not silently fix or follow.
+- **Brief numeric counts must recheck against most-recent commit** (practice round commit 10, `cbd8145`). Briefs containing numeric counts (file counts, field counts, row counts) drift between commit-time and brief-write-time. The brief's count is a starting estimate; the audit's first move is `git diff --stat` or a fresh `wc -l` against current `HEAD`, with the brief amended inline if recheck shows divergence.
+- **Product-judgment vs implementation-detail in stub→real transitions** (practice round commit 7, `f1db5ec`). When a stub becomes a real read, some encoded ordering decisions cross from implementation-detail (silently chosen by stub author) to product-judgment (Leo-overridable). The mission picker's `MASTERY_RANK` ordering (learning < decayed < fluent < mastered) and tie-break determinism (DB composite-PK alphabetical on `(userId, subTypeId)` slug) are reversible via one-line constant changes; audit at stub→real transitions surfaces these as redirector decisions rather than treating them as inert detail.
+
 ---
 
 #### 6.14.19 Type-error-as-audit cascade pattern
@@ -1344,6 +1351,8 @@ Plans under `docs/plans/` that have flipped to "shipped <date>" status are immut
 
 **Cross-references.** Plan: `docs/plans/phase5-taxonomy-restructure.md` §3 resolution 8 (closed-plan drift acknowledgment). Round commits where the convention was empirically verified via `git diff` zero-line check: `e9cf5d5` (commit 4 of this round). The convention was first invoked structurally at `022dbd6` (Phase 5 sub-phase 1 commit 7); §6.14.20 generalizes the four-round repeat into a meta-convention.
 
+**Two-step migration as a related route-tree-stability discipline (dashboard round, 2026-05-07).** A sibling discipline to plan-doc immutability: when migrating an existing route surface, first copy the content to a new path, then replace the original path's content with the new feature. The dashboard round (commits 3 + 10, `f4d0653` + `ad95e9b`) demonstrated this concretely — Mastery Map content moved from `/` to `/drill/page.tsx` at commit 3, then `/` was replaced with the dashboard at commit 10. The two-step keeps the pre-migration surface stable as a known-good route during the multi-commit interval (commits 3-9 here) and lets the round ship intermediate commits without breaking the user-visible route tree. Closed plans referencing the old route shape stay immutable per §6.14.20; the round-time route-tree carries both old and new content for the migration window. Future rounds doing route migrations under shipped-and-deployed conditions should default to this two-step shape rather than the one-shot replace.
+
 #### 6.14.21 Audit DB row-state against the live DB, not against intended-state from prior commits
 
 > **Captured 2026-05-06** (data-wipe round commit 3). Pattern surfaced from the round's commit-1 pre-execution audit, where the plan §2(b) listed `sub_types` and `strategies` as preserved tables under the assumption they were already at the post-taxonomy-restructure 14/33 state from the taxonomy round's commit-1 schema-seed run; the live dev DB instead carried 11 sub_types (with old-taxonomy IDs still present) and 111 strategies (3.36× the expected 33).
@@ -1363,6 +1372,8 @@ The first two are config-table-row-state problems; the third is a schema-state p
 **Inverse-pattern reference (audit done correctly).** The v1-code-cleanup round (closed at `37ad762`) provides the well-handled-failure-mode contrast: that round's audit identified `review_queue` and `strategy_views` as schema files marked "shipped, vestigial — needs to be dropped from disk." The audit step verified each table was in `src/db/schemas/**` AND in the schema barrel before authoring the `DROP TABLE … CASCADE` migration, rather than assuming the doc-only-cuts round had eliminated them. The contrast is instructive: schema-state was verified live in v1-code-cleanup; row-state was assumed-from-config in the original phase5-data-wipe plan §2(b). The audit-against-live-state discipline applies in both directions (intent says "exists, should drop" → verify it's still on disk; intent says "should be at shape X post-prior-round" → verify it's actually at shape X).
 
 **Cross-references.** Plan: `docs/plans/phase5-data-wipe.md` §10.6 (Path (A) amendment) + §11 (round-close summary). Round commits where the pattern was empirically demonstrated: `8d3cf1d` (commit 1 — audit-finding inline + Path (A) amendment shipped), this commit (plan-doc formal §2(b) amendment + this SPEC entry). Inverse-pattern reference: `37ad762` (v1-code-cleanup commit 4 — schema-state verified live before authoring the `DROP TABLE` migration).
+
+**Deferred-migration-bundling as a row-state-audit corollary (practice round, 2026-05-07).** A corollary failure mode where the live-DB / disk-schema divergence isn't a row-state issue but a generated-migration issue: `bun db:generate` walks the schema barrel and sweeps up any prior-round-deferred schema additions into the next migration regardless of the current round's intended scope. Practice round commit 3 (`0e90bde`) shipped a `target_score` ALTER, and the generated migration also bundled the dashboard-round-deferred `user_sub_type_belts` table + `belt_level` enum (added at dashboard round commit 2 `ff93fe1` to the barrel without a paired migration). Round-planning needs to anticipate this bundling — either accept the absorbed scope (this round's choice; documents that the future Belts PRD's commit ledger shrinks by ~1) OR remove deferred schema from the barrel until its planned migration commit. Audit step at round-open: inspect the generated SQL before `db:push` (or `bun db:generate --dry-run` if available) to surface bundling before the migration ships.
 
 #### 6.14.22 Audit claims about existing code semantics against the consuming code, not the producing code
 
@@ -1420,6 +1431,96 @@ All three of those commits passed runtime verification on the user's next pass; 
 **Kinship to §6.14.21 + §6.14.22.** Both prior entries codify "audit / verify against the actual artifact, not against the assumed shape." §6.14.21 specializes to runtime DB row-state vs. plan-time intended state; §6.14.22 specializes to consuming-code semantics vs. producing-code reads; this §6.14.23 specializes to runtime user-experience vs. static-trace code-level reasoning. Future-Claude reading any of the three should consider the others — they're three faces of the same parent discipline ("audit against actual artifact, not assumed shape," see §6.14.18).
 
 **Cross-references.** Plan: `docs/plans/diagnostic-bug-fixes.md` §3 (BUG 2 + BUG 3 round-close summaries) + §5 (round-close meta-finding capture). Round commits where the pattern was empirically demonstrated: `b02590a` + `caccfbd` (the static-trace failures), `f7045f8` + `f59a8ea` + `08ba782` (the explicit-deferral successes), this commit (plan-doc + this SPEC entry). Siblings: §6.14.21 (DB row-state audit), §6.14.22 (consuming-code audit). Shared parent: §6.14.18 (audit against actual artifact).
+
+**TS type signatures may diverge from runtime at SSR/CSR boundaries (dashboard round, 2026-05-07).** A third gap-class to add to the runtime-verification convention: framework-supplied `.d.ts` signatures may not match runtime behavior at the server/client boundary. Dashboard round commit 9 (`49894d7`) hit this with Next.js 16's `usePathname`, declared as returning `string` but returning `null` during the server-render tick before client hydration. Static-trace verification + `bun typecheck` both pass cleanly because the type signature matches; the runtime divergence only surfaces under streaming-SSR with the relevant render path actually exercised. The fix shipped a runtime null-check at the consumption site, with verification deferred to a streaming-SSR throwaway harness. Specialization framing: TS type signatures are a producing-code claim about runtime behavior; SSR/CSR boundary semantics are a consuming-code constraint that the type signature can't encode. Runtime render with streaming SSR is the reliable proof; type-checker-clean is necessary but not sufficient.
+
+---
+
+#### 6.14.24 Lint/type-rule strictness vs spec-acceptable usage
+
+> **Captured 2026-05-08** (post-practice-round §6.14 promotion sub-round). Pattern surfaced from three rule-vs-spec collisions across the dashboard round (2026-05-07) and practice round (2026-05-07/08), where a project lint/type rule rejected a usage the relevant external spec (HTML/ARIA, gritql rule comments, Next.js typed-routes config) explicitly sanctioned. Each instance shipped a workaround that achieved the same UX/semantics without invoking the banned attribute or pattern.
+
+When a project lint, type, or grit rule's strictness exceeds the relevant external spec's acceptable-usage envelope, the resolution is **always** a workaround that preserves the spec-correct UX, never a rule-suppression or `biome-ignore-line` exemption. The cost of the workaround is per-instance code; the cost of widening the rule (or adding case-by-case ignores) is repeated future audits and silent rule-erosion. Three concrete classes of this collision have surfaced empirically:
+
+- **Biome lint vs ARIA dialog pattern** (practice round commit 9, `6178b2a`). Biome's `noAutofocus` rule flags `autoFocus` on every JSX element, including popover-dialog content where focus-on-mount is the WCAG 2.4.3 + ARIA dialog-pattern canonical UX. Workaround: `useRef` + `useEffect` programmatic `.focus()` on mount. Same observable behavior; rule-clean.
+- **gritql rule scope drift vs commented intent** (dashboard round commit 8, `3abe143`). The `no-inline-ternary.grit` rule's comment header says nested const-ternaries are allowed; the actual gritql pattern only matches the *outermost* ternary and silently flags nested ternaries inside outer-ternary branches. Workaround: refactor to a top-level helper with an early-return chain, achieving the same expression value without nesting. Rule body wins over rule-comment claim about scope.
+- **Next.js typed-routes config vs `<Link>` with dynamic strings** (dashboard round commits 6 + 7, `befe9bd` + `3abe143` cluster). `next.config.ts` has `typedRoutes: true`, which requires `<Link>` hrefs to be `Route` literals, not arbitrary strings. PRD listings used `<Link href={dynamicString}>` for BeltRow row hrefs, MissionCard CTAs, MistakesTile, LastSimTile. Workaround: refactor to plain `<a>` per `src/components/mastery-map/start-session-button.tsx` precedent (loss of soft-nav prefetch accepted in exchange for type-safety + rule-compliance).
+
+**Common shape.** In every instance, the project rule is correct in the broad case (autofocus is a real a11y footgun outside dialogs; inline ternaries genuinely degrade readability; typed routes catch real broken-link bugs at compile time) but the spec-permitted usage IS one of the cases the rule's blanket pattern catches. The workaround pattern always exists; the cost is per-instance, well-bounded, and produces no recurring maintenance debt.
+
+**Convention going forward.** When a project rule blocks a spec-permitted usage, the default action is to ship the workaround and document the rule-vs-spec collision in the commit body (one paragraph naming the rule, the spec, the workaround chosen, and the precedent if one exists in the codebase). Do not add `biome-ignore-line` or `// rule-suppress` comments; they accumulate as silent rule-erosion. Do not widen the rule; the rule's broad-case correctness is load-bearing. The workaround is the answer.
+
+**Anti-pattern.** Resolving a rule-vs-spec collision by adding a per-line ignore comment with a justification. Justifications-as-comments rot; the next contributor reading the line sees the ignore-comment and infers the rule is negotiable. The workaround pattern keeps the rule absolutely enforced and surfaces the rule-vs-spec gap to future audits as a finding rather than a precedent.
+
+**Cross-references.** Round commits where the pattern was empirically demonstrated: `3abe143` (no-inline-ternary scope drift + `<Link>` typed-routes / `<a>` refactor), `befe9bd` (composite components consuming the `<a>` precedent), `6178b2a` (autofocus / `useRef`+`useEffect`). Plans: `docs/plans/dashboard.md` §5 (commit 7 + 8 rows) + `docs/plans/practice-round.md` §5 (commit 9 row). This entry generalizes the three instances into the convention; future rule-vs-spec collisions add an instance below the bullet list rather than re-litigate the resolution.
+
+---
+
+#### 6.14.25 SQL-level NULL handling for `sql<T>` aggregate templates
+
+> **Captured 2026-05-08** (post-practice-round §6.14 promotion sub-round). Pattern surfaced from two adjacent commits in the practice round (commits 5 + 6) where Drizzle's `sql<T>` template literal cast aggregate results as non-null but the underlying SQL semantics returned NULL on empty result sets. The two instances required different remedies depending on whether the empty-set default carried meaningful product semantics.
+
+Drizzle's `sql<number>\`SUM(...)\`` (or `sql<number>\`PERCENTILE_CONT(...)\``, etc.) template casts the runtime result as `number` regardless of the actual SQL semantics — but `SUM` over an empty set returns NULL, `PERCENTILE_CONT` over an empty set returns NULL, `COUNT` over a LEFT JOIN can return 0 or NULL depending on shape, and so on. The TypeScript type asserts non-null; the runtime value can be null; super-lint's `no-unnecessary-condition` rule then flags JS-side null checks as redundant against the type. The collision is real: the lint rule's type-system view of `sql<T>` does not match the SQL runtime's NULL semantics.
+
+The right resolution depends on whether the empty-set default is meaningful or misleading:
+
+- **Default-is-meaningful → SQL-level COALESCE.** When the empty-set default has a real product semantic (SUM=0 means "zero correct answers"; COUNT=0 means "no rows matched"), the fix is `COALESCE(SUM(...), 0)::int` (or equivalent) at the SQL level. The template's `sql<number>` cast is then accurate; no JS-side null check is needed; lint stays green. Practice round commit 5 (`812292f`) used this shape for the `computeScoreEstimate` correct-answer count.
+- **Default-is-misleading → typed-as-nullable + JS-side normalization.** When the empty-set default would be misleading (PERCENTILE_CONT=0 implies "0ms median latency" — false; the truthful answer is "no median exists"), the fix is to type the template as `sql<number | null>` and JS-side map null → undefined at the consumption boundary. Practice round commit 6 (`0e8a737`) used this shape for `previousMedianMs` + `last5SimMedianMs`: returning `undefined` on the empty case lets downstream rendering branch to "—" / "Take your first sim →" empty states rather than display "0 ms" as if it were a real measurement.
+
+**Common shape.** The lint rule's type-system view of `sql<T>` aggregate templates does not match SQL runtime NULL semantics. The two remedies are not interchangeable — choose by what the empty-set default *means* for the consuming code, not by what's syntactically convenient.
+
+**Convention going forward.** When writing a `sql<T>` template that contains an aggregate (SUM, AVG, MIN, MAX, COUNT under LEFT JOIN, PERCENTILE_CONT, percentile / quantile functions, ARRAY_AGG with FILTER), pause at the type annotation and ask: "does this aggregate return NULL on the empty case?" If yes, the next question is "is the empty-set default meaningful?" — yes → COALESCE-at-SQL-level; no → type-as-nullable + JS-side normalization. The lint rule's complaint is a feature: it forces this question into every aggregate-template site rather than letting silent NULL→0 coercions slip through.
+
+**Cross-references.** Round commits where the pattern was empirically demonstrated: `812292f` (commit 5 — COALESCE-when-default-meaningful for correct-count SUM), `0e8a737` (commit 6 — typed-as-nullable for PERCENTILE_CONT median). Plan: `docs/plans/practice-round.md` §5 (commit ledger). §6.14.18 is the broader parent (audit-framework-constraint-before-pinning); §6.14.25 specializes to ORM-template-vs-SQL-runtime-NULL semantics.
+
+---
+
+#### 6.14.26 Active-wrong vs historical-trail comment classification
+
+> **Captured 2026-05-08** (post-practice-round §6.14 promotion sub-round; instance from practice round commit 11, `7367d20`). Pattern surfaced from the round's full-surface Alpha Style audit + polish, where two distinct kinds of stale comment trail across multiple files received different default treatments: a comment that *describes how the code currently works* and is technically wrong gets fixed; a comment that *describes how the code used to look before a refactor* and is historically accurate but no longer load-bearing is left in place.
+
+Comments cleave into two distinct categories with distinct treatments:
+
+- **Active-wrong (technical-correctness misdocumentation).** A comment that claims "this code does X" or "this field carries Y" and the claim no longer matches the current code. **Default: fix.** The comment is actively misleading; future contributors read it as ground truth and act on its claim. Treatment is the same as a stale Zod schema description or a stale type comment — correct it inline as part of the next commit that touches the file, or surface it as an audit finding if the file isn't being touched in the round.
+- **Historical-trail (provenance / migration-trace).** A comment that describes "this used to be at X / this was moved from Y / this previously inlined Z." The claim is historically accurate even if no longer architecturally load-bearing. **Default: leave.** The comment encodes commit-history context that `git log` recovers slowly (multi-commit traces with renames + moves are expensive to reconstruct from blame alone); deleting it loses the trace. Treatment is the same as a `// see commit XYZ` cross-reference — leave it unless it's actively misleading about *current* behavior.
+
+**The distinction matters at audit time.** Mass `comment cleanup` sweeps that don't separate the two categories either (a) leave active-wrong comments in place and ship a misleading codebase, or (b) delete historical-trail comments and lose round-time context. The default is per-comment classification: read each stale comment, decide which category it belongs to, treat accordingly. Resist the temptation to apply a uniform default ("delete all stale comments" or "leave all stale comments") — the categories cleave the population, and the right action diverges.
+
+**Convention going forward.** During audit-and-polish rounds, comment-trail review is per-comment, not per-sweep. The audit step categorizes each stale comment as active-wrong (fix-now), historical-trail (leave), or genuinely-orphaned (delete with a one-line commit-message note). The fix-now category gets inline edits; the leave category stays untouched; the delete category is the rare third path for comments that match neither — typically scaffolding comments left over from initial implementation that have lost both technical and historical relevance.
+
+**Cross-references.** Round commit where the pattern was empirically demonstrated: `7367d20` (practice round commit 11 — full-surface Alpha Style audit + polish). Plan: `docs/plans/practice-round.md` §5 (commit 11 row). The convention complements §6.14.11 (audit-tighter-than-contract pattern) by specifying the per-comment treatment within the audit's edit phase; §6.14.11 covers when the audit *catches* tighter-than-contract; §6.14.26 covers what to *do* with the comment trail surfaced by the catch.
+
+---
+
+#### 6.14.27 Discriminated-union-local-to-the-page for deletion-cascade absorption
+
+> **Captured 2026-05-08** (post-practice-round §6.14 promotion sub-round; instance from practice round commit 2, `a4883cf`). Pattern surfaced from the round's drill-restructure work, where deleting an upstream `/drill/configure` gate cascaded an "empty bank" detection responsibility onto the downstream `/drill/run` page. The page absorbed the new state via a local discriminated union, leaving the page's exported contract unchanged.
+
+When deleting an upstream gate (a configuration page, a form, an intermediate route) that previously handled a precondition check, the downstream consumer page often inherits the responsibility for surfacing the precondition's failure case. The clean shape is a **discriminated union local to the consuming page** — the downstream page's internal state widens from `T` to `T | empty-bank-variant`, the union is consumed via discriminated-render in the page, and the page's exported contract (the type names and shapes external code imports) stays compatible because the exported variant is just the success case.
+
+**The shape concretely:**
+
+```typescript
+// page-internal type, NOT exported
+type DrillInit =
+  | { kind: "ready"; firstQuestion: Question; bankSize: number }
+  | { kind: "empty-bank"; subTypeId: SubTypeId }
+
+// exported type — what external code imports as the run-engine input
+type RunInit = Extract<DrillInit, { kind: "ready" }>
+```
+
+The consuming page reads `DrillInit`, switches on `.kind`, renders the empty-bank surface inline OR forwards `RunInit` to the run-engine machinery. External code (route handlers, server actions, the run-engine) keeps importing `RunInit` and never sees the empty-bank variant.
+
+**Why this shape over the alternatives:**
+
+- **Reintroducing a gate page** would re-create the deleted upstream surface, which the round was deleting precisely to simplify the route tree. Wrong direction.
+- **Throwing on empty-bank in the data layer** would propagate as a server-error surface, which is semantically wrong (empty bank is a normal state, not an error). The user-facing rendering needs to be a deliberate UX surface, not an error boundary.
+- **Widening the exported contract to `RunInit | EmptyBankInit`** would force every consumer to handle the empty-bank case even though only the page renders it. The local-to-the-page union confines the new responsibility to the one file that actually uses it.
+
+**Convention going forward.** When a deletion-cascade lands a new responsibility on a downstream consumer, default to a local discriminated union with the new variant scoped to the consumer's internal type. Export the success-case extraction (`Extract<…, { kind: 'ready' }>` or equivalent) as the consumer's external contract. Resist widening the exported type or pushing the new responsibility further upstream — both alternatives leak the cascade into code that doesn't need to know about it.
+
+**Cross-references.** Round commit where the pattern was empirically demonstrated: `a4883cf` (practice round commit 2 — `/drill/configure` deletion + `/drill/run` empty-bank absorption via local `DrillInit` union with `RunInit = Extract<DrillInit, { kind: 'ready' }>` exported). Plan: `docs/plans/practice-round.md` §5 (commit 2 row). The convention is narrow but the framing is sharp; future deletion-cascade rounds that encounter the same shape can reference §6.14.27 as the canonical pattern.
 
 ---
 
