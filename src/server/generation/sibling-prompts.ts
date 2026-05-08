@@ -30,6 +30,7 @@
 
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
 import { itemTemplates } from "@/config/item-templates"
+import type { SiblingNeighbor } from "@/server/generation/sibling-schema"
 
 const SIBLING_MODE_APPENDIX = [
 	"",
@@ -107,6 +108,15 @@ interface SiblingSourceContext {
 	options: { id: string; text: string }[]
 	correctAnswer: string
 	explanation?: string
+	// Vector-similar-context sub-round commit 1 (sub-round plan §4.1, §4.4):
+	// the K nearest neighbors within the same sub-type as the source
+	// (excluding the source itself + already-ingested siblings of the
+	// source). Optional at the type boundary so existing direct callers
+	// (unit tests, future ad-hoc consumers) need not construct a
+	// neighbors array; the workflow runtime always populates it via
+	// `loadNearestNeighborsStep`. Empty array and undefined render the
+	// same way (no neighbors block).
+	neighbors?: SiblingNeighbor[]
 }
 
 function findCorrectAnswerText(
@@ -119,6 +129,32 @@ function findCorrectAnswerText(
 	return undefined
 }
 
+function renderNeighborLines(neighbor: SiblingNeighbor, idx: number): string[] {
+	const optionsLine = neighbor.options.map((o) => o.text).join("; ")
+	return [
+		`${idx + 1}. ${neighbor.body.text}`,
+		`   Options: ${optionsLine}`,
+		`   Correct: ${neighbor.correctAnswerText}`
+	]
+}
+
+function buildNeighborsBlock(neighbors: SiblingNeighbor[] | undefined): string[] {
+	if (neighbors === undefined || neighbors.length === 0) return []
+	const headerLine =
+		"Existing items in this sub-type (the bank already contains these — your siblings must NOT duplicate any of these in body, anchor word, or option-set composition):"
+	const itemLines: string[] = []
+	for (let i = 0; i < neighbors.length; i++) {
+		const n = neighbors[i]
+		if (n === undefined) continue
+		for (const line of renderNeighborLines(n, i)) {
+			itemLines.push(line)
+		}
+	}
+	const footerLine =
+		"Your siblings must preserve the source's structural pattern (same operation, same number of decision-points, same distractor relationship to correct answer) but use DIFFERENT specific words / numbers / structures than any of the items listed above. Surface-detail collapse across sources is the failure mode this list exists to prevent."
+	return ["", headerLine, ...itemLines, "", footerLine]
+}
+
 function buildSiblingUserPrompt(source: SiblingSourceContext): string {
 	const correctText = findCorrectAnswerText(source.options, source.correctAnswer)
 	const correctTextLine = correctText === undefined
@@ -127,6 +163,7 @@ function buildSiblingUserPrompt(source: SiblingSourceContext): string {
 	const explanationBlock = source.explanation === undefined
 		? "Source explanation: (none — generate the sibling explanations from the body + options + correct answer alone.)"
 		: `Source explanation:\n${source.explanation}`
+	const neighborLines = buildNeighborsBlock(source.neighbors)
 	const lines = [
 		`Source sub-type: ${source.subTypeId}`,
 		`Source difficulty: ${source.difficulty}`,
@@ -140,6 +177,7 @@ function buildSiblingUserPrompt(source: SiblingSourceContext): string {
 		correctTextLine,
 		"",
 		explanationBlock,
+		...neighborLines,
 		"",
 		"Produce four siblings — easy, medium, hard, brutal — via the submit_sibling_set tool."
 	]

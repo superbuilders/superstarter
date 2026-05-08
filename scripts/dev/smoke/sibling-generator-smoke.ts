@@ -53,7 +53,12 @@ const SMOKE_SOURCE: SourceItem = {
 	],
 	correctAnswer: "qg5yg1gt",
 	explanation:
-		"Combinatorial probability problem with two independent selections; the fast move is to count only the matching-color outcomes (black-black and white-white) out of all possible shoe-trouser pairs — total pairs = 3 × 2 = 6, matching pairs = 2. Convert all options to sixths: '2/5' = 2.4/6, '1/5' = 1.2/6, '4/5' = 4.8/6, '1/6' = 1/6 — none equal 2/6, so cut all four; only '1/3' = 2/6 matches the two matching outcomes out of six total."
+		"Combinatorial probability problem with two independent selections; the fast move is to count only the matching-color outcomes (black-black and white-white) out of all possible shoe-trouser pairs — total pairs = 3 × 2 = 6, matching pairs = 2. Convert all options to sixths: '2/5' = 2.4/6, '1/5' = 1.2/6, '4/5' = 4.8/6, '1/6' = 1/6 — none equal 2/6, so cut all four; only '1/3' = 2/6 matches the two matching outcomes out of six total.",
+	// Vector-similar-context sub-round commit 1: SourceItem.neighbors is
+	// required at the type level. This dev smoke runs without a DB
+	// connection so empty array is the correct value here (the workflow
+	// runtime is the authoritative populator via loadNearestNeighborsStep).
+	neighbors: []
 }
 
 async function main(): Promise<void> {

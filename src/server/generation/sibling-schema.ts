@@ -18,6 +18,7 @@
 // resolve transform they're on.
 
 import { z } from "zod"
+import type { Difficulty } from "@/config/sub-types"
 import { itemBody } from "@/server/items/body-schema"
 
 const explanationPartKind = z.enum(["recognition", "elimination", "tie-breaker"])
@@ -71,7 +72,23 @@ type LlmStructuredExplanation = z.infer<typeof llmStructuredExplanation>
 type SiblingItemInput = z.infer<typeof siblingItemSchema>
 type SubmitSiblingSetOutput = z.infer<typeof submitSiblingSetSchema>
 
-export type { LlmStructuredExplanation, SiblingItemInput, SubmitSiblingSetOutput }
+// Vector-similar-context sub-round commit 1 (sub-round plan §4.1, §4.4):
+// neighbor item shape rendered into the user prompt. Type-only — no Zod
+// schema since the LLM never receives this as a tool-input; it flows into
+// the user-prompt text via `buildSiblingUserPrompt`. Options are
+// text-only per the opaque-id pipeline-split contract; the option ids in
+// the DB row are stripped at the SiblingNeighbor boundary. The neighbor's
+// `id` is the neighbor item's id (NOT an option id) — kept for debugging
+// and future provenance use.
+interface SiblingNeighbor {
+	id: string
+	difficulty: Difficulty
+	body: { kind: "text"; text: string }
+	options: { text: string }[]
+	correctAnswerText: string
+}
+
+export type { LlmStructuredExplanation, SiblingItemInput, SiblingNeighbor, SubmitSiblingSetOutput }
 export {
 	llmOption,
 	llmStructuredExplanation,

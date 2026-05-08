@@ -16,7 +16,7 @@
 //   5. writeSiblingSetStep     — idempotency guard + ingestSiblingSet
 
 import * as errors from "@superbuilders/errors"
-import { and, asc, eq, sql } from "drizzle-orm"
+import { and, asc, cosineDistance, eq, isNotNull, ne, notInArray, sql } from "drizzle-orm"
 import * as crypto from "node:crypto"
 import { type Difficulty, subTypeIds, type SubTypeId } from "@/config/sub-types"
 import { db } from "@/db"
@@ -32,7 +32,7 @@ import type {
 	SiblingProvenanceSourceSnapshot,
 	SiblingProvenanceUsage
 } from "@/server/generation/sibling-provenance"
-import type { SubmitSiblingSetOutput } from "@/server/generation/sibling-schema"
+import type { SiblingNeighbor, SubmitSiblingSetOutput } from "@/server/generation/sibling-schema"
 import { itemBody } from "@/server/items/body-schema"
 import {
 	type IngestSiblingSetResult,
@@ -49,6 +49,13 @@ const ErrInvalidSourceBody = errors.new("sibling-generation: source body failed 
 const ErrInvalidSourceSubType = errors.new("sibling-generation: source sub_type_id not in v1 union")
 const ErrInvalidSourceOptions = errors.new("sibling-generation: source options_json malformed")
 const ErrPartialSiblingSet = errors.new("sibling-generation: partial sibling set already on disk")
+const ErrSourceMissingEmbedding = errors.new("sibling-generation: source item has no embedding")
+const ErrNeighborOptionsMalformed = errors.new(
+	"sibling-generation: neighbor options_json malformed"
+)
+const ErrNeighborBodyMalformed = errors.new(
+	"sibling-generation: neighbor body failed schema"
+)
 
 const subTypeIdSet: ReadonlySet<string> = new Set<string>(subTypeIds)
 
@@ -164,6 +171,149 @@ function parseSourceOptions(
 		out.push({ id: o.id, text: o.text })
 	}
 	return out
+}
+
+interface LoadNearestNeighborsInput {
+	sourceId: string
+	subTypeId: SubTypeId
+	k: number
+}
+
+async function loadNearestNeighborsStep(
+	input: LoadNearestNeighborsInput
+): Promise<SiblingNeighbor[]> {
+	"use step"
+	if (input.k <= 0) {
+		logger.info(
+			{ sourceId: input.sourceId, k: input.k },
+			"sibling-generation: loadNearestNeighborsStep skipped (k<=0)"
+		)
+		return []
+	}
+
+	// Step 1 — fetch the source item's stored embedding. The column is
+	// populated synchronously for all live items (parent §4.10) and for
+	// generated candidates (writeSiblingSetStep's transaction). NULL is
+	// surfaced as a hard error: the source item has no neighbor anchor
+	// without it.
+	const sourceEmbeddingResult = await errors.try(
+		db
+			.select({ embedding: items.embedding })
+			.from(items)
+			.where(eq(items.id, input.sourceId))
+			.limit(1)
+	)
+	if (sourceEmbeddingResult.error) {
+		logger.error(
+			{ error: sourceEmbeddingResult.error, sourceId: input.sourceId },
+			"sibling-generation: loadNearestNeighborsStep source embedding query failed"
+		)
+		throw errors.wrap(sourceEmbeddingResult.error, "loadNearestNeighborsStep source embedding")
+	}
+	const sourceRow = sourceEmbeddingResult.data[0]
+	if (!sourceRow || sourceRow.embedding === null) {
+		logger.error(
+			{ sourceId: input.sourceId },
+			"sibling-generation: loadNearestNeighborsStep source missing embedding"
+		)
+		throw errors.wrap(ErrSourceMissingEmbedding, `source id '${input.sourceId}'`)
+	}
+	const sourceEmbedding = sourceRow.embedding
+
+	// Step 2 — query nearest neighbors. Filters per sub-round plan §4.3:
+	//   - same sub-type
+	//   - exclude source self
+	//   - exclude existing siblings of source (per parent §4.13's
+	//     exemption — siblings are by-design high-similarity to source)
+	//   - non-NULL embedding
+	// Ordering: cosine distance ASC, LIMIT k.
+	const existingSiblingIdsSubq = db
+		.select({ id: items.id })
+		.from(items)
+		.where(
+			and(
+				sql`${items.metadataJson}->>'parentItemId' = ${input.sourceId}`,
+				eq(items.source, "generated")
+			)
+		)
+
+	const neighborsResult = await errors.try(
+		db
+			.select({
+				id: items.id,
+				difficulty: items.difficulty,
+				body: items.body,
+				optionsJson: items.optionsJson,
+				correctAnswer: items.correctAnswer
+			})
+			.from(items)
+			.where(
+				and(
+					eq(items.subTypeId, input.subTypeId),
+					ne(items.id, input.sourceId),
+					notInArray(items.id, existingSiblingIdsSubq),
+					isNotNull(items.embedding)
+				)
+			)
+			.orderBy(cosineDistance(items.embedding, sourceEmbedding))
+			.limit(input.k)
+	)
+	if (neighborsResult.error) {
+		logger.error(
+			{ error: neighborsResult.error, sourceId: input.sourceId, subTypeId: input.subTypeId },
+			"sibling-generation: loadNearestNeighborsStep neighbors query failed"
+		)
+		throw errors.wrap(neighborsResult.error, "loadNearestNeighborsStep neighbors query")
+	}
+
+	const neighbors: SiblingNeighbor[] = []
+	for (const row of neighborsResult.data) {
+		const bodyParsed = itemBody.safeParse(row.body)
+		if (!bodyParsed.success) {
+			logger.error(
+				{ neighborId: row.id, issues: bodyParsed.error.issues },
+				"sibling-generation: neighbor body failed itemBody schema"
+			)
+			throw errors.wrap(ErrNeighborBodyMalformed, `neighbor id '${row.id}'`)
+		}
+		if (bodyParsed.data.kind !== "text") {
+			logger.error(
+				{ neighborId: row.id, kind: bodyParsed.data.kind },
+				"sibling-generation: neighbor body kind not text (v1 invariant violated)"
+			)
+			throw errors.wrap(ErrNeighborBodyMalformed, `neighbor id '${row.id}' non-text body`)
+		}
+		const optionsParsed = parseSourceOptions(row.optionsJson, row.id)
+		const correctText = optionsParsed.find((o) => o.id === row.correctAnswer)?.text
+		if (correctText === undefined) {
+			logger.error(
+				{ neighborId: row.id, correctAnswer: row.correctAnswer },
+				"sibling-generation: neighbor correctAnswer not found in options"
+			)
+			throw errors.wrap(
+				ErrNeighborOptionsMalformed,
+				`neighbor id '${row.id}' correctAnswer '${row.correctAnswer}'`
+			)
+		}
+		neighbors.push({
+			id: row.id,
+			difficulty: row.difficulty,
+			body: { kind: "text", text: bodyParsed.data.text },
+			options: optionsParsed.map((o) => ({ text: o.text })),
+			correctAnswerText: correctText
+		})
+	}
+
+	logger.info(
+		{
+			sourceId: input.sourceId,
+			subTypeId: input.subTypeId,
+			k: input.k,
+			retrieved: neighbors.length
+		},
+		"sibling-generation: loadNearestNeighborsStep produced neighbors"
+	)
+	return neighbors
 }
 
 interface GenerationResult {
@@ -315,11 +465,12 @@ async function loadExistingSiblingIds(parentItemId: string): Promise<string[]> {
 	return result.data.map((r) => r.id)
 }
 
-export type { GenerationResult, LoadedSource, WriteSiblingSetInput }
+export type { GenerationResult, LoadedSource, LoadNearestNeighborsInput, WriteSiblingSetInput }
 export {
 	assignIdsAndValidateStep,
 	embedSiblingStep,
 	generateSiblingSetStep,
+	loadNearestNeighborsStep,
 	loadSourceItemStep,
 	SIBLING_GEN_MODEL,
 	writeSiblingSetStep

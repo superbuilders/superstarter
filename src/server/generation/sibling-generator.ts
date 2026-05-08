@@ -25,6 +25,7 @@ import {
 	type SiblingSourceContext
 } from "@/server/generation/sibling-prompts"
 import {
+	type SiblingNeighbor,
 	type SubmitSiblingSetOutput,
 	submitSiblingSetSchema
 } from "@/server/generation/sibling-schema"
@@ -60,6 +61,12 @@ interface SourceItem {
 	options: { id: string; text: string }[]
 	correctAnswer: string
 	explanation?: string
+	// Vector-similar-context sub-round commit 1 (sub-round plan §4.1):
+	// the K nearest neighbors within the source's sub-type, populated by
+	// `loadNearestNeighborsStep` in the workflow before this type is
+	// passed to `generateSiblingSet`. Empty array when K=0 or no
+	// neighbors are available after exclusions.
+	neighbors: SiblingNeighbor[]
 }
 
 const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
@@ -104,7 +111,8 @@ function buildSourceContext(source: SourceItem): SiblingSourceContext {
 		difficulty: source.difficulty,
 		body: source.body,
 		options: source.options,
-		correctAnswer: source.correctAnswer
+		correctAnswer: source.correctAnswer,
+		neighbors: source.neighbors
 	}
 	if (source.explanation !== undefined) {
 		ctx.explanation = source.explanation

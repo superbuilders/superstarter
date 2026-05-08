@@ -12,16 +12,25 @@ import {
 	assignIdsAndValidateStep,
 	embedSiblingStep,
 	generateSiblingSetStep,
+	loadNearestNeighborsStep,
 	loadSourceItemStep,
 	writeSiblingSetStep
 } from "@/workflows/sibling-generation-steps"
 
+const DEFAULT_NEIGHBORS_K = 8
+
 async function siblingGenerationWorkflow(
-	input: { itemId: string }
+	input: { itemId: string; neighborsK?: number }
 ): Promise<{ insertedIds: string[] }> {
 	"use workflow"
 	const loaded = await loadSourceItemStep(input.itemId)
-	const generation = await generateSiblingSetStep(loaded.source)
+	const k = input.neighborsK === undefined ? DEFAULT_NEIGHBORS_K : input.neighborsK
+	const neighbors = await loadNearestNeighborsStep({
+		sourceId: loaded.source.id,
+		subTypeId: loaded.source.subTypeId,
+		k
+	})
+	const generation = await generateSiblingSetStep({ ...loaded.source, neighbors })
 	const resolvedSiblings = await assignIdsAndValidateStep(generation.siblingSet.siblings)
 	const embeddings = await embedSiblingStep(resolvedSiblings)
 	return await writeSiblingSetStep({
