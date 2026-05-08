@@ -69,7 +69,13 @@ interface SiblingProvenancePayload {
 	promptHash: string
 	source: SiblingProvenanceSourceSnapshot
 	llmOutputVerbatim: SubmitSiblingSetOutput
-	siblings: SiblingProvenancePerSibling[]
+	// Per-sibling post-processing decisions are populated by commit 5's
+	// `ingest-siblings.ts` after id-assignment + correctAnswer resolution +
+	// referencedOptionTexts → ids resolution + embedding compute + DB
+	// transaction. Commit 4's smoke (LLM-call only) writes the payload
+	// without this field; the field is forward-compatible with commit 5
+	// which always populates it.
+	siblings?: SiblingProvenancePerSibling[]
 	usage: SiblingProvenanceUsage
 }
 

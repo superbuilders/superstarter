@@ -208,10 +208,18 @@ test("writeSiblingComparisonMd: renders without throwing for empty rows", () => 
 })
 
 test("writeSiblingComparisonMd: renders a 1-row fixture with source + sibling sections", () => {
+	// `siblings` is optional on SiblingProvenancePayload (commit 4 made it
+	// optional so the LLM-call-only smoke can write a payload without
+	// post-processing decisions). The fixture populates it; assert via
+	// expect() and narrow with an early return to satisfy the type check
+	// without invoking the require-logger-before-throw rule.
+	const siblings = samplePayload.siblings
+	expect(siblings).toBeDefined()
+	if (siblings === undefined) return
 	const row: SiblingComparisonRow = {
 		subTypeId: "numerical.fractions",
 		source: samplePayload.source,
-		siblings: samplePayload.siblings
+		siblings
 	}
 	writeSiblingComparisonMd([row], TEST_MD_PATH)
 	const raw = fs.readFileSync(TEST_MD_PATH, "utf8")

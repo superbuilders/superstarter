@@ -77,6 +77,13 @@ scripts/_logs/wipe-snapshot-*.sql
 # See docs/plans/opaque-option-ids-and-pipeline-split.md §5.3 for lifecycle.
 scripts/_stage1/
 
+# Phase 4 sub-phase a sibling-generation per-source provenance JSONs.
+# Per docs/plans/phase4-similar-item-generator.md §4.12 / §7.3 — canonical
+# audit trail on disk, mirrors the stage-1 lifecycle (dev-time artifact,
+# never committed; the DB row + metadata_json.parentItemId is the
+# runtime-queryable surface).
+scripts/_siblings/
+
 # Archived stage-1 outputs from prior pipeline runs (e.g.
 # scripts/_stage1_old_2026-05-06/ from the testbank-re-extraction round).
 # Per-archive directories accumulate as taxonomy/pipeline shape changes; the
