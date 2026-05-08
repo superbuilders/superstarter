@@ -70,6 +70,12 @@ TODO.md
 # OCR import script run artefacts (idempotency log, failures, skipped, etc.)
 scripts/_logs/*.jsonl
 
+# Phase 4 sub-phase a sibling-generation orchestrator artefacts.
+# Comparison markdown is regenerated on every test run; tee output is
+# the run's stdout capture. Both are dev-time review surfaces.
+scripts/_logs/sibling-test-run-comparison.md
+scripts/_logs/test-run-output.log
+
 # Pre-wipe data snapshots from scripts/dev/wipe-practice-data.ts
 scripts/_logs/wipe-snapshot-*.sql
 
