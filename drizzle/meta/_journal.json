@@ -29,6 +29,13 @@
       "when": 1778049949870,
       "tag": "0003_simple_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778199452233,
+      "tag": "0004_square_speedball",
+      "breakpoints": true
     }
   ]
 }
