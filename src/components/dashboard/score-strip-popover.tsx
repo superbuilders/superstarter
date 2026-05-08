@@ -23,8 +23,14 @@
 //     toggling on open/close.
 //   - The popover content has role="dialog" with aria-label.
 //   - Focus-visible outline on the trigger (cobalt).
-//   - First focusable input inside the popover should auto-focus
-//     (handled by the editor children themselves via autoFocus).
+//   - First focusable input inside the popover focuses on mount —
+//     handled by the editor children themselves via `useRef +
+//     useEffect`, NOT `autoFocus` (biome's `noAutofocus` rule
+//     bans the prop; the useEffect-driven approach achieves the
+//     same UX without lint friction). Tab-trap is NOT implemented;
+//     focus exits the popover after the Save button. ESC + outside-
+//     click both close. A focus-trap follow-up is queued under the
+//     a11y completeness sub-round.
 
 import * as React from "react"
 import { cn } from "@/lib/utils"
