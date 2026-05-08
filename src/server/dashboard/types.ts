@@ -51,9 +51,25 @@ interface DashboardData {
 		current?: number
 		/** Signed delta vs previous full sim; undefined when fewer than 2 sims */
 		delta?: number
-		/** Target raw score (out of 50 questions on a full sim). Stubbed to 40. */
+		/** Target raw score (out of 50 questions on a full sim). Sourced
+		 * from users.target_score (added at practice round commit 3;
+		 * NOT NULL DEFAULT 40). */
 		goal: number
 		daysToTest?: number
+		/** Raw target date in epoch ms; undefined when no date set.
+		 * Practice round commit 9 surfaced this so the
+		 * <DaysToTestEditor> popover can pre-populate its date input
+		 * with the user's existing target. The display field
+		 * `daysToTest` (days-from-now) is derived from this in
+		 * loadUserProfile and stays the primary read for the tile
+		 * value. */
+		targetDateMs?: number
+		/** Length-5 array of per-sim correct counts, OLDEST-TO-NEWEST.
+		 * Missing slots padded with undefined. New at practice round
+		 * commit 9; consumed by the Previous Score sparkline in the
+		 * rebuilt <ScoreStrip>. Empty-state (0 sims) is `[undefined,
+		 * undefined, undefined, undefined, undefined]`. */
+		last5SimScores: ReadonlyArray<number | undefined>
 	}
 	mission: {
 		eyebrow: string

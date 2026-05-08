@@ -42,7 +42,7 @@ import { deriveHeadline } from "@/server/dashboard/helpers"
 import { countMistakes } from "@/server/dashboard/mistakes"
 import { pickTodaysMission } from "@/server/dashboard/mission"
 import { computePaceWeek } from "@/server/dashboard/pace"
-import { computeScoreEstimate, getLastFullSim } from "@/server/dashboard/score"
+import { computeScoreEstimate, getLast5SimScores, getLastFullSim } from "@/server/dashboard/score"
 import { computeStreak } from "@/server/dashboard/streak"
 import type { DashboardData } from "@/server/dashboard/types"
 
@@ -52,6 +52,7 @@ interface UserProfile {
 	initials: string
 	goal: number
 	daysToTest?: number
+	targetDateMs?: number
 }
 
 /**
@@ -83,17 +84,27 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 	}
 	const profile = profileResult.data
 
-	const [verbal, numerical, mission, score, streakDays, pace, mistakesCount, lastSim] =
-		await Promise.all([
-			loadAllBelts(userId, "verbal"),
-			loadAllBelts(userId, "numerical"),
-			pickTodaysMission(userId),
-			computeScoreEstimate(userId),
-			computeStreak(userId),
-			computePaceWeek(userId),
-			countMistakes(userId),
-			getLastFullSim(userId)
-		])
+	const [
+		verbal,
+		numerical,
+		mission,
+		score,
+		streakDays,
+		pace,
+		mistakesCount,
+		lastSim,
+		last5SimScores
+	] = await Promise.all([
+		loadAllBelts(userId, "verbal"),
+		loadAllBelts(userId, "numerical"),
+		pickTodaysMission(userId),
+		computeScoreEstimate(userId),
+		computeStreak(userId),
+		computePaceWeek(userId),
+		countMistakes(userId),
+		getLastFullSim(userId),
+		getLast5SimScores(userId)
+	])
 
 	const last7Days = pace.perDayMs.map(function toPaceDay(ms, i) {
 		return {
@@ -121,7 +132,9 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 			current: score.current,
 			delta: score.delta,
 			goal: profile.goal,
-			daysToTest: profile.daysToTest
+			daysToTest: profile.daysToTest,
+			targetDateMs: profile.targetDateMs,
+			last5SimScores
 		},
 		mission,
 		verbal,
@@ -166,16 +179,18 @@ async function loadUserProfile(userId: string): Promise<UserProfile> {
 	const firstName = firstNameFor(fullName)
 	const initials = initialsFor(fullName)
 	const nowMs = Date.now()
+	const targetDateMs = row.targetDateMs === null ? undefined : row.targetDateMs
 	const daysToTest =
-		row.targetDateMs === null
+		targetDateMs === undefined
 			? undefined
-			: Math.max(0, Math.ceil((row.targetDateMs - nowMs) / 86_400_000))
+			: Math.max(0, Math.ceil((targetDateMs - nowMs) / 86_400_000))
 	return {
 		id: row.id,
 		firstName,
 		initials,
 		goal: row.targetScore,
-		daysToTest
+		daysToTest,
+		targetDateMs
 	}
 }
 

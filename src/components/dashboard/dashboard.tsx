@@ -45,6 +45,8 @@ function Dashboard({ dataPromise }: DashboardProps) {
 					firstName={data.user.firstName}
 					greeting={data.greeting}
 					score={data.score}
+					pace={data.pace}
+					mistakesQueue={data.mistakesQueue}
 				/>
 				<MissionCard mission={data.mission} />
 				<div className="mb-[14px] grid grid-cols-1 gap-3 md:grid-cols-2">
