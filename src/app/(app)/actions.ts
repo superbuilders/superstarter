@@ -12,6 +12,17 @@
 // options — the workflow-trigger always fires. The dev/test escape hatch
 // (see src/server/sessions/end.ts) is reachable only by direct import
 // from a script, never from this surface. See plan §10 commit 1.
+//
+// Practice round commit 4 added two dashboard-mutation actions:
+// updateGoal + updateTargetDate. Both clone the saveOnboardingTargets
+// pattern (Zod-parsed input, requireUserId, errors.try around DB
+// write, revalidatePath("/")) and write to users.target_score and
+// users.target_date_ms respectively. Per
+// `docs/plans/practice-round.md` §3 decision 3: two narrow actions
+// rather than extending saveOnboardingTargets — the diagnostic-
+// completion onboarding form (saveOnboardingTargets) and the
+// dashboard editors (updateGoal + updateTargetDate) are different
+// surfaces with different copy and different write semantics.
 
 import * as errors from "@superbuilders/errors"
 import { revalidatePath } from "next/cache"
@@ -180,6 +191,83 @@ async function saveOnboardingTargets(input: {
 	revalidatePath("/")
 }
 
+// updateGoal — dashboard editor for users.target_score. Practice round
+// commit 4 (`docs/plans/practice-round.md` §5 commit 4 + ask 3).
+// Range 1..50 per redline 5: target_score is a raw correct count out
+// of 50 questions on a full sim; values outside that range are
+// nonsensical and Zod rejects pre-DB. Past-test-review use cases that
+// might want lower targets are still inside the range (1 minimum).
+const updateGoalInputSchema = z.object({
+	goal: z.number().int().min(1).max(50)
+})
+
+async function updateGoal(input: { goal: number }): Promise<{ success: true }> {
+	const parsed = updateGoalInputSchema.safeParse(input)
+	if (!parsed.success) {
+		logger.error({ issues: parsed.error.issues }, "updateGoal: input invalid")
+		throw errors.wrap(ErrInvalidActionInput, "updateGoal input")
+	}
+	const userId = await requireUserId()
+	const result = await errors.try(
+		db.update(users).set({ targetScore: parsed.data.goal }).where(eq(users.id, userId))
+	)
+	if (result.error) {
+		logger.error(
+			{ error: result.error, userId, goal: parsed.data.goal },
+			"updateGoal: update failed"
+		)
+		throw errors.wrap(result.error, "updateGoal")
+	}
+	logger.info({ userId, goal: parsed.data.goal }, "updateGoal: target_score persisted")
+	revalidatePath("/")
+	return { success: true }
+}
+
+// updateTargetDate — dashboard editor for users.target_date_ms.
+// Practice round commit 4 (`docs/plans/practice-round.md` §5 commit 4
+// + ask 3). Validates as integer epoch ms. Past dates are NOT
+// rejected — the user might be reviewing post-test (target date in
+// the past is valid); the past-date path logs a warn so it surfaces
+// in observability without blocking the write.
+const updateTargetDateInputSchema = z.object({
+	targetDateMs: z.number().int()
+})
+
+async function updateTargetDate(input: { targetDateMs: number }): Promise<{ success: true }> {
+	const parsed = updateTargetDateInputSchema.safeParse(input)
+	if (!parsed.success) {
+		logger.error({ issues: parsed.error.issues }, "updateTargetDate: input invalid")
+		throw errors.wrap(ErrInvalidActionInput, "updateTargetDate input")
+	}
+	const userId = await requireUserId()
+	const nowMs = Date.now()
+	if (parsed.data.targetDateMs < nowMs) {
+		logger.warn(
+			{ userId, targetDateMs: parsed.data.targetDateMs, nowMs },
+			"updateTargetDate: target date set in past (post-test review use case)"
+		)
+	}
+	const result = await errors.try(
+		db
+			.update(users)
+			.set({ targetDateMs: parsed.data.targetDateMs })
+			.where(eq(users.id, userId))
+	)
+	if (result.error) {
+		logger.error(
+			{ error: result.error, userId, targetDateMs: parsed.data.targetDateMs },
+			"updateTargetDate: update failed"
+		)
+		throw errors.wrap(result.error, "updateTargetDate")
+	}
+	logger.info(
+		{ userId, targetDateMs: parsed.data.targetDateMs },
+		"updateTargetDate: target_date_ms persisted"
+	)
+	revalidatePath("/")
+	return { success: true }
+}
+
 // signOutAction — clears the NextAuth session and redirects to /login.
 // Wired to the Mastery Map header's <SignOutButton>. Plan:
 // docs/plans/phase3-drill-mode.md §7.
@@ -198,5 +286,7 @@ export {
 	saveOnboardingTargets,
 	signOutAction,
 	startSession,
-	submitAttempt
+	submitAttempt,
+	updateGoal,
+	updateTargetDate
 }

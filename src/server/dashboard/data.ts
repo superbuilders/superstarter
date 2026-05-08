@@ -1,5 +1,6 @@
 // Dashboard data orchestrator + loadUserProfile real read. Dashboard
-// PRD §6 + §6.1 + `docs/plans/dashboard.md` §5 commit 5.
+// PRD §6 + §6.1 + `docs/plans/dashboard.md` §5 commit 5 +
+// `docs/plans/practice-round.md` §5 commit 4.
 //
 // The orchestrator composes one real read (loadUserProfile) and seven
 // stubbed helpers into a single DashboardData payload. Each helper
@@ -8,10 +9,14 @@
 // (`docs/plans/dashboard.md` §9 lists the stub-removal sequence).
 //
 // loadUserProfile is private to this file. It reads `users` directly
-// for `id`, `name`, `targetDateMs` only — `target_percentile` is
-// intentionally NOT read (`docs/plans/dashboard.md` §2.4 audit).
-// The `goal` field is hardcoded to STUB_GOAL_SCORE (40) until a
-// Goal Score PRD adds a settable column.
+// for `id`, `name`, `targetDateMs`, and `targetScore`.
+// `target_percentile` is intentionally NOT read
+// (`docs/plans/dashboard.md` §2.4 audit). Practice round commit 4
+// (this commit) replaced the previous STUB_GOAL_SCORE=40 constant
+// with a real read of users.target_score: the column was added at
+// practice round commit 3 with NOT NULL DEFAULT 40, so every
+// existing user row has 40 and the read returns a number
+// unconditionally.
 //
 // Decision G (`docs/plans/dashboard.md` §3, resolved 2026-05-07):
 // loadUserProfile validates `row.name === null` and throws via
@@ -41,24 +46,25 @@ interface UserProfile {
 	daysToTest?: number
 }
 
-// TODO(stub): replace with a real read from users.target_score (or
-// equivalent) once the Goal Score PRD lands
-// (`docs/plans/dashboard.md` §9). Until then the dashboard shows a
-// default 40 — a sensible passing score on a 50-question full sim.
-const STUB_GOAL_SCORE = 40
-
 /**
  * Returns the dashboard payload for the given user.
  *
- * Helper status as of dashboard plan §5 commit 5:
- *   - loadUserProfile        → real read (auth/users); goal stubbed
+ * Helper status as of practice round commit 4:
+ *   - loadUserProfile        → real read (auth/users; target_score
+ *                              wired this commit, was STUB_GOAL_SCORE
+ *                              pre-practice-round)
  *   - loadAllBelts           → STUB (Belts PRD)
- *   - pickTodaysMission      → STUB (Mission Picker PRD)
- *   - computeScoreEstimate   → STUB (Sim Scoring PRD)
+ *   - pickTodaysMission      → STUB (Mission Picker PRD; real impl
+ *                              lands at practice round commit 7)
+ *   - computeScoreEstimate   → STUB (Sim Scoring PRD; real impl
+ *                              lands at practice round commit 5)
  *   - computeStreak          → STUB (Streaks PRD)
- *   - computePaceWeek        → STUB (Pace-Strip PRD)
- *   - countMistakes          → STUB (Mistakes PRD)
- *   - getLastFullSim         → STUB (Sim Scoring PRD)
+ *   - computePaceWeek        → STUB (Pace-Strip PRD; real impl
+ *                              lands at practice round commit 6)
+ *   - countMistakes          → STUB (Mistakes PRD; real impl lands
+ *                              at practice round commit 8)
+ *   - getLastFullSim         → STUB (Sim Scoring PRD; real impl
+ *                              lands at practice round commit 5)
  */
 async function getDashboardData(userId: string): Promise<DashboardData> {
 	logger.info({ userId }, "dashboard data requested")
@@ -127,7 +133,8 @@ async function loadUserProfile(userId: string): Promise<UserProfile> {
 		.select({
 			id: users.id,
 			name: users.name,
-			targetDateMs: users.targetDateMs
+			targetDateMs: users.targetDateMs,
+			targetScore: users.targetScore
 		})
 		.from(users)
 		.where(eq(users.id, userId))
@@ -153,7 +160,7 @@ async function loadUserProfile(userId: string): Promise<UserProfile> {
 		id: row.id,
 		firstName,
 		initials,
-		goal: STUB_GOAL_SCORE,
+		goal: row.targetScore,
 		daysToTest
 	}
 }
