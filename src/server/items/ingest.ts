@@ -10,6 +10,11 @@ import { embeddingBackfillWorkflow } from "@/workflows/embedding-backfill"
 
 const ErrIngestValidation = errors.new("ingest validation failed")
 
+// `optionSchema` and `structuredExplanation` (defined below) are exported
+// from the bottom barrel for reuse by Phase 4 sub-phase a's
+// ingestSiblingSet (`@/server/items/ingest-siblings`). The post-resolution
+// option-id and structured-explanation invariants are identical for real
+// and sibling-generated items.
 const optionSchema = z.object({
 	id: z.string().regex(/^[0-9a-z]{8}$/),
 	text: z.string().min(1)
@@ -230,5 +235,12 @@ async function ingestRealItem(
 	return { itemId }
 }
 
-export type { IngestRealItemInput, IngestRealItemOptions }
-export { ErrIngestValidation, ingestInput, ingestRealItem }
+export type { IngestRealItemInput, IngestRealItemOptions, StructuredExplanation }
+export {
+	assertReferencedOptionsExist,
+	ErrIngestValidation,
+	ingestInput,
+	ingestRealItem,
+	optionSchema,
+	structuredExplanation
+}
