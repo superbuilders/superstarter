@@ -32,7 +32,14 @@ import {
 import { SIBLING_TOOL, SIBLING_TOOL_NAME } from "@/server/generation/sibling-tool"
 
 const SIBLING_GEN_MODEL = "claude-sonnet-4-6"
-const SIBLING_GEN_MAX_TOKENS = 4096
+// Raised from 4096 after the full-bank rerun surfaced 5 consecutive
+// empty-rawInput failures on hard-tier verbal.critical_reasoning sources at
+// the high-content tail. Diagnostic confirmed the SDK's tool_use empty-input
+// shape on stop_reason='max_tokens' mid-output (~62s wall-clock vs ~25s
+// typical, all hard-tier, all userPromptTokens > 2700). 8192 is Sonnet's
+// default output cap; gives ~100% headroom over projected ~3500-4500 token
+// outputs for the verbose hard/brutal-tier cases.
+const SIBLING_GEN_MAX_TOKENS = 8192
 const RETRY_DELAYS_MS = [1000, 2000, 4000]
 
 const ErrSiblingGenerationParse = errors.new("sibling-set parse failed")
@@ -165,8 +172,22 @@ async function generateSiblingSet(source: SourceItem): Promise<SiblingGeneration
 
 	const parsed = submitSiblingSetSchema.safeParse(toolInput)
 	if (!parsed.success) {
+		const rawCacheReadOnFail = message.usage.cache_read_input_tokens
+		const rawCacheCreateOnFail = message.usage.cache_creation_input_tokens
+		const cacheReadInputTokensOnFail = rawCacheReadOnFail === null ? 0 : rawCacheReadOnFail
+		const cacheCreationInputTokensOnFail =
+			rawCacheCreateOnFail === null ? 0 : rawCacheCreateOnFail
 		logger.error(
-			{ sourceItemId: source.id, issues: parsed.error.issues, rawInput: toolInput },
+			{
+				sourceItemId: source.id,
+				issues: parsed.error.issues,
+				rawInput: toolInput,
+				stop_reason: message.stop_reason,
+				input_tokens: message.usage.input_tokens,
+				output_tokens: message.usage.output_tokens,
+				cache_read_input_tokens: cacheReadInputTokensOnFail,
+				cache_creation_input_tokens: cacheCreationInputTokensOnFail
+			},
 			"sibling-generator: tool_use input failed Zod validation"
 		)
 		throw errors.wrap(ErrSiblingGenerationParse, `source id '${source.id}'`)
