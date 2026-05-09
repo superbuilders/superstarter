@@ -141,6 +141,49 @@ Per Leo's mid-round redirect on 2026-05-08, the round drops the Wikimedia Common
 
 **Sections revised under this redirect.** §1 (in-scope list), §2.3 (REMOVED — no third-party assets), §5.3 (repurposed to plan-doc revision commit — this commit), §5.4 (first-party `<BeltGraphic>` implementation). Audit-trail-of-superseded-state in §0.10 Q4, §5 intro paragraph, and §7 Q4 are flagged here for round-close revision; left in place mid-flight per §6.14.20 quote-preservation spirit (these are forward-looking resolutions referencing the now-superseded ATTRIBUTIONS.md path; an in-flight rewrite would erase the audit trail of the pre-redirect plan).
 
+### §0.14 Mid-round redirect — retire rotating greeting + title-quote corpora (2026-05-08)
+
+Per Leo's mid-round redirect on 2026-05-08, the round retires the rotating greeting tagline corpus (§2.1 + §5.5) and the expanded title-quote corpus (§2.2 + §5.6) entirely. The existing `deriveHeadline()` editorial-signal system at `src/server/dashboard/helpers.ts:7-13` is preserved as-is.
+
+**Trigger.** Commit-5 audit step (a) surfaced **State C** — the existing dashboard greeting block at `src/components/dashboard/score-strip.tsx:73-77` already renders `"Good morning, {firstName}. {headline}"` where `{headline}` is interpolated from `greeting.headline` (an existing data-driven prop). Source: `deriveHeadline()` at `helpers.ts:7-13`, a 4-state sim-delta-driven editorial line:
+
+- `!hasSim` → `"Let's begin."`
+- `delta === undefined` → `"Steady today."`
+- `delta > 0` → `"You're climbing."`
+- `delta < 0` → `"Reset and reload."`
+- (else, `delta === 0`) → `"Steady today."`
+
+The §2.1 + §5.5 rotating greeting corpus would have silently replaced this sim-state editorial signal with non-personalized motivational taglines ("Sharpen the pattern.", "Ready to drill?", etc.), losing real product information. Same logic applies to §2.2 + §5.6: the corpus's framing — "replaces single 'you're climbing'" — was based on the misreading that "You're climbing." was a single hardcoded surface; in fact it is the `delta > 0` branch of `deriveHeadline()`. Replacing the title quote with a rotated 12-quote corpus would have silently displaced the same 4-state sim-state signal.
+
+**Reasoning.** The existing `deriveHeadline()` system carries product information (sim-delta editorial signal) that the rotating corpora would have eliminated. Three resolutions were considered at the audit-step (a) halt:
+
+- **Resolution 1: REPLACE** — new corpus takes over the italic cobalt slot; `deriveHeadline()` retired. Rejected: discards real product information for motivational filler.
+- **Resolution 2: COEXIST** — both render via layout expansion. Rejected: visual clutter; no clean place in the existing 22pt serif H2 layout for two italic-cobalt lines.
+- **Resolution 3: ALTERNATING SOURCE** — session-stable signal picks which line displays. Rejected: complex; loses rotation across sim-having users.
+
+**Resolution 4 (selected): RETIRE.** Both corpora retired entirely. `deriveHeadline()` system preserved as-is. No code changes ship from this redirect.
+
+**Empirical state.** No code changes ship from §0.14 itself; this is a plan-doc-only revision. The implementation files originally targeted by §5.5 (`helpers.ts`, `score-strip.tsx`, `data.ts`, `types.ts`) and §5.6 (TBD title-quote rendering site) are untouched.
+
+**Commit envelope impact.** Round commit ledger reduces from 13 → 12 commits. Commits 5 and 6 are **RETIRED-not-renumbered** per SPEC §6.14.20 in-flight quote-preservation discipline; commits 7-13 keep their existing slot numbers. The commit-3 plan-doc-revision precedent (§5.3 was REPURPOSED — kept its slot, content swapped) carries forward conceptually: §5.5 + §5.6 are RETIRED — kept their slots, content swapped to a RETIRED-marker block with quote-preservation. This commit (the §0.14 plan-doc revision itself) consumes the "commit 5" slot in the round's commit history; the original §5.5 implementation it replaces is the very thing being retired.
+
+**Sub-pattern observation (§6.14.28 instance tracking).** This is the **third** §6.14.28-style empirical-state divergence in this round:
+
+- §0.12 — first instance, explicit (the `data/images/` → `public/images/belts/` SVG move was discovered out-of-session at body-authoring time).
+- §0.13 — second instance, primarily a SPEC §6.14.34 mid-round redirect (Wikimedia → first-party `<BeltGraphic>`) with §6.14.28 undertones (the Wikimedia approach was abandoned mid-flight).
+- §0.14 — third instance, explicit (audit-step (a) State-C finding revealed plan-doc prose diverged from empirical truth: the existing `deriveHeadline()` system already occupies the JSX slot that §5.5 + §5.6 proposed to populate).
+
+Multi-instance pattern strong; round-close §6.14 entry candidate per the second-instance-discipline (Leo's call at round-close whether to promote a new §6.14.{n} entry codifying the audit-step-surfaced-empirical-divergence pattern, or to leave the three instances as in-round prose).
+
+**Cross-references.**
+
+- SPEC §6.14.20 (in-flight wholesale-replacement-with-quote-preservation) — §1, §2.1, §2.2, §5.5, §5.6 all revised below with original content quote-preserved as `>` blocks; §5 intro takes a one-line addendum.
+- SPEC §6.14.28 (plan-prose-vs-empirical-truth divergence) — explicit instance trigger above.
+- SPEC §6.14.34 (mid-round narrow-scope sub-round insertion) — paralleled the §0.13 redirect; this redirect is narrower (no implementation; pure retirement).
+- §0.13 — precedent for stacking quote-preservation blocks within a section (§1 here gets a second stacked quote-preservation block alongside §0.13's existing one).
+
+**Sections revised under this redirect.** §1 (in-scope list — drop two bullets, stack a second quote-preservation block), §2.1 (REMOVED — corpus retired), §2.2 (REMOVED — corpus retired), §5.5 (RETIRED — implementation discontinued), §5.6 (RETIRED — implementation discontinued), §5 intro paragraph (one-line addendum noting §5.5+§5.6 retirement). Audit-trail-of-superseded-state in §0.8 audit prose, §0.10 Q2 resolution, and §7 Q2 resolution are flagged here for round-close revision; left in place mid-flight per §6.14.20 quote-preservation spirit (mirrors §0.13's collateral-handling decision for §0.10 Q4 / §5 intro / §7 Q4).
+
 ---
 
 ## §1 — Round scope (captured from redline; fenced)
@@ -150,8 +193,6 @@ Per Leo's mid-round redirect on 2026-05-08, the round drops the Wikimedia Common
 - Dashboard top-panel reordering: Mistakes-to-review → Days-to-test → Goal → Previous-score (with horizontal goal-line) → Previous-pace (with horizontal 18s-line)
 - Mistakes-to-review: stub → real component (resolved as wire-up-only per §0.2)
 - Belt-text → first-party `<BeltGraphic>` inline SVG component swap (per §0.13; supersedes the original Wikimedia-SVG-from-`public/images/belts/` approach captured below as quote-preserved record)
-- Rotating greeting tagline (Claude-style) — corpus captured in §2.1
-- Expanded title-quote corpus — corpus captured in §2.2
 - Drill: rankings refresh after completion (currently stale; root cause per §0.4)
 - Drill: number-series question formatting legibility fix (per §0.7)
 - Drill: warning sound plays once, ticking-sound thereafter (per §0.6)
@@ -171,54 +212,68 @@ Per Leo's mid-round redirect on 2026-05-08, the round drops the Wikimedia Common
 
 > **Original §1 in-scope list (pre-§0.13 redirect, preserved per SPEC §6.14.20).** The bullet "Belt-text → belt-SVG swap using `public/images/belts/GJJ_{White,Blue,Brown,Black}_Belt.svg` (path corrected per §0.12)" and the bullet "CC BY-SA 3.0 attribution surface for belt SVGs" were the original in-scope items for the belt-graphic work. Both are superseded by the §0.13 redirect: the former replaced by a first-party `<BeltGraphic>` component (no public-path consumption); the latter dropped entirely (no third-party assets in the round → no attribution surface required). Quote-preserved here for audit-trail integrity; the live in-scope list above reflects the post-redirect state.
 
+> **Original §1 in-scope list (post-§0.13, pre-§0.14 — additional bullets retired per SPEC §6.14.20).** Two bullets were dropped by the §0.14 redirect: "Rotating greeting tagline (Claude-style) — corpus captured in §2.1" and "Expanded title-quote corpus — corpus captured in §2.2". Both are superseded by the §0.14 retirement: the existing `deriveHeadline()` editorial-signal system at `src/server/dashboard/helpers.ts:7-13` is preserved as-is, and the rotating corpora that would have replaced its slot are dropped entirely. Quote-preserved here for audit-trail integrity; the live in-scope list above reflects the post-§0.14 state.
+
 ---
 
 ## §2 — Captured corpora + attribution requirements (from redline)
 
-### §2.1 Greeting tagline corpus (rotating)
+### §2.1 Greeting tagline corpus (rotating) — REMOVED per §0.14 redirect
 
-Time-of-day variants (always first-name per Leo's redirect):
+REMOVED per §0.14 mid-round redirect — rotating greeting tagline retired; existing `deriveHeadline()` editorial-signal system at `src/server/dashboard/helpers.ts:7-13` preserved as-is. Original corpus preserved below as historical record per SPEC §6.14.20.
 
-- "Good morning, {firstName}"
-- "Good afternoon, {firstName}"
-- "Good evening, {firstName}"
+> **Original §2.1 (pre-§0.14 retirement, preserved per SPEC §6.14.20).**
+>
+> ### §2.1 Greeting tagline corpus (rotating)
+>
+> Time-of-day variants (always first-name per Leo's redirect):
+>
+> - "Good morning, {firstName}"
+> - "Good afternoon, {firstName}"
+> - "Good evening, {firstName}"
+>
+> Test-prep flavored prompts (rotate alongside time-of-day; ~50/50 mix between name-prefixed and not, per Leo's redirect):
+>
+> - "Ready to drill?" / "Ready to drill, {firstName}?"
+> - "What's on your mind?" / "What's on your mind, {firstName}?"
+> - "Pick up where you left off?" / "Pick up where you left off, {firstName}?"
+> - "18 seconds at a time." / "18 seconds at a time, {firstName}."
+> - "Today's pattern recognition?" / "Today's pattern recognition, {firstName}?"
+> - "Time to triage." / "Time to triage, {firstName}."
+> - "Recognize. Apply. Avoid the trap." / "Recognize. Apply. Avoid the trap, {firstName}."
+> - "One more rep?" / "One more rep, {firstName}?"
+> - "Sharpen the pattern." / "Sharpen the pattern, {firstName}."
+> - "Speed before perfection." / "Speed before perfection, {firstName}."
+> - "Drill the recognition." / "Drill the recognition, {firstName}."
+> - "Build the reflex." / "Build the reflex, {firstName}."
+> - "Where's your pace today?" / "Where's your pace today, {firstName}?"
+> - "Five minutes, fifteen questions?" / "Five minutes, fifteen questions, {firstName}?"
+> - "Patterns under pressure." / "Patterns under pressure, {firstName}."
+>
+> **Selection-logic invariant.** Greeting selection happens once per session, not per render. Time-of-day greeting is always first-name; test-prep prompt is randomly selected per session, with the 50/50 first-name/no-first-name split applying to the prompt only (NOT to the time-of-day). Avoids flicker on navigation. Implementation guidance in §5.5.
 
-Test-prep flavored prompts (rotate alongside time-of-day; ~50/50 mix between name-prefixed and not, per Leo's redirect):
+### §2.2 Expanded title-quote corpus (replaces single "you're climbing") — REMOVED per §0.14 redirect
 
-- "Ready to drill?" / "Ready to drill, {firstName}?"
-- "What's on your mind?" / "What's on your mind, {firstName}?"
-- "Pick up where you left off?" / "Pick up where you left off, {firstName}?"
-- "18 seconds at a time." / "18 seconds at a time, {firstName}."
-- "Today's pattern recognition?" / "Today's pattern recognition, {firstName}?"
-- "Time to triage." / "Time to triage, {firstName}."
-- "Recognize. Apply. Avoid the trap." / "Recognize. Apply. Avoid the trap, {firstName}."
-- "One more rep?" / "One more rep, {firstName}?"
-- "Sharpen the pattern." / "Sharpen the pattern, {firstName}."
-- "Speed before perfection." / "Speed before perfection, {firstName}."
-- "Drill the recognition." / "Drill the recognition, {firstName}."
-- "Build the reflex." / "Build the reflex, {firstName}."
-- "Where's your pace today?" / "Where's your pace today, {firstName}?"
-- "Five minutes, fifteen questions?" / "Five minutes, fifteen questions, {firstName}?"
-- "Patterns under pressure." / "Patterns under pressure, {firstName}."
+REMOVED per §0.14 mid-round redirect — expanded title-quote corpus retired; the "single 'you're climbing'" framing was incorrect (it's one of four `deriveHeadline()` outputs at `helpers.ts:7-13`, not a single hardcoded surface — specifically the `delta > 0` branch). Original corpus preserved below as historical record per SPEC §6.14.20.
 
-**Selection-logic invariant.** Greeting selection happens once per session, not per render. Time-of-day greeting is always first-name; test-prep prompt is randomly selected per session, with the 50/50 first-name/no-first-name split applying to the prompt only (NOT to the time-of-day). Avoids flicker on navigation. Implementation guidance in §5.5.
-
-### §2.2 Expanded title-quote corpus (replaces single "you're climbing")
-
-- "You're climbing."
-- "Pace is patience."
-- "Recognize the pattern."
-- "Trap-avoidance is technique."
-- "18 seconds is enough."
-- "Speed compounds."
-- "Triage, then solve."
-- "The shortcut is the answer."
-- "Drill builds reflex."
-- "Confidence under clock."
-- "Easy isn't easy under time."
-- "Brutal is the ceiling, not the floor."
-
-Same per-session selection invariant as §2.1; implementation guidance in §5.6.
+> **Original §2.2 (pre-§0.14 retirement, preserved per SPEC §6.14.20).**
+>
+> ### §2.2 Expanded title-quote corpus (replaces single "you're climbing")
+>
+> - "You're climbing."
+> - "Pace is patience."
+> - "Recognize the pattern."
+> - "Trap-avoidance is technique."
+> - "18 seconds is enough."
+> - "Speed compounds."
+> - "Triage, then solve."
+> - "The shortcut is the answer."
+> - "Drill builds reflex."
+> - "Confidence under clock."
+> - "Easy isn't easy under time."
+> - "Brutal is the ceiling, not the floor."
+>
+> Same per-session selection invariant as §2.1; implementation guidance in §5.6.
 
 ### §2.3 Belt SVG attribution (CC BY-SA 3.0) — REMOVED per §0.13 redirect
 
@@ -264,6 +319,8 @@ No LLM cost this round (no generation/validation work). Round cost is engineer-t
 ## §5 — Commit ledger
 
 Commit envelope per Leo's reorder (2026-05-08 redirect): attribution (commit 3) precedes the belt SVG swap (commit 4) because CC BY-SA 3.0 requires attribution whenever the licensed work is distributed; SVGs are already in the repo, so attribution is owed at the next commit boundary regardless of the swap commit.
+
+**Commit-envelope addendum (§0.14 retirement, 2026-05-08):** §5.5 + §5.6 are RETIRED-not-renumbered (commit-5 audit-step (a) State-C finding; rotating greeting + title-quote corpora dropped). Round commit count drops from 13 → 12; commits 7-13 keep their existing slot numbers.
 
 Each commit follows the `phase4-similar-item-generator.md` + `phase5-data-wipe.md` shape: hash placeholder, files touched, audit step (cheap pre-flight per §6.14.18 / §6.14.21 / §6.14.22), implementation notes, verification step, stop-and-report contract.
 
@@ -390,40 +447,52 @@ The audit step (b)'s verbatim-token capture is the input; only add net-new token
 >
 > **Stop-and-report.** Do not proceed to next commit until redirect.
 
-### §5.5 — Commit 5: rotating greeting tagline + selection logic
+### §5.5 — Commit 5: rotating greeting tagline + selection logic — RETIRED per §0.14
 
-**Hash:** `<TBD>`.
+RETIRED per §0.14 mid-round redirect. Commit 5 in the ledger is now the plan-doc revision commit that authored §0.14 and the §1 / §2.1 / §2.2 / §5.5 / §5.6 / §5 intro revisions documenting this retirement (i.e., this very commit). The audit-step (a) State-C finding from the prior commit-5 attempt IS the empirical justification for retirement: the existing `deriveHeadline()` system at `src/server/dashboard/helpers.ts:7-13` already populates the italic-cobalt H2 slot at `score-strip.tsx:73-77` with sim-state-driven editorial lines ("Let's begin." / "Steady today." / "You're climbing." / "Reset and reload."), and the rotating greeting tagline corpus would have silently displaced that real product information. No rotating-greeting code shipped; no `deriveGreeting()` helper exists; no implementation files touched. Commit slot 5 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline (commits 7-13 keep their existing slot numbers).
 
-**Files touched.**
-- `src/server/dashboard/helpers.ts` — new `deriveGreeting()` helper.
-- `src/components/dashboard/score-strip.tsx` — consume the greeting prop instead of the hardcoded `"Good morning, {firstName}."`.
-- `src/server/dashboard/data.ts` — wire `deriveGreeting()` output into the prop construction.
-- `src/server/dashboard/types.ts` — add the greeting prop shape to the `<ScoreStrip>` props.
+> **Original §5.5 (pre-§0.14 retirement, preserved per SPEC §6.14.20).**
+>
+> ### §5.5 — Commit 5: rotating greeting tagline + selection logic
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - `src/server/dashboard/helpers.ts` — new `deriveGreeting()` helper.
+> - `src/components/dashboard/score-strip.tsx` — consume the greeting prop instead of the hardcoded `"Good morning, {firstName}."`.
+> - `src/server/dashboard/data.ts` — wire `deriveGreeting()` output into the prop construction.
+> - `src/server/dashboard/types.ts` — add the greeting prop shape to the `<ScoreStrip>` props.
+>
+> **Audit step.** Pre-flight: (a) confirm `firstName` extraction at `data.ts:156-175` still sources from `session.user.name` and survives the `null`-name edge case (per CLAUDE.md `no-null-undefined-union` discipline — verify the boundary); (b) confirm `score-strip.tsx:69`'s current hardcoded greeting; (c) identify the session-stable seed source: prefer the practice session's `id` if a session is in progress, else hash of `(userId + day-bucket)` for the dashboard-with-no-active-session case. Verify which path the dashboard takes by reading `data.ts`'s session-loading logic.
+>
+> **Implementation notes.** Per §2.1 — `deriveGreeting(firstName: string, seed: string): { timeOfDay: string; prompt: string }`. Time-of-day computed from server time: `< 12:00` → "Good morning"; `< 17:00` → "Good afternoon"; else "Good evening". Time-of-day always first-name; final string template: `"${timeOfDay}, ${firstName}"`. Prompt selected from the §2.1 corpus via deterministic-from-seed rotation: `corpus[seedHash % corpus.length]`; the selected prompt has a 50% chance (also seed-derived, distinct bit slice) of being the first-name-suffixed variant. Selection is once per `data.ts` invocation — so once per server-rendered page-load — and is stable as long as the seed is stable (per-session for an active session; per-day for a no-active-session dashboard view). Avoid `Math.random()` (per Bun + Next.js RSC discipline; randomness in RSC creates per-render flicker). Use a small deterministic hash (`Bun.hash(seed)` or similar) over the seed string.
+>
+> **Verification.** Visual review on `/`; reload the page; confirm greeting does NOT change on reload (per-session stability). Mock-advance system time across day-bucket boundaries (or wait + re-test) to confirm rotation does eventually rotate. Manual review across 3+ sessions to spot-check rotation distribution and the 50/50 first-name/no-first-name split.
+>
+> **Stop-and-report.** Do not proceed to next commit until redirect.
 
-**Audit step.** Pre-flight: (a) confirm `firstName` extraction at `data.ts:156-175` still sources from `session.user.name` and survives the `null`-name edge case (per CLAUDE.md `no-null-undefined-union` discipline — verify the boundary); (b) confirm `score-strip.tsx:69`'s current hardcoded greeting; (c) identify the session-stable seed source: prefer the practice session's `id` if a session is in progress, else hash of `(userId + day-bucket)` for the dashboard-with-no-active-session case. Verify which path the dashboard takes by reading `data.ts`'s session-loading logic.
+### §5.6 — Commit 6: expanded title-quote corpus — RETIRED per §0.14
 
-**Implementation notes.** Per §2.1 — `deriveGreeting(firstName: string, seed: string): { timeOfDay: string; prompt: string }`. Time-of-day computed from server time: `< 12:00` → "Good morning"; `< 17:00` → "Good afternoon"; else "Good evening". Time-of-day always first-name; final string template: `"${timeOfDay}, ${firstName}"`. Prompt selected from the §2.1 corpus via deterministic-from-seed rotation: `corpus[seedHash % corpus.length]`; the selected prompt has a 50% chance (also seed-derived, distinct bit slice) of being the first-name-suffixed variant. Selection is once per `data.ts` invocation — so once per server-rendered page-load — and is stable as long as the seed is stable (per-session for an active session; per-day for a no-active-session dashboard view). Avoid `Math.random()` (per Bun + Next.js RSC discipline; randomness in RSC creates per-render flicker). Use a small deterministic hash (`Bun.hash(seed)` or similar) over the seed string.
+RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "single 'you're climbing'" premise was based on a misreading of the existing `deriveHeadline()` system at `src/server/dashboard/helpers.ts:7-13`: "You're climbing." is the `delta > 0` branch of a 4-state sim-state-driven editorial line, not a single hardcoded surface. Replacing it with a rotated 12-quote corpus would have silently displaced the same sim-state signal that §5.5's retirement was designed to preserve. Corpus preservation captured in §2.2 (also REMOVED per §0.14, with quote-preservation). Commit slot 6 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline; no title-quote-rotation code shipped.
 
-**Verification.** Visual review on `/`; reload the page; confirm greeting does NOT change on reload (per-session stability). Mock-advance system time across day-bucket boundaries (or wait + re-test) to confirm rotation does eventually rotate. Manual review across 3+ sessions to spot-check rotation distribution and the 50/50 first-name/no-first-name split.
-
-**Stop-and-report.** Do not proceed to next commit until redirect.
-
-### §5.6 — Commit 6: expanded title-quote corpus
-
-**Hash:** `<TBD>`.
-
-**Files touched.**
-- The title-quote rendering component (locate at audit step — likely `score-strip.tsx` or a sibling tile).
-- Possibly `src/server/dashboard/helpers.ts` if the rotation logic is shared with §5.5's greeting.
-- `src/server/dashboard/data.ts` and `types.ts` if the title-quote prop shape changes.
-
-**Audit step.** Pre-flight: (a) locate the current "you're climbing" rendering — `grep -r "climbing" src/` should surface it quickly; (b) identify the current selection logic (hardcoded? randomized?); (c) decide whether the title-quote rotation reuses §5.5's session-stable seed or uses an independent seed (independent rotation may feel more varied; same seed makes the dashboard's "feel" change as a unit). Pick at audit-step.
-
-**Implementation notes.** Per §2.2 — replace single hardcoded quote with rotation across the 12-quote corpus. Same selection-logic invariant as §5.5: session-stable, not per-render. If reusing §5.5's seed, pull a different bit slice for the rotation index to avoid lockstep with the greeting. If using an independent seed, derive it from the session/user identifiers in a parallel-but-distinct way (e.g., hash with a different salt). Document the choice in the commit body.
-
-**Verification.** Visual review on `/`; confirm title quote rotates across sessions but stays stable within a session. Confirm no first-name interpolation on title quotes (per §2.2 corpus — the title quotes are non-personalized; this is intentional and contrasts with §5.5's greeting prompt).
-
-**Stop-and-report.** Do not proceed to next commit until redirect.
+> **Original §5.6 (pre-§0.14 retirement, preserved per SPEC §6.14.20).**
+>
+> ### §5.6 — Commit 6: expanded title-quote corpus
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - The title-quote rendering component (locate at audit step — likely `score-strip.tsx` or a sibling tile).
+> - Possibly `src/server/dashboard/helpers.ts` if the rotation logic is shared with §5.5's greeting.
+> - `src/server/dashboard/data.ts` and `types.ts` if the title-quote prop shape changes.
+>
+> **Audit step.** Pre-flight: (a) locate the current "you're climbing" rendering — `grep -r "climbing" src/` should surface it quickly; (b) identify the current selection logic (hardcoded? randomized?); (c) decide whether the title-quote rotation reuses §5.5's session-stable seed or uses an independent seed (independent rotation may feel more varied; same seed makes the dashboard's "feel" change as a unit). Pick at audit-step.
+>
+> **Implementation notes.** Per §2.2 — replace single hardcoded quote with rotation across the 12-quote corpus. Same selection-logic invariant as §5.5: session-stable, not per-render. If reusing §5.5's seed, pull a different bit slice for the rotation index to avoid lockstep with the greeting. If using an independent seed, derive it from the session/user identifiers in a parallel-but-distinct way (e.g., hash with a different salt). Document the choice in the commit body.
+>
+> **Verification.** Visual review on `/`; confirm title quote rotates across sessions but stays stable within a session. Confirm no first-name interpolation on title quotes (per §2.2 corpus — the title quotes are non-personalized; this is intentional and contrasts with §5.5's greeting prompt).
+>
+> **Stop-and-report.** Do not proceed to next commit until redirect.
 
 ### §5.7 — Commit 7: drill ranking refresh
 
