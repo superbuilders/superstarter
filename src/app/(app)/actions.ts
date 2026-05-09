@@ -145,22 +145,18 @@ async function endSession(sessionId: string): Promise<void> {
 // `practice_sessions.diagnostic_overtime_note_shown_at_ms` DB column is
 // left in place as vestigial-and-unread for sub-phase 1 — see plan §10.
 
-const allowedPercentiles = [50, 30, 20, 10, 5] as const
+// Score range matches users.target_score (1-50; the project's exams are
+// always 50 questions). Mirror of <GoalEditor>'s 1-50 validation + the
+// updateGoal action's range gate (per `goal-editor.tsx` + below).
+// Sidecar §1 replaced the prior targetPercentile field per
+// `docs/plans/score-based-target-goals-sidecar.md` §0.13 + §5.1.
 const onboardingTargetsSchema = z.object({
-	targetPercentile: z
-		.union([
-			z.literal(50),
-			z.literal(30),
-			z.literal(20),
-			z.literal(10),
-			z.literal(5)
-		])
-		.optional(),
+	targetScore: z.number().int().min(1).max(50).optional(),
 	targetDateMs: z.number().int().positive().optional()
 })
 
 async function saveOnboardingTargets(input: {
-	targetPercentile?: (typeof allowedPercentiles)[number]
+	targetScore?: number
 	targetDateMs?: number
 }): Promise<void> {
 	const parsed = onboardingTargetsSchema.safeParse(input)
@@ -169,9 +165,9 @@ async function saveOnboardingTargets(input: {
 		throw errors.wrap(ErrInvalidActionInput, "saveOnboardingTargets input")
 	}
 	const userId = await requireUserId()
-	const updateValues: { targetPercentile?: number; targetDateMs?: number } = {}
-	if (parsed.data.targetPercentile !== undefined) {
-		updateValues.targetPercentile = parsed.data.targetPercentile
+	const updateValues: { targetScore?: number; targetDateMs?: number } = {}
+	if (parsed.data.targetScore !== undefined) {
+		updateValues.targetScore = parsed.data.targetScore
 	}
 	if (parsed.data.targetDateMs !== undefined) {
 		updateValues.targetDateMs = parsed.data.targetDateMs
@@ -192,7 +188,7 @@ async function saveOnboardingTargets(input: {
 	logger.info(
 		{
 			userId,
-			targetPercentile: parsed.data.targetPercentile,
+			targetScore: parsed.data.targetScore,
 			targetDateMs: parsed.data.targetDateMs
 		},
 		"saveOnboardingTargets: targets persisted"
