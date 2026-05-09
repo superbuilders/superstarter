@@ -2710,3 +2710,92 @@ Sub-phases 1 (diagnostic flow), 2 (Mastery Map + post-diagnostic empty-state pan
 - Surface strategies in `<PostSessionReview>` (already wired in phase 5).
 
 PRD §9 cuts apply if behind: simulation, history detail views. The mastery model, generation pipeline, focus shell, and Mastery Map are non-negotiable. (NarrowingRamp's visual-narrowing step was previously listed here as a cut candidate — moot now since the entire NarrowingRamp protocol is cut from v1 2026-05-04, see PRD §5.3 + SPEC §10.6 markers.)
+
+---
+
+## 13. Token architecture
+
+> **Authored 2026-05-09** (Round 2 commit 1 — post-session audit fixes + wide token retrofit; per `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md` §2.2 + §5.1, Q5 = γ resolution). Codifies a dual-layer architecture that was previously documented only as an inline comment-block in `src/styles/unstyled/globals.css` lines 43-54. The Round 2 commit-0 audit (`§0.3` of the same plan-doc, audit step 3) surfaced the bifurcation as a §6.14.40 (redirector-vs-empirical-state divergence) instance — the audit's §B.1 "wide retrofit" framing assumed a single-token-system architecture, but empirically the system is two-layer, and the dashboard surface (Round 1 commit 1+2+4 product) was already on Layer B before Round 2 opened. This section is the authoritative documentation.
+
+### 13.1 Overview — two parallel token layers
+
+`src/styles/unstyled/globals.css` defines two parallel design-token systems coexisting in the same `:root` + `.dark` blocks:
+
+- **Layer A — shadcn foundation tokens.** The tokens shadcn ships in its base preset (`--background`, `--foreground`, `--card`, `--card-foreground`, `--popover`, `--popover-foreground`, `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--accent`, `--accent-foreground`, `--destructive`, `--border`, `--input`, `--ring`, the `--chart-1..5` chart palette, the `--sidebar*` sidebar palette). These tokens are referenced directly by every shadcn UI primitive (`src/components/ui/*` — alert-dialog, badge, button, card, combobox, dropdown-menu, field, input-group, input, select, textarea), and indirectly by every consumer of those primitives. Pre-Round-2 they are pure-grayscale (chroma = 0); Round 2 commit 2 retrofits them to hue-270 chroma 0.005-0.012 per ALPHA_DESIGN.md §3 ("Tinted neutrals only. Never pure gray or pure black.").
+
+- **Layer B — Alpha product tokens.** Brand, surface, text, belt, pace, and product-domain tokens (`--bg`, `--surface`, `--surface-2`, `--text-1`, `--text-2`, `--text-3`, `--border-soft`, `--border-strong`, `--cobalt`, `--indigo`, `--indigo-deep`, `--alpha-accent`, `--pale`, `--lavender`, `--lavender-line`, `--belt-white`, `--belt-white-line`, `--belt-blue`, `--belt-brown`, `--belt-black`, `--belt-tip-red`, `--pace-on`, `--pace-warn`, `--pace-over`, `--good`). Authored at hue 270 with chroma 0.005-0.020+, with brand additions in named hex (`--cobalt`, `--indigo*`, `--alpha-accent`, `--pale`, `--lavender*`). These tokens are referenced directly by the dashboard surface (`src/components/dashboard/*`) + the stub pages (`/review`, `/lessons`, `/stats`) + the focus-shell pace track + the belt-rendering surfaces.
+
+The two layers coexist by design — neither supersedes the other. A surface MAY consume both (e.g., the dashboard's `<BeltRow>` references Layer-A `border-border` once + Layer-B `--bg`, `--text-*`, `--belt-*` extensively), but the typical pattern is layer-coherent consumption per surface.
+
+### 13.2 Why two layers — rationale
+
+Layer A maintains shadcn primitive compatibility. The shadcn UI primitives ship written against Layer-A token names (`bg-background`, `text-foreground`, `bg-primary`, etc.); rewriting those primitives to consume Layer B would require a per-primitive migration with non-trivial blast radius. The Layer-A tokens were therefore Alpha-tinted in place (Round 2 commit 2) rather than retired — the chroma is dialed up just enough (0.005-0.012) to dial down the "neutral gray" feel without competing with Layer B's stronger tints.
+
+Layer B carries Alpha brand identity at the product level. Surfaces that ARE the Alpha product (dashboard's hero/marketing-grade panels, brand accents, belt-rendering, pace-tracking) consume Layer-B tokens directly. The brand (`--cobalt`, `--indigo*`, `--alpha-accent`, `--pale`, `--lavender*`) lives only in Layer B; Layer A has no brand identity by intent.
+
+The bifurcation ALSO encodes a temporal-discipline hint: Layer A is shadcn's pre-existing inheritance (Tailwind v4 `@theme` mapping ships with shadcn-named tokens); Layer B is Alpha's purposeful additive layer (Dashboard PRD §8 + ALPHA_DESIGN §3 + this round's §13). New tokens authored after Round 2 default to Layer B unless they're explicitly extending shadcn primitive coverage (in which case Layer A is correct).
+
+### 13.3 Per-layer chroma + hue rules
+
+| Layer | Hue | Chroma range | Notable exceptions |
+|---|---|---|---|
+| Layer A (foundation, post-Round-2-retrofit) | 270 (Alpha blue-violet) | 0.005-0.012 (faint tint; sufficient to break the pure-grayscale feel without competing with Layer B) | `--destructive` keeps its chroma at 0.22 hue 27 (red-equivalent; AA-grade as button/border, NOT body-text-grade per audit doc §A.3 + structured comment in `latency-summary.tsx:178-181`) |
+| Layer B (product, brand, domain) | 270 primary; brand exceptions | 0.005-0.020+ (stronger tint; brand identity-carrying) | `--cobalt` (#1e00ff), `--indigo` / `--indigo-deep` / `--alpha-accent` (named-hex brand tokens, off-hue-270); `--belt-tip-red` (oklch 57.5% 0.21 27 for BJJ canon); `--pace-warn` / `--pace-over` (off-hue for pace semantic differentiation); `--good` (oklch 58% 0.160 145 — green for affirmative); `--belt-brown` (oklch 0.4 0.07 50 — brown for BJJ rank canon) |
+
+ALPHA_DESIGN.md §3 cites hue 250 OR 270 with chroma 0.005-0.012 as the tinted-neutrals canon; the project standardized on **hue 270** for both layers as of Round 1's Layer-B authoring (Dashboard PRD §8). Future tokens authored in either layer should default to hue 270 unless a brand or domain consideration warrants deviation.
+
+### 13.4 Authoritative inventory (as of 2026-05-09 — Round 2 commit 1)
+
+#### 13.4.1 Layer A — 31 color/border tokens
+
+`:root` (light mode), lines 8-25 of `src/styles/unstyled/globals.css`:
+
+- `--background`, `--foreground`, `--card`, `--card-foreground`, `--popover`, `--popover-foreground` (6 — surface + on-surface foreground)
+- `--primary`, `--primary-foreground`, `--secondary`, `--secondary-foreground`, `--muted`, `--muted-foreground`, `--accent`, `--accent-foreground` (8 — primitive variants)
+- `--destructive` (1 — error state; AA-grade for buttons/borders only)
+- `--border`, `--input`, `--ring` (3 — chrome)
+
+`:root` lines 103-107 — chart palette (5):
+- `--chart-1`, `--chart-2`, `--chart-3`, `--chart-4`, `--chart-5`
+
+`:root` lines 109-116 — sidebar palette (8):
+- `--sidebar`, `--sidebar-foreground`, `--sidebar-primary`, `--sidebar-primary-foreground`, `--sidebar-accent`, `--sidebar-accent-foreground`, `--sidebar-border`, `--sidebar-ring`
+
+`.dark` block (line 119+) carries dark-mode counterparts for all 31 above.
+
+#### 13.4.2 Layer B — 25 color/border tokens
+
+`:root` lines 41-42, 55-80 of `src/styles/unstyled/globals.css`:
+
+- **Surface + text + border** (8): `--bg`, `--surface`, `--surface-2`, `--border-soft`, `--border-strong`, `--text-1`, `--text-2`, `--text-3`
+- **Brand** (5, named-hex): `--cobalt`, `--indigo`, `--indigo-deep`, `--alpha-accent`, `--pale`
+- **Lavender accents** (2, named-hex): `--lavender`, `--lavender-line`
+- **Belt** (6): `--belt-white`, `--belt-white-line`, `--belt-blue`, `--belt-brown`, `--belt-black`, `--belt-tip-red`
+- **Pace** (3): `--pace-on`, `--pace-warn`, `--pace-over`
+- **Affirmative** (1): `--good`
+
+`.dark` block carries dark-mode counterparts for the surface/text/border subset (8 — depth via lighter surfaces per ALPHA_DESIGN §3, not via shadows). Brand, pace, sizing, motion, type-scale, and spacing tokens are mode-agnostic and inherited from `:root`. `--belt-blue` / `--belt-brown` ARE redeclared in `.dark` for dark-mode rank-color parity (per `globals.css:118` Belt-indicator-dark-mode-counterparts comment).
+
+#### 13.4.3 Layer-neutral tokens (sizing / motion / type — not color)
+
+`:root` lines 81-102 + 108: `--font-sans`, `--font-serif`, `--t-xs/sm/base/lg/xl/display`, `--sp-1..12`, `--r-sm/md/lg`, `--ease-out`, `--d-fast/base/slow`, `--radius`. These are layer-orthogonal (consumed by both Layer-A and Layer-B surfaces) and are NOT covered by the Layer-A retrofit.
+
+### 13.5 Decision rule for adding new tokens
+
+When adding a new token, decide which layer it belongs to:
+
+- **Default Layer B** for Alpha-product-specific concepts: surfaces, brand accents, domain-specific colors (belt-namespaced, pace-namespaced, etc.), and any token meant to communicate Alpha brand identity directly. Layer-B tokens use hue 270 by default; named-hex permitted for brand tokens with established identity (cobalt, indigo, alpha-accent).
+- **Default Layer A** only when extending shadcn primitive coverage (e.g., a new shadcn UI primitive ships requiring a new foundation token, or a sidebar/chart palette extension is needed). Layer-A tokens follow the Round-2-retrofit hue-270 chroma 0.005-0.012 convention.
+
+Single-occurrence tokens at or below the `.alpha-style.md` "below-3 systemic-token" threshold may be authored without promotion to either layer if they are visually-isolated to one component (per `globals.css:38-39` belt-indicator note + lines 73-75 belt-tip-red note). Tokens with three or more consumers MUST land in either Layer A or Layer B explicitly.
+
+### 13.6 Cross-references
+
+- **`src/styles/unstyled/globals.css` lines 43-54** — original comment-block decision (Dashboard PRD §8 cite). This SPEC section supersedes for discoverability; the inline comment stays as cross-reference for component-author code-reading flow.
+- **SPEC §6.14.18** — audit-against-actual-artifact pattern; the original `--belt-blue` / `--belt-brown` Layer-B authoring (Phase 5 sub-phase 5 commit 3) cited this pattern when the "established Alpha Style accent blue" referenced by plan §5.2 was found NOT to exist as a structural token.
+- **SPEC line 1309** — PRD-prose-claims-vs-globals.css verification discipline (dashboard round commit 11). Sibling pattern: prose claims about CSS state require git-log verification.
+- **SPEC line 2573** — belt-indicator extension shipping note (Phase 5 sub-phase 5); cites belt tokens but does not codify dual-layer architecture.
+- **ALPHA_DESIGN.md §3** — tinted-neutrals canon (hue 250 OR 270, chroma 0.005-0.012). The project standardized on hue 270 for both layers per Dashboard PRD §8.
+- **Round 2 plan-doc `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md` §0.3 + §2.2 + §5.1** — discovery (audit step 3 surfacing the bifurcation), resolution decision (Q5 = γ), and codification commit (this SPEC §13 entry).
+- **Dashboard PRD §8** — Layer-B token-set definition + audit-trail for the additive-not-superseding decision.
+- **`.alpha-style.md` "below-3 systemic-token" threshold** — tokens used by ≥3 consumers must land in a layer; below-3 tokens may stay component-local.
