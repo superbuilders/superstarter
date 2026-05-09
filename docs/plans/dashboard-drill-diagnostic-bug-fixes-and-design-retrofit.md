@@ -121,6 +121,26 @@ All four files present at the expected new path; the old `data/images/` location
 
 This is a small instance of SPEC §6.14.28 (Plan-prose-vs-empirical-truth divergence): the plan-doc's pre-mv prose diverged from the empirical state by the time the body was authored. The direction is benign (the scope flag the audit raised was resolved more cheaply than the audit anticipated, not the reverse), and the divergence was caught at the body-authoring stage rather than at commit 4 execution time. The §0.12 note records the divergence rather than rewriting the audit prose, per the closed-plans-immutable spirit of §6.14.20 carried into the in-flight plan-doc.
 
+### §0.13 Mid-round redirect — drop Wikimedia SVGs, adopt first-party `<BeltGraphic>` (2026-05-08)
+
+Per Leo's mid-round redirect on 2026-05-08, the round drops the Wikimedia Commons CC BY-SA 3.0 SVG approach for the dashboard belt graphic and adopts a first-party inline SVG component (`<BeltGraphic>`) rendering the BJJ belt structure (rectangular body + offset tip block) using `<rect>` elements with project-tokenized colors.
+
+**Reasoning.**
+
+1. **Attribution surface simplification.** No third-party assets in the round → no `ATTRIBUTIONS.md` required → no per-asset author/source/license-link maintenance burden carried forward.
+2. **Theming + responsive control.** First-party SVG built with project tokens (`bg-belt-{white,blue,brown,black}` family + new `belt-tip-{black,red}` + `belt-stroke` tokens) inherits the dark-theme overrides at `globals.css:135+` automatically; rendered at any aspect ratio via `viewBox` + `preserveAspectRatio="none"` for the `<BeltStripe>` consumer.
+3. **External-license maintenance burden removed.** CC BY-SA 3.0 share-alike preservation is a forever obligation on any downstream modification of the SVGs; eliminating the third-party origin removes that obligation entirely.
+
+**Empirical state at redirect time.** `public/images/belts/GJJ_*_Belt.svg` (untracked, 4 files) and `data/images/GJJ_*_Belt.svg` (staged-deletions, 4 files) are both becoming orphaned — the public-path files were never consumed (commit 4 had not yet executed); the staged-deletions reflect the out-of-session move from §0.12. Commit 4 (revised per §5.4) cleans up both: `git rm` the staged-deletions; `rm` the untracked public-path files. Neither set ever enters the rendering path.
+
+**Cross-references.**
+
+- SPEC §6.14.34 (mid-round narrow-scope sub-round insertion) — the redirect inserts a sub-round-equivalent revision into the in-flight plan-doc rather than spawning a separate plan-doc.
+- SPEC §6.14.20 (in-flight plan-doc revision discipline) — the §1 / §2.3 / §5.3 / §5.4 revisions below quote-preserve the original content rather than silently rewriting; the round-close discipline lifts these revisions to immutable status.
+- §0.12 — the SF-1 empirical-state correction recorded the `data/images/` → `public/images/belts/` move; that move is now itself superseded by this §0.13 redirect. §0.12 stays as the audit-trail record of the pre-redirect state; §0.13 supersedes its forward-looking implication (the `public/images/belts/` files are no longer the consumption target).
+
+**Sections revised under this redirect.** §1 (in-scope list), §2.3 (REMOVED — no third-party assets), §5.3 (repurposed to plan-doc revision commit — this commit), §5.4 (first-party `<BeltGraphic>` implementation). Audit-trail-of-superseded-state in §0.10 Q4, §5 intro paragraph, and §7 Q4 are flagged here for round-close revision; left in place mid-flight per §6.14.20 quote-preservation spirit (these are forward-looking resolutions referencing the now-superseded ATTRIBUTIONS.md path; an in-flight rewrite would erase the audit trail of the pre-redirect plan).
+
 ---
 
 ## §1 — Round scope (captured from redline; fenced)
@@ -129,8 +149,7 @@ This is a small instance of SPEC §6.14.28 (Plan-prose-vs-empirical-truth diverg
 
 - Dashboard top-panel reordering: Mistakes-to-review → Days-to-test → Goal → Previous-score (with horizontal goal-line) → Previous-pace (with horizontal 18s-line)
 - Mistakes-to-review: stub → real component (resolved as wire-up-only per §0.2)
-- Belt-text → belt-SVG swap using `public/images/belts/GJJ_{White,Blue,Brown,Black}_Belt.svg` (path corrected per §0.12)
-- CC BY-SA 3.0 attribution surface for belt SVGs
+- Belt-text → first-party `<BeltGraphic>` inline SVG component swap (per §0.13; supersedes the original Wikimedia-SVG-from-`public/images/belts/` approach captured below as quote-preserved record)
 - Rotating greeting tagline (Claude-style) — corpus captured in §2.1
 - Expanded title-quote corpus — corpus captured in §2.2
 - Drill: rankings refresh after completion (currently stale; root cause per §0.4)
@@ -149,6 +168,8 @@ This is a small instance of SPEC §6.14.28 (Plan-prose-vs-empirical-truth diverg
 - Triage explainer + earlier triage option (→ Round 4)
 - Belt-ranking algorithm change (→ Round 4; cross-references deferred sub-phase b validator)
 - All review-section fixes (→ Round 2; Round 1 ships audit only)
+
+> **Original §1 in-scope list (pre-§0.13 redirect, preserved per SPEC §6.14.20).** The bullet "Belt-text → belt-SVG swap using `public/images/belts/GJJ_{White,Blue,Brown,Black}_Belt.svg` (path corrected per §0.12)" and the bullet "CC BY-SA 3.0 attribution surface for belt SVGs" were the original in-scope items for the belt-graphic work. Both are superseded by the §0.13 redirect: the former replaced by a first-party `<BeltGraphic>` component (no public-path consumption); the latter dropped entirely (no third-party assets in the round → no attribution surface required). Quote-preserved here for audit-trail integrity; the live in-scope list above reflects the post-redirect state.
 
 ---
 
@@ -199,18 +220,24 @@ Test-prep flavored prompts (rotate alongside time-of-day; ~50/50 mix between nam
 
 Same per-session selection invariant as §2.1; implementation guidance in §5.6.
 
-### §2.3 Belt SVG attribution (CC BY-SA 3.0)
+### §2.3 Belt SVG attribution (CC BY-SA 3.0) — REMOVED per §0.13 redirect
 
-Source: Wikimedia Commons. License: Creative Commons Attribution-Share Alike 3.0 Unported (CC BY-SA 3.0). Files: `GJJ_White_Belt.svg`, `GJJ_Blue_Belt.svg`, `GJJ_Brown_Belt.svg`, `GJJ_Black_Belt.svg`. **Final repo path: `public/images/belts/` (per §0.12 empirical-state correction).**
+REMOVED per §0.13 mid-round redirect — no third-party assets in this round. The belt graphic is now a first-party inline SVG component (`<BeltGraphic>`) per §5.4 (revised); no Wikimedia source, no CC BY-SA 3.0 obligations, no `ATTRIBUTIONS.md` surface required. Original requirements preserved below as historical record per SPEC §6.14.20.
 
-Requirements per CC BY-SA 3.0:
+The generic-naming convention from the original §2.3 (user-facing names use "white belt" / "blue belt" / etc., NOT "GJJ" branding) is **carried forward** into §5.4's `<BeltGraphic>` `aria-label` design even though §2.3 is otherwise removed; the convention is good UX hygiene independent of the attribution context that originally motivated it.
 
-1. Attribution to original author(s) — verify Wikimedia source pages for each SVG and capture author + page URL during commit 3 (the attribution doc).
-2. Link to license — `https://creativecommons.org/licenses/by-sa/3.0/`.
-3. Indication of changes — note the move from `data/images/` (pre-redirect) to `public/images/belts/` (current); note any SVG metadata edits.
-4. Downstream-share-alike preservation — anyone modifying the SVGs further inherits the license.
-
-User-facing alt text and tooltips MUST use generic belt names ("white belt", "blue belt", etc.), NOT "GJJ" branding. Internal filenames may stay as-is (`GJJ_White_Belt.svg`).
+> **Original §2.3 (pre-§0.13 redirect, preserved per SPEC §6.14.20).**
+>
+> Source: Wikimedia Commons. License: Creative Commons Attribution-Share Alike 3.0 Unported (CC BY-SA 3.0). Files: `GJJ_White_Belt.svg`, `GJJ_Blue_Belt.svg`, `GJJ_Brown_Belt.svg`, `GJJ_Black_Belt.svg`. **Final repo path: `public/images/belts/` (per §0.12 empirical-state correction).**
+>
+> Requirements per CC BY-SA 3.0:
+>
+> 1. Attribution to original author(s) — verify Wikimedia source pages for each SVG and capture author + page URL during commit 3 (the attribution doc).
+> 2. Link to license — `https://creativecommons.org/licenses/by-sa/3.0/`.
+> 3. Indication of changes — note the move from `data/images/` (pre-redirect) to `public/images/belts/` (current); note any SVG metadata edits.
+> 4. Downstream-share-alike preservation — anyone modifying the SVGs further inherits the license.
+>
+> User-facing alt text and tooltips MUST use generic belt names ("white belt", "blue belt", etc.), NOT "GJJ" branding. Internal filenames may stay as-is (`GJJ_White_Belt.svg`).
 
 ---
 
@@ -274,35 +301,94 @@ Each commit follows the `phase4-similar-item-generator.md` + `phase5-data-wipe.m
 
 **Stop-and-report.** Do not proceed to next commit until redirect.
 
-### §5.3 — Commit 3: ATTRIBUTIONS.md at repo root (REORDERED — was commit 4)
+### §5.3 — Commit 3: plan-doc revision (REPURPOSED per §0.13 — was ATTRIBUTIONS.md)
 
-**Hash:** `<TBD>`.
+**Hash:** `<TBD>` (filled at round-close).
 
 **Files touched.**
-- `ATTRIBUTIONS.md` (NEW, repo root).
+- `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-retrofit.md` (this plan-doc) — adds §0.13; revises §1 in-scope list; removes §2.3 body (with quote-preservation); repurposes §5.3 (this commit, with quote-preservation); revises §5.4 to first-party `<BeltGraphic>` (with quote-preservation).
 
-**Audit step.** Pre-flight: (a) re-verify SVG presence at `public/images/belts/` (per §0.12); (b) for each of the four SVGs, fetch the Wikimedia source page and capture original author + page URL + license-version confirmation. The Wikimedia source pages are externally reachable; this is a research step that bounds the commit at network-latency-plus-write rather than code-edit time. (c) confirm no existing `ATTRIBUTIONS.md` (per §0.1); confirm the `LICENSE` file's scope is software-only (so this commit doesn't conflict with existing license content).
+**Audit step.** Pre-flight: (a) re-verify the four §0.13-named sections (§1, §2.3, §5.3, §5.4) are the entire revision surface — `grep` the plan-doc for `ATTRIBUTIONS.md`, `Wikimedia`, `CC BY-SA`, `/data/images/`, `share-alike`, `attribution` and report any collateral references for redirect at round-close (do NOT silently rewrite mid-flight per SPEC §6.14.20 quote-preservation discipline); (b) confirm the empirical state of belt asset files matches §0.13's statement: 4 staged-deletions under `data/images/GJJ_*_Belt.svg` + 4 untracked under `public/images/belts/GJJ_*_Belt.svg`; (c) confirm `src/components/dashboard/belt-graphic.tsx` does NOT yet exist (commit 4 creates it); (d) pre-verify the project's Tailwind v4 CSS-based config carries existing `--belt-{white,blue,brown,black}` + `--belt-white-line` tokens at `src/styles/unstyled/globals.css` for commit 4's reference (note: there is NO `tailwind.config.ts` file — the audit-step instruction in the original §5.4 incorrectly assumed JS-based Tailwind config; commit 4's audit step inherits this empirical correction).
 
-**Implementation notes.** Per §2.3 — markdown doc at repo root with one section per asset family. Belt SVG section names each file, attributes its Wikimedia source (author + page URL captured at audit step), links the license (`https://creativecommons.org/licenses/by-sa/3.0/`), notes the move from `data/images/` to `public/images/belts/`, and reaffirms the share-alike preservation requirement. Format: simple markdown headings per asset family, table for files-author-source mapping if four-plus files. The doc is the durable surface; future asset families append new sections.
+**Implementation notes.** Documents the §0.13 + §1 + §2.3 + §5.3 + §5.4 revisions per SPEC §6.14.20 (in-flight wholesale-replacement-with-quote-preservation). The commit body's WHY is license simplification (no CC BY-SA 3.0 share-alike forever-obligation) + theming/responsive control (project tokens + dark-theme inheritance + `viewBox`/`preserveAspectRatio="none"` consumer flexibility); the WHAT is the four-section revision. No code touched in this commit; commit 4 carries the actual `<BeltGraphic>` implementation + asset cleanup.
 
-**Verification.** Render-check `ATTRIBUTIONS.md` in a markdown viewer (GitHub render, or `bunx markdown-it-cli` or equivalent — verify the dev tooling at audit step); confirm all four SVGs cited with author + URL + license link.
+**Verification.** Render-check the plan-doc; confirm all quote-preservation `>` blocks are intact and verbatim against the originals (start-of-block phrasing must match the pre-edit text exactly); confirm no broken cross-references (`§0.13`, `§5.4`, `§6.14.20`, `§6.14.34`, `§0.12` all resolve to existing sections); confirm staged file set is exactly the plan-doc and nothing else (`git diff --cached --name-only` must show only the plan-doc path); confirm the working-tree staged-deletions + untracked belt-asset files are unchanged from pre-commit (those belong to commit 4).
+
+**Stop-and-report.** Do not proceed to next commit until redirect. Reports include collateral-reference grep findings, working-tree pre/post verification, plan-doc final line count, and quote-preservation block sanity-check.
+
+> **Original §5.3 (pre-§0.13 redirect, preserved per SPEC §6.14.20).**
+>
+> ### §5.3 — Commit 3: ATTRIBUTIONS.md at repo root (REORDERED — was commit 4)
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - `ATTRIBUTIONS.md` (NEW, repo root).
+>
+> **Audit step.** Pre-flight: (a) re-verify SVG presence at `public/images/belts/` (per §0.12); (b) for each of the four SVGs, fetch the Wikimedia source page and capture original author + page URL + license-version confirmation. The Wikimedia source pages are externally reachable; this is a research step that bounds the commit at network-latency-plus-write rather than code-edit time. (c) confirm no existing `ATTRIBUTIONS.md` (per §0.1); confirm the `LICENSE` file's scope is software-only (so this commit doesn't conflict with existing license content).
+>
+> **Implementation notes.** Per §2.3 — markdown doc at repo root with one section per asset family. Belt SVG section names each file, attributes its Wikimedia source (author + page URL captured at audit step), links the license (`https://creativecommons.org/licenses/by-sa/3.0/`), notes the move from `data/images/` to `public/images/belts/`, and reaffirms the share-alike preservation requirement. Format: simple markdown headings per asset family, table for files-author-source mapping if four-plus files. The doc is the durable surface; future asset families append new sections.
+>
+> **Verification.** Render-check `ATTRIBUTIONS.md` in a markdown viewer (GitHub render, or `bunx markdown-it-cli` or equivalent — verify the dev tooling at audit step); confirm all four SVGs cited with author + URL + license link.
+>
+> **Stop-and-report.** Do not proceed to next commit until redirect.
+
+### §5.4 — Commit 4: first-party `<BeltGraphic>` implementation (REVISED per §0.13 — was Wikimedia-SVG swap)
+
+**Hash:** `<TBD>` (filled at round-close).
+
+**Files touched.**
+
+- `src/components/dashboard/belt-graphic.tsx` (NEW) — first-party inline SVG component.
+- `src/components/dashboard/belt-stripe.tsx` — replace CSS-class indirection (`BELT_BG` record) with `<BeltGraphic beltColor={...} />` consumer.
+- `src/styles/unstyled/globals.css` — add `--belt-tip-black`, `--belt-tip-red`, `--belt-stroke` CSS custom properties + corresponding `--color-belt-tip-black` / `--color-belt-tip-red` / `--color-belt-stroke` Tailwind v4 aliases (project uses Tailwind v4 CSS-based config — there is NO `tailwind.config.ts`; existing belt-color tokens live at `globals.css:41-72` for `:root` and `globals.css:135-154` for the dark theme override). Add dark-theme overrides for the new tokens if visual review surfaces a need; otherwise the `:root` values inherit.
+- `data/images/GJJ_*_Belt.svg` (4 files) — `git rm` of the staged-deletions already in working tree (per §0.13 cleanup).
+- `public/images/belts/GJJ_*_Belt.svg` (4 files) — `rm` from disk; never enters git history (untracked at commit time per §0.13).
+
+**Audit step.** Pre-flight: (a) re-verify `belt-graphic.tsx` does NOT already exist under `src/components/dashboard/` (idempotent guard); (b) re-verify the four-color belt token VALUES in `src/styles/unstyled/globals.css` — capture verbatim for any color-correction decisions (existing values from §5.3 audit step (d): `--belt-white: oklch(94% 0.005 270)`; `--belt-blue: oklch(0.55 0.16 245)`; `--belt-brown: oklch(0.4 0.07 50)`; `--belt-black: oklch(22% 0.020 270)`; `--belt-white-line: oklch(82% 0.012 270)` is the existing lavender-line border that the new `--belt-stroke` token can mirror or replace); (c) re-confirm `<BeltStripe>` consumer count is exactly one (`<BeltRow>` at `belt-row.tsx:66`, per §0.3 audit B) — no cascade; (d) verify file states: `data/images/GJJ_*_Belt.svg` are staged-deletions; `public/images/belts/GJJ_*_Belt.svg` are untracked; `belt-graphic.tsx` does not exist; (e) confirm `<BeltStripe>` props shape (`beltColor: 'white' | 'blue' | 'brown' | 'black'`) — `<BeltGraphic>` should accept the same prop signature for drop-in substitution.
+
+**Implementation notes.** `<BeltGraphic>` accepts a single `beltColor: 'white' | 'blue' | 'brown' | 'black'` prop (matching `<BeltStripe>`). Renders `<svg viewBox="0 0 100 22" preserveAspectRatio="none">` with three `<rect>` elements per the BJJ canonical structure observed in the four reference PNGs:
+
+1. **Body:** full width (`x=0 y=0 width=100 height=22`); `fill` = body color per `beltColor` lookup (white = `var(--color-belt-white)`; blue = `var(--color-belt-blue)`; brown = `var(--color-belt-brown)`; black = `#000000` per BJJ canonical recognition — see exception note below); `stroke` = `var(--color-belt-stroke)`; `stroke-width="0.5"`; `vector-effect="non-scaling-stroke"` so the stroke doesn't distort under non-uniform scaling.
+2. **Tip:** `x=80 y=0 width=14 height=22`; `fill` = `var(--color-belt-tip-red)` if `beltColor === 'black'`, else `var(--color-belt-tip-black)`. (Tip extents are tunable at commit-time per visual review against the four reference PNGs; the spec target is tip block at ~78-92% of length with a small body-color sliver from ~92-100%.)
+3. **(Optional sliver — implicit.)** The body `<rect>` already covers `92-100%`; the tip `<rect>` is offset to leave the sliver visible. No third `<rect>` needed if the body fills the full width and the tip layers on top with the offset.
+
+Generic `aria-label="${beltColor} belt"` per the §2.3 spirit (preserved as carried-forward UX hygiene per §2.3 revised).
+
+**Black-belt body color exception.** Black-belt body uses pure `#000000` (NOT a `--color-belt-black` token resolving to an OKLCH near-black). Rationale: BJJ canonical black-belt recognition depends on the saturation reading as unambiguous black; the OKLCH(22%) token used elsewhere reads as dark-charcoal in practice. ALPHA_DESIGN.md §3 anti-pattern "no pure black for large areas" is a UI-chrome rule (cards, surfaces, type), NOT a representational-iconography rule; the belt graphic depicts a physical object with a culturally-specific canonical color. Document this exception inline in the component as a one-line code comment with a cross-ref to ALPHA_DESIGN.md §3.
+
+**Color values reference (audit-step capture / commit-time tunable).** Approximate target values, to be reconciled against existing tokens at audit step (b):
+
+- `belt-white` ≈ `#FFFFFF` (existing token uses `oklch(94% 0.005 270)` — slightly off-white; visual review at commit time decides whether to tighten to pure white for the belt body or keep the existing token value).
+- `belt-blue` ≈ `#1E5BD9` (true BJJ blue, deliberately NOT Alpha cobalt `#1E00FF`).
+- `belt-brown` ≈ `#5C3A1E` (warm leather).
+- `belt-black` (body) = `#000000` (per exception above).
+- `belt-tip-black` = `#000000` (NEW token).
+- `belt-tip-red` = `#DC2626` (NEW token).
+- `belt-stroke` = `#E5E3F5` (existing lavender border — may alias `--belt-white-line` or be a NEW distinct token; decide at commit time per visual review).
+
+The audit step (b)'s verbatim-token capture is the input; only add net-new tokens or correct mismatches at implementation time.
+
+**Verification.** Visual review across all four belt tiers (white / blue / brown / black). Spec the dev-server seed approach for switching between tiers at audit step (e) (mock `mastery_state` per tier? or 4 dev users? — pick the lower-friction path). Tab through; confirm `aria-label` announces correctly. Spot-check rendered widths at multiple `<BeltStripe>` parent sizes (since `preserveAspectRatio="none"` stretches non-uniformly — the `vector-effect="non-scaling-stroke"` should keep the stroke crisp, but verify). Confirm the post-session `<BeltIndicator>` is unaffected (separate component at `src/components/post-session/belt-indicator.tsx` — already SVG; `<BeltGraphic>` is dashboard-only). Confirm `git status` post-commit shows: belt-graphic.tsx ADDED; belt-stripe.tsx MODIFIED; globals.css MODIFIED; 4 `data/images/GJJ_*_Belt.svg` DELETED (formerly staged-deletions, now committed); `public/images/belts/` empty or removed (untracked-file cleanup is filesystem-only, not git-visible).
 
 **Stop-and-report.** Do not proceed to next commit until redirect.
 
-### §5.4 — Commit 4: belt-text → belt-SVG swap (REORDERED — was commit 3)
-
-**Hash:** `<TBD>`.
-
-**Files touched.**
-- `src/components/dashboard/belt-stripe.tsx`.
-
-**Audit step.** Pre-flight: (a) re-verify SVGs at `public/images/belts/` (per §0.12; idempotent re-check before the swap); (b) confirm `BELT_BG` record at `belt-stripe.tsx:25-30` is the only call site for the CSS-class indirection — `grep` the codebase for `bg-belt-` to verify no other consumers; (c) confirm `<BeltStripe>` is rendered only from `<BeltRow>` at `belt-row.tsx:66` (per §0.3 audit B); (d) check `tailwind.config.ts` for any color tokens named `belt-white|blue|brown|black` that may need cleanup or stay for the post-session `<BeltIndicator>` (which already uses SVG; the tokens may remain in use there).
-
-**Implementation notes.** Replace the CSS-class indirection in `<BeltStripe>` with an `<img>` element loading from the public path: `<img src={"/images/belts/GJJ_" + capitalize(beltColor) + "_Belt.svg"} alt={beltColor + " belt"} />` (or via a typed map for the four discrete colors — prefer the map for type-safety per CLAUDE.md `no-as-type-assertion` and `type-safety` rules). Generic alt text per §2.3 (NOT "GJJ" branding). Filenames stay as-is internally. Optionally use Next.js `<Image>` if intrinsic dimensions benefit optimization; plain `<img>` is simpler for SVG and avoids the layout-shift / dimensions-required gymnastics. Pick at commit-time. Drop or repurpose the `BELT_BG` record per audit step (d).
-
-**Verification.** Visual review on `/` for all four belt tiers (white/blue/brown/black) — sign in as dev users with each tier (or seed mastery_state to each tier and verify). Tab through; confirm alt text via DevTools accessibility tree. Sanity: confirm the swap didn't regress post-session `<BeltIndicator>` (separate component; should be untouched).
-
-**Stop-and-report.** Do not proceed to next commit until redirect.
+> **Original §5.4 (pre-§0.13 redirect, preserved per SPEC §6.14.20).**
+>
+> ### §5.4 — Commit 4: belt-text → belt-SVG swap (REORDERED — was commit 3)
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - `src/components/dashboard/belt-stripe.tsx`.
+>
+> **Audit step.** Pre-flight: (a) re-verify SVGs at `public/images/belts/` (per §0.12; idempotent re-check before the swap); (b) confirm `BELT_BG` record at `belt-stripe.tsx:25-30` is the only call site for the CSS-class indirection — `grep` the codebase for `bg-belt-` to verify no other consumers; (c) confirm `<BeltStripe>` is rendered only from `<BeltRow>` at `belt-row.tsx:66` (per §0.3 audit B); (d) check `tailwind.config.ts` for any color tokens named `belt-white|blue|brown|black` that may need cleanup or stay for the post-session `<BeltIndicator>` (which already uses SVG; the tokens may remain in use there).
+>
+> **Implementation notes.** Replace the CSS-class indirection in `<BeltStripe>` with an `<img>` element loading from the public path: `<img src={"/images/belts/GJJ_" + capitalize(beltColor) + "_Belt.svg"} alt={beltColor + " belt"} />` (or via a typed map for the four discrete colors — prefer the map for type-safety per CLAUDE.md `no-as-type-assertion` and `type-safety` rules). Generic alt text per §2.3 (NOT "GJJ" branding). Filenames stay as-is internally. Optionally use Next.js `<Image>` if intrinsic dimensions benefit optimization; plain `<img>` is simpler for SVG and avoids the layout-shift / dimensions-required gymnastics. Pick at commit-time. Drop or repurpose the `BELT_BG` record per audit step (d).
+>
+> **Verification.** Visual review on `/` for all four belt tiers (white/blue/brown/black) — sign in as dev users with each tier (or seed mastery_state to each tier and verify). Tab through; confirm alt text via DevTools accessibility tree. Sanity: confirm the swap didn't regress post-session `<BeltIndicator>` (separate component; should be untouched).
+>
+> **Stop-and-report.** Do not proceed to next commit until redirect.
 
 ### §5.5 — Commit 5: rotating greeting tagline + selection logic
 
