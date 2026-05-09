@@ -8,11 +8,14 @@
 //   - target date (date picker → unix-ms timestamp).
 //
 // Two submit paths:
-//   "Save and continue" — submits the form, action writes both columns,
-//   then router.push('/').
-//   "Skip for now"      — router.push('/') without writing. The
-//                          users.target_percentile / target_date_ms
-//                          columns stay null.
+//   "Save and continue"          — submits the form, action writes both
+//                                  columns, then router.push('/').
+//   "Skip and go to dashboard"   — router.push('/') without writing. The
+//                                  users.target_percentile / target_date_ms
+//                                  columns stay null. Round 2 §5.14
+//                                  refined the copy from "Skip for now"
+//                                  to specify destination per
+//                                  ALPHA_DESIGN §9 verb+object guidance.
 //
 // `saveOnboardingTargets` is the canonical action surface (lives in
 // src/app/(app)/actions.ts). It's reachable from this client component
@@ -218,9 +221,9 @@ function OnboardingTargets() {
 					onClick={function onSkip() {
 						router.push("/")
 					}}
-					className="relative text-muted-foreground text-sm underline-offset-4 pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-top-3 pointer-coarse:before:-bottom-3 pointer-coarse:before:content-[''] hover:text-foreground hover:underline"
+					className="relative text-muted-foreground text-sm underline-offset-4 pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-top-3 pointer-coarse:before:-bottom-3 pointer-coarse:before:content-[''] hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-foreground/30 focus-visible:outline-offset-2"
 				>
-					Skip for now
+					Skip and go to dashboard
 				</button>
 				<Button type="submit" disabled={submitting}>
 					{submitLabel}
