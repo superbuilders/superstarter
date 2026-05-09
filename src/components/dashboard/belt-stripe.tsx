@@ -1,13 +1,21 @@
 // <BeltStripe> — dashboard belt-row primitive. Dashboard PRD §10.1
 // + `docs/plans/dashboard.md` §5 commit 6 + Round 1 commit 4 per
 // `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-
-// retrofit.md` §5.4 + §0.13.
+// retrofit.md` §5.4 + §0.13 + commit-4 follow-up (sizing).
 //
 // Thin layout wrapper around <BeltGraphic>: provides the dashboard's
-// 22×6 dimensions + 1px-border-radius-clipped frame, plus ARIA
+// 40×12 dimensions + 1px-border-radius-clipped frame, plus ARIA
 // context-prefixing for the belt-row's category label (e.g.
 // "Antonyms: white belt"). The visual primitive itself — body +
 // offset tip + body sliver — lives in <BeltGraphic>.
+//
+// Container sizing: bumped from 22×6 to 40×12 in commit-4 follow-up
+// for BJJ-belt recognition (the 22×6 size made the tip block too
+// small to read as a rank tip). The aspect ratio (40:12 ≈ 3.3:1) is
+// flatter than <BeltGraphic>'s natural viewBox (100:22 ≈ 4.5:1);
+// preserveAspectRatio="none" on the SVG absorbs the difference. The
+// paired <BeltRow> grid first column was bumped 24px → 44px to fit
+// (4px slack).
 //
 // Pre-§0.13: this file owned an inline-block <span> with a "cap" via
 // a second absolute-positioned <span> using `bg-bg`. The cap created
@@ -39,7 +47,7 @@ function BeltStripe({ belt, ariaContext, className }: BeltStripeProps) {
 	return (
 		<span
 			className={cn(
-				"inline-block h-[6px] w-[22px] overflow-hidden rounded-[1px]",
+				"inline-block h-[12px] w-[40px] overflow-hidden rounded-[1px]",
 				className
 			)}
 		>
