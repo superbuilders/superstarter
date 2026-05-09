@@ -1,6 +1,6 @@
 # Plan — Post-Session Audit Fixes + Wide Token Retrofit (Round 2)
 
-> **Status: planning (commit 0 — plan-doc creation + §0 audit findings).** Body sections (§1 scope fence, §2 captured-from-redline anchors, §5 commit ledger, §6 verification, §7 resolutions, §8 round-close residuals) are intentionally deferred until Leo redirects post-§0. Per the round-opening redline's stop-and-report contract: *"Do NOT proceed to commit 1. Wait for redirect."*
+> **Status: shipped 2026-05-09.** 15 implementation commits + 1 round-close (this slot, §5.15). Three mid-round events: §0.14 retirement (§A.4.f1 superseded by commit 2 system-level cascade); §0.15 audit cascade (commit 5 halt surfaced `strategy-selection.ts` as type-export consumer; Option 4 split into §5.4 + §5.4b); §5.9 Outcome B (empty-state token-level drift caught at audit-step). Two structural commit-envelope additions: §5.4a (lib extraction pre-poned before combine) + §5.4b (cascade resolution post-combine). Three retirements: §5.3 RETIRED-as-superseded; §5.10 RETIRED-as-superseded by §5.4a; original §5.11 plan-doc-stub never authored (renumbered slot is now §5.11 continue-button copy). Round-close commentary captured in §9.
 >
 > **Round opened against `main` at HEAD `ebb8489`** (Round 1 round-close commit; post-amend hash on linear history). Cross-doc reference value `6122366` carried by Round 1 `§5.13` and the audit doc's frontmatter is the *pre-amend* round-close hash — orphan-trending in git's object DB but NOT an ancestor of HEAD; both hashes are kept verbatim in their respective frozen artifacts per SPEC §6.14.20 (closed-plans-immutable). Round 2's empirical anchor is `ebb8489`; cross-doc citations honor `6122366`.
 >
@@ -422,7 +422,7 @@ Per Round 1's discipline: each entry carries a hash placeholder (backfilled at r
 
 ### §5.1 — Commit 1: SPEC dual-layer token codification (Option γ.2 — new top-level §13)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `7031167` — `docs(spec,plan): open Round 2 + codify dual-layer token architecture (SPEC §13)`.
 
 **Files touched.**
 - `docs/SPEC.md` — NEW top-level section §13 ("Token architecture") inserted after §12 (Build order). No existing SPEC entries modified. Cross-references to existing §6.14.18 (audit-against-actual-artifact) + line 1309 (PRD-prose-claims-vs-globals.css) + line 2573 (belt-indicator extension shipping note) added inline.
@@ -438,7 +438,7 @@ Per Round 1's discipline: each entry carries a hash placeholder (backfilled at r
 
 ### §5.2 — Commit 2: §B.1 Layer-A token retrofit + per-surface screenshot walk + SF-B grep follow-up
 
-**Hash:** `<TBD>`.
+**Hash:** `bd5af4f` — `feat(theme): Layer-A token Alpha-tinting retrofit (§B.1)`.
 
 **Files touched.**
 - `src/styles/unstyled/globals.css` — `:root` lines 8-25 (Layer-A foundation, light mode) + lines 109-116 (Layer-A sidebar tokens) + lines 103-107 (Layer-A chart tokens — only those used as text/border in shadcn primitives) + `.dark` mirror block (lines 120+ light-mode counterparts).
@@ -462,7 +462,7 @@ Per Round 1's discipline: each entry carries a hash placeholder (backfilled at r
 
 ### §5.3 — Commit 3: §A.4.f1 onboarding skip-link contrast — RETIRED per §0.14
 
-**Hash:** `<TBD; this slot consumed by the plan-doc revision commit that authored §0.14 + this retirement marker per §0.14 retire-not-renumber model>`.
+**Hash:** `ba2ae9c` — `docs(plan): retire §5.3 — superseded by commit 2 system-level retrofit`. (Slot consumed by the plan-doc revision commit that authored §0.14 + this retirement marker per the §0.14 retire-not-renumber model. No `src/` files touched.)
 
 RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in the ledger is now the plan-doc revision commit that authored §0.14 and the §5.3 retirement marker (i.e., this very commit) — no `src/` files touched. The audit-step (a) finding from the commit-3 prep time IS the empirical justification for retirement: commit 2 (`bd5af4f`) shipped `--muted-foreground` light-mode oklch(0.556 0 0) → oklch(0.45 0.012 270), which raises the skip-link's contrast against `--background` to **7.23:1 (AAA)** at the system level. The audit doc's §A.4.f1 per-consumer fix-shape (`text-muted-foreground → text-foreground/80`) is no longer needed — the underlying concern is closed at the token-definition layer per the §6.14.40 (redirector-vs-empirical-state) discipline (commit 2's empirical contrast gate superseded the audit doc's pre-Round-2 hypothesis-shape framing). Commit slot 3 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline (commits 4-15 keep their existing slot numbers).
 
@@ -485,7 +485,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.4a — Commit 4 (inserted): extract shared `_lib/sub-type-display.ts` (supersedes original §5.10)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `20cd8d6` — `refactor(post-session): extract shared sub-type-display lib (§5.4a; supersedes §5.10)`.
 
 **Files touched.**
 - `src/components/post-session/_lib/sub-type-display.ts` — NEW (~52 lines). Exports `SUB_TYPE_BY_ID: ReadonlyMap<SubTypeId, SubTypeConfig>` (canonical Map; replaces 4 local Maps) + `compareBySubTypeDisplay(a: SubTypeIdHaver, b: SubTypeIdHaver): number` (verbal-section-first, alphabetical-by-displayName-within-section; validates meta exists via `errors.new()` defensive throw with `logger.error` — defense-in-depth since `buildDisplayRows` upstream filters undefined-meta cases).
@@ -505,7 +505,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.4 — Commit 5 (Option 4 split, part 1/2): combined `<PerformanceSummary>` + SQL consolidation + transient projection shims
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `ac8ea1e` — `refactor(post-session): combine accuracy + latency into <PerformanceSummary> (§5.4; commit 5/2 of Option 4 split)`.
 
 **Files touched.**
 - `src/components/post-session/performance-summary.tsx` — NEW (~190 lines). Combined renderer: 3-column CSS grid per row (sub-type label | ✓/✗ counts | latency value + `<LatencyTrack>` SVG); render-heading-+-empty-state for zero rows ("No sub-type performance data this session."); `<dl>` semantic preserved (one `<dt>` paired with two `<dd>`s per row); `<LatencyTrack>` SVG sub-component lifted verbatim from deleted `<LatencySummary>`; AA-discipline comment block preserved.
@@ -547,7 +547,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.4b — Commit 5b (Option 4 split, part 2/2): refactor `strategy-selection.ts` to consume `PerSubTypePerformance` + delete transient shims + delete `PerSubTypeAccuracy` / `PerSubTypeLatency` types
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `8095b76` — `refactor(post-session): consume PerSubTypePerformance directly in strategy-selection (§5.4b; commit 5b/2 of Option 4 split)`.
 
 **Files touched.**
 - `src/server/post-session/strategy-selection.ts` — 4 public functions refactored (`isStruggled`, `deriveStruggledSubTypes`, `buildStruggleContexts`, `selectStrategiesForStruggledSubTypes`) from per-axis arrays to single `PerSubTypePerformance` array param. Internal Map-intersection at the prior lines 118-125 + 155-158 collapsed into single iterations over consolidated rows. Imports updated (drop `PerSubTypeAccuracy` + `PerSubTypeLatency`; add `PerSubTypePerformance`). Top doc-comment line 30 updated (`<LatencySummary>` → `<PerformanceSummary>`). Net file size: 228 → **212 lines** (−16; Map-collapse + signature-rename savings).
@@ -564,7 +564,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.5 — Commit 6: `<BeltIndicator>` Option β refactor (consume `<BeltGraphic>`)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `590f5dc` — `refactor(post-session): <BeltIndicator> uses <BeltGraphic> internally (§5.5)`.
 
 **Files touched.**
 - `src/components/post-session/belt-indicator.tsx` — file size 189 → **134 lines** (−55, close to the −50 audit-time estimate). Replaced inline `<svg>...<rect>...<rect>...</svg>` body (former lines 146-171) with single `<BeltGraphic beltColor={color} ariaLabel={ariaLabel} className="h-5 w-full max-w-[12rem]" />` invocation. Deleted: `BeltStyle` interface (former lines 86-89); `BELT_STYLE_BY_COLOR` constant (former lines 96-113); `style = BELT_STYLE_BY_COLOR[color]` lookup at former line 125; local `BeltColor` type union (former line 57); `BeltColor` from the export list. Added: `import { BeltGraphic } from "@/components/dashboard/belt-graphic"` + `import type { BeltLevel } from "@/server/dashboard/types"`. Function signatures `tierToBeltColor` + `beltColorDisplayName` shifted return/param type from `BeltColor` to `BeltLevel` (canonical type origin). Top doc-comment block updated to reflect post-refactor framing (Round 2 §5.5 cascade + Round 1 §8 residual #9 closure). **Accessibility refinement:** outer wrapper dropped `role="img"` + `aria-label` (`<BeltGraphic>` carries its own internal `role="img"` + the full tier+calibrating phrasing via the `ariaLabel` prop; nested `role="img"` was a SR anti-pattern); visible text label below preserves WCAG 1.4.1 (color-not-alone-carries-meaning).
@@ -580,7 +580,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.6 — Commit 7: §A.4.f2 onboarding error-state slot (P2)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `c6d473b` — `feat(post-session): add error-state slot to <OnboardingTargets> (§5.6; §A.4.f2)`.
 
 **Files touched.**
 - `src/components/post-session/onboarding-targets.tsx` — added: `submitError: string \| null` useState peer + `SUBMIT_ERROR_COPY` module-level constant + `ONBOARDING_ERROR_ID` module-level constant + `formDescribedBy` computed ref (extracted per `no-inline-ternary`) + form-level `aria-describedby` attribute + conditional error `<p>` region between date field and action row. Updated: `onSave` clears `submitError` at retry boundary and sets it on `result === null` branch. File size 142 → **169 lines** (+27).
@@ -595,7 +595,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.7 — Commit 8: §A.4.f3 onboarding blur-validation (P2)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `42b3558` — `feat(post-session): blur-validate target date against past dates (§5.7; §A.4.f3)`.
 
 **Files touched.**
 - `src/components/post-session/onboarding-targets.tsx` — added: module-level `DATE_PAST_ERROR_COPY` constant; module-level `DATE_ERROR_ID` constant; module-level `validateDateNotPast(value: string): string \| null` pure-function helper (parses ISO `YYYY-MM-DD` to local-midnight Date; compares against local startOfToday; returns error string if past, `null` if valid or empty); component-level `dateError: string \| null` useState peer; `dateDescribedBy` extracted const for `aria-describedby`. `onSave` got submit-time re-validation gate (closes type-and-submit-without-blur edge case). Date input got `onBlur` handler (sets dateError) + updated `onChange` handler (clears dateError on next interaction). Per-field error region rendered conditionally below the date input. File size 169 → **234 lines** (+65).
@@ -610,7 +610,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.8 — Commit 9: §B.4 touch-target `pointer: coarse` (P2; covers §A.4.f4 + §A.7.f2)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `d72a29f` — `feat(post-session): pointer-coarse hit-area expansion (§5.8; §B.4 + §A.4.f4 + §A.7.f2)`.
 
 **Files touched.**
 - `src/components/post-session/onboarding-targets.tsx` — `<select>` + `<input type="date">` got `pointer-coarse:min-h-11` (Path A revised — `min-height: 44px` enforcement on touch only). Skip-link `<button>` got `relative` + `pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-top-3 pointer-coarse:before:-bottom-3 pointer-coarse:before:content-['']` (Path B — pseudo-element extends hit area to ~44px on touch without visual change on desktop). Biome's nursery `useSortedClasses` rule fired on the `pointer-coarse:min-h-11` insertions; safe-fix re-sorted Tailwind classes per the rule's prescribed order (`block pointer-coarse:min-h-11 w-full ...`).
@@ -628,7 +628,7 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 ### §5.9 — Commit 10: §B.2 empty-state harmonization (Outcome B — token-level drift)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `88d390f` — `fix(post-session): empty-state harmonization (§5.9; §B.2)`.
 
 **Files touched.**
 - `src/components/post-session/strategy-surface.tsx` — empty-state `<p>` className: `text-foreground/60` → **`text-foreground/80`** (1-line; AA-discipline align with `<PerformanceSummary>` canonical pattern).
@@ -671,7 +671,7 @@ RETIRED-as-superseded per §5.4a (2026-05-09). Commit 10 in the ledger is now em
 
 ### §5.11 — Commit 11: §A.5.f1 continue-button copy refinement
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `362e62d` — `style(post-session): continue-button copy specifies destination (§5.11; §A.5.f1)`.
 
 **Files touched.**
 - `src/components/post-session/post-session-shell.tsx` — Continue button label inside `<ContinueButton>` sub-component (line 175 pre-commit): `Continue` → **`Continue to dashboard`**. Single-line copy edit.
@@ -686,7 +686,7 @@ RETIRED-as-superseded per §5.4a (2026-05-09). Commit 10 in the ledger is now em
 
 ### §5.12 — Commit 12: §A.7.f1 structured-explanation rest-state affordance
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `078211e` — `feat(post-session): chevron affordance on structured-explanation toggles (§5.12; §A.7.f1)`.
 
 **Files touched.**
 - `src/components/post-session/structured-explanation.tsx` — added imports `ChevronRightIcon` from `lucide-react` + `cn` from `@/lib/utils`. Both interactive `<button>` elements (elimination + tie-breaker) wrapped their text content in `<span className="flex items-start justify-between gap-3">` + appended a right-aligned `<ChevronRightIcon aria-hidden="true" className="mt-1 size-3 shrink-0 text-foreground/60 [rotate-90 when active]">`. Recognition `<p>` (non-interactive) **unchanged**.
@@ -701,7 +701,7 @@ RETIRED-as-superseded per §5.4a (2026-05-09). Commit 10 in the ledger is now em
 
 ### §5.13 — Commit 13: §A.9.f1 wrong-items group heading style (Option A — sentence-cased)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `17f1692` — `style(post-session): wrong-items group heading sentence-cased (§5.13; §A.9.f1)`.
 
 **Files touched.**
 - `src/components/post-session/wrong-items-browser.tsx` — group heading className: `font-medium text-foreground/80 text-xs uppercase tracking-wide` → **`font-semibold text-foreground/80 text-sm`**. Element type `<h3>` unchanged. Top-of-file doc-comment block at line 43 updated to reflect new visual treatment + cite Round 2 §5.13 + ALPHA_DESIGN §4 editorial-warmth bias rationale (preserves the historical "uppercase tracked label" framing in the cite for future-author archeology).
@@ -716,7 +716,7 @@ RETIRED-as-superseded per §5.4a (2026-05-09). Commit 10 in the ledger is now em
 
 ### §5.14 — Commit 14: §A.4.f5 + §A.4.f6 skip-link copy + focus-visible class (P3 polish bundled)
 
-**Hash:** `<TBD; backfilled at round-close>`.
+**Hash:** `69ea647` — `style(post-session): skip-link copy + focus-visible (§5.14; §A.4.f5 + §A.4.f6)`.
 
 **Files touched.**
 - `src/components/post-session/onboarding-targets.tsx` — skip-link `<button>` (lines 216-224 pre-commit): copy `"Skip for now"` → **`"Skip and go to dashboard"`** (§A.4.f5); className gained `focus-visible:outline-2 focus-visible:outline-foreground/30 focus-visible:outline-offset-2` (§A.4.f6, matches `<StructuredExplanation>` `interactiveBaseClass` canonical pattern). Top-of-file doc-comment block at lines 10-15 updated to reflect new copy + cite Round 2 §5.14 + ALPHA_DESIGN §9 verb+object guidance (preserves the historical "Skip for now" framing in the cite for future-author archeology). Biome's `useSortedClasses` rule fired on the `focus-visible:*` insertions; safe-fix re-sorted Tailwind classes (no behavior change).
@@ -735,19 +735,20 @@ Pseudo-element `::before` (commit 9 hit-area expansion for `pointer: coarse`) co
 
 ### §5.15 — Round-close commit (administrative)
 
-**Hash:** `<TBD>`.
+**Hash:** `<TBD; this commit's hash captured in git log post-commit>`. (Round 2 has no audit doc that pins a round-close hash via frontmatter, so the Round 1 self-reference paradox + amend-pattern do not apply here. The §5.15 line stays placeholder; the empirical hash is the latest commit on `main` per `git log --oneline -1` after this commit ships.)
 
 **Files touched.**
-- `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md` — status flip "planning" → "shipped {date}"; hash backfill across §5.1-§5.14; §7 resolutions log finalized; §8 round-close residuals enumerated.
-- `docs/SPEC.md` — any §6.14 promotions surfaced during the round (TBD per round-close decision; default DEFER if no multi-instance pattern emerges).
+- `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md` — status flip "planning" → "shipped 2026-05-09"; hash backfill across §5.1-§5.14 (+ §5.4a + §5.4b); §6 verification protocol carry-forward + Round 2 additions noted; §7 resolutions log finalized (audit-doc findings closed-or-deferred; Round 1 inherited residuals dispositioned; Round 2 audit-surfaced findings closed); §8 round-close residuals enumerated (12 items per the round-close redirect); §9 round-close commentary (NEW; 6 pattern observations per Decision A).
+- `docs/SPEC.md` — NEW §6.14.42 entry (audit-step grep-verify-consumers when deleting/renaming type-or-function exports; single-instance promotion on impact-shape, sister to §6.14.41); §6.14.40 sub-pattern note added (instance-granularity reinforcement, NOT new entry); §13.4.1 chart-tokens footnote added (chart palette + dark `--sidebar-primary` pre-existing-chromatic exception per Round 2 commit 2 audit-step (a) Finding 1).
+- `src/styles/unstyled/globals.css` — SF-B stale-prose cleanup at line 64 (drop "mastery map" reference; surface absorbed into `src/components/dashboard/` during Round 1's dashboard-PRD redesign and now consumes Layer-B tokens). Folded into commit 15 per audit-step (e) recommendation (1-line comment edit; bundling with round-close keeps the residual list cleaner).
 
-**Audit step.** Pre-flight executed at round-close: (a) `git log --oneline` from round-open `ebb8489` to HEAD; capture all Round 2 commit hashes for backfill; (b) `git status --short` confirms clean working tree; (c) closed-plans-immutable verified per §6.14.20; (d) audit-skill convention re-check (per §0.7); (e) §6.14 promotion candidates enumerated + decided.
+**Audit step.** Pre-flight executed at round-close: (a) `git log --oneline ebb8489..HEAD` captured 16 commits — 15 Round 2 implementation commits (mapped to §5.1-§5.14 + §5.4a + §5.4b) + 1 Round-1-cleanup logs commit (`98b54e5`, parented on `ebb8489`; subject "docs(logs): add session logs for Round 1 close..."; not part of Round 2's §5 ledger). (b) `git status --short` confirms clean working tree post-commit-14. (c) **Closed-plans-immutable verified** per §6.14.20.3: `git log --name-only ebb8489..HEAD -- docs/plans/ docs/audits/` shows ONLY `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md`; Round 1's plan + audit doc + earlier closed plans untouched. ✓ (d) SPEC §6.14 numbering verification: `grep -nE "^#### 6\.14\." docs/SPEC.md | tail` confirms last entry pre-commit is `#### 6.14.41` at line ~1795; new §6.14.42 inserts after. (e) **SF-B `<MasteryMap>` stale-prose disposition: FOLDED into commit 15** per audit-step (e) recommendation; `globals.css:64` (formerly `globals.css:50` in §0.11 audit-time framing — line drift between Round 2 commit-0 and round-close) had a single 1-line edit dropping "mastery map," from the surface list with a Round 2 §0.11 + §5.15 cite explaining the absorption.
 
-**Implementation notes.** Plan-doc finalization per the round-close redirect's enumerated content. Hash backfill via amend-pattern (CLAUDE.md normally prefers new commits, but the redirect explicitly authorizes amend for self-referential round-close-hash backfill, per Round 1 precedent).
+**Implementation notes.** Plan-doc finalization per the round-close redirect's Decision A + B1 + E2 trio. SPEC additions per Decision A's §6.14.42 promotion + §6.14.40 reinforcement + §13.4.1 footnote per Decision B1. The `--amend` pattern Round 1 used for self-referential round-close-hash backfill is NOT applicable here: Round 2 has no audit doc whose frontmatter pins the round-close hash, so the §5.15 hash stays as `<TBD>` placeholder + git log captures the empirical hash. Pre-commit Lefthook lint + typecheck verify clean per Round 1 §6 + Round 2's per-commit discipline.
 
-**Verification.** Render-check the plan-doc post-edit; confirm all hash placeholders resolved; pre-commit lint + typecheck pass.
+**Verification.** Render-check the plan-doc post-edit; confirm all hash placeholders resolved (§5.1-§5.14 backfilled with empirical hashes; §5.15 stays `<TBD>` per the no-self-reference-paradox model). Pre-commit lefthook lint + typecheck pass clean. SPEC additions render clean (§6.14.42 inserts cleanly after §6.14.41; §6.14.40 sub-pattern note inserts cleanly between §6.14.40's existing closing and §6.14.41's opening; §13.4.1 footnote inserts cleanly between §13.4.1's closing line and §13.4.2's opening).
 
-**Stop-and-report.** Round 2 complete. Round 3 (review-section architecture) opens at Leo's discretion.
+**Stop-and-report.** Round 2 complete. Score-based goals sidecar round queued post-Round-2-close per Decision D. Round 3 (review-section architecture) opens at Leo's discretion.
 
 ---
 
@@ -760,6 +761,7 @@ Per Round 1 §6 + Round 2-specific additions:
 - **No new smokes.** This round doesn't add smoke scripts. Existing smokes under `scripts/dev/smoke/` continue unchanged.
 - **`tee` for any long-running stdout** per §6.14.38; not anticipated this round (no long-running pipelines), except commit 2's screenshot-capture script if scripted (manual screenshot capture is the default).
 - **Round 2-specific addition: per-commit screenshot capture for commit 2** per §2.7. Stored at `scripts/_logs/round-2-retrofit-screenshots/{surface-name}-{pre|post}.png` for forward-traceability.
+- **Round 2-specific addition: empirical visual walk at round-close (Decision E2)** per Leo's pre-redirect: surfaces walked post-commit-14 (pre-round-close) verified visual rhythm preserved post-implementation; no regressions surfaced. Round-close ships after empirical visual verification.
 
 ---
 
@@ -797,13 +799,70 @@ Final state for each Open Q + scope flag (per Leo's 2026-05-09 redirect):
 
 ## §8 — Round-close residuals + forward pins
 
-Forward-pinned at audit time (round-close updates this list with empirical residuals as commits ship):
+12 residuals captured at round-close per Leo's pre-redirect Decision D + the round-close redirect's enumerated list. None block round-close. Forward-pin column maps each to the queued downstream round/disposition.
 
-1. **Round 3 (review-section architecture).** Generalize post-session components for historical session viewing; new route + data layer. Out of scope per §1.3.
-2. **Round 4 (review-specific features).** Time-per-question line chart with right/wrong dots; filter UI; all-questions-by-default; per-question time display; overall score on top. Out of scope per §1.3.
-3. **Diagnostic-timing sidecar round.** PRD §4.1 amendment + server cutoff + client timer + mastery compute multiplier revert + post-session pacing copy revision. Per Round 1 §0.15. Opens at Leo's discretion. Out of scope per §1.3.
-4. **§B.5 motion sweep + remaining P3 polish (§A.2.f1, §A.3.f1, §A.7.f3, §A.9.f2).** Future polish round. Out of scope per §1.3.
-5. **Sub-phase b validator.** Indefinitely deferred per Round 1 context.
-6. **SF-B stale-prose cleanup (forward-pinned to round-close cleanup commit per §5.15 or a small dedicated commit).** Resolved at commit 2 pre-flight as stale-prose (per §5.2 audit step (c) + commit-2 §6.14.28 addendum Finding 2). The `globals.css:50` comment block lists "mastery map" as a non-touched surface, but no `src/components/mastery-map/` directory exists (absorbed into `src/components/dashboard/`). Single-line edit at round-close: drop "mastery map" from the comment-block surface list, OR replace with "dashboard" if a positive-naming retrofit is preferred.
-7. **§B.6 mobile real-device walk.** Deferred to Round 3+ per Q6.
-8. **Hook re-enable.** Environmental, not project. Re-enable per Leo's earlier direction.
+| # | Residual | Forward-pin |
+|---|---|---|
+| 1 | **Score-based goals sidecar round** (NEW per Decision D — score-based goals replace percentile-based goals in `<OnboardingTargets>` + downstream consumers; standalone bounded round) | Score-based goals sidecar — opens at Leo's discretion next |
+| 2 | **Diagnostic-timing sidecar round** — PRD §4.1 amendment + server cutoff + client timer + mastery compute multiplier revert + post-session pacing copy revision (Round 1 §0.15 forward-pin) | Diagnostic-timing sidecar — opens at Leo's discretion |
+| 3 | **Round 3 (review-section architecture)** — generalize post-session components for historical session viewing; new `/review/[sessionId]` route + data layer | Round 3 |
+| 4 | **Round 4 (review-specific features)** — time-per-question line chart with right/wrong dots; filter UI; all-questions-by-default; per-question time display; overall score on top | Round 4 |
+| 5 | **§B.5 motion sweep + remaining P3 polish** — §A.2.f1 belt-indicator calibrating-suffix transition; §A.3.f1 latency-marker entrance animation; §A.7.f3 structured-explanation active-state transition; §A.9.f2 wrong-items marker tooltip | Future polish round |
+| 6 | **Sub-phase b validator** — 1,711 candidates at `status='candidate'` (Round 1 inheritance) | Indefinitely deferred per Round 1 context |
+| 7 | **`--border` 1.23:1 sub-3:1 contrast** — borders fail WCAG 1.4.11 3:1 floor for non-text-component-state. Out of §B.1 retrofit scope per commit 2's §5.2 audit step (e) — borders are decorative/structural per shadcn convention. If a future surface uses border-color to convey UI-component-state, revisit. | Future-future-round if border-as-state surface emerges |
+| 8 | **`.catch()` pattern at `onboarding-targets.tsx:onSave`** — preserved per `simplify` discipline at commit 7 + commit 8 (CLAUDE.md "bug fix doesn't need surrounding cleanup"). Project's stronger `errors.try` discipline would convert this; bounded refactor for a future round. | Future polish round (low priority) |
+| 9 | **SF-B stale-prose cleanup** — RESOLVED at this round-close (commit 15 folded the 1-line `globals.css:64` edit; no longer a residual). | RESOLVED in commit 15 |
+| 10 | **§B.6 mobile real-device walk** — DevTools emulation only at Round 2; real iPhone + Android verification deferred per Q6. | Round 3+ when devices available |
+| 11 | **Hook re-enable** — `~/.claude/hooks/cbm-code-discovery-gate` was disabled at Round 1's commit-11 to unblock Read tool calls; stayed disabled through Round 2. Environmental, not project. | Re-enable per Leo's earlier direction |
+| 12 | **Round 1 inherited residuals NOT closed by Round 2** — `loadAllBelts()` stub at `src/server/dashboard/data.ts` (Round 1 §8 #1 + #2; forward-pinned to Belts PRD round); number-series shape coverage (Round 1 §8 #3; forward-pinned to post-Belts-PRD or sub-phase b validator); `urgencyLoop` naming debt (Round 1 §8 #5; OPTIONAL future round, mechanical rename). | Belts PRD round / Sub-phase b validator / OPTIONAL future round |
+| 13 | **`bun test` flake (single occurrence at commit 14)** — one run reported 127/1; consecutive re-runs report 128/0; not reproducible at audit time. Track for next round; if re-occurs, investigate. | Track for Round 3 |
+
+
+---
+
+## §9 — Round-close commentary
+
+Round 2-specific pattern observations without §6.14 promotion (per Decision A). Captured here for cross-round-pattern accumulation; promotion candidates if instances accrue across future rounds.
+
+### §9.1 Audit-doc-frozen evidence interacts with system-level changes
+
+Single instance. Round 2 commit 10's audit-step (d) caught that audit-doc §B.2 evidence (`<StrategySurface>` + `<WrongItemsBrowser>` empty-state classified PASS at audit-time HEAD `81fcea5`) was correct at audit-time but the post-commit-2 Layer-A retrofit changed the contrast math: `text-foreground/60` blended on retrofitted `--background` at ~4.4:1 (borderline AA), where canonical post-commit-5 `<PerformanceSummary>` uses `text-foreground/80` (~7.2:1, AAA). Round 2's commit-time empirical re-verification reclassified as drift; Outcome B (fix) shipped 2-line align.
+
+This is the inverted form of §6.14.41 (audit-vs-revert blindness): there, the audit cited a project mechanism that had been retired (audit's premise wrong, downstream implementation re-introduces retired mechanism). Here, the audit cited a class string + accompanying classification that were correct at audit-time, but a downstream system change (commit 2's retrofit) changed the underlying token's chroma + lightness math, which reclassified the previously-PASS empty-state as drift. The audit doc's frozen-at-Round-1-close framing isn't wrong; the system around it shifted. Round 2's commit-time re-verification at commit 10 caught it.
+
+Single instance; not promoted. Track if a similar audit-doc-frozen-vs-system-shift pattern recurs in Round 3+.
+
+### §9.2 Discipline-rule instance counts must accrue at consistent granularity
+
+Single self-correction observation. Commit 5b's commit message body said "Round 2 §6.14.40 instance count = 5 (matches Round 1 §6.14.40 promotion threshold)" while the plan-doc's authoritative §0.15 + §5.4b carry **count = 3**. Re-issued stop-and-report at commit 5b explicitly noted the discrepancy: commit-message overshoot vs plan-doc-section-canonical count.
+
+Plan-doc-section granularity is canonical for promotion-threshold accounting (5 plan-doc-section instances in Round 1 → §6.14.40 promotion). Commit-message audit-step audit-step-granularity instances reinforce the rule but do not separately promote (per the new §6.14.40 sub-pattern note added at this round-close). Self-correction observation; not promoted.
+
+### §9.3 Redirect-approximate-math-off-by-enough-to-matter
+
+Single observation. Commit 9 (§5.8 touch-target pointer-coarse) — the redirect's `py-3` recommendation would have brought form-field height from ~35px (pre) to ~43px (still sub-44; AA fail). Audit-step (b) computed empirically that `pointer-coarse:min-h-11` (44px enforcement) is required to reliably reach the 44px floor. The audit-step's empirical math beats the redirect's approximation — the implementation pivoted from `py-3` to `min-h-11` mid-commit before code shipped.
+
+Single observation; not promoted. The discipline rule "audit-step's first action is empirical-state capture; redirect's specification is hypothesis-to-verify" is already articulated at §6.14.40. This instance is a numeric-approximation specialization; track if recurs.
+
+### §9.4 Mid-round component discovery ("audit-step verifies cross-consumer scope at commit time, not just commit-0 time")
+
+Single instance. Commit 6 (§5.5 `<BeltIndicator>` Option β) audit-step (f) surfaced `<BeltLegend>` (added between Round 2 commit-0 and commit-6 by separate work; already canonical-on-`<BeltGraphic>`). The cross-consumer scope at commit-0 time was `<BeltStripe>` + `<BeltIndicator>` + the primitive `<BeltGraphic>`. By commit-6 time, `<BeltLegend>` had been added — and was correctly canonical-on-`<BeltGraphic>` so no scope expansion was needed. The discipline rule is paying off: audit-step re-verifies scope at commit-time, not just commit-0-time.
+
+Single instance; not promoted. Cross-references §6.14.42 (audit-step grep-verify-consumers; the deletion-side specialization).
+
+### §9.5 IEEE-rounding test fixture discipline
+
+Single instance. Commit 5 fixture-fix at test prep time: `formatSeconds(12_450)` was expected to produce "12.5 s" but produced "12.4 s" — IEEE 754 doesn't represent 0.45 exactly (stored as 12.4499...), and `Number.prototype.toFixed(1)` rounds down. Test fixtures revised to use exactly-representable values (`12_500`, `8_000`, `15_000`).
+
+Single instance; not promoted. Discipline rule: when asserting on stringified-float output, use exactly-representable values OR use `toBeCloseTo(...)` for approximate match. Track if recurs.
+
+### §9.6 Planned-commit-superseded-by-positive-cascade pattern
+
+**2 instances in Round 2** — accumulating but below promotion threshold. Pattern:
+- §5.3 (commit 3): planned as a 1-line skip-link contrast fix (§A.4.f1); audit step (a) found commit 2's system-level retrofit already lifted to AAA; commit 3 retired-as-superseded.
+- §5.10 (originally scheduled): planned as a sort-DRY extraction; pre-poned to §5.4a so `<PerformanceSummary>` (commit 5) imports the canonical lib from day one; original §5.10 retired-as-superseded with quote-preservation.
+
+Round 1's promotion threshold for §6.14.40 was 5 plan-doc-section instances. This pattern (planned commit superseded by positive cascade — earlier commit's broader scope absorbs the later commit's targeted fix) is at 2 instances in Round 2. Track for Round 3 if instances accumulate; promotion candidate at 3+ instances.
+
+Captured here for cross-round pattern accumulation. Not promoted yet.
+

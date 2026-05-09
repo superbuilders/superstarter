@@ -61,8 +61,11 @@
 	 * --accent, --primary, etc.) are NOT touched — the dashboard
 	 * components reference these new --bg, --surface, --text-1, etc.
 	 * tokens directly, leaving the existing surfaces (post-session
-	 * shell, mastery map, focus shell, full-length flow) on the shadcn
-	 * tokens unchanged. See `docs/plans/dashboard.md` §2.9 + §4 for the
+	 * shell, focus shell, full-length flow) on the shadcn tokens
+	 * unchanged (Round 2 §0.11 SF-B + §5.15 cleanup retired the prior
+	 * "mastery map" reference — that surface was absorbed into
+	 * src/components/dashboard/ during the dashboard-PRD redesign and
+	 * now consumes Layer-B tokens). See `docs/plans/dashboard.md` §2.9 + §4 for the
 	 * audit trail; `--belt-blue` / `--belt-brown` are intentionally
 	 * NOT redeclared (see `docs/plans/DASHBOARD_PRD.md` §8 audit note).
 	 */
