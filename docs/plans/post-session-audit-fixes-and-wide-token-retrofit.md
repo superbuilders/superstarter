@@ -273,9 +273,31 @@ The round-opening redline estimated **13-14 commits + round-close**. Audit-surfa
 
 **Empirical estimate: 13 implementation commits + 1 round-close (= 14) under default Q5=α; 14 + 1 (= 15) if Q5=γ.** Tracks the round-opening 13-14 envelope estimate.
 
+> **Footnote (added 2026-05-09 at commit-3 prep time per §0.14 retirement).** This §0.12 table was authored at commit-0 prep time before Leo resolved Q5 to γ; the table's slot numbering is historical (commit 1 = retrofit slot under default α; SPEC dual-layer commit was slot 14 conditional on γ). After Q5=γ resolved at commit-1 prep, §5 ledger re-anchored: commit 1 = SPEC dual-layer codification (§5.1); commit 2 = Layer-A retrofit (§5.2); commit 3 = §A.4.f1 skip-link RETIRED-not-renumbered per §0.14; commit 4 = combined `<PerformanceSummary>` (§5.4); ... ; commit 15 = round-close (§5.15). **§5 is the authoritative ledger going forward; this §0.12 table stays as commit-0-time historical artifact per §6.14.20 closed-plans-immutable spirit.**
+
 ### §0.13 Stop-and-report
 
 This plan-doc is the commit-0 deliverable. Per the round-opening contract, Round 2 stops here and reports findings. No body sections (§1 scope-fence, §2 captured-from-redline, §3 SPEC §6.14 cross-references, §4 cost envelope, §5 commit ledger, §6 verification protocol, §7 resolutions log, §8 round-close residuals) authored until Leo redirects.
+
+### §0.14 Mid-round retirement — §5.3 (§A.4.f1 onboarding skip-link contrast) superseded by commit 2 system-level retrofit (2026-05-09)
+
+Per Leo's 2026-05-09 redirect (commit-3 prep): commit 3 (originally `fix: §A.4.f1 onboarding skip-link contrast`) is **RETIRED-as-superseded** because commit 2's `--muted-foreground` lightness drop (0.556 → 0.45) + chroma bump already raised the skip-link's empirical contrast to **AAA-grade** via the system-level cascade. Path A (retire) selected over Path B (defense-in-depth class swap) per the redirect's recommendation + the empirical contrast measurements captured at commit 2.
+
+**Empirical evidence (audit step (a) at commit-3 prep time, 2026-05-09).**
+- Skip-link line at `src/components/post-session/onboarding-targets.tsx:129`: `className="text-muted-foreground text-sm underline-offset-4 hover:text-foreground hover:underline"`. Hover state goes to `--foreground` (19.23:1, AAA-grade). Rest state on `--muted-foreground`.
+- Form container at line 76 carries no background of its own (`className="space-y-6"`) — the skip-link sits on `--background` (page-level surface).
+- Post-retrofit `--muted-foreground` (oklch 0.45 0.012 270) vs `--background` (oklch 0.99 0.005 270): **7.23:1 — AAA**, captured at `scripts/_logs/round-2-retrofit-screenshots/contrast-check.log`.
+- The audit doc's §A.4.f1 finding (P1, sub-AA on skip-link) was framed as a per-consumer single-line fix (`text-muted-foreground → text-foreground/80`). Commit 2's system-level retrofit closed the underlying concern (sub-AA `--muted-foreground`) at the token-definition layer, where all consumers of `text-muted-foreground` benefit symmetrically. The per-consumer class swap would over-correct to ~11.5:1 (`--foreground/80` alpha-blended on `--background`) when 7.23:1 already clears AAA with comfortable margin.
+
+**Why this is a §6.14.40 (redirector-vs-empirical-state) instance, benign direction.** The round-opening redline's commit ledger pinned §A.4.f1 as a P1 single-line fix at commit 3 — a hypothesis-shape based on the audit doc's frozen-at-Round-1-close framing. Commit 2's empirical contrast gate at commit-time superseded the hypothesis: the system-level fix made the per-consumer fix redundant. The audit-step-(a) flag at §5.3 (*"after commit 2's --muted-foreground retrofit may have raised contrast already; confirm whether the f1 fix is still needed"*) was the canonical pre-flight that caught this. **Round 2 §6.14.40 instance count this round: 2** (SF-A bifurcated tokens + this §A.4.f1 supersession). Both benign-direction; both caught by audit-first discipline.
+
+**Disposition.**
+- §5.3 entry RETIRED-as-superseded; original prose preserved per §6.14.20 quote-preservation discipline (see §5.3 quote-block).
+- Commit envelope updates: commits 4-15 keep their existing slot numbers (§0.14 retire-not-renumber per Round 1 §0.13/§0.14/§0.15 precedent). New empirical commit envelope: **14 total** (1 plan-doc creation + 12 implementation + 1 round-close — was 15; commit 3 slot consumed by THIS plan-doc revision commit, which logs the retirement decision).
+- §7 resolutions log: §A.4.f1 disposition explicitly logged as RESOLVED-via-commit-2-system-level-cascade (rather than RESOLVED-via-commit-3-class-swap).
+- §8 round-close residuals: no new residual; the original §A.4.f1 fix is closed at the system level.
+
+This commit ships the plan-doc revision only; no `src/` files touched. Next commit (originally commit 4: combined `<PerformanceSummary>`) keeps its existing §5.4 slot number.
 
 ---
 
@@ -295,7 +317,7 @@ This plan-doc is the commit-0 deliverable. Per the round-opening contract, Round
 
 ### §1.2 Q5 = Option γ — adds SPEC dual-layer codification commit
 
-Per Leo's redirect, Q5 lands as **Option γ** (Layer-A retrofit + SPEC dual-layer codification). The SPEC commit is a new entry (commit 1 in the round's ledger), authored standalone before the Layer-A retrofit (commit 2) so the SPEC entry exists as the authoritative cross-reference for the retrofit's commit body. Empirical commit envelope updates from 13 implementation commits (the round-opening redline's estimate) to 14 implementation commits + 1 round-close = **15 total**.
+Per Leo's redirect, Q5 lands as **Option γ** (Layer-A retrofit + SPEC dual-layer codification). The SPEC commit is a new entry (commit 1 in the round's ledger), authored standalone before the Layer-A retrofit (commit 2) so the SPEC entry exists as the authoritative cross-reference for the retrofit's commit body. Empirical commit envelope updates from 13 implementation commits (the round-opening redline's estimate) to **14 total** post-§0.14 retirement (was 15 pre-retirement; §5.3 RETIRED-not-renumbered consumed by the plan-doc revision commit that logs the retirement decision per §0.14).
 
 ### §1.3 Explicitly deferred out-of-scope (per round-opening redline + audit-time forward-pins)
 
@@ -374,7 +396,7 @@ Round 2 inherits Round 1's discipline patterns:
 
 ## §4 — Cost envelope
 
-No LLM cost this round (no generation / validation work). Round cost is engineer-time only. Empirical commit envelope per §1.2 + §5: **15 commits** (1 plan-doc creation + 13 implementation + 1 round-close, with the SPEC dual-layer codification per Q5=γ counted as commit 1). Estimated wall time: **1-2 days** at the round's typical commit pace.
+No LLM cost this round (no generation / validation work). Round cost is engineer-time only. Empirical commit envelope per §1.2 + §5 (post-§0.14 retirement): **14 commits** (1 plan-doc creation + 12 implementation + 1 round-close, with §5.3 RETIRED-not-renumbered consumed by the plan-doc revision commit per §0.14). Estimated wall time: **1-2 days** at the round's typical commit pace.
 
 ---
 
@@ -422,20 +444,28 @@ Per Round 1's discipline: each entry carries a hash placeholder (backfilled at r
 >
 > **Finding 3 — empirical contrast measurements post-retrofit confirm AAA-grade closure of Round 1 §8 residual #10.** Audit steps (e) + (f) ran via `scripts/_logs/round-2-retrofit-screenshots/contrast-check.ts` (committed for forward-traceability per §6.14.38 tee-discipline). Pre-retrofit `--muted-foreground` (oklch 0.556 0 0) vs `--muted` (oklch 0.97 0 0) measured **4.34:1 — SUB-AA**, confirming the audit doc's "system-level ≈ 4.0:1" framing. Post-retrofit `--muted-foreground` (oklch 0.45 0.012 270) vs `--muted` (oklch 0.97 0.008 270) measures **6.82:1 — AAA**. Vs `--background` (oklch 0.99 0.005 270): **7.23:1 — AAA**. Dark-mode `--muted-foreground` preserved at lightness 0.708 (chroma-only retrofit) maintains 7.63:1 / 5.83:1 (AAA pre + post). **Round 1 §8 residual #10 closes with AAA-grade margin.** Border 1.26:1 / 1.23:1 (pre / post) is below the WCAG 1.4.11 3:1 floor — but borders are decorative/structural per shadcn convention; not a §B.1 target; out of scope for Round 2 (note for forward-future-round if a border-as-UI-component-state surface emerges).
 
-### §5.3 — Commit 3: §A.4.f1 onboarding skip-link contrast (P1 single-line)
+### §5.3 — Commit 3: §A.4.f1 onboarding skip-link contrast — RETIRED per §0.14
 
-**Hash:** `<TBD>`.
+**Hash:** `<TBD; this slot consumed by the plan-doc revision commit that authored §0.14 + this retirement marker per §0.14 retire-not-renumber model>`.
 
-**Files touched.**
-- `src/components/post-session/onboarding-targets.tsx` — single class swap on the "Skip for now" button: `text-muted-foreground` → `text-foreground/80` (matches the surface's documented AA-discipline pattern per audit doc §B.7).
+RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in the ledger is now the plan-doc revision commit that authored §0.14 and the §5.3 retirement marker (i.e., this very commit) — no `src/` files touched. The audit-step (a) finding from the commit-3 prep time IS the empirical justification for retirement: commit 2 (`bd5af4f`) shipped `--muted-foreground` light-mode oklch(0.556 0 0) → oklch(0.45 0.012 270), which raises the skip-link's contrast against `--background` to **7.23:1 (AAA)** at the system level. The audit doc's §A.4.f1 per-consumer fix-shape (`text-muted-foreground → text-foreground/80`) is no longer needed — the underlying concern is closed at the token-definition layer per the §6.14.40 (redirector-vs-empirical-state) discipline (commit 2's empirical contrast gate superseded the audit doc's pre-Round-2 hypothesis-shape framing). Commit slot 3 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline (commits 4-15 keep their existing slot numbers).
 
-**Audit step.** Pre-flight: (a) read `onboarding-targets.tsx` skip-link region; confirm the audit doc's §A.4.f1 finding is structurally accurate (after commit 2's `--muted-foreground` retrofit may have raised contrast already; confirm whether the f1 fix is still needed). If commit 2's retrofit already lifted `--muted-foreground` to AA, this commit reduces to a no-op + audit-trail note. (b) Surrounding interactive states (focus-visible, hover, active) — confirm the `text-foreground/80` swap doesn't drop a state below AA.
-
-**Implementation notes.** Per audit doc §A.4.f1 fix-shape. Single-line edit. If commit 2's retrofit closed the AA gap, this commit becomes redundant — disposition decision at commit-3 prep time (either retire as RETIRED-superseded or ship as defense-in-depth).
-
-**Verification.** Visual diff of post-session onboarding section; manual contrast measurement (DevTools or browser pick-ratio); confirm AA ≥ 4.5:1.
-
-**Stop-and-report.** Do not proceed to commit 4 until redirect.
+> **Original §5.3 (pre-§0.14 retirement, preserved per SPEC §6.14.20).**
+>
+> ### §5.3 — Commit 3: §A.4.f1 onboarding skip-link contrast (P1 single-line)
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - `src/components/post-session/onboarding-targets.tsx` — single class swap on the "Skip for now" button: `text-muted-foreground` → `text-foreground/80` (matches the surface's documented AA-discipline pattern per audit doc §B.7).
+>
+> **Audit step.** Pre-flight: (a) read `onboarding-targets.tsx` skip-link region; confirm the audit doc's §A.4.f1 finding is structurally accurate (after commit 2's `--muted-foreground` retrofit may have raised contrast already; confirm whether the f1 fix is still needed). If commit 2's retrofit already lifted `--muted-foreground` to AA, this commit reduces to a no-op + audit-trail note. (b) Surrounding interactive states (focus-visible, hover, active) — confirm the `text-foreground/80` swap doesn't drop a state below AA.
+>
+> **Implementation notes.** Per audit doc §A.4.f1 fix-shape. Single-line edit. If commit 2's retrofit closed the AA gap, this commit becomes redundant — disposition decision at commit-3 prep time (either retire as RETIRED-superseded or ship as defense-in-depth).
+>
+> **Verification.** Visual diff of post-session onboarding section; manual contrast measurement (DevTools or browser pick-ratio); confirm AA ≥ 4.5:1.
+>
+> **Stop-and-report.** Do not proceed to commit 4 until redirect.
 
 ### §5.4 — Commit 4: combined `<PerformanceSummary>` (replaces `<AccuracySummary>` + `<LatencySummary>`)
 
@@ -655,6 +685,7 @@ Final state for each Open Q + scope flag (per Leo's 2026-05-09 redirect):
 - **SF-B `<MasteryMap>` referenced but absent:** **RESOLVED at commit 2 pre-flight as STALE-PROSE** (per §5.2 audit step (c) + §6.14.28 commit-2 addendum Finding 2). No `src/components/mastery-map/` directory exists; the component was absorbed into `src/components/dashboard/` as part of the dashboard-PRD redesign. The `globals.css:50` comment-block prose listing "mastery map" as a non-touched surface is stale. Forward-pinned to round-close cleanup (small one-line edit), tracked in §8.
 - **SF-C `/phase3-smoke` non-production:** **RESOLVED via Q2** (excluded from Round 2 verification surface walk).
 - **SF-D §B.6 mobile real-device verification:** **RESOLVED via Q6** (deferred to Round 3+).
+- **§A.4.f1 onboarding skip-link contrast (P1):** **RESOLVED via Round 2 commit 2 system-level cascade** (per §0.14 + §5.3 retirement). Empirical post-retrofit contrast: 7.23:1 (AAA). Per-consumer class swap (audit doc §A.4.f1 fix-shape `text-muted-foreground → text-foreground/80`) was retired-as-superseded — the underlying concern closed at the token-definition layer where every consumer benefits symmetrically.
 
 ---
 
