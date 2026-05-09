@@ -3,15 +3,15 @@
 //
 // Layout: greeting block on the left (eyebrow date + serif headline);
 // 5 stats on the right at md+:
-//   1. Previous Score — last full-length sim's score (or em-dash if
-//      no sims) + 5-bar sparkline of last 5 sim scores.
-//   2. Goal — editable popover (numeric input 1..50) wired to
-//      updateGoal Server Action from commit 4.
-//   3. Days to test — editable popover (native date input) wired to
+//   1. Mistakes to review — count from commit 8 (links to /review).
+//   2. Days to test — editable popover (native date input) wired to
 //      updateTargetDate.
-//   4. Previous Pace — last full-length sim's median seconds-per-Q
+//   3. Goal — editable popover (numeric input 1..50) wired to
+//      updateGoal Server Action from commit 4.
+//   4. Previous Score — last full-length sim's score (or em-dash if
+//      no sims) + 5-bar sparkline of last 5 sim scores.
+//   5. Previous Pace — last full-length sim's median seconds-per-Q
 //      (or em-dash) + 5-bar sparkline of last 5 sim medians.
-//   5. Mistakes to review — count from commit 8 (links to /review).
 //
 // At sm and below, the 5-stat row wraps responsively beneath the
 // greeting (per ALPHA §8 + practice-round-plan §13's "doesn't break"
@@ -72,52 +72,6 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 				</h2>
 			</div>
 			<div className="flex flex-wrap items-end gap-6">
-				<div className="flex w-[110px] flex-col items-end text-right">
-					<StatTile
-						label="Previous score"
-						value={
-							<span className="tabular font-medium font-serif text-[22px] leading-none">
-								{currentDisplay}
-							</span>
-						}
-						align="right"
-					/>
-					<Sparkline data={score.last5SimScores} label="Previous score history" />
-				</div>
-				<ScoreStripPopover
-					triggerLabel="Goal"
-					triggerValue={
-						<span className="tabular font-medium font-serif text-[22px] text-cobalt leading-none">
-							{score.goal}
-						</span>
-					}
-					dialogLabel="Edit goal score"
-				>
-					{(close) => <GoalEditor initial={score.goal} onSaved={close} />}
-				</ScoreStripPopover>
-				<ScoreStripPopover
-					triggerLabel="Days to test"
-					triggerValue={
-						<span className="tabular font-medium font-serif text-[22px] leading-none">
-							{daysDisplay}
-						</span>
-					}
-					dialogLabel="Edit test date"
-				>
-					{(close) => <DaysToTestEditor currentMs={score.targetDateMs} onSaved={close} />}
-				</ScoreStripPopover>
-				<div className="flex w-[110px] flex-col items-end text-right">
-					<StatTile
-						label="Previous pace"
-						value={
-							<span className="tabular font-medium font-serif text-[22px] leading-none">
-								{paceDisplay}
-							</span>
-						}
-						align="right"
-					/>
-					<Sparkline data={pace.last5SimMedians} label="Previous pace history" />
-				</div>
 				<a
 					href={mistakesQueue.href}
 					className="flex flex-col items-end rounded-md text-right transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
@@ -132,6 +86,52 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 						align="right"
 					/>
 				</a>
+				<ScoreStripPopover
+					triggerLabel="Days to test"
+					triggerValue={
+						<span className="tabular font-medium font-serif text-[22px] leading-none">
+							{daysDisplay}
+						</span>
+					}
+					dialogLabel="Edit test date"
+				>
+					{(close) => <DaysToTestEditor currentMs={score.targetDateMs} onSaved={close} />}
+				</ScoreStripPopover>
+				<ScoreStripPopover
+					triggerLabel="Goal"
+					triggerValue={
+						<span className="tabular font-medium font-serif text-[22px] text-cobalt leading-none">
+							{score.goal}
+						</span>
+					}
+					dialogLabel="Edit goal score"
+				>
+					{(close) => <GoalEditor initial={score.goal} onSaved={close} />}
+				</ScoreStripPopover>
+				<div className="flex w-[110px] flex-col items-end text-right">
+					<StatTile
+						label="Previous score"
+						value={
+							<span className="tabular font-medium font-serif text-[22px] leading-none">
+								{currentDisplay}
+							</span>
+						}
+						align="right"
+					/>
+					<Sparkline data={score.last5SimScores} label="Previous score history" />
+				</div>
+				<div className="flex w-[110px] flex-col items-end text-right">
+					<StatTile
+						label="Previous pace"
+						value={
+							<span className="tabular font-medium font-serif text-[22px] leading-none">
+								{paceDisplay}
+							</span>
+						}
+						align="right"
+					/>
+					<Sparkline data={pace.last5SimMedians} label="Previous pace history" />
+				</div>
 			</div>
 		</section>
 	)
