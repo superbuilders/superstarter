@@ -1,0 +1,29 @@
+=== Pre-retrofit (current globals.css) ===
+--- Light mode ---
+✓ foreground vs background                           oklch(0.145 0 0)             on oklch(1 0 0)                 = 19.79:1 (need ≥4.5)
+✓ muted-foreground vs background                     oklch(0.556 0 0)             on oklch(1 0 0)                 = 4.73:1 (need ≥4.5)
+✗ muted-foreground vs muted                          oklch(0.556 0 0)             on oklch(0.97 0 0)              = 4.34:1 (need ≥4.5)
+✗ border vs background (3:1 non-text)                oklch(0.922 0 0)             on oklch(1 0 0)                 = 1.26:1 (need ≥3)
+--- Dark mode ---
+✓ foreground vs background                           oklch(0.985 0 0)             on oklch(0.145 0 0)             = 18.96:1 (need ≥4.5)
+✓ muted-foreground vs background                     oklch(0.708 0 0)             on oklch(0.145 0 0)             = 7.63:1 (need ≥4.5)
+✓ muted-foreground vs muted                          oklch(0.708 0 0)             on oklch(0.269 0 0)             = 5.83:1 (need ≥4.5)
+
+=== Post-retrofit (proposed Layer-A targets — hue 270, chroma 0.005-0.012) ===
+--- Light mode ---
+✓ foreground vs background                           oklch(0.145 0.012 270)       on oklch(0.99 0.005 270)        = 19.23:1 (need ≥4.5)
+✓ muted-foreground vs background (target 0.45)       oklch(0.45 0.012 270)        on oklch(0.99 0.005 270)        = 7.23:1 (need ≥4.5)
+✓ muted-foreground vs muted (target 0.45)            oklch(0.45 0.012 270)        on oklch(0.97 0.008 270)        = 6.82:1 (need ≥4.5)
+✓ muted-foreground alt 0.50 vs background            oklch(0.5 0.012 270)         on oklch(0.99 0.005 270)        = 5.83:1 (need ≥4.5)
+✓ muted-foreground alt 0.50 vs muted                 oklch(0.5 0.012 270)         on oklch(0.97 0.008 270)        = 5.50:1 (need ≥4.5)
+✗ border vs background (non-text 3:1)                oklch(0.92 0.008 270)        on oklch(0.99 0.005 270)        = 1.23:1 (need ≥3)
+✓ primary-foreground vs primary (button)             oklch(0.985 0.005 270)       on oklch(0.205 0.012 270)       = 17.16:1 (need ≥4.5)
+--- Dark mode ---
+✓ foreground vs background                           oklch(0.985 0.005 270)       on oklch(0.145 0.012 270)       = 18.96:1 (need ≥4.5)
+✓ muted-foreground vs background (preserve 0.708)    oklch(0.708 0.012 270)       on oklch(0.145 0.012 270)       = 7.63:1 (need ≥4.5)
+✓ muted-foreground vs muted (preserve 0.708)         oklch(0.708 0.012 270)       on oklch(0.269 0.012 270)       = 5.83:1 (need ≥4.5)
+✓ primary-foreground vs primary (button)             oklch(0.205 0.012 270)       on oklch(0.87 0.012 270)        = 12.09:1 (need ≥4.5)
+
+=== Sanity: destructive vs background (button-grade, AA ≥ 3:1 for non-text component) ===
+✓ destructive light vs background light              oklch(0.577 0.245 27)        on oklch(0.99 0.005 270)        = 4.63:1 (need ≥3)
+✓ destructive dark vs background dark                oklch(0.704 0.191 22)        on oklch(0.145 0.012 270)       = 6.85:1 (need ≥3)
