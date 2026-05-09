@@ -1,32 +1,30 @@
 // <BeltIndicator> — post-session walker-tier readout for drill mode.
 //
 // Plan: docs/plans/phase5-dojo-belt-indicator.md §5.1, §5.2, §5.5,
-// §5.6, §5.7.
+// §5.6, §5.7; Round 2 §5.5 (per docs/plans/post-session-audit-fixes-and-
+// wide-token-retrofit.md §0.5 + §5.5) refactored the inline SVG body to
+// consume the canonical `<BeltGraphic>` primitive (Option β: visual
+// unified with dashboard `<BeltStripe>` + `<BeltLegend>`; calibrating-
+// label logic preserved). Closes Round 1 §8 residual #9 — post-session
+// belt now consumes Layer-B `--belt-*` tokens (replacing the prior
+// Layer-A `fill-card` / `fill-foreground` / `fill-foreground/30..40` /
+// `fill-background/40` mix); visual parity with the dashboard belt.
 //
 // Pure presentational. Receives the walker's session-end tier (the
 // REQUESTED tier, not the served tier — the upstream query in
 // @/server/post-session/end-session-tier reads
-// `(fallback_from_tier ?? served_at_tier)` per SPEC §9.2). Renders an
-// SVG belt-shape colored per the 4-tier mapping plus a text label.
-// Dormant: no consumer wires it in commit 3 — commit 4 wires the
-// post-session shell + page query.
-//
-// Visual language follows <LatencyTrack> precedent (sub-phase 1
-// commit 4): a viewBox-anchored SVG with currentColor-bound fills
-// driven by Tailwind classes. The belt body is a single rounded
-// rectangle in the tier color; a thin contrast stripe at the right
-// end echoes the textile-stripe detail from real martial-arts belts
-// without adding a second token (the stripe rides on the existing
-// foreground-near-black token at varied opacity).
+// `(fallback_from_tier ?? served_at_tier)` per SPEC §9.2). Renders the
+// `<BeltGraphic>` primitive in the tier color plus a text label.
 //
 // Color mapping per plan §5.2:
-//   easy   → white  (existing --card token; outlined for visibility)
-//   medium → blue   (--belt-blue, net-new in commit 3)
-//   hard   → brown  (--belt-brown, net-new in commit 3)
-//   brutal → black  (existing --foreground token)
-// Two reused tokens + two new = below the .alpha-style.md "below-3
-// systemic-token" threshold per plan §6.3. The two new tokens are
-// belt-namespaced; commit 3's globals.css change documents this.
+//   easy   → white
+//   medium → blue
+//   hard   → brown
+//   brutal → black
+// The 4-tier mapping returns `BeltLevel` (imported from
+// `@/server/dashboard/types` — the canonical post-Round-1-dashboard
+// type origin; Round 2 §5.5 retired the locally-duplicated `BeltColor`
+// type union).
 //
 // Pre-floor branch (plan §5.5): when the walker's running window
 // has fewer than 10 attempts (ADAPTIVE_FLOOR_ATTEMPTS), the belt
@@ -36,10 +34,11 @@
 // that flag.
 //
 // Accessibility per plan §5.7:
-//   - role="img" on the outer wrapper so SR announces it as a single
-//     image rather than narrating each SVG primitive.
-//   - aria-label carries the full readable phrasing
-//     ("{Color} belt; {Tier} tier{; calibrating}").
+//   - `<BeltGraphic>` carries `role="img"` + the full tier+calibrating
+//     aria-label internally (passed via the `ariaLabel` prop). Outer
+//     wrapper is a plain `<div>` — Round 2 §5.5 dropped the outer
+//     `role="img"` + duplicate aria-label to avoid nested SR
+//     announcements.
 //   - The visible text label duplicates the SR phrasing so colorblind
 //     users get the same signal in text. Color alone never carries
 //     meaning per WCAG 1.4.1.
@@ -52,11 +51,11 @@
 // .alpha-style.md "respect prefers-reduced-motion outside the focus
 // shell" trivially.
 
+import { BeltGraphic } from "@/components/dashboard/belt-graphic"
 import type { Difficulty } from "@/config/sub-types"
+import type { BeltLevel } from "@/server/dashboard/types"
 
-type BeltColor = "white" | "blue" | "brown" | "black"
-
-function tierToBeltColor(tier: Difficulty): BeltColor {
+function tierToBeltColor(tier: Difficulty): BeltLevel {
 	if (tier === "easy") return "white"
 	if (tier === "medium") return "blue"
 	if (tier === "hard") return "brown"
@@ -65,7 +64,7 @@ function tierToBeltColor(tier: Difficulty): BeltColor {
 	return _exhaustive
 }
 
-function beltColorDisplayName(color: BeltColor): string {
+function beltColorDisplayName(color: BeltLevel): string {
 	if (color === "white") return "White"
 	if (color === "blue") return "Blue"
 	if (color === "brown") return "Brown"
@@ -83,35 +82,6 @@ function tierDisplayName(tier: Difficulty): string {
 	return _exhaustive
 }
 
-interface BeltStyle {
-	bodyClass: string
-	stripeClass: string
-}
-
-// White is the only color that needs an explicit outline because the
-// belt body rides on the same near-white surface as the page; without
-// a border the belt would visually disappear. The other three colors
-// have intrinsic contrast against the surface; their stripe rides on
-// the foreground color at low opacity.
-const BELT_STYLE_BY_COLOR: Record<BeltColor, BeltStyle> = {
-	white: {
-		bodyClass: "fill-card stroke-foreground/30 [stroke-width:1]",
-		stripeClass: "fill-foreground/40"
-	},
-	blue: {
-		bodyClass: "fill-belt-blue",
-		stripeClass: "fill-foreground/30"
-	},
-	brown: {
-		bodyClass: "fill-belt-brown",
-		stripeClass: "fill-foreground/40"
-	},
-	black: {
-		bodyClass: "fill-foreground",
-		stripeClass: "fill-background/40"
-	}
-}
-
 interface BeltIndicatorProps {
 	tier: Difficulty
 	subTypeDisplayName: string
@@ -122,7 +92,6 @@ function BeltIndicator(props: BeltIndicatorProps) {
 	const color = tierToBeltColor(props.tier)
 	const colorName = beltColorDisplayName(color)
 	const tierName = tierDisplayName(props.tier)
-	const style = BELT_STYLE_BY_COLOR[color]
 
 	const calibratingSuffix = props.isPreFloor ? "; calibrating" : ""
 	const ariaLabel = `${colorName} belt; ${tierName} tier${calibratingSuffix}.`
@@ -136,39 +105,16 @@ function BeltIndicator(props: BeltIndicatorProps) {
 
 	return (
 		<div
-			aria-label={ariaLabel}
 			className="space-y-2"
+			data-belt-color={color}
 			data-testid="belt-indicator"
 			data-tier={props.tier}
-			data-belt-color={color}
-			role="img"
 		>
-			<svg
-				aria-hidden="true"
-				className="h-4 w-full max-w-[12rem] overflow-visible"
-				viewBox="0 0 100 16"
-				xmlns="http://www.w3.org/2000/svg"
-			>
-				{/* Belt body — rounded rectangle in the tier color. */}
-				<rect
-					className={style.bodyClass}
-					height="14"
-					rx="3"
-					width="100"
-					x="0"
-					y="1"
-				/>
-				{/* Textile stripe — vertical band at the right end,
-				    echoing the real martial-arts belt detail. */}
-				<rect
-					className={style.stripeClass}
-					height="10"
-					rx="1"
-					width="3"
-					x="82"
-					y="3"
-				/>
-			</svg>
+			<BeltGraphic
+				ariaLabel={ariaLabel}
+				beltColor={color}
+				className="h-5 w-full max-w-[12rem]"
+			/>
 			<p className="text-foreground text-sm">
 				You reached the{" "}
 				<span className="font-medium" data-testid="belt-indicator-color-name">
@@ -184,5 +130,5 @@ function BeltIndicator(props: BeltIndicatorProps) {
 	)
 }
 
-export type { BeltColor, BeltIndicatorProps }
+export type { BeltIndicatorProps }
 export { BeltIndicator, beltColorDisplayName, tierDisplayName, tierToBeltColor }
