@@ -20,9 +20,13 @@ interface DojoCardProps {
 	title: string
 	meta: string
 	rows: ReadonlyArray<SubtypeRow>
+	/** Unix-ms snapshot of "now" — threaded through to every <BeltRow>'s
+	 * relative-time formatter so all rows in the card agree on a single
+	 * clock per render (resolved once at the dashboard root). */
+	nowMs: number
 }
 
-function DojoCard({ title, meta, rows }: DojoCardProps) {
+function DojoCard({ title, meta, rows, nowMs }: DojoCardProps) {
 	return (
 		<section className="overflow-hidden rounded-lg border border-border-soft bg-surface">
 			<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-3 pb-2">
@@ -35,7 +39,7 @@ function DojoCard({ title, meta, rows }: DojoCardProps) {
 				{rows.map(function renderRow(row) {
 					return (
 						<li key={row.id}>
-							<BeltRow row={row} />
+							<BeltRow row={row} nowMs={nowMs} />
 						</li>
 					)
 				})}

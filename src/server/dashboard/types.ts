@@ -30,8 +30,12 @@ interface SubtypeRow {
 	 * desired later, the fix lives at the config source. */
 	name: string
 	belt: BeltLevel
-	/** 0..1, fraction of promotion window met. Clamped at the call site. */
-	progressToNext: number
+	/** Unix-ms of the user's most-recent drill attempt against this
+	 * sub-type, derived from the attempt's UUIDv7 prefix; undefined
+	 * when the user has never drilled this sub-type. Drives both the
+	 * row's "last drilled" text and the dashboard's last-worked-on
+	 * sort key. */
+	lastAttemptedAtMs?: number
 	/** True if recent accuracy < 65% or median time > target by 30%+ */
 	atRisk: boolean
 	/** Where "drill this" navigates */

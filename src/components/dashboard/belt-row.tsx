@@ -1,10 +1,11 @@
 // <BeltRow> — one sub-type row in a <DojoCard>. Dashboard PRD §10.2
 // + `docs/plans/dashboard.md` §5 commit 7.
 //
-// Renders: belt + name (+ optional at-risk dot) + thin progress bar
-// + chevron. The whole row is a Next.js <Link>; hover lightens the
-// surface; focus-visible shows a cobalt 2px inset outline (so the
-// row's grid can't shift sibling rows when focus lands on one).
+// Renders: belt + name (+ optional at-risk dot) + last-drilled
+// relative time + chevron. The whole row is a Next.js <Link>; hover
+// lightens the surface; focus-visible shows a cobalt 2px inset
+// outline (so the row's grid can't shift sibling rows when focus
+// lands on one).
 //
 // Inset focus ring (PRD §10.2 + ALPHA §7 + plan §4 reconciliation):
 // ALPHA prefers outside focus rings, but the row's grid layout
@@ -12,12 +13,18 @@
 // inset cobalt-on-lavender contrast clears 3:1 per ALPHA's "≥3:1
 // against neighbors" requirement, so the deviation is sound.
 //
-// Progress-bar shape: SVG (NOT a styled <div> with style={{ width:
-// `${pct}%` }}). The project's gritql/no-inline-style.grit bans the
-// style={{}} prop; latency-summary.tsx (sub-phase 1) is the canonical
-// precedent — SVG attributes (x, y, width, height) accept dynamic
-// JSX values cleanly without violating the rule. PRD §10.2's listing
-// uses style={{ width: ... }}; we adapt to project convention here.
+// Last-drilled column: replaced the original thin progress bar
+// (SVG) with right-aligned dim text reading "<Coarse interval>
+// ago" (e.g., "1 day ago") or "Never" for sub-types the user has
+// never drilled. The column is also the dashboard's last-worked-on
+// sort key (computed off SubtypeRow.lastAttemptedAtMs in
+// <Dashboard>).
+//
+// Time shown is computed from a single `nowMs` prop the parent
+// resolves once per render. Reading the clock in the parent (not
+// per-row) keeps every row in the dojo card consistent and makes
+// the formatter pure-function-of-(past,now), which the unit test at
+// src/lib/relative-time.test.ts depends on.
 //
 // At-risk semantics: a 6px cobalt-warning dot with role="img" so
 // the aria-label="at risk" is valid per ARIA spec. Title attribute
@@ -36,20 +43,21 @@
 
 import { ChevronRightIcon } from "lucide-react"
 import { BeltStripe } from "@/components/dashboard/belt-stripe"
-import { clamp01 } from "@/server/dashboard/helpers"
+import { formatRelativePast } from "@/lib/relative-time"
 import type { SubtypeRow } from "@/server/dashboard/types"
-
-const PROGRESS_TRACK_WIDTH = 64
-const PROGRESS_TRACK_HEIGHT = 3
-const PROGRESS_TRACK_RADIUS = 2
 
 interface BeltRowProps {
 	row: SubtypeRow
+	/** Unix-ms snapshot of "now" for the relative-time formatter.
+	 * Resolved once per render by the parent dojo so all rows agree. */
+	nowMs: number
 }
 
-function BeltRow({ row }: BeltRowProps) {
-	const fillFraction = clamp01(row.progressToNext)
-	const fillWidth = fillFraction * PROGRESS_TRACK_WIDTH
+function BeltRow({ row, nowMs }: BeltRowProps) {
+	const lastDrilledLabel =
+		row.lastAttemptedAtMs === undefined
+			? "Never"
+			: formatRelativePast(row.lastAttemptedAtMs, nowMs)
 	const atRiskDot = row.atRisk ? (
 		<span
 			role="img"
@@ -61,36 +69,16 @@ function BeltRow({ row }: BeltRowProps) {
 	return (
 		<a
 			href={row.href}
-			className="grid grid-cols-[44px_1fr_64px_16px] items-center gap-[10px] border-border-soft border-b px-4 py-[9px] text-sm transition-colors duration-150 ease-out last:border-b-0 hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:-outline-offset-2"
+			className="grid grid-cols-[44px_1fr_auto_16px] items-center gap-[10px] border-border-soft border-b px-4 py-[9px] text-sm transition-colors duration-150 ease-out last:border-b-0 hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:-outline-offset-2"
 		>
 			<BeltStripe belt={row.belt} ariaContext={row.name} />
 			<span className="flex items-center gap-[6px] font-medium text-text-1">
 				<span>{row.name}</span>
 				{atRiskDot}
 			</span>
-			<svg
-				viewBox={`0 0 ${PROGRESS_TRACK_WIDTH} ${PROGRESS_TRACK_HEIGHT}`}
-				preserveAspectRatio="none"
-				aria-hidden="true"
-				className="h-[3px] w-full"
-			>
-				<rect
-					x={0}
-					y={0}
-					width={PROGRESS_TRACK_WIDTH}
-					height={PROGRESS_TRACK_HEIGHT}
-					rx={PROGRESS_TRACK_RADIUS}
-					className="fill-surface-2"
-				/>
-				<rect
-					x={0}
-					y={0}
-					width={fillWidth}
-					height={PROGRESS_TRACK_HEIGHT}
-					rx={PROGRESS_TRACK_RADIUS}
-					className="fill-alpha-accent"
-				/>
-			</svg>
+			<span className="whitespace-nowrap text-[12px] text-text-3 tabular-nums">
+				{lastDrilledLabel}
+			</span>
 			<ChevronRightIcon aria-hidden="true" className="h-[14px] w-[14px] text-text-3" />
 		</a>
 	)
