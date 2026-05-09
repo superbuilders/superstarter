@@ -25,7 +25,8 @@
 // line.
 
 import type { SurfacedStrategy } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
-import { type SubTypeId, subTypes } from "@/config/sub-types"
+import { SUB_TYPE_BY_ID, compareBySubTypeDisplay } from "@/components/post-session/_lib/sub-type-display"
+import type { SubTypeId } from "@/config/sub-types"
 
 interface StrategySurfaceProps {
 	strategies: ReadonlyArray<SurfacedStrategy>
@@ -36,19 +37,6 @@ interface DisplayRow {
 	displayName: string
 	section: "verbal" | "numerical"
 	strategy: SurfacedStrategy
-}
-
-const SUB_TYPE_BY_ID = new Map(
-	subTypes.map(function entry(t) {
-		return [t.id, t]
-	})
-)
-
-function compareDisplay(a: DisplayRow, b: DisplayRow): number {
-	if (a.section !== b.section) {
-		return a.section === "verbal" ? -1 : 1
-	}
-	return a.displayName.localeCompare(b.displayName)
 }
 
 function buildDisplay(strategies: ReadonlyArray<SurfacedStrategy>): DisplayRow[] {
@@ -63,7 +51,7 @@ function buildDisplay(strategies: ReadonlyArray<SurfacedStrategy>): DisplayRow[]
 			strategy: s
 		})
 	}
-	rows.sort(compareDisplay)
+	rows.sort(compareBySubTypeDisplay)
 	return rows
 }
 
@@ -113,4 +101,4 @@ function StrategySurface(props: StrategySurfaceProps) {
 }
 
 export type { StrategySurfaceProps }
-export { buildDisplay, compareDisplay, StrategySurface }
+export { buildDisplay, StrategySurface }

@@ -33,7 +33,8 @@
 // internal proportion, never surfaced as text.
 
 import type { PerSubTypeLatency } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
-import { type SubTypeId, subTypes } from "@/config/sub-types"
+import { SUB_TYPE_BY_ID, compareBySubTypeDisplay } from "@/components/post-session/_lib/sub-type-display"
+import type { SubTypeId } from "@/config/sub-types"
 
 interface LatencySummaryProps {
 	rows: ReadonlyArray<PerSubTypeLatency>
@@ -45,19 +46,6 @@ interface DisplayRow {
 	section: "verbal" | "numerical"
 	medianLatencyMs: number
 	thresholdMs: number
-}
-
-const SUB_TYPE_BY_ID = new Map(
-	subTypes.map(function entry(t) {
-		return [t.id, t]
-	})
-)
-
-function compareRows(a: DisplayRow, b: DisplayRow): number {
-	if (a.section !== b.section) {
-		return a.section === "verbal" ? -1 : 1
-	}
-	return a.displayName.localeCompare(b.displayName)
 }
 
 function buildDisplayRows(rows: ReadonlyArray<PerSubTypeLatency>): DisplayRow[] {
@@ -75,7 +63,7 @@ function buildDisplayRows(rows: ReadonlyArray<PerSubTypeLatency>): DisplayRow[] 
 			thresholdMs: meta.latencyThresholdMs
 		})
 	}
-	display.sort(compareRows)
+	display.sort(compareBySubTypeDisplay)
 	return display
 }
 
@@ -205,4 +193,4 @@ function LatencySummary(props: LatencySummaryProps) {
 }
 
 export type { LatencySummaryProps }
-export { buildDisplayRows, compareRows, formatSeconds, LatencySummary, markerPosition }
+export { buildDisplayRows, formatSeconds, LatencySummary, markerPosition }

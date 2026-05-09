@@ -21,7 +21,8 @@
 // counts use a tabular feature so rows align vertically.
 
 import type { PerSubTypeAccuracy } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
-import { type SubTypeId, subTypes } from "@/config/sub-types"
+import { SUB_TYPE_BY_ID, compareBySubTypeDisplay } from "@/components/post-session/_lib/sub-type-display"
+import type { SubTypeId } from "@/config/sub-types"
 
 interface AccuracySummaryProps {
 	rows: ReadonlyArray<PerSubTypeAccuracy>
@@ -33,19 +34,6 @@ interface DisplayRow {
 	section: "verbal" | "numerical"
 	correct: number
 	total: number
-}
-
-const SUB_TYPE_BY_ID = new Map(
-	subTypes.map(function entry(t) {
-		return [t.id, t]
-	})
-)
-
-function compareRows(a: DisplayRow, b: DisplayRow): number {
-	if (a.section !== b.section) {
-		return a.section === "verbal" ? -1 : 1
-	}
-	return a.displayName.localeCompare(b.displayName)
 }
 
 function buildDisplayRows(rows: ReadonlyArray<PerSubTypeAccuracy>): DisplayRow[] {
@@ -63,7 +51,7 @@ function buildDisplayRows(rows: ReadonlyArray<PerSubTypeAccuracy>): DisplayRow[]
 			total: r.total
 		})
 	}
-	display.sort(compareRows)
+	display.sort(compareBySubTypeDisplay)
 	return display
 }
 
@@ -112,4 +100,4 @@ function AccuracySummary(props: AccuracySummaryProps) {
 }
 
 export type { AccuracySummaryProps }
-export { AccuracySummary, buildDisplayRows, compareRows }
+export { AccuracySummary, buildDisplayRows }

@@ -317,7 +317,7 @@ This commit ships the plan-doc revision only; no `src/` files touched. Next comm
 
 ### §1.2 Q5 = Option γ — adds SPEC dual-layer codification commit
 
-Per Leo's redirect, Q5 lands as **Option γ** (Layer-A retrofit + SPEC dual-layer codification). The SPEC commit is a new entry (commit 1 in the round's ledger), authored standalone before the Layer-A retrofit (commit 2) so the SPEC entry exists as the authoritative cross-reference for the retrofit's commit body. Empirical commit envelope updates from 13 implementation commits (the round-opening redline's estimate) to **14 total** post-§0.14 retirement (was 15 pre-retirement; §5.3 RETIRED-not-renumbered consumed by the plan-doc revision commit that logs the retirement decision per §0.14).
+Per Leo's redirect, Q5 lands as **Option γ** (Layer-A retrofit + SPEC dual-layer codification). The SPEC commit is a new entry (commit 1 in the round's ledger), authored standalone before the Layer-A retrofit (commit 2) so the SPEC entry exists as the authoritative cross-reference for the retrofit's commit body. Empirical commit envelope: **15 commits** post-§5.4a insertion (= 14 post-§0.14 retirement + 1 §5.4a NEW − 0 §5.10 RETIRED; the §5.10 retirement is a slot-consumed-by-§5.4a model where slot 10 carries no implementation work but stays in the ledger for cross-reference stability). Net commit count tracks the round-opening 13-14 envelope estimate at the +2 mark (γ adds SPEC codification; §5.4a adds the lib-extraction-before-combine).
 
 ### §1.3 Explicitly deferred out-of-scope (per round-opening redline + audit-time forward-pins)
 
@@ -396,7 +396,7 @@ Round 2 inherits Round 1's discipline patterns:
 
 ## §4 — Cost envelope
 
-No LLM cost this round (no generation / validation work). Round cost is engineer-time only. Empirical commit envelope per §1.2 + §5 (post-§0.14 retirement): **14 commits** (1 plan-doc creation + 12 implementation + 1 round-close, with §5.3 RETIRED-not-renumbered consumed by the plan-doc revision commit per §0.14). Estimated wall time: **1-2 days** at the round's typical commit pace.
+No LLM cost this round (no generation / validation work). Round cost is engineer-time only. Empirical commit envelope per §1.2 + §5 (post-§0.14 retirement + §5.4a insertion): **15 commits** (1 plan-doc creation + §5.1 SPEC + §5.2 Layer-A retrofit + §5.3 RETIRED-not-renumbered + §5.4a lib extraction + §5.4-§5.9 (6 commits) + §5.10 RETIRED-not-renumbered + §5.11-§5.14 (4 commits) + §5.15 round-close). Estimated wall time: **1-2 days** at the round's typical commit pace.
 
 ---
 
@@ -466,6 +466,26 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 > **Verification.** Visual diff of post-session onboarding section; manual contrast measurement (DevTools or browser pick-ratio); confirm AA ≥ 4.5:1.
 >
 > **Stop-and-report.** Do not proceed to commit 4 until redirect.
+
+### §5.4a — Commit 4 (inserted): extract shared `_lib/sub-type-display.ts` (supersedes original §5.10)
+
+**Hash:** `<TBD; backfilled at round-close>`.
+
+**Files touched.**
+- `src/components/post-session/_lib/sub-type-display.ts` — NEW (~52 lines). Exports `SUB_TYPE_BY_ID: ReadonlyMap<SubTypeId, SubTypeConfig>` (canonical Map; replaces 4 local Maps) + `compareBySubTypeDisplay(a: SubTypeIdHaver, b: SubTypeIdHaver): number` (verbal-section-first, alphabetical-by-displayName-within-section; validates meta exists via `errors.new()` defensive throw with `logger.error` — defense-in-depth since `buildDisplayRows` upstream filters undefined-meta cases).
+- `src/components/post-session/_lib/sub-type-display.test.ts` — NEW (~75 lines). 6 test cases: SUB_TYPE_BY_ID size + shape coverage; comparator verbal-vs-numerical ordering; alphabetical-within-section; identical-id zero; full 15-sub-type sort invariant. The throw-on-unknown-id path is unreachable through type-safe call sites + the project's `no-as-type-assertion` rule prohibits bypassing the type system to test it; defensive branch documented in implementation comment + this test note.
+- `src/components/post-session/accuracy-summary.tsx` — drop local `SUB_TYPE_BY_ID` + `compareRows`; import shared. Drop `subTypes` from imports (still need `SubTypeId`). Drop `compareRows` from exports.
+- `src/components/post-session/latency-summary.tsx` — same shape.
+- `src/components/post-session/strategy-surface.tsx` — drop local `SUB_TYPE_BY_ID` + `compareDisplay`; import shared. Drop `subTypes` from imports. Drop `compareDisplay` from exports.
+- `src/components/post-session/wrong-items-browser.tsx` — drop local `SUB_TYPE_BY_ID` + `compareGroups`; import shared. Drop `subTypes` from imports. Drop `compareGroups` from exports.
+
+**Audit step.** Pre-flight: (a) read all 4 components' compare functions verbatim — confirmed body-identical (verbal-first ternary + `localeCompare` on `displayName`). (b) confirmed canonical `subTypes` source at `@/config/sub-types` with `SubTypeConfig` exported. (c) confirmed generic `SubTypeIdHaver { subTypeId: SubTypeId }` accepts all 4 row types (`DisplayRow` × 3, `DisplayGroup` × 1). (d) decided **add tests** since the lib is shared infrastructure — ~75 lines covering 6 invariant cases. (e) confirmed original §5.10 fully superseded — no remaining scope after §5.4a; RETIRED-as-superseded with quote-preservation per §6.14.20. (f) confirmed no external consumers of the dropped local exports (`compareRows`, `compareGroups`, `compareDisplay`, `SUB_TYPE_BY_ID`, `buildDisplayRows`) via grep — safe to drop from export lists.
+
+**Implementation notes.** Per Leo's 2026-05-09 redirect (reorder §5.10 before §5.4 so `<PerformanceSummary>` imports the canonical lib from day one; avoids retrofit pass at original §5.10 slot). The lib's `compareBySubTypeDisplay` looks up meta inside the comparator (handles any `SubTypeIdHaver`); each component still pre-projects `displayName` + `section` into its `DisplayRow` / `DisplayGroup` shape via the shared `SUB_TYPE_BY_ID.get()` pattern (preserves render-time behavior — no architectural shift to look-up-on-demand).
+
+**Verification.** `bun test` — 117 pass (was 111; +6 from new test file) / 0 fail / 16 files (was 15). Lint (Biome + super-lint) clean across 1128 files (was 1126; +2 lib + test). Typecheck (tsgo --noEmit) clean. Behavior preservation: same sort output across all 4 components (verbal-first, alphabetical-within-section); test invariants encode this empirically.
+
+**Stop-and-report.** Do not proceed to §5.4 (combined `<PerformanceSummary>`) until redirect.
 
 ### §5.4 — Commit 4: combined `<PerformanceSummary>` (replaces `<AccuracySummary>` + `<LatencySummary>`)
 
@@ -564,22 +584,30 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 **Stop-and-report.** Do not proceed to commit 10 until redirect.
 
-### §5.10 — Commit 10: §B.3 shared `_lib/sub-type-display.ts` (remaining components)
+### §5.10 — Commit 10: §B.3 shared `_lib/sub-type-display.ts` — RETIRED per §5.4a
 
-**Hash:** `<TBD>`.
+**Hash:** RETIRED — slot consumed by §5.4a's pre-pone of the same extraction (Leo's 2026-05-09 redirect; original §5.10 reduces to zero scope after §5.4a migrates all 4 components in a single pass).
 
-**Files touched.**
-- `src/components/post-session/_lib/sub-type-display.ts` — NEW. Exports `SUB_TYPE_BY_ID: Map<SubTypeId, SubTypeMeta>` + `compareBySubTypeDisplay(a, b): number`.
-- `src/components/post-session/strategy-surface.tsx` — replace local `SUB_TYPE_BY_ID` + `compareGroups` with imports.
-- `src/components/post-session/wrong-items-browser.tsx` — replace local `SUB_TYPE_BY_ID` + `compareDisplay` with imports.
+RETIRED-as-superseded per §5.4a (2026-05-09). Commit 10 in the ledger is now empty — the shared `_lib/sub-type-display.ts` extraction was pre-poned to §5.4a (commit 4) so `<PerformanceSummary>` (commit 5) imports the canonical lib from day one. The original §5.10 scope (extract for `<StrategySurface>` + `<WrongItemsBrowser>` post-commit-4 fold) was absorbed into §5.4a's single-pass migration of all 4 components. Commit slot 10 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline (commits 11-15 keep their existing slot numbers).
 
-**Audit step.** Pre-flight: (a) re-read all four components' compare functions (already collapsed to two post-commit-4: `<PerformanceSummary>` + `<StrategySurface>` + `<WrongItemsBrowser>`; `<PerformanceSummary>` may also import the shared lib). (b) confirm `compareRows` body in `<PerformanceSummary>` matches the body in `<StrategySurface>` + `<WrongItemsBrowser>` (verbal-first, alphabetical-within-section). (c) decide `<PerformanceSummary>` consumption: import shared OR keep local (since commit 4 already collapsed two — slight argument for shared if commit 10's extraction lands the canonical version).
-
-**Implementation notes.** Per audit doc §B.3 fix-shape. Net reduction ~20 lines across the three files (was 4 components in audit doc; commit 4 already collapsed to 3). Reduces future drift risk.
-
-**Verification.** `bun test` (any sort tests still pass against the shared lib). Lint + typecheck clean.
-
-**Stop-and-report.** Do not proceed to commit 11 until redirect.
+> **Original §5.10 (pre-§5.4a retirement, preserved per SPEC §6.14.20).**
+>
+> ### §5.10 — Commit 10: §B.3 shared `_lib/sub-type-display.ts` (remaining components)
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - `src/components/post-session/_lib/sub-type-display.ts` — NEW. Exports `SUB_TYPE_BY_ID: Map<SubTypeId, SubTypeMeta>` + `compareBySubTypeDisplay(a, b): number`.
+> - `src/components/post-session/strategy-surface.tsx` — replace local `SUB_TYPE_BY_ID` + `compareGroups` with imports.
+> - `src/components/post-session/wrong-items-browser.tsx` — replace local `SUB_TYPE_BY_ID` + `compareDisplay` with imports.
+>
+> **Audit step.** Pre-flight: (a) re-read all four components' compare functions (already collapsed to two post-commit-4: `<PerformanceSummary>` + `<StrategySurface>` + `<WrongItemsBrowser>`; `<PerformanceSummary>` may also import the shared lib). (b) confirm `compareRows` body in `<PerformanceSummary>` matches the body in `<StrategySurface>` + `<WrongItemsBrowser>` (verbal-first, alphabetical-within-section). (c) decide `<PerformanceSummary>` consumption: import shared OR keep local (since commit 4 already collapsed two — slight argument for shared if commit 10's extraction lands the canonical version).
+>
+> **Implementation notes.** Per audit doc §B.3 fix-shape. Net reduction ~20 lines across the three files (was 4 components in audit doc; commit 4 already collapsed to 3). Reduces future drift risk.
+>
+> **Verification.** `bun test` (any sort tests still pass against the shared lib). Lint + typecheck clean.
+>
+> **Stop-and-report.** Do not proceed to commit 11 until redirect.
 
 ### §5.11 — Commit 11: §A.5.f1 continue-button copy refinement
 
@@ -686,6 +714,7 @@ Final state for each Open Q + scope flag (per Leo's 2026-05-09 redirect):
 - **SF-C `/phase3-smoke` non-production:** **RESOLVED via Q2** (excluded from Round 2 verification surface walk).
 - **SF-D §B.6 mobile real-device verification:** **RESOLVED via Q6** (deferred to Round 3+).
 - **§A.4.f1 onboarding skip-link contrast (P1):** **RESOLVED via Round 2 commit 2 system-level cascade** (per §0.14 + §5.3 retirement). Empirical post-retrofit contrast: 7.23:1 (AAA). Per-consumer class swap (audit doc §A.4.f1 fix-shape `text-muted-foreground → text-foreground/80`) was retired-as-superseded — the underlying concern closed at the token-definition layer where every consumer benefits symmetrically.
+- **§B.3 sub-type sort-DRY drift (P2):** **RESOLVED via Round 2 commit 4 (§5.4a)** — single shared `_lib/sub-type-display.ts` extracted with `SUB_TYPE_BY_ID` + `compareBySubTypeDisplay` consumed by all 4 components (`<AccuracySummary>`, `<LatencySummary>`, `<StrategySurface>`, `<WrongItemsBrowser>`) in a single-pass migration. Original §5.10 (extract-after-combine) RETIRED-not-renumbered as superseded; §5.4a (extract-before-combine) lands the canonical lib so `<PerformanceSummary>` (commit 5 = §5.4) imports from day one. Net DRY win: 4 local Maps + 4 compare functions → 1 of each, +75 lines of test coverage.
 
 ---
 

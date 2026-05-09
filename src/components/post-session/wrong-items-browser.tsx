@@ -60,8 +60,9 @@ import * as React from "react"
 import { z } from "zod"
 import type { WrongItem } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { TextBody } from "@/components/item/body-renderers/text"
+import { SUB_TYPE_BY_ID, compareBySubTypeDisplay } from "@/components/post-session/_lib/sub-type-display"
 import { StructuredExplanation } from "@/components/post-session/structured-explanation"
-import { type SubTypeId, subTypes } from "@/config/sub-types"
+import type { SubTypeId } from "@/config/sub-types"
 import { logger } from "@/logger"
 import { itemBody, type ItemBody } from "@/server/items/body-schema"
 
@@ -76,12 +77,6 @@ interface DisplayGroup {
 	items: WrongItem[]
 }
 
-const SUB_TYPE_BY_ID = new Map(
-	subTypes.map(function entry(t) {
-		return [t.id, t]
-	})
-)
-
 const optionShapeSchema = z.object({
 	id: z.string(),
 	text: z.string()
@@ -90,13 +85,6 @@ const optionShapeSchema = z.object({
 const optionsArraySchema = z.array(optionShapeSchema)
 
 type OptionShape = z.infer<typeof optionShapeSchema>
-
-function compareGroups(a: DisplayGroup, b: DisplayGroup): number {
-	if (a.section !== b.section) {
-		return a.section === "verbal" ? -1 : 1
-	}
-	return a.displayName.localeCompare(b.displayName)
-}
 
 function compareAttemptIdAsc(a: WrongItem, b: WrongItem): number {
 	// UUIDv7 string comparison = chronological order (RFC 9562 byte
@@ -129,7 +117,7 @@ function buildDisplayGroups(items: ReadonlyArray<WrongItem>): DisplayGroup[] {
 			items: sortedItems
 		})
 	}
-	groups.sort(compareGroups)
+	groups.sort(compareBySubTypeDisplay)
 	return groups
 }
 
@@ -403,7 +391,6 @@ export {
 	BodyDispatch,
 	buildDisplayGroups,
 	compareAttemptIdAsc,
-	compareGroups,
 	letterFor,
 	OptionLine,
 	WrongItemCard,
