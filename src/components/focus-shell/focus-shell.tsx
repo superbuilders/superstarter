@@ -413,8 +413,9 @@ function FocusShell(props: FocusShellProps) {
 	// Session auto-end (commit 7). When the session timer reaches zero,
 	// fire onEndSession and navigate to /post-session/<sessionId>.
 	// Diagnostic sessions pass `sessionDurationMs={null}` and skip this
-	// branch — the diagnostic uses the server-side cutoff in
-	// submitAttempt instead (polish-plan §3.1 / §4.2). Same
+	// branch — the diagnostic is untimed at the session level per PRD
+	// §4.1 capacity-measurement framing (the polish-round 15-min
+	// server-side cutoff was reverted; see plan-doc §0.15). Same
 	// double-guard as commit 6's dong: reducer flag is canonical state,
 	// useRef is the synchronous race-prevention.
 	const router = useRouter()

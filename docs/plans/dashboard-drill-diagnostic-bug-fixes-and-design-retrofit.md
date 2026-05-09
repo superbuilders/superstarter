@@ -42,13 +42,19 @@ Dashboard ranking read path: server component at `src/app/(app)/page.tsx:30-55` 
 
 **Root cause hypothesis: missing dashboard cache invalidation.** Likely fix: add `revalidatePath('/')` after the workflow trigger in `endSession` action (or, less surgically, set `dynamic = 'force-dynamic'` on the dashboard page). Surgical fix preferred; the dashboard staying RSC-cached for non-mastery-changing visits is a perf benefit to preserve.
 
-### §0.5 Diagnostic timer/bar absence (audit step #5)
+### §0.5 Diagnostic timer/bar absence (audit step #5) — RETRACTED per §0.15
 
-Diagnostic invokes `<FocusShell>` at `src/app/(diagnostic-flow)/diagnostic/run/content.tsx:48-57` with `sessionDurationMs={null}`, `paceTrackVisible={false}`, `targetQuestionCount={50}`. Drill invokes `<FocusShell>` at `src/app/(app)/drill/[subTypeId]/run/content.tsx:43-52` with `sessionDurationMs={drillLength * 18_000}`, `paceTrackVisible={true}`, `targetQuestionCount={init.drillLength}`.
+Audit-trail only. The diagnostic stays untimed at the session level per PRD §4.1 capacity-measurement framing; no client-side timer or progress bar. The "server-side 15-minute cutoff that already gates diagnostic submissions" cited in the original audit below was reverted earlier in this round (evidence: `src/server/mastery/compute.test.ts:5-10`, `src/app/(app)/actions.ts:141-146`, zero hits in `src/server/sessions/submit.ts`). The audit's premise was therefore stale; executing on it would have re-introduced via `focus-shell.tsx:411-447`'s `maybeAutoEndSession` effect the very 15-min hard cap this round reverted server-side. Diagnostic timing re-introduction is queued as a sidecar round per §0.15. Original audit prose preserved below per SPEC §6.14.20.
 
-`<FocusShell>` at `src/components/focus-shell/focus-shell.tsx:265-285` short-circuits both the chronometer (MM:SS) and `<SessionTimerBar>` (progress bar) when `sessionDurationMs === null`. The intentional comment at lines 265-267 reads "Hidden entirely when the session has no duration (diagnostic)."
-
-**Root cause: deliberate `sessionDurationMs={null}` on diagnostic, encoding the historical "no session timer for diagnostic" decision that the redline now reverses.** Fix shape: change diagnostic's `sessionDurationMs` from `null` to `50 * 18_000` (= 900_000ms = 15 minutes), matching drill's pattern. The server-side 15-minute cutoff that already gates diagnostic submissions stays unchanged. **One-line fix on the diagnostic side; no FocusShell changes.**
+> **Original §0.5 (pre-§0.15 retraction, preserved per SPEC §6.14.20).**
+>
+> ### §0.5 Diagnostic timer/bar absence (audit step #5)
+>
+> Diagnostic invokes `<FocusShell>` at `src/app/(diagnostic-flow)/diagnostic/run/content.tsx:48-57` with `sessionDurationMs={null}`, `paceTrackVisible={false}`, `targetQuestionCount={50}`. Drill invokes `<FocusShell>` at `src/app/(app)/drill/[subTypeId]/run/content.tsx:43-52` with `sessionDurationMs={drillLength * 18_000}`, `paceTrackVisible={true}`, `targetQuestionCount={init.drillLength}`.
+>
+> `<FocusShell>` at `src/components/focus-shell/focus-shell.tsx:265-285` short-circuits both the chronometer (MM:SS) and `<SessionTimerBar>` (progress bar) when `sessionDurationMs === null`. The intentional comment at lines 265-267 reads "Hidden entirely when the session has no duration (diagnostic)."
+>
+> **Root cause: deliberate `sessionDurationMs={null}` on diagnostic, encoding the historical "no session timer for diagnostic" decision that the redline now reverses.** Fix shape: change diagnostic's `sessionDurationMs` from `null` to `50 * 18_000` (= 900_000ms = 15 minutes), matching drill's pattern. The server-side 15-minute cutoff that already gates diagnostic submissions stays unchanged. **One-line fix on the diagnostic side; no FocusShell changes.**
 
 ### §0.6 Audio cadence (audit step #6)
 
@@ -184,6 +190,60 @@ Multi-instance pattern strong; round-close §6.14 entry candidate per the second
 
 **Sections revised under this redirect.** §1 (in-scope list — drop two bullets, stack a second quote-preservation block), §2.1 (REMOVED — corpus retired), §2.2 (REMOVED — corpus retired), §5.5 (RETIRED — implementation discontinued), §5.6 (RETIRED — implementation discontinued), §5 intro paragraph (one-line addendum noting §5.5+§5.6 retirement). Audit-trail-of-superseded-state in §0.8 audit prose, §0.10 Q2 resolution, and §7 Q2 resolution are flagged here for round-close revision; left in place mid-flight per §6.14.20 quote-preservation spirit (mirrors §0.13's collateral-handling decision for §0.10 Q4 / §5 intro / §7 Q4).
 
+### §0.15 Mid-round redirect — retract §5.11 (diagnostic timer/bar) per audit-vs-revert blindness (2026-05-09)
+
+Per Leo's mid-round redirect on 2026-05-09, the round retracts §5.11 (commit 11: diagnostic timer/bar fix) entirely. The diagnostic stays `sessionDurationMs={null}` (untimed at the session level per PRD §4.1 capacity-measurement framing). No client-side timer. No progress bar. No `<FocusShell>` changes. The only code change in this commit is a stale-comment rewrite at `src/components/focus-shell/focus-shell.tsx:415-417` (bundled here per the §0.14 plan-doc-revision-with-incidental-fix model).
+
+**Trigger.** Commit-11 implementation audit step (b) — re-confirm the server-side 15-minute cutoff that gates diagnostic submissions — surfaced that the cutoff has been REVERTED earlier in this same round, before the §5.11 / §0.5 audit was authored. Three independent confirmations:
+
+- `src/server/mastery/compute.test.ts:5-10` — explicit revert testimony: *"The polish round briefly recalibrated this to 1.2× under a session-level 15-minute cutoff that was reverted in this round."*
+- `src/app/(app)/actions.ts:141-146` — overlay/cutoff machinery deleted: *"`recordDiagnosticOvertimeNote` was the polish-round in-flow overlay trigger; both it and the underlying overlay are deleted. The diagnostic is untimed at the session level under the capacity-measurement framing (PRD §4.1, plan docs/plans/phase3-diagnostic-flow.md §4)."*
+- `src/server/sessions/submit.ts` — grep for `diagnostic|elapsed|cutoff|15.*min|900_000|startedAtMs` returns zero hits. No submission gate is enforced server-side at any minute mark.
+
+The §5.11 implementation, if executed, would have set `sessionDurationMs={50 * 18_000}` on diagnostic. Per `focus-shell.tsx:411-447` (the `maybeAutoEndSession` effect), this would auto-end the session at 15 minutes client-side via `dispatch({ kind: "session_ended" }) + onEndSession()` — re-introducing the very 15-min hard cap that this round reverted server-side. It would also contradict the post-session pacing UX at `src/components/post-session/post-session-shell.tsx:106` (*"Your diagnostic took {pacingMinutes} minutes. The real CCAT is 15 minutes for 50 questions."*) — copy that only makes sense when users may take longer than 15 min.
+
+**Reasoning.** The §0.5 audit cited "server-side 15-minute cutoff that already gates diagnostic submissions stays unchanged" under stale empirical assumptions. Earlier work in this same round retired the cutoff under PRD §4.1 capacity-measurement framing; §5.11 / §0.5 / §1 carried forward the polish-round pre-revert state without reconciling. Three resolutions were considered at audit step (b) halt:
+
+- **Resolution 1: EXECUTE §5.11 AS WRITTEN** — re-introduce the 15-min auto-end client-side. Rejected: contradicts the same round's server-side revert; contradicts post-session pacing copy; contradicts PRD §4.1 capacity-measurement framing.
+- **Resolution 2: RENDER BAR + CHRONOMETER, NO AUTO-END** — render the chronometer + `<SessionTimerBar>` but suppress the auto-end at 15:00. Rejected: requires a new `<FocusShell>` prop (e.g., `sessionDurationIsAdvisory`); larger blast radius than §5.11 anticipates; cosmetic value of a counting-down timer past 15:00 is unclear (the bar overflows or stops at 100% while the session continues — confusing UX).
+- **Resolution 3: RETRACT** — drop §5.11 entirely; diagnostic stays untimed; the redline's "session timer + progress bar render" intent is queued for a sidecar round that re-introduces server-side timing first. Selected.
+
+**Resolution 4 (selected): RETRACT.** §5.11 + §0.5 cutoff-citation + §1 in-scope bullet retracted. No diagnostic-flow code changes ship from §5.11 itself; this commit is the §0.15 retraction commit (plan-doc-only revision plus the single stale-comment fix at `focus-shell.tsx:415-417` noted above).
+
+**Empirical state.** No diagnostic-flow code changes ship from §0.15. The implementation file originally targeted by §5.11 (`src/app/(diagnostic-flow)/diagnostic/run/content.tsx`) is untouched — its existing header comment at lines 9-12 already correctly describes the untimed-at-session-level reality (*"sessionDurationMs: null (the diagnostic is untimed at the session level — capacity, not triage. The chronometer and session-progress bar do not render in the diagnostic flow.)"*) and stays as-is. The only code change is the stale-comment rewrite at `src/components/focus-shell/focus-shell.tsx:415-417` — the comment claimed *"the diagnostic uses the server-side cutoff in submitAttempt instead (polish-plan §3.1 / §4.2)"*, which is no longer true post-revert.
+
+**Forward reference.** Diagnostic timing re-introduction is queued as a SIDECAR ROUND (TBD; opens after Round 1 closes). Sidecar scope:
+
+1. PRD §4.1 amendment — explicit decision on whether the diagnostic is "untimed capacity measurement" or "timed real-CCAT-conditions" (these are mutually exclusive framings; the redline implies the latter, but PRD §4.1 currently codifies the former).
+2. Server-side cutoff re-introduction — submit-attempt gate at 15:00 elapsed; or alternative gating model.
+3. Client-side timer — `sessionDurationMs={50 * 18_000}` on diagnostic content.tsx; auto-end behavior deliberate.
+4. Mastery compute multiplier revert — `compute.ts:55` 1.5× → 1.2× under timed framing (per the test comment at `compute.test.ts:5-10`).
+5. Post-session pacing copy revision — reframe `post-session-shell.tsx:106` for the timed-end-state.
+
+**Commit envelope impact.** No change to the round commit count (stays at 12 from §0.14's 13 → 12 reduction). §5.11 is RETIRED-not-renumbered per the §0.14 precedent — slot 11 is consumed by this §0.15 plan-doc-revision commit (the retraction itself); commits 12 (ALPHA_DESIGN audit doc) and 13 (round-close) keep their existing slot numbers. Per §0.14's slot-5 model (where the §0.14 retraction commit consumed slot 5), this retraction commit IS commit 11.
+
+**Sub-pattern observation (§6.14.28 instance tracking).** This is the **sixth** §6.14.28-style empirical-state divergence in this round, and introduces a new sub-pattern variant — *"round-internal audit-vs-revert blindness"*: the audit cited mechanisms that prior work in the same project had retired. Cumulative round instance ledger (each empirical correction counted separately, per the §5.8 addendum's per-finding granularity):
+
+- §0.12 — 1st instance, explicit (the `data/images/` → `public/images/belts/` SVG move was discovered out-of-session at body-authoring time).
+- §0.13 — 2nd instance, primarily a SPEC §6.14.34 mid-round redirect (Wikimedia → first-party `<BeltGraphic>`) with §6.14.28 undertones.
+- §0.14 — 3rd instance, explicit (audit-step (a) State-C finding: the existing `deriveHeadline()` system already occupies the JSX slot that §5.5 + §5.6 proposed to populate).
+- §5.8 §6.14.28 addendum, finding (a) — 4th instance, explicit (the §0.7 framing's `item.subType.id` reachability assumption was empirically incorrect; sub-type id is not a property of `ItemForRender`).
+- §5.8 §6.14.28 addendum, finding (b) — 5th instance, explicit (canonical sub-type id confirmed as `"numerical.number_series"` per `src/config/sub-types.ts:9 + :54`, not `"number_series"` or `"12min_number_series"` as the §5.8 audit-step (a) sample query string assumed).
+- §0.15 — 6th instance, explicit (audit step (b) at commit-11: the §0.5 audit cited a server-side 15-minute cutoff that prior work in the same round had reverted).
+
+**New sub-pattern variant.** §0.15 is the first instance of *"round-internal audit-vs-revert blindness"* — earlier instances were either out-of-session state changes (§0.12, §0.13) or audit-prose-vs-empirical-truth divergences within unrelated subsystems (§0.14, §5.8). §0.15 is the first where the audit ITSELF cited a mechanism that other commits IN THE SAME ROUND had retired. The §0.5 audit was authored before the cutoff revert landed (or against a pre-revert mental model), and was not reconciled when the revert shipped. Round-close decides whether this earns its own §6.14 entry (e.g., "§6.14.{n} — audit-vs-prior-round-work reconciliation discipline") or folds into the broader §6.14.28 sub-pattern.
+
+**Cross-references.**
+
+- SPEC §6.14.20 (in-flight wholesale-replacement-with-quote-preservation) — §0.5, §1 in-scope bullet, and §5.11 all revised below with original content quote-preserved as `>` blocks; §5 intro takes a one-line addendum sibling to §0.14's.
+- SPEC §6.14.28 (plan-prose-vs-empirical-truth divergence) — explicit sixth-instance trigger above; new sub-pattern variant ("round-internal audit-vs-revert blindness") proposed for round-close §6.14 evaluation.
+- SPEC §6.14.34 (mid-round narrow-scope sub-round insertion) — does NOT apply here; §0.15 is a pure retraction with no implementation. The diagnostic-timing sidecar round (forward reference above) is the §6.14.34-flavored future work.
+- §0.13, §0.14 — precedents for retract-and-quote-preserve; this redirect parallels §0.14's "RETIRE" model (drop the work; preserve the original prose; no implementation ships).
+
+**Sections revised under this redirect.** §0.5 (audit-trail-only marker — original audit prose quote-preserved), §1 in-scope bullet "Diagnostic: session timer + progress bar render" (RETRACTED with quote-preservation, stacking a third paragraph alongside §0.13's and §0.14's), §5.11 (RETIRED — implementation discontinued; original commit-ledger entry quote-preserved), §5 intro paragraph (one-line addendum noting §5.11 retirement; sibling to the §0.14 addendum). Audit-trail-of-superseded-state collateral references in §5.13 round-close ("§5.1-§5.12 backfilled with actual commit hashes" — §5.11 has no impl hash now; round-close adjusts the count) and §6 verification protocol ("`/diagnostic/...` visual review canonical signal" — diagnostic surface stays unchanged this round; the `/diagnostic/...` visual-review signal is now mostly load-bearing for §5.12 / §0.9 design audit only) are flagged here for round-close revision; left in place mid-flight per §6.14.20 quote-preservation spirit (mirrors §0.13 / §0.14 collateral-handling).
+
+**Environmental footnote (out-of-round).** The `~/.claude/hooks/cbm-code-discovery-gate` hook unconditionally blocked Read in this session — its one-shot logic relies on `$PPID`, but Claude Code spawns a different PPID per tool invocation, so the marker-file short-circuit never kicks in. Hook was disabled (`chmod -x`) for this commit; tracked here as an out-of-round environmental flag, NOT a Round 1 concern. Re-enable post-round-close (or post-this-commit if it doesn't surface again as a blocker).
+
 ---
 
 ## §1 — Round scope (captured from redline; fenced)
@@ -197,7 +257,7 @@ Multi-instance pattern strong; round-close §6.14 entry candidate per the second
 - Drill: number-series question formatting legibility fix (per §0.7)
 - Drill: warning sound plays once, ticking-sound thereafter (per §0.6)
 - Drill: remove extra top whitespace (per §0.7)
-- Diagnostic: session timer + progress bar render (per §0.5; one-line fix)
+- ~~Diagnostic: session timer + progress bar render (per §0.5; one-line fix)~~ — RETRACTED per §0.15 mid-round redirect (2026-05-09); diagnostic stays untimed at session level per PRD §4.1; original bullet quote-preserved below per §6.14.20
 - Review section audit against `docs/ALPHA_DESIGN.md` — written audit only, no fixes (per §0.9; fixes scheduled to Round 2)
 
 ### Explicitly deferred out of scope
@@ -213,6 +273,8 @@ Multi-instance pattern strong; round-close §6.14 entry candidate per the second
 > **Original §1 in-scope list (pre-§0.13 redirect, preserved per SPEC §6.14.20).** The bullet "Belt-text → belt-SVG swap using `public/images/belts/GJJ_{White,Blue,Brown,Black}_Belt.svg` (path corrected per §0.12)" and the bullet "CC BY-SA 3.0 attribution surface for belt SVGs" were the original in-scope items for the belt-graphic work. Both are superseded by the §0.13 redirect: the former replaced by a first-party `<BeltGraphic>` component (no public-path consumption); the latter dropped entirely (no third-party assets in the round → no attribution surface required). Quote-preserved here for audit-trail integrity; the live in-scope list above reflects the post-redirect state.
 
 > **Original §1 in-scope list (post-§0.13, pre-§0.14 — additional bullets retired per SPEC §6.14.20).** Two bullets were dropped by the §0.14 redirect: "Rotating greeting tagline (Claude-style) — corpus captured in §2.1" and "Expanded title-quote corpus — corpus captured in §2.2". Both are superseded by the §0.14 retirement: the existing `deriveHeadline()` editorial-signal system at `src/server/dashboard/helpers.ts:7-13` is preserved as-is, and the rotating corpora that would have replaced its slot are dropped entirely. Quote-preserved here for audit-trail integrity; the live in-scope list above reflects the post-§0.14 state.
+
+> **Original §1 in-scope list (post-§0.14, pre-§0.15 — additional bullet retracted per SPEC §6.14.20).** One bullet was dropped by the §0.15 redirect: "Diagnostic: session timer + progress bar render (per §0.5; one-line fix)". Superseded by the §0.15 retraction: the diagnostic stays `sessionDurationMs={null}` (untimed at the session level per PRD §4.1 capacity-measurement framing); no client-side timer; no progress bar; no `<FocusShell>` changes. The §0.5 audit's premise — that a server-side 15-minute cutoff still gates diagnostic submissions — was empirically stale (the cutoff was reverted earlier in this same round; evidence per §0.15 trigger). Diagnostic timing re-introduction is queued as a sidecar round per §0.15 forward reference. Quote-preserved here for audit-trail integrity; the live in-scope list above reflects the post-§0.15 state.
 
 ---
 
@@ -321,6 +383,8 @@ No LLM cost this round (no generation/validation work). Round cost is engineer-t
 Commit envelope per Leo's reorder (2026-05-08 redirect): attribution (commit 3) precedes the belt SVG swap (commit 4) because CC BY-SA 3.0 requires attribution whenever the licensed work is distributed; SVGs are already in the repo, so attribution is owed at the next commit boundary regardless of the swap commit.
 
 **Commit-envelope addendum (§0.14 retirement, 2026-05-08):** §5.5 + §5.6 are RETIRED-not-renumbered (commit-5 audit-step (a) State-C finding; rotating greeting + title-quote corpora dropped). Round commit count drops from 13 → 12; commits 7-13 keep their existing slot numbers.
+
+**Commit-envelope addendum (§0.15 retraction, 2026-05-09):** §5.11 is RETIRED-not-renumbered (commit-11 audit-step (b) audit-vs-revert blindness; diagnostic timer/bar fix retracted because the cited server-side 15-minute cutoff was reverted earlier in this same round). Round commit count UNCHANGED at 12 (the §0.14 13 → 12 reduction stands); slot 11 is consumed by the §0.15 retraction commit itself, paralleling §0.14's slot-5 model. Commits 12 (ALPHA_DESIGN audit doc) and 13 (round-close) keep their existing slot numbers.
 
 Each commit follows the `phase4-similar-item-generator.md` + `phase5-data-wipe.md` shape: hash placeholder, files touched, audit step (cheap pre-flight per §6.14.18 / §6.14.21 / §6.14.22), implementation notes, verification step, stop-and-report contract.
 
@@ -559,20 +623,26 @@ RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "si
 
 **Stop-and-report.** Do not proceed to next commit until redirect.
 
-### §5.11 — Commit 11: diagnostic timer/bar fix
+### §5.11 — Commit 11: diagnostic timer/bar fix — RETIRED per §0.15
 
-**Hash:** `<TBD>`.
+RETIRED per §0.15 mid-round redirect (2026-05-09). Commit 11 in the ledger is now the plan-doc revision commit that authored §0.15 and the §0.5 / §1 / §5.11 / §5 intro revisions documenting this retirement (i.e., this very commit) plus a single stale-comment fix at `src/components/focus-shell/focus-shell.tsx:415-417` (the comment claimed *"the diagnostic uses the server-side cutoff in submitAttempt instead (polish-plan §3.1 / §4.2)"* — no longer true post-revert; rewritten to reflect current untimed-at-session-level reality per PRD §4.1). The audit-step (b) finding from the commit-11 implementation attempt IS the empirical justification for retraction: the server-side 15-minute cutoff cited by §0.5 was reverted earlier in this same round (evidence: `src/server/mastery/compute.test.ts:5-10`, `src/app/(app)/actions.ts:141-146`, zero hits in `src/server/sessions/submit.ts`); executing §5.11 as written would have re-introduced via `focus-shell.tsx:411-447`'s `maybeAutoEndSession` effect the very 15-min hard cap this round reverted server-side, contradicting PRD §4.1 capacity-measurement framing and the post-session pacing UX at `post-session-shell.tsx:106`. No diagnostic-flow code shipped; `src/app/(diagnostic-flow)/diagnostic/run/content.tsx` is untouched. Commit slot 11 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline (commits 12-13 keep their existing slot numbers).
 
-**Files touched.**
-- `src/app/(diagnostic-flow)/diagnostic/run/content.tsx` (lines 48-57).
-
-**Audit step.** Pre-flight: (a) re-confirm diagnostic FocusShell prop set: `sessionDurationMs={null}` is the explicit short-circuit per `focus-shell.tsx:265-285`; (b) re-confirm the server-side 15-minute cutoff that gates diagnostic submissions still exists and matches the new client-side timer (so the timer doesn't drift out of sync with submission gating); (c) decide whether `paceTrackVisible` should also flip from `false` to `true` — the redline mentions "session timer + progress bar" but is silent on pace track. Probe at audit step; default is conservative (only what the redline names — keep `paceTrackVisible={false}`).
-
-**Implementation notes.** Per §0.5 — change `sessionDurationMs` from `null` to `50 * 18_000` (= 900_000ms = 15 minutes), matching the existing server-side cutoff. `<FocusShell>` unchanged. Server-side 15-minute cutoff stays as the authoritative submission gate. `paceTrackVisible` stays `false` unless audit step finds otherwise. The chronometer (MM:SS) and `<SessionTimerBar>` (progress bar) will both render via the existing FocusShell logic at `focus-shell.tsx:265-285`.
-
-**Verification.** Start a diagnostic in dev; confirm chronometer (MM:SS) and SessionTimerBar both render in the focus shell chrome row. Watch the timer count down; confirm it matches wall-clock and aligns with the server-side 15-minute cutoff (i.e., the timer hits zero around the same time the server cuts off). Edge case: page-load mid-diagnostic — confirm the timer accurately reflects remaining time, not full duration.
-
-**Stop-and-report.** Do not proceed to next commit until redirect.
+> **Original §5.11 (pre-§0.15 retirement, preserved per SPEC §6.14.20).**
+>
+> ### §5.11 — Commit 11: diagnostic timer/bar fix
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - `src/app/(diagnostic-flow)/diagnostic/run/content.tsx` (lines 48-57).
+>
+> **Audit step.** Pre-flight: (a) re-confirm diagnostic FocusShell prop set: `sessionDurationMs={null}` is the explicit short-circuit per `focus-shell.tsx:265-285`; (b) re-confirm the server-side 15-minute cutoff that gates diagnostic submissions still exists and matches the new client-side timer (so the timer doesn't drift out of sync with submission gating); (c) decide whether `paceTrackVisible` should also flip from `false` to `true` — the redline mentions "session timer + progress bar" but is silent on pace track. Probe at audit step; default is conservative (only what the redline names — keep `paceTrackVisible={false}`).
+>
+> **Implementation notes.** Per §0.5 — change `sessionDurationMs` from `null` to `50 * 18_000` (= 900_000ms = 15 minutes), matching the existing server-side cutoff. `<FocusShell>` unchanged. Server-side 15-minute cutoff stays as the authoritative submission gate. `paceTrackVisible` stays `false` unless audit step finds otherwise. The chronometer (MM:SS) and `<SessionTimerBar>` (progress bar) will both render via the existing FocusShell logic at `focus-shell.tsx:265-285`.
+>
+> **Verification.** Start a diagnostic in dev; confirm chronometer (MM:SS) and SessionTimerBar both render in the focus shell chrome row. Watch the timer count down; confirm it matches wall-clock and aligns with the server-side 15-minute cutoff (i.e., the timer hits zero around the same time the server cuts off). Edge case: page-load mid-diagnostic — confirm the timer accurately reflects remaining time, not full duration.
+>
+> **Stop-and-report.** Do not proceed to next commit until redirect.
 
 ### §5.12 — Commit 12: review-surface ALPHA_DESIGN audit doc
 
