@@ -22,6 +22,9 @@ interface ItemSlotProps {
 	selectedOptionId?: string
 	onSelectOption: (optionId: string) => void
 	onMounted: (nowMs: number) => void
+	// Drill-only — passed from <FocusShell> for body-renderer dispatch in
+	// <ItemPrompt> (Round 1 §5.8). Diagnostic + full_length leave undefined.
+	subTypeId?: string
 }
 
 function ItemSlot(props: ItemSlotProps) {
@@ -47,6 +50,7 @@ function ItemSlot(props: ItemSlotProps) {
 			options={props.item.options}
 			selectedOptionId={props.selectedOptionId}
 			onSelect={props.onSelectOption}
+			subTypeId={props.subTypeId}
 		/>
 	)
 }

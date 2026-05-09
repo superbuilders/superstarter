@@ -540,6 +540,7 @@ function FocusShell(props: FocusShellProps) {
 					<ItemSlot
 						key={state.currentItem.id}
 						item={state.currentItem}
+						subTypeId={props.subTypeId}
 						selectedOptionId={state.selectedOptionId}
 						onSelectOption={function selectOption(optionId: string) {
 							// User interaction — unlock audio (idempotent) so any

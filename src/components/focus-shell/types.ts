@@ -44,6 +44,14 @@ interface SubmitAttemptResult {
 interface FocusShellProps {
 	sessionId: string
 	sessionType: SessionType
+	// Drill-only — the canonical sub-type id (e.g. "numerical.number_series")
+	// passed from /drill/[subTypeId]/run/content for body-renderer dispatch
+	// in <ItemPrompt> (Round 1 §5.8 number-series formatting). Diagnostic +
+	// full_length leave undefined because those surfaces mix sub-types
+	// per-item; per-item dispatch would require adding subTypeId to
+	// ItemForRender (out of scope per Round 1 §1, see plan-doc §5.8
+	// §6.14.28 addendum).
+	subTypeId?: string
 	// `null` for sessions with no session-level duration. The diagnostic
 	// passes `null` (untimed at the session level — capacity measurement,
 	// not triage; see plan docs/plans/phase3-diagnostic-flow.md §4). Drill,

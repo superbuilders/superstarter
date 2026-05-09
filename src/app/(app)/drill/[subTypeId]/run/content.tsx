@@ -54,6 +54,7 @@ function DrillRunContent(props: DrillRunContentProps) {
 		<FocusShell
 			sessionId={init.sessionId}
 			sessionType="drill"
+			subTypeId={init.subTypeId}
 			sessionDurationMs={sessionDurationMs}
 			perQuestionTargetMs={18_000}
 			targetQuestionCount={init.drillLength}
