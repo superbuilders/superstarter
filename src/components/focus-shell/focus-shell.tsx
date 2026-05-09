@@ -540,7 +540,7 @@ function FocusShell(props: FocusShellProps) {
 	return (
 		<div
 			data-strict-mode={strictModeAttr}
-			className={cn("flex min-h-dvh w-full flex-col px-6 py-8")}
+			className={cn("flex min-h-dvh w-full flex-col px-6 pt-4 pb-8")}
 		>
 			<main className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
 				{/* chrome row — chronometer top-right, then progression
