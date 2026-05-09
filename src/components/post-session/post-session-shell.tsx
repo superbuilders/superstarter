@@ -3,27 +3,19 @@
 // <PostSessionShell> — session-type-aware dispatch with locked §10
 // component ordering.
 //
-// Plan: docs/plans/phase5-post-session-review.md §10 + §12 commits 1-6.
+// Plan: docs/plans/phase5-post-session-review.md §10 + §12 commits 1-6;
+// Round 2 §5.4 combined slots 3 + 4 (<AccuracySummary> + <LatencySummary>)
+// into a single <PerformanceSummary> renderer at the slot-3 position.
+// Slot 4's data-testid wrapper is retired; the locked §10 ordering now has
+// 8 visible slots after the merge (numbering preserved for cross-doc
+// stability — slot 4 is empty-not-renumbered in the in-flight ledger).
 //
-// - Commit 1 established the locked nine-slot ordering with empty
-//   placeholder divs in slots 2-6.
-// - Commit 2 widened the prop boundary to carry the review-data
-//   fields (accuracy, latency, wrongItems, triageScore,
-//   surfacedStrategies); slots stayed placeholder.
-// - Commit 3 filled slot 2 (<TriageScoreLine>) and slot 3
-//   (<AccuracySummary>) into their locked positions.
-// - Commit 4 filled slot 4 (<LatencySummary>) into its locked
-//   position.
-// - Commit 5 filled slot 5 (<WrongItemsBrowser>).
-// - Commit 6 (this commit) fills slot 6 (<StrategySurface>). All six
-//   slots in the locked §10 ordering are now component-filled; no
-//   placeholder divs remain.
-//
-// Render order (top to bottom), per §10:
+// Render order (top to bottom), per §10 + Round 2 §5.4:
 //   1. Heading + brief one-line summary.
 //   2. <TriageScoreLine>           — filled (commit 3, plan §7).
-//   3. <AccuracySummary>           — filled (commit 3, plan §5).
-//   4. <LatencySummary>            — filled (commit 4, plan §6).
+//   3. <PerformanceSummary>        — filled (Round 2 §5.4; combined
+//                                    accuracy + latency per sub-type;
+//                                    replaces former slots 3 + 4).
 //   5. <WrongItemsBrowser>         — filled (commit 5, plan §8).
 //   6. <StrategySurface>           — filled (commit 6, plan §9).
 //   7. <OnboardingTargets>         — diagnostic-only, already shipped.
@@ -39,15 +31,13 @@ import { useRouter } from "next/navigation"
 import type * as React from "react"
 import type {
 	EndSessionTierForRender,
-	PerSubTypeAccuracy,
-	PerSubTypeLatency,
+	PerSubTypePerformance,
 	SurfacedStrategy,
 	WrongItem
 } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
-import { AccuracySummary } from "@/components/post-session/accuracy-summary"
 import { BeltIndicator } from "@/components/post-session/belt-indicator"
-import { LatencySummary } from "@/components/post-session/latency-summary"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
+import { PerformanceSummary } from "@/components/post-session/performance-summary"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
 import { TriageScoreLine } from "@/components/post-session/triage-score-line"
 import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser"
@@ -59,8 +49,7 @@ type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
 interface PostSessionShellProps {
 	sessionType: SessionTypeForShell
 	pacingMinutes?: number
-	accuracy: PerSubTypeAccuracy[]
-	latency: PerSubTypeLatency[]
+	performance: PerSubTypePerformance[]
 	wrongItems: WrongItem[]
 	triageScore: TriageScore
 	surfacedStrategies: SurfacedStrategy[]
@@ -151,14 +140,10 @@ function PostSessionShell(props: PostSessionShellProps) {
 				<TriageScoreLine score={props.triageScore} />
 			</div>
 
-			{/* Slot 3: <AccuracySummary> — filled in commit 3 (plan §5). */}
-			<div data-testid="post-session-slot-accuracy-summary">
-				<AccuracySummary rows={props.accuracy} />
-			</div>
-
-			{/* Slot 4: <LatencySummary> — filled in commit 4 (plan §6). */}
-			<div data-testid="post-session-slot-latency-summary">
-				<LatencySummary rows={props.latency} />
+			{/* Slot 3: <PerformanceSummary> — Round 2 §5.4 combined accuracy
+			    + latency renderer (replaces former slots 3 + 4). */}
+			<div data-testid="post-session-slot-performance-summary">
+				<PerformanceSummary rows={props.performance} />
 			</div>
 
 			{/* Slot 5: <WrongItemsBrowser> — filled in commit 5 (plan §8). */}

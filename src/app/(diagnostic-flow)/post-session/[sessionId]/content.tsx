@@ -3,13 +3,10 @@
 // /post-session/[sessionId] content — consumes the loadSession promise
 // from page.tsx and renders <PostSessionShell>.
 //
-// Plan: docs/plans/phase5-post-session-review.md §3 + §4 + §12 commit 2.
-//
-// Forwards `sessionType`, `pacingMinutes`, and the five new review-data
-// fields (accuracy, latency, wrongItems, triageScore, surfacedStrategies)
-// to the shell. The shell currently ignores the new fields — slots 2-6
-// stay placeholder; this commit only adds the data flow. Visible
-// behavior is unchanged from commit 1.
+// Plan: docs/plans/phase5-post-session-review.md §3 + §4 + §12 commit 2;
+// post-Round-2-§5.4 the per-sub-type accuracy + latency fields collapsed
+// into a single `performance: PerSubTypePerformance[]` field consumed by
+// the shell's `<PerformanceSummary>` slot.
 
 import * as React from "react"
 import type { SessionInfo } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
@@ -25,8 +22,7 @@ function PostSessionContent(props: PostSessionContentProps) {
 		<PostSessionShell
 			sessionType={info.sessionType}
 			pacingMinutes={info.pacingMinutes}
-			accuracy={info.accuracy}
-			latency={info.latency}
+			performance={info.performance}
 			wrongItems={info.wrongItems}
 			triageScore={info.triageScore}
 			surfacedStrategies={info.surfacedStrategies}

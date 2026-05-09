@@ -279,6 +279,22 @@ The round-opening redline estimated **13-14 commits + round-close**. Audit-surfa
 
 This plan-doc is the commit-0 deliverable. Per the round-opening contract, Round 2 stops here and reports findings. No body sections (§1 scope-fence, §2 captured-from-redline, §3 SPEC §6.14 cross-references, §4 cost envelope, §5 commit ledger, §6 verification protocol, §7 resolutions log, §8 round-close residuals) authored until Leo redirects.
 
+### §0.15 Mid-round Option-4 split — commit 5 audit (c) surfaced `strategy-selection.ts` cascade; §5.4 split into §5.4 + §5.4b (2026-05-09)
+
+Per Leo's 2026-05-09 redirect (commit-5 audit-step (c) STOP-AND-REPORT): commit 5's pre-flight grep for `PerSubTypeAccuracy` + `PerSubTypeLatency` consumers surfaced `src/server/post-session/strategy-selection.ts` (228 lines, 4 public functions, 2 page-level call sites) as a major server-side consumer beyond the deletion-target components. The redirect's original commit-5 framing assumed only the components consumed those types; empirical state contradicted.
+
+**Resolution: Option 4 (split into bounded commits).** Commit 5 ships the combined `<PerformanceSummary>` + SQL consolidation + transient projection shims (sync `projectAccuracy` + `projectLatency` helpers at page level; `Pick<PerSubTypePerformance, ...>` types preserved); commit §5.4b refactors `strategy-selection.ts` to consume `PerSubTypePerformance` directly + deletes the shims + deletes the per-axis types. Two commits land the same scope as a single Option-1 absorption but with each commit's blast radius bounded.
+
+**Why this is a §6.14.40 (redirector-vs-empirical-state) instance.** The round-opening redline + my §0.4 audit-step probe both characterized `<AccuracySummary>` + `<LatencySummary>` as the only consumers of `PerSubTypeAccuracy` + `PerSubTypeLatency` types. Empirical reality (caught at commit-5 audit-step (c) per the discipline): `strategy-selection.ts` is a downstream consumer with 4 functions taking the per-axis arrays as separate params + internal app-code Map-intersection on `subTypeId`. The audit-step (c) framing — "grep for callers" — is the canonical pre-flight that surfaces this kind of cascade; cite-without-verify (e.g., reading the audit doc's §B.3 evidence + assuming no other consumers exist) is the adversarial-direction §6.14.41 anti-pattern.
+
+**Round 2 §6.14.40 instance count this round: 3** (SF-A bifurcated tokens at §0.3 + §A.4.f1 supersession at §0.14 + this strategy-selection cascade resolved via Option 4 split). All three benign-direction (caught by audit-first discipline before code shipped). Round 1 had 5 §6.14.40 instances (including §6.14.41 promotion); Round 2 trends similarly — 3 instances at the §5.4 mark, all closed cleanly without rework.
+
+**Disposition.**
+- §5.4 entry rewritten as commit-5/2 of Option 4 split (Files touched + audit-step + implementation-notes capture transient-shim discipline). Original §5.4 prose preserved per §6.14.20 quote-preservation block.
+- §5.4b NEW entry (between §5.4 and §5.5): full ledger entry for the `strategy-selection.ts` refactor + shim cleanup. Commit envelope updates 15 → 16 (per Option 4 split).
+- §1.2 + §4 + §7 envelope updates capture the new total.
+- §8 forward-pin: any commit-5b residuals surfaced during commit-5b's audit step land in §8 at round-close.
+
 ### §0.14 Mid-round retirement — §5.3 (§A.4.f1 onboarding skip-link contrast) superseded by commit 2 system-level retrofit (2026-05-09)
 
 Per Leo's 2026-05-09 redirect (commit-3 prep): commit 3 (originally `fix: §A.4.f1 onboarding skip-link contrast`) is **RETIRED-as-superseded** because commit 2's `--muted-foreground` lightness drop (0.556 → 0.45) + chroma bump already raised the skip-link's empirical contrast to **AAA-grade** via the system-level cascade. Path A (retire) selected over Path B (defense-in-depth class swap) per the redirect's recommendation + the empirical contrast measurements captured at commit 2.
@@ -317,7 +333,7 @@ This commit ships the plan-doc revision only; no `src/` files touched. Next comm
 
 ### §1.2 Q5 = Option γ — adds SPEC dual-layer codification commit
 
-Per Leo's redirect, Q5 lands as **Option γ** (Layer-A retrofit + SPEC dual-layer codification). The SPEC commit is a new entry (commit 1 in the round's ledger), authored standalone before the Layer-A retrofit (commit 2) so the SPEC entry exists as the authoritative cross-reference for the retrofit's commit body. Empirical commit envelope: **15 commits** post-§5.4a insertion (= 14 post-§0.14 retirement + 1 §5.4a NEW − 0 §5.10 RETIRED; the §5.10 retirement is a slot-consumed-by-§5.4a model where slot 10 carries no implementation work but stays in the ledger for cross-reference stability). Net commit count tracks the round-opening 13-14 envelope estimate at the +2 mark (γ adds SPEC codification; §5.4a adds the lib-extraction-before-combine).
+Per Leo's redirect, Q5 lands as **Option γ** (Layer-A retrofit + SPEC dual-layer codification). The SPEC commit is a new entry (commit 1 in the round's ledger), authored standalone before the Layer-A retrofit (commit 2) so the SPEC entry exists as the authoritative cross-reference for the retrofit's commit body. Empirical commit envelope: **16 commits** post-§5.4a insertion + post-§5.4b insertion (= 14 post-§0.14 retirement + 1 §5.4a NEW + 1 §5.4b NEW − 0 §5.10 RETIRED; §5.10 stays empty-not-renumbered for cross-reference stability). Net commit count tracks the round-opening 13-14 envelope estimate at the +3 mark (γ adds SPEC codification; §5.4a adds lib-extraction-before-combine; §5.4b adds the strategy-selection cascade refactor surfaced by commit-5 audit-step (c) per §0.15).
 
 ### §1.3 Explicitly deferred out-of-scope (per round-opening redline + audit-time forward-pins)
 
@@ -396,7 +412,7 @@ Round 2 inherits Round 1's discipline patterns:
 
 ## §4 — Cost envelope
 
-No LLM cost this round (no generation / validation work). Round cost is engineer-time only. Empirical commit envelope per §1.2 + §5 (post-§0.14 retirement + §5.4a insertion): **15 commits** (1 plan-doc creation + §5.1 SPEC + §5.2 Layer-A retrofit + §5.3 RETIRED-not-renumbered + §5.4a lib extraction + §5.4-§5.9 (6 commits) + §5.10 RETIRED-not-renumbered + §5.11-§5.14 (4 commits) + §5.15 round-close). Estimated wall time: **1-2 days** at the round's typical commit pace.
+No LLM cost this round (no generation / validation work). Round cost is engineer-time only. Empirical commit envelope per §1.2 + §5 (post-§0.14 retirement + §5.4a + §5.4b insertions): **16 commits** (1 plan-doc creation + §5.1 SPEC + §5.2 Layer-A retrofit + §5.3 RETIRED-not-renumbered + §5.4a lib extraction + §5.4 combined component + §5.4b strategy-selection cascade refactor + §5.5-§5.9 (5 commits) + §5.10 RETIRED-not-renumbered + §5.11-§5.14 (4 commits) + §5.15 round-close). Estimated wall time: **1-2 days** at the round's typical commit pace.
 
 ---
 
@@ -487,24 +503,63 @@ RETIRED-as-superseded per §0.14 mid-round retirement (2026-05-09). Commit 3 in 
 
 **Stop-and-report.** Do not proceed to §5.4 (combined `<PerformanceSummary>`) until redirect.
 
-### §5.4 — Commit 4: combined `<PerformanceSummary>` (replaces `<AccuracySummary>` + `<LatencySummary>`)
+### §5.4 — Commit 5 (Option 4 split, part 1/2): combined `<PerformanceSummary>` + SQL consolidation + transient projection shims
 
-**Hash:** `<TBD>`.
+**Hash:** `<TBD; backfilled at round-close>`.
 
 **Files touched.**
-- `src/components/post-session/performance-summary.tsx` — NEW component (~220-260 lines).
-- `src/components/post-session/accuracy-summary.tsx` — DELETE (115 lines).
-- `src/components/post-session/latency-summary.tsx` — DELETE (208 lines).
-- `src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx` — replace `getPerSubTypeAccuracy` + `getPerSubTypeLatency` with single `getPerSubTypePerformance` prepared statement (`{ subTypeId, correct, total, medianLatencyMs }`). Update `accuracy: PerSubTypeAccuracy[]` + `latency: PerSubTypeLatency[]` props on `<PostSessionShell>` to single `performance: PerSubTypePerformance[]`. Update type exports.
-- `src/components/post-session/post-session-shell.tsx` — consume `performance` prop instead of `accuracy` + `latency`; render `<PerformanceSummary>` instead of `<AccuracySummary>` + `<LatencySummary>`.
+- `src/components/post-session/performance-summary.tsx` — NEW (~190 lines). Combined renderer: 3-column CSS grid per row (sub-type label | ✓/✗ counts | latency value + `<LatencyTrack>` SVG); render-heading-+-empty-state for zero rows ("No sub-type performance data this session."); `<dl>` semantic preserved (one `<dt>` paired with two `<dd>`s per row); `<LatencyTrack>` SVG sub-component lifted verbatim from deleted `<LatencySummary>`; AA-discipline comment block preserved.
+- `src/components/post-session/performance-summary.test.ts` — NEW (~95 lines, 11 test cases via Test option B logic-only — no React testing library installed; matches existing test discipline). Covers `buildDisplayRows` (3 cases: empty, single-row meta projection, sort verbal-first / alphabetical-within-section) + `formatSeconds` (3 cases: exact representation, integer seconds, zero) + `markerPosition` (5 cases: equal-to-threshold = 50, half-threshold = 25, double-clamps-100, over-double-clamps-100, negative-clamps-0).
+- `src/components/post-session/accuracy-summary.tsx` — DELETED (104 lines post-§5.4a; was 115 pre-§5.4a).
+- `src/components/post-session/latency-summary.tsx` — DELETED (197 lines post-§5.4a; was 208 pre-§5.4a).
+- `src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx` — replace `getPerSubTypeAccuracy` + `getPerSubTypeLatency` with single `getPerSubTypePerformance` prepared statement; add `PerSubTypePerformance` type derivation; add transient `projectAccuracy` + `projectLatency` sync projection shims (deleted at §5.4b); `PerSubTypeAccuracy` + `PerSubTypeLatency` types redefined as `Pick<PerSubTypePerformance, ...>` (still consumed by `strategy-selection.ts`); `SessionInfo` bundle replaces `accuracy` + `latency` fields with single `performance` field; doc-comment at top updated.
+- `src/app/(diagnostic-flow)/post-session/[sessionId]/content.tsx` — drop `accuracy` + `latency` props on `<PostSessionShell>`; pass `performance` instead (Option F2 — shell prop surface stays clean; `accuracy` + `latency` variables remain at page level for `strategy-selection.ts` consumption via projection shims).
+- `src/components/post-session/post-session-shell.tsx` — drop `PerSubTypeAccuracy` + `PerSubTypeLatency` imports + `<AccuracySummary>` + `<LatencySummary>` imports + `accuracy` + `latency` props; add `PerSubTypePerformance` import + `<PerformanceSummary>` import + `performance` prop; collapse former slots 3 + 4 into single slot rendering `<PerformanceSummary>`; update doc-comment header (slot 4 empty-not-renumbered).
 
-**Audit step.** Pre-flight: (a) re-read `accuracy-summary.tsx` + `latency-summary.tsx` + the page-level prepared statements verbatim; confirm structural identity per §0.4.a. (b) Confirm `attempts.latencyMs` is non-nullable per `src/db/schemas/practice/attempts.ts` (a touched sub-type ALWAYS has a median latency value; safe to combine queries with no LEFT JOIN). (c) Confirm no other consumer imports `<AccuracySummary>` / `<LatencySummary>` / their type exports — grep for both component names + `PerSubTypeAccuracy` + `PerSubTypeLatency` across `src/`.
+**Audit step.** Pre-flight: (a) re-confirm deletion-target inventory — both files' verbatim shapes captured at prior-halt audit (a); structural identity for SQL consolidation re-verified; (b) confirm `attempts.latencyMs` is non-nullable per `src/db/schemas/practice/attempts.ts:18` (`integer("latency_ms").notNull()`); (c) **scope-flag at this step surfaced `src/server/post-session/strategy-selection.ts` as a downstream consumer** of `PerSubTypeAccuracy` + `PerSubTypeLatency` — 4 functions, 2 page-level call sites, no tests; redirect resolved as Option 4 split (this commit + §5.4b for `strategy-selection.ts` refactor); (d) combined SQL query verified (FROM/WHERE/GROUP BY identical to the two it replaces; projections add both aggregates); (e) page-level shape probe complete (transient shims live alongside the consolidated fetcher with bounded comment block; deleted at §5.4b); (f) Option F2 selected for `<PostSessionShell>` prop reshape (drop `accuracy` + `latency` props; `performance` only); (g) Test option B (logic-only) selected — no React testing library installed; (h) empty-state copy approved; (i) `<dl>` semantic preserved with 3-column grid per row + `<PerformanceRow>` sub-component (decided over `<table>` to preserve editorial-feel; column-header announcements deferred; 8rem-wide latency column gives `<LatencyTrack>` SVG useful render width).
 
-**Implementation notes.** Per §2.1 + §0.4. Single SQL query with both aggregates; single `SUB_TYPE_BY_ID` Map; single `compareRows`; row renderer carries two-column layout (✓/✗ counts on left, latency value + LatencyTrack SVG on right). The LatencyTrack sub-component preserved verbatim (still uses `text-destructive` for above-threshold; AA verified post-commit-2 retrofit). Empty-path: `return null` if zero rows (consistent with the audit doc's §B.2 inconsistency observation; if §B.2 commit-9 shifts to "render heading + empty-state copy", this component absorbs that shift symmetrically). Closes audit doc §B.3 sort-DRY for these two components automatically (one `compareRows` instead of two).
+**Implementation notes.** Per §2.1 + §0.4 + Leo's Option 4 redirect. Single DB round-trip per page load (down from 2). The `Pick<PerSubTypePerformance, ...>` derivation pattern preserves structural compatibility with `strategy-selection.ts`'s existing `PerSubTypeAccuracy` / `PerSubTypeLatency` consumption — same shape, derived from canonical source. Closes audit doc §B.2 (empty-state harmonization for these two) + §B.3 (sort-DRY for these two; lib already extracted at §5.4a). Round 2 §6.14.40 instance count this round: **3** (SF-A bifurcated tokens at §0.3 + §A.4.f1 supersession at §0.14 + this strategy-selection cascade resolved via Option 4 split). All three benign-direction; all caught by audit-first discipline before code shipped.
 
-**Verification.** Run a session in dev; confirm post-session view renders `<PerformanceSummary>` with both axes per row, sorted verbal-first / alphabetical-within-section. `bun test` for any test file referencing the old types (none expected per audit step (c)). Lint + typecheck clean. Render-test: zero-touched-sub-types session → component returns null (no orphan section heading); single-touched-sub-type session → one row.
+**Verification.** `bun test` — 128 pass / 0 fail / 17 files (was 117 / 16; +11 from new test file). Lint (Biome + super-lint) clean across 1128 files. Typecheck (tsgo --noEmit) clean. Visual diff in dev DEFERRED to manual review by Leo (per §6 + the round's screenshot-deferred discipline).
 
-**Stop-and-report.** Do not proceed to commit 5 until redirect.
+**Stop-and-report.** Do not proceed to commit §5.4b until redirect.
+
+> **Original §5.4 (pre-Option-4-split, preserved per SPEC §6.14.20).**
+>
+> ### §5.4 — Commit 4: combined `<PerformanceSummary>` (replaces `<AccuracySummary>` + `<LatencySummary>`)
+>
+> **Hash:** `<TBD>`.
+>
+> **Files touched.**
+> - `src/components/post-session/performance-summary.tsx` — NEW component (~220-260 lines).
+> - `src/components/post-session/accuracy-summary.tsx` — DELETE (115 lines).
+> - `src/components/post-session/latency-summary.tsx` — DELETE (208 lines).
+> - `src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx` — replace `getPerSubTypeAccuracy` + `getPerSubTypeLatency` with single `getPerSubTypePerformance` prepared statement (`{ subTypeId, correct, total, medianLatencyMs }`). Update `accuracy: PerSubTypeAccuracy[]` + `latency: PerSubTypeLatency[]` props on `<PostSessionShell>` to single `performance: PerSubTypePerformance[]`. Update type exports.
+> - `src/components/post-session/post-session-shell.tsx` — consume `performance` prop instead of `accuracy` + `latency`; render `<PerformanceSummary>` instead of `<AccuracySummary>` + `<LatencySummary>`.
+>
+> **Audit step.** Pre-flight: (a) re-read `accuracy-summary.tsx` + `latency-summary.tsx` + the page-level prepared statements verbatim; confirm structural identity per §0.4.a. (b) Confirm `attempts.latencyMs` is non-nullable per `src/db/schemas/practice/attempts.ts` (a touched sub-type ALWAYS has a median latency value; safe to combine queries with no LEFT JOIN). (c) Confirm no other consumer imports `<AccuracySummary>` / `<LatencySummary>` / their type exports — grep for both component names + `PerSubTypeAccuracy` + `PerSubTypeLatency` across `src/`.
+>
+> **Implementation notes.** Per §2.1 + §0.4. Single SQL query with both aggregates; single `SUB_TYPE_BY_ID` Map; single `compareRows`; row renderer carries two-column layout (✓/✗ counts on left, latency value + LatencyTrack SVG on right). The LatencyTrack sub-component preserved verbatim (still uses `text-destructive` for above-threshold; AA verified post-commit-2 retrofit). Empty-path: `return null` if zero rows (consistent with the audit doc's §B.2 inconsistency observation; if §B.2 commit-9 shifts to "render heading + empty-state copy", this component absorbs that shift symmetrically). Closes audit doc §B.3 sort-DRY for these two components automatically (one `compareRows` instead of two).
+>
+> **Verification.** Run a session in dev; confirm post-session view renders `<PerformanceSummary>` with both axes per row, sorted verbal-first / alphabetical-within-section. `bun test` for any test file referencing the old types (none expected per audit step (c)). Lint + typecheck clean. Render-test: zero-touched-sub-types session → component returns null (no orphan section heading); single-touched-sub-type session → one row.
+>
+> **Stop-and-report.** Do not proceed to commit 5 until redirect.
+
+### §5.4b — Commit 6 (inserted): refactor `strategy-selection.ts` to consume `PerSubTypePerformance` + delete transient shims + delete `PerSubTypeAccuracy` / `PerSubTypeLatency` types
+
+**Hash:** `<TBD; backfilled at round-close>`.
+
+**Files touched (anticipated).**
+- `src/server/post-session/strategy-selection.ts` — refactor 4 public functions (`isStruggled`, `deriveStruggledSubTypes`, `buildStruggleContexts`, `selectStrategiesForStruggledSubTypes`) from per-axis arrays to single `PerSubTypePerformance` array param; collapse internal Map-intersection logic at lines 118-125 + 155-158 into single iteration over consolidated rows.
+- `src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx` — drop `PerSubTypeAccuracy` + `PerSubTypeLatency` type definitions + `projectAccuracy` + `projectLatency` shim functions + the transient comment block; update `deriveStruggledSubTypes` + `selectStrategiesForStruggledSubTypes` call sites to pass `performance` directly; drop `accuracy` + `latency` variable assignments; drop `PerSubTypeAccuracy` + `PerSubTypeLatency` from type exports.
+
+**Audit step.** Pre-flight: (a) re-read `strategy-selection.ts` end-to-end; capture all 4 function signatures + internal logic verbatim. (b) Identify the access patterns: `accuracy.correct` + `accuracy.total` → `performance.correct` + `performance.total`; `latency.medianLatencyMs` → `performance.medianLatencyMs`; the two Maps `accuracyBySubType` + `latencyBySubType` collapse into single `performanceBySubType: Map<SubTypeId, PerSubTypePerformance>`. (c) Confirm no consumers exist beyond page.tsx (already captured at commit-5 audit step (c)).
+
+**Implementation notes.** Mechanical refactor: rename per-axis params to single `performance` param; replace Map-intersection iteration with single Map-build + lookup; preserve all numeric anchors (`STRUGGLED_ACCURACY_FLOOR = 0.7`) + control flow. Net diff estimate: -25 lines (Map-intersection collapse) + signature renames. The transient comment block in page.tsx + the two projection shims delete cleanly.
+
+**Verification.** `bun test` — should match commit-5 count (no new tests added; existing 128 pass). Lint + typecheck clean. Manual verify: `surfacedStrategies` derivation still produces the same output for the same input set (regression-test by running a session in dev pre + post commit-5b).
+
+**Stop-and-report.** Do not proceed to commit 7 (originally §5.5 belt-indicator refactor) until redirect.
 
 ### §5.5 — Commit 5: `<BeltIndicator>` Option β refactor (consume `<BeltGraphic>`)
 
@@ -715,6 +770,8 @@ Final state for each Open Q + scope flag (per Leo's 2026-05-09 redirect):
 - **SF-D §B.6 mobile real-device verification:** **RESOLVED via Q6** (deferred to Round 3+).
 - **§A.4.f1 onboarding skip-link contrast (P1):** **RESOLVED via Round 2 commit 2 system-level cascade** (per §0.14 + §5.3 retirement). Empirical post-retrofit contrast: 7.23:1 (AAA). Per-consumer class swap (audit doc §A.4.f1 fix-shape `text-muted-foreground → text-foreground/80`) was retired-as-superseded — the underlying concern closed at the token-definition layer where every consumer benefits symmetrically.
 - **§B.3 sub-type sort-DRY drift (P2):** **RESOLVED via Round 2 commit 4 (§5.4a)** — single shared `_lib/sub-type-display.ts` extracted with `SUB_TYPE_BY_ID` + `compareBySubTypeDisplay` consumed by all 4 components (`<AccuracySummary>`, `<LatencySummary>`, `<StrategySurface>`, `<WrongItemsBrowser>`) in a single-pass migration. Original §5.10 (extract-after-combine) RETIRED-not-renumbered as superseded; §5.4a (extract-before-combine) lands the canonical lib so `<PerformanceSummary>` (commit 5 = §5.4) imports from day one. Net DRY win: 4 local Maps + 4 compare functions → 1 of each, +75 lines of test coverage.
+- **§B.2 empty-state inconsistency (P2):** **PARTIAL via Round 2 commit 5 (§5.4)** — combined `<PerformanceSummary>` renders heading + empty-state copy ("No sub-type performance data this session.") in place of the prior `return null` from `<AccuracySummary>` + `<LatencySummary>`. §5.9 (commit 11 in original ledger) verifies `<StrategySurface>` + `<WrongItemsBrowser>` align (both already render heading + empty-state copy per audit doc §B.2 evidence at lines 380-381; expected no-op or RETIRED-already-aligned).
+- **`strategy-selection.ts` cascade (audit-surfaced):** **PARTIAL via Round 2 commit 5 (§5.4) + IN-PROGRESS commit §5.4b.** Commit 5 added transient projection shims (`projectAccuracy` + `projectLatency` sync helpers at page level) so `strategy-selection.ts` continues to consume `PerSubTypeAccuracy` + `PerSubTypeLatency` (now `Pick<PerSubTypePerformance, ...>` types) via a single DB round-trip. Commit §5.4b refactors `strategy-selection.ts` to consume `PerSubTypePerformance` directly + deletes the shims + deletes the per-axis types. See §0.15 for the §6.14.40 framing.
 
 ---
 

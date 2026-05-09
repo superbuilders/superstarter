@@ -9,10 +9,10 @@
 //      existing security shape. **Does not redirect non-diagnostic
 //      session types** (sub-phase 1 commit 1 lifted that gate).
 //   3. Fires the post-session review aggregations in parallel:
-//        - getPerSubTypeAccuracy  → PerSubTypeAccuracy[]
-//        - getPerSubTypeLatency   → PerSubTypeLatency[]
-//        - getWrongItemsForSession → WrongItem[]
-//        - triageScoreForSession  → TriageScore
+//        - getPerSubTypePerformance → PerSubTypePerformance[]
+//          (consolidated accuracy + latency per sub-type; Round 2 §5.4)
+//        - getWrongItemsForSession  → WrongItem[]
+//        - triageScoreForSession    → TriageScore
 //        - pacing-line read (existing, unchanged)
 //   4. Derives the "struggled" sub-type set from accuracy + latency
 //      per plan §9 (accuracy < 70% OR median > threshold), then chains
@@ -68,37 +68,32 @@ const PACING_THRESHOLD_MS = 15 * 60_000
 
 // ---------------- Prepared statements (plan §4) ----------------
 
-// Per-sub-type accuracy aggregation. Returns one row per sub-type the
-// session touched: { subTypeId, correct, total }. The "no-percentages"
-// constraint in PRD §6.5 applies to the renderer; the query itself
-// returns counts.
-const getPerSubTypeAccuracy = db
+// Per-sub-type performance aggregation — combined accuracy + median latency
+// in a single round-trip. Returns one row per sub-type the session touched:
+// { subTypeId, correct, total, medianLatencyMs }. percentile_cont(0.5) is
+// the linear-interpolation continuous median (NOT percentile_disc, which
+// returns the actually-observed value; NOT AVG which is the mean). The
+// "no-percentages" constraint in PRD §6.5 applies to the renderer; this
+// query returns counts + ms.
+//
+// Round 2 commit §5.4 (Option 4 split) consolidated the prior two prepared
+// statements (`getPerSubTypeAccuracy` + `getPerSubTypeLatency`) into one.
+// The deleted statements' shape match was verified at sub-phase 1 commit
+// 2's harness (5/10/15/20/25 fixture asserting median = 15). See
+// `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md` §5.4 +
+// §0.4 for the consolidation rationale.
+const getPerSubTypePerformance = db
 	.select({
 		subTypeId: sql<SubTypeId>`${items.subTypeId}`,
 		correct: sql<number>`COUNT(*) FILTER (WHERE ${attempts.correct})::int`,
-		total: sql<number>`COUNT(*)::int`
-	})
-	.from(attempts)
-	.innerJoin(items, eq(attempts.itemId, items.id))
-	.where(eq(attempts.sessionId, sql.placeholder("sessionId")))
-	.groupBy(items.subTypeId)
-	.prepare("app_dgflow_post_session_id_per_sub_type_accuracy")
-
-// Per-sub-type median latency. percentile_cont(0.5) is the
-// linear-interpolation continuous median (NOT percentile_disc, which
-// returns the actually-observed value, NOT AVG which is the mean).
-// The shape match is verified at runtime in commit 2's harness via a
-// 5/10/15/20/25 fixture asserting median = 15.
-const getPerSubTypeLatency = db
-	.select({
-		subTypeId: sql<SubTypeId>`${items.subTypeId}`,
+		total: sql<number>`COUNT(*)::int`,
 		medianLatencyMs: sql<number>`percentile_cont(0.5) WITHIN GROUP (ORDER BY ${attempts.latencyMs})::int`
 	})
 	.from(attempts)
 	.innerJoin(items, eq(attempts.itemId, items.id))
 	.where(eq(attempts.sessionId, sql.placeholder("sessionId")))
 	.groupBy(items.subTypeId)
-	.prepare("app_dgflow_post_session_id_per_sub_type_latency")
+	.prepare("app_dgflow_post_session_id_per_sub_type_performance")
 
 // Wrong items for the session, chronologically ordered. The §15.2-
 // amendment seam shipped end-to-end at sub-phase 4 — commit 2 landed
@@ -149,11 +144,43 @@ const getStrategiesForSubTypes = db
 
 // ---------------- Derived types (plan §4) ----------------
 
-// Per the RSC export-derived-types rule, derive the row types from the
-// query's Awaited return shape. Downstream components import these
-// from page.tsx so the type contract stays anchored to the query.
-type PerSubTypeAccuracy = Awaited<ReturnType<typeof getPerSubTypeAccuracy.execute>>[number]
-type PerSubTypeLatency = Awaited<ReturnType<typeof getPerSubTypeLatency.execute>>[number]
+// Per the RSC export-derived-types rule, derive the row type from the
+// query's Awaited return shape. Downstream components import this from
+// page.tsx so the type contract stays anchored to the query.
+type PerSubTypePerformance = Awaited<ReturnType<typeof getPerSubTypePerformance.execute>>[number]
+
+// ──────────────────────────────────────────────────────────────────
+// TRANSIENT PROJECTION TYPES + SHIMS — deleted at commit §5.4b.
+// `strategy-selection.ts` still consumes per-axis arrays
+// (`PerSubTypeAccuracy`, `PerSubTypeLatency`) to derive struggled
+// sub-types + select kind-preference strategies. The combined fetcher
+// above is the canonical source; these `Pick<>` types + sync
+// projection helpers project consolidated rows into per-axis shapes
+// for backwards-compat. Commit §5.4b refactors `strategy-selection.ts`
+// to consume `PerSubTypePerformance` directly and deletes everything
+// in this block.
+// ──────────────────────────────────────────────────────────────────
+
+type PerSubTypeAccuracy = Pick<PerSubTypePerformance, "subTypeId" | "correct" | "total">
+type PerSubTypeLatency = Pick<PerSubTypePerformance, "subTypeId" | "medianLatencyMs">
+
+function projectAccuracy(
+	performance: ReadonlyArray<PerSubTypePerformance>
+): PerSubTypeAccuracy[] {
+	return performance.map(function project(p) {
+		return { subTypeId: p.subTypeId, correct: p.correct, total: p.total }
+	})
+}
+
+function projectLatency(
+	performance: ReadonlyArray<PerSubTypePerformance>
+): PerSubTypeLatency[] {
+	return performance.map(function project(p) {
+		return { subTypeId: p.subTypeId, medianLatencyMs: p.medianLatencyMs }
+	})
+}
+
+// ──────────────────────────────────────────────────────────────────
 
 // WrongItem: normalize null → undefined at the boundary per
 // rules/no-null-undefined-union.md. items.explanation and
@@ -198,8 +225,7 @@ interface SessionInfo {
 	sessionId: string
 	sessionType: SessionTypeForShell
 	pacingMinutes?: number
-	accuracy: PerSubTypeAccuracy[]
-	latency: PerSubTypeLatency[]
+	performance: PerSubTypePerformance[]
 	wrongItems: WrongItem[]
 	triageScore: TriageScore
 	surfacedStrategies: SurfacedStrategy[]
@@ -303,23 +329,22 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 	}
 
 	// Parallel reads against the resolved sessionId. The pacing-line
-	// read keeps its existing inline (non-prepared) shape; the four
-	// new aggregations + the triage score fire alongside.
-	const accuracyResult = await errors.try(getPerSubTypeAccuracy.execute({ sessionId: row.id }))
-	if (accuracyResult.error) {
+	// read keeps its existing inline (non-prepared) shape; the
+	// performance + wrong-items + triage-score aggregations fire
+	// alongside. Round 2 commit §5.4 consolidated the prior two
+	// per-sub-type queries (accuracy + latency) into a single
+	// `getPerSubTypePerformance` round-trip; transient projection
+	// shims (above) project per-axis shapes for `strategy-selection.ts`
+	// consumption until §5.4b retires the per-axis types.
+	const performanceResult = await errors.try(
+		getPerSubTypePerformance.execute({ sessionId: row.id })
+	)
+	if (performanceResult.error) {
 		logger.error(
-			{ error: accuracyResult.error, sessionId: row.id },
-			"/post-session: per-sub-type accuracy query failed"
+			{ error: performanceResult.error, sessionId: row.id },
+			"/post-session: per-sub-type performance query failed"
 		)
-		throw errors.wrap(accuracyResult.error, "per-sub-type accuracy")
-	}
-	const latencyResult = await errors.try(getPerSubTypeLatency.execute({ sessionId: row.id }))
-	if (latencyResult.error) {
-		logger.error(
-			{ error: latencyResult.error, sessionId: row.id },
-			"/post-session: per-sub-type latency query failed"
-		)
-		throw errors.wrap(latencyResult.error, "per-sub-type latency")
+		throw errors.wrap(performanceResult.error, "per-sub-type performance")
 	}
 	const wrongItemsResult = await errors.try(
 		getWrongItemsForSession.execute({ sessionId: row.id })
@@ -355,8 +380,11 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		throw errors.wrap(lastAttemptResult.error, "last attempt")
 	}
 
-	const accuracy = accuracyResult.data
-	const latency = latencyResult.data
+	const performance = performanceResult.data
+	// Transient per-axis projections for strategy-selection.ts (deleted
+	// at commit §5.4b together with the projection helpers).
+	const accuracy = projectAccuracy(performance)
+	const latency = projectLatency(performance)
 	const wrongItemsRaw = wrongItemsResult.data
 	const triageScore = triageScoreResult.data
 	const lastAttemptRow = lastAttemptResult.data[0]
@@ -425,8 +453,7 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		sessionId: row.id,
 		sessionType: row.type,
 		pacingMinutes,
-		accuracy,
-		latency,
+		performance,
 		wrongItems,
 		triageScore,
 		surfacedStrategies,
@@ -458,6 +485,7 @@ export type {
 	EndSessionTierForRender,
 	PerSubTypeAccuracy,
 	PerSubTypeLatency,
+	PerSubTypePerformance,
 	SessionInfo,
 	SurfacedStrategy,
 	WrongItem
