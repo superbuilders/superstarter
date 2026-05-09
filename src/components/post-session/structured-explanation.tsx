@@ -44,8 +44,10 @@
 // screen-reader announcements lives at the <WrongItemCard> level
 // in commit 4 — this commit only emits state via callbacks.
 
+import { ChevronRightIcon } from "lucide-react"
 import * as React from "react"
 import { z } from "zod"
+import { cn } from "@/lib/utils"
 import { logger } from "@/logger"
 
 const explanationPartKind = z.enum(["recognition", "elimination", "tie-breaker"])
@@ -252,7 +254,16 @@ function StructuredExplanation(props: StructuredExplanationProps) {
 				onClick={handleEliminationToggle}
 				type="button"
 			>
-				{elimination.text}
+				<span className="flex items-start justify-between gap-3">
+					<span className="flex-1">{elimination.text}</span>
+					<ChevronRightIcon
+						aria-hidden="true"
+						className={cn(
+							"mt-1 size-3 shrink-0 text-foreground/60",
+							eliminationActive && "rotate-90"
+						)}
+					/>
+				</span>
 			</button>
 			{tieBreaker === undefined ? null : (
 				<button
@@ -263,7 +274,16 @@ function StructuredExplanation(props: StructuredExplanationProps) {
 					onClick={handleTieBreakerToggle}
 					type="button"
 				>
-					{tieBreaker.text}
+					<span className="flex items-start justify-between gap-3">
+						<span className="flex-1">{tieBreaker.text}</span>
+						<ChevronRightIcon
+							aria-hidden="true"
+							className={cn(
+								"mt-1 size-3 shrink-0 text-foreground/60",
+								tieBreakerActive && "rotate-90"
+							)}
+						/>
+					</span>
 				</button>
 			)}
 		</div>
