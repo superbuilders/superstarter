@@ -699,20 +699,20 @@ RETIRED-as-superseded per §5.4a (2026-05-09). Commit 10 in the ledger is now em
 
 **Stop-and-report.** Do not proceed to commit 13 (§5.13 wrong-items group heading per §A.9.f1) until redirect.
 
-### §5.13 — Commit 13: §A.9.f1 wrong-items group heading style
+### §5.13 — Commit 13: §A.9.f1 wrong-items group heading style (Option A — sentence-cased)
 
-**Hash:** `<TBD>`.
+**Hash:** `<TBD; backfilled at round-close>`.
 
 **Files touched.**
-- `src/components/post-session/wrong-items-browser.tsx` — group heading style per audit doc §A.9.f1 (e.g., `text-sm` sentence-cased + `font-semibold` or `text-sm uppercase`).
+- `src/components/post-session/wrong-items-browser.tsx` — group heading className: `font-medium text-foreground/80 text-xs uppercase tracking-wide` → **`font-semibold text-foreground/80 text-sm`**. Element type `<h3>` unchanged. Top-of-file doc-comment block at line 43 updated to reflect new visual treatment + cite Round 2 §5.13 + ALPHA_DESIGN §4 editorial-warmth bias rationale (preserves the historical "uppercase tracked label" framing in the cite for future-author archeology).
 
-**Audit step.** Pre-flight: (a) read wrong-items group heading rendering; (b) audit doc §A.9.f1 verbatim; (c) ALPHA_DESIGN §4 typography hierarchy — confirm the style choice aligns.
+**Audit step.** Pre-flight: (a) Group heading located at line 372 of `wrong-items-browser.tsx`: `<h3 className="font-medium text-foreground/80 text-xs uppercase tracking-wide">{group.displayName}</h3>`. Single-instance `<h3>` repeated per group via `groups.map()`. (b) Section heading parity verified at line 350-354: `<h2 className="font-medium text-foreground text-sm tracking-tight" id="post-session-wrong-items-heading">Items you got wrong</h2>`. Post-edit hierarchy distinguishes via **weight + opacity axis** (section: `font-medium` + full-opacity; group: `font-semibold` + opacity-reduced) instead of size + uppercase axis. Same `text-sm` size on both; group reads as subordinate-but-readable due to the opacity reduction (~80% of foreground). (c) Tracking-wide removal verified — `tracking-wide` is paired with `uppercase` for letter-spacing on small-caps treatment; both retired together when the heading goes sentence-cased. No other styles depend on the tracking value. (d) Test cascade: no `wrong-items-browser.test.ts` exists. **Zero cascade.** (e) Visual hierarchy snapshot: pre-edit was section (`text-sm font-medium tracking-tight` full-opacity) → group (`text-xs uppercase tracking-wide font-medium` reduced-opacity) → item content. Post-edit: section unchanged → group (`text-sm font-semibold` reduced-opacity sentence-cased) → item content unchanged. Squint test: section is the loudest (full-opacity); group is quieter despite heavier weight (opacity reduction dominates); items are quietest. Hierarchy stays cleanly distinguishable.
 
-**Implementation notes.** Per audit doc §A.9.f1. Decide at commit-time between sentence-cased + `font-semibold` (warmer) vs uppercase (more systematic). Likely sentence-cased per Alpha §4 editorial-warmth bias.
+**Implementation notes.** Per audit doc §A.9.f1 + ALPHA_DESIGN §4 editorial-warmth bias + Leo's Option A pick (over Option B uppercase + text-sm bumped). Single-line className change at line 372 + accompanying doc-comment refresh at line 43. **Mobile-readability concern resolved** — pre-edit `text-xs uppercase tracking-wide` (~12px wide-set caps) was documented as harder to scan on mobile than sentence-cased `text-sm` (14px). Post-edit eliminates the §4 mobile-readability concern while preserving distinguishable visual hierarchy via the weight+opacity axis. Token usage stays Layer A only (post-commit-2 retrofit).
 
-**Verification.** Visual diff of wrong-items section group headings.
+**Verification.** `bun test` 128 pass / 0 fail / 17 files (matches commit 12; no test cascade). Lint (Biome + super-lint) clean across 1128 files. Typecheck (tsgo --noEmit) clean. Manual visual diff DEFERRED to Leo's review per the round's screenshot-deferred discipline.
 
-**Stop-and-report.** Do not proceed to commit 14 until redirect.
+**Stop-and-report.** Do not proceed to commit 14 (§5.14 skip-link copy + focus-visible per §A.4.f5 + §A.4.f6) until redirect.
 
 ### §5.14 — Commit 14: §A.4.f5 + §A.4.f6 skip-link copy + focus-visible class (P3 polish)
 
@@ -785,6 +785,7 @@ Final state for each Open Q + scope flag (per Leo's 2026-05-09 redirect):
 - **§A.7.f2 structured-explanation interactive paragraphs sub-44px (P2):** **RESOLVED via Round 2 commit §5.8** (composed with §B.4 above; pseudo-element approach applied to elimination + tie-breaker `<button>` constants).
 - **§A.5.f1 continue-button copy refinement (P2):** **RESOLVED via Round 2 commit §5.11**. `<ContinueButton>` text content `"Continue"` → `"Continue to dashboard"` per ALPHA_DESIGN §9 specific-over-generic ("Verb + object. Never 'OK', 'Submit', 'Yes/No', 'Click here'."). Single-line copy edit; preserves the surface's "continue" framing. Destination is consistent across non-diagnostic session types (`router.push("/")`).
 - **§A.7.f1 structured-explanation rest-state affordance (P2):** **RESOLVED via Round 2 commit §5.12**. Added right-aligned `<ChevronRightIcon>` (lucide-react, size-3 ≈12px) to the elimination + tie-breaker interactive paragraphs; rotates 90° on active state via `cn(... && "rotate-90")` class toggle (no transition per surface's no-motion-at-v1 discipline). Recognition `<p>` (non-interactive) unchanged — the chevron-on-interactive vs no-chevron-on-recognition asymmetry IS the affordance signal. Existing `aria-pressed` semantic preserved (toggle-button pattern; correct per W3C ARIA APG); `aria-expanded` rejected at audit step (f) — these buttons affect sibling regions (option-list strike/highlight overlays), not collapsible content under the button itself.
+- **§A.9.f1 wrong-items group heading style (P2):** **RESOLVED via Round 2 commit §5.13** (Option A — sentence-cased). `<h3>` className: `font-medium text-foreground/80 text-xs uppercase tracking-wide` → `font-semibold text-foreground/80 text-sm`. Visual hierarchy preserved via **weight + opacity axis** (section heading `font-medium` + full-opacity; group heading `font-semibold` + opacity-reduced) instead of size + uppercase. Mobile-readability concern (audit doc §A.9.f1 evidence: text-xs wide-set uppercase pushes against ALPHA_DESIGN §4) resolved by sentence-casing at text-sm. Doc-comment block updated to reflect new treatment + cite Round 2 §5.13 + §4 rationale.
 
 ---
 

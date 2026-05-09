@@ -40,7 +40,12 @@
 // cross-references.
 //
 // Visual treatment per Alpha Style:
-//   - Sub-type heading: small uppercase tracked label.
+//   - Sub-type heading: sentence-cased text-sm font-semibold at
+//     text-foreground/80; subordinate to the section heading via
+//     weight+opacity axis (Round 2 §5.13 per audit doc §A.9.f1 +
+//     ALPHA_DESIGN §4 editorial-warmth bias). Pre-Round-2 was small
+//     uppercase tracked label; the prior treatment pushed against
+//     §4's mobile-readability guidance at text-xs.
 //   - Item card: left-rule pl-4 (no nested-card boxes, no shadow).
 //   - Options as <ol> with letter+text+marker.
 //   - Correct option emphasized via subtle bg-foreground/5 + font-
@@ -369,7 +374,7 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 								className="space-y-3"
 								data-testid={`post-session-wrong-items-group-${group.subTypeId}`}
 							>
-								<h3 className="font-medium text-foreground/80 text-xs uppercase tracking-wide">
+								<h3 className="font-semibold text-foreground/80 text-sm">
 									{group.displayName}
 								</h3>
 								<ol className="space-y-5">
