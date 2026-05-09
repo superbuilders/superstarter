@@ -16,8 +16,7 @@
 // React. Server-and-client safe.
 
 import type {
-	PerSubTypeAccuracy,
-	PerSubTypeLatency,
+	PerSubTypePerformance,
 	SurfacedStrategy
 } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
@@ -27,7 +26,8 @@ import { type SubTypeId, subTypes } from "@/config/sub-types"
 // "Struggled" definition per plan §9: a sub-type is struggled if
 // EITHER accuracy < 70% (matches computeMastery's SPEC §9.3 learning
 // floor) OR median latency > the sub-type's threshold (matches what
-// <LatencySummary> already marks).
+// <PerformanceSummary> already marks; Round 2 §5.4 absorbed the prior
+// <LatencySummary>'s threshold-mark rendering).
 const STRUGGLED_ACCURACY_FLOOR = 0.7
 
 const THRESHOLD_BY_SUB_TYPE: ReadonlyMap<SubTypeId, number> = new Map(
@@ -97,45 +97,35 @@ function pickOneStrategy(
 // ---------------- Struggle derivation ----------------
 
 function isStruggled(args: {
-	accuracy: PerSubTypeAccuracy | undefined
-	latency: PerSubTypeLatency | undefined
+	performance: PerSubTypePerformance | undefined
 	threshold: number
 }): boolean {
 	const accRatio =
-		args.accuracy !== undefined && args.accuracy.total > 0
-			? args.accuracy.correct / args.accuracy.total
+		args.performance !== undefined && args.performance.total > 0
+			? args.performance.correct / args.performance.total
 			: 1
-	const medianMs = args.latency !== undefined ? args.latency.medianLatencyMs : 0
+	const medianMs = args.performance !== undefined ? args.performance.medianLatencyMs : 0
 	const lowAccuracy = accRatio < STRUGGLED_ACCURACY_FLOOR
 	const slowMedian = medianMs > args.threshold
 	return lowAccuracy || slowMedian
 }
 
 function deriveStruggledSubTypes(
-	accuracy: ReadonlyArray<PerSubTypeAccuracy>,
-	latency: ReadonlyArray<PerSubTypeLatency>
+	performance: ReadonlyArray<PerSubTypePerformance>
 ): SubTypeId[] {
-	const accuracyBySubType = new Map<SubTypeId, PerSubTypeAccuracy>()
-	for (const a of accuracy) {
-		accuracyBySubType.set(a.subTypeId, a)
-	}
-	const latencyBySubType = new Map<SubTypeId, PerSubTypeLatency>()
-	for (const l of latency) {
-		latencyBySubType.set(l.subTypeId, l)
-	}
-	const seen = new Set<SubTypeId>()
-	for (const a of accuracy) seen.add(a.subTypeId)
-	for (const l of latency) seen.add(l.subTypeId)
+	// Single iteration over consolidated rows — Round 2 §5.4b cascade
+	// resolution per §0.15. The pre-§5.4b implementation built two
+	// per-axis Maps (accuracy + latency) then intersected via a Set of
+	// seen sub-type ids; post-consolidation each row carries both
+	// metrics by construction (attempts.latency_ms NOT NULL +
+	// getPerSubTypePerformance's single GROUP BY), so the intersection
+	// step is structurally redundant.
 	const struggled: SubTypeId[] = []
-	for (const subTypeId of seen) {
-		const threshold = THRESHOLD_BY_SUB_TYPE.get(subTypeId)
+	for (const row of performance) {
+		const threshold = THRESHOLD_BY_SUB_TYPE.get(row.subTypeId)
 		if (threshold === undefined) continue
-		const struggledHere = isStruggled({
-			accuracy: accuracyBySubType.get(subTypeId),
-			latency: latencyBySubType.get(subTypeId),
-			threshold
-		})
-		if (struggledHere) struggled.push(subTypeId)
+		const struggledHere = isStruggled({ performance: row, threshold })
+		if (struggledHere) struggled.push(row.subTypeId)
 	}
 	return struggled
 }
@@ -148,23 +138,18 @@ interface StruggleContext {
 }
 
 function buildStruggleContexts(
-	accuracy: ReadonlyArray<PerSubTypeAccuracy>,
-	latency: ReadonlyArray<PerSubTypeLatency>,
+	performance: ReadonlyArray<PerSubTypePerformance>,
 	struggled: ReadonlyArray<SubTypeId>
 ): Map<SubTypeId, StruggleContext> {
-	const accBySubType = new Map<SubTypeId, PerSubTypeAccuracy>()
-	for (const a of accuracy) accBySubType.set(a.subTypeId, a)
-	const latBySubType = new Map<SubTypeId, PerSubTypeLatency>()
-	for (const l of latency) latBySubType.set(l.subTypeId, l)
+	const performanceBySubType = new Map<SubTypeId, PerSubTypePerformance>()
+	for (const p of performance) performanceBySubType.set(p.subTypeId, p)
 	const out = new Map<SubTypeId, StruggleContext>()
 	for (const subTypeId of struggled) {
 		const threshold = THRESHOLD_BY_SUB_TYPE.get(subTypeId)
 		if (threshold === undefined) continue
-		const acc = accBySubType.get(subTypeId)
-		const lat = latBySubType.get(subTypeId)
-		const accRatio =
-			acc !== undefined && acc.total > 0 ? acc.correct / acc.total : 1
-		const medianMs = lat !== undefined ? lat.medianLatencyMs : 0
+		const row = performanceBySubType.get(subTypeId)
+		const accRatio = row !== undefined && row.total > 0 ? row.correct / row.total : 1
+		const medianMs = row !== undefined ? row.medianLatencyMs : 0
 		const mode = deriveFailureMode({
 			accuracyRatio: accRatio,
 			medianLatencyMs: medianMs,
@@ -191,13 +176,12 @@ function groupStrategiesBySubType(
 }
 
 function selectStrategiesForStruggledSubTypes(
-	accuracy: ReadonlyArray<PerSubTypeAccuracy>,
-	latency: ReadonlyArray<PerSubTypeLatency>,
+	performance: ReadonlyArray<PerSubTypePerformance>,
 	allStrategies: ReadonlyArray<SurfacedStrategy>
 ): SurfacedStrategy[] {
-	const struggled = deriveStruggledSubTypes(accuracy, latency)
+	const struggled = deriveStruggledSubTypes(performance)
 	if (struggled.length === 0) return []
-	const ctx = buildStruggleContexts(accuracy, latency, struggled)
+	const ctx = buildStruggleContexts(performance, struggled)
 	const stratsBySubType = groupStrategiesBySubType(allStrategies)
 	const surfaced: SurfacedStrategy[] = []
 	for (const subTypeId of struggled) {

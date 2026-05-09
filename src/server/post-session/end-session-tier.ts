@@ -27,7 +27,7 @@
 //
 // Sibling-module placement (rather than colocation in page.tsx) per
 // the audit-against-actual-artifact finding: sub-phase 1's pure
-// aggregations colocate as prepared statements (PerSubTypeAccuracy
+// aggregations colocate as prepared statements (PerSubTypePerformance
 // etc.), but query-with-logic functions live as sibling modules
 // (triageScoreForSession at @/server/triage/score). This function
 // carries logic (null-on-non-drill, null-on-empty, isPreFloor calc),

@@ -76,12 +76,13 @@ const PACING_THRESHOLD_MS = 15 * 60_000
 // "no-percentages" constraint in PRD §6.5 applies to the renderer; this
 // query returns counts + ms.
 //
-// Round 2 commit §5.4 (Option 4 split) consolidated the prior two prepared
-// statements (`getPerSubTypeAccuracy` + `getPerSubTypeLatency`) into one.
-// The deleted statements' shape match was verified at sub-phase 1 commit
-// 2's harness (5/10/15/20/25 fixture asserting median = 15). See
-// `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md` §5.4 +
-// §0.4 for the consolidation rationale.
+// Round 2 commits §5.4 + §5.4b consolidated the prior two prepared
+// statements + retired the per-axis types end-to-end (the deleted
+// statements' shape match was verified at sub-phase 1 commit 2's harness
+// via a 5/10/15/20/25 fixture asserting median = 15). See
+// `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md`
+// §5.4 + §5.4b + §0.4 + §0.15 for the consolidation rationale + the
+// strategy-selection cascade resolution.
 const getPerSubTypePerformance = db
 	.select({
 		subTypeId: sql<SubTypeId>`${items.subTypeId}`,
@@ -148,39 +149,6 @@ const getStrategiesForSubTypes = db
 // query's Awaited return shape. Downstream components import this from
 // page.tsx so the type contract stays anchored to the query.
 type PerSubTypePerformance = Awaited<ReturnType<typeof getPerSubTypePerformance.execute>>[number]
-
-// ──────────────────────────────────────────────────────────────────
-// TRANSIENT PROJECTION TYPES + SHIMS — deleted at commit §5.4b.
-// `strategy-selection.ts` still consumes per-axis arrays
-// (`PerSubTypeAccuracy`, `PerSubTypeLatency`) to derive struggled
-// sub-types + select kind-preference strategies. The combined fetcher
-// above is the canonical source; these `Pick<>` types + sync
-// projection helpers project consolidated rows into per-axis shapes
-// for backwards-compat. Commit §5.4b refactors `strategy-selection.ts`
-// to consume `PerSubTypePerformance` directly and deletes everything
-// in this block.
-// ──────────────────────────────────────────────────────────────────
-
-type PerSubTypeAccuracy = Pick<PerSubTypePerformance, "subTypeId" | "correct" | "total">
-type PerSubTypeLatency = Pick<PerSubTypePerformance, "subTypeId" | "medianLatencyMs">
-
-function projectAccuracy(
-	performance: ReadonlyArray<PerSubTypePerformance>
-): PerSubTypeAccuracy[] {
-	return performance.map(function project(p) {
-		return { subTypeId: p.subTypeId, correct: p.correct, total: p.total }
-	})
-}
-
-function projectLatency(
-	performance: ReadonlyArray<PerSubTypePerformance>
-): PerSubTypeLatency[] {
-	return performance.map(function project(p) {
-		return { subTypeId: p.subTypeId, medianLatencyMs: p.medianLatencyMs }
-	})
-}
-
-// ──────────────────────────────────────────────────────────────────
 
 // WrongItem: normalize null → undefined at the boundary per
 // rules/no-null-undefined-union.md. items.explanation and
@@ -381,10 +349,6 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 	}
 
 	const performance = performanceResult.data
-	// Transient per-axis projections for strategy-selection.ts (deleted
-	// at commit §5.4b together with the projection helpers).
-	const accuracy = projectAccuracy(performance)
-	const latency = projectLatency(performance)
 	const wrongItemsRaw = wrongItemsResult.data
 	const triageScore = triageScoreResult.data
 	const lastAttemptRow = lastAttemptResult.data[0]
@@ -415,15 +379,15 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		}
 	}
 
-	// Chain: derive struggled sub-types from accuracy + latency, then
-	// fire the strategies query for that set. Per plan §4 the empty
-	// case is short-circuited (no SQL `IN ()` syntax error). Per plan
-	// §9 kind-preference selection picks ONE strategy per struggled
-	// sub-type matching the failure mode (fast-wrong → trap, slow-
-	// wrong → recognition, slow-but-right → recognition; technique as
-	// universal fallback). Sub-types with zero strategies don't
-	// surface a row.
-	const struggledIds = deriveStruggledSubTypes(accuracy, latency)
+	// Chain: derive struggled sub-types from the consolidated
+	// performance rows, then fire the strategies query for that set.
+	// Per plan §4 the empty case is short-circuited (no SQL `IN ()`
+	// syntax error). Per plan §9 kind-preference selection picks ONE
+	// strategy per struggled sub-type matching the failure mode
+	// (fast-wrong → trap, slow-wrong → recognition, slow-but-right →
+	// recognition; technique as universal fallback). Sub-types with
+	// zero strategies don't surface a row.
+	const struggledIds = deriveStruggledSubTypes(performance)
 	let surfacedStrategies: SurfacedStrategy[] = []
 	if (struggledIds.length > 0) {
 		const strategiesResult = await errors.try(
@@ -437,8 +401,7 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			throw errors.wrap(strategiesResult.error, "strategies for struggled")
 		}
 		surfacedStrategies = selectStrategiesForStruggledSubTypes(
-			accuracy,
-			latency,
+			performance,
 			strategiesResult.data
 		)
 	}
@@ -483,8 +446,6 @@ function PostSessionSkeleton() {
 
 export type {
 	EndSessionTierForRender,
-	PerSubTypeAccuracy,
-	PerSubTypeLatency,
 	PerSubTypePerformance,
 	SessionInfo,
 	SurfacedStrategy,
