@@ -103,3 +103,6 @@ scripts/_logs/imported.jsonl.old_*
 # Claude Code's playwright MCP scratch dir (console logs, snapshots).
 .playwright-mcp/
 .claude/scheduled_tasks.lock
+
+# CR Zod-failure diagnostic
+scripts/_logs/*.log
