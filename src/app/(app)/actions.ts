@@ -124,9 +124,18 @@ async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptRe
 async function endSession(sessionId: string): Promise<void> {
 	const userId = await requireUserId()
 	await assertSessionOwnedBy(sessionId, userId)
-	// Default options — workflow trigger always fires. See file header.
-	await sessionEnd.endSession(sessionId)
+	// awaitCompletion=true → wait for masteryRecomputeWorkflow's body to
+	// finish (recomputeStep writes the new mastery_state rows) BEFORE we
+	// invalidate the dashboard route below. Otherwise revalidatePath('/')
+	// fires while the workflow is still in flight and the next dashboard
+	// render serves stale belts. Round 1 §5.7 + §0.4.
+	await sessionEnd.endSession(sessionId, { awaitCompletion: true })
 	revalidatePath(`/post-session/${sessionId}`)
+	// Round 1 §5.7 + §0.4 — invalidate the dashboard so the user sees
+	// post-drill belts/mastery on next visit. Path-based per audit (c):
+	// the dashboard read path doesn't use cacheTag, so revalidateTag is
+	// not the right tool here.
+	revalidatePath("/")
 }
 
 // `recordDiagnosticOvertimeNote` was the polish-round in-flow overlay

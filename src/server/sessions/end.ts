@@ -23,6 +23,17 @@ interface EndSessionOptions {
 	// dev/test only — see file header. NOT exposed via the (app)/actions.ts
 	// server action; only the commit-1 smoke script ever sets this true.
 	skipWorkflowTrigger?: boolean
+	// When true, await the masteryRecomputeWorkflow's body completion (via
+	// the Run handle's `returnValue` getter, which polls until completion)
+	// before returning. Default false → fire-and-forget; the workflow's
+	// `recomputeStep` writes may still be in flight when this function
+	// returns. Set true from the (app)/actions.ts user-facing endSession
+	// action so the dashboard's `revalidatePath('/')` can fire AFTER the
+	// new mastery_state rows land — see Round 1 §5.7 + §0.4. The cron
+	// caller at app/api/cron/abandon-sweep/route.ts keeps the default
+	// (fire-and-forget) — cron throughput matters more than the post-write
+	// invalidation timing in that path.
+	awaitCompletion?: boolean
 }
 
 async function endSession(sessionId: string, options?: EndSessionOptions): Promise<void> {
@@ -67,15 +78,31 @@ async function endSession(sessionId: string, options?: EndSessionOptions): Promi
 		return
 	}
 
-	const workflowResult = await errors.try(
+	const startResult = await errors.try(
 		start(masteryRecomputeWorkflow, [{ sessionId }])
 	)
-	if (workflowResult.error) {
+	if (startResult.error) {
 		logger.error(
-			{ error: workflowResult.error, sessionId },
+			{ error: startResult.error, sessionId },
 			"endSession: masteryRecomputeWorkflow start failed"
 		)
-		throw errors.wrap(workflowResult.error, "endSession: masteryRecomputeWorkflow")
+		throw errors.wrap(startResult.error, "endSession: masteryRecomputeWorkflow start")
+	}
+	const run = startResult.data
+
+	if (options?.awaitCompletion === true) {
+		const completionResult = await errors.try(run.returnValue)
+		if (completionResult.error) {
+			logger.error(
+				{ error: completionResult.error, sessionId, runId: run.runId },
+				"endSession: masteryRecomputeWorkflow body failed"
+			)
+			throw errors.wrap(completionResult.error, "endSession: masteryRecomputeWorkflow body")
+		}
+		logger.info(
+			{ sessionId, runId: run.runId },
+			"endSession: masteryRecomputeWorkflow body completed (awaited)"
+		)
 	}
 }
 
