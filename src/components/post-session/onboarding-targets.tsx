@@ -41,7 +41,46 @@ function isPercentile(n: number): n is TargetPercentile {
 // §5.6 + audit doc §A.4.f2.
 const SUBMIT_ERROR_COPY = "We couldn't save your targets. Please try again."
 
+// Past-date validation copy per ALPHA_DESIGN §9 Error Formula. Per Round 2
+// §5.7 + audit doc §A.4.f3 + ALPHA_DESIGN §7 ("Validate on blur, not every
+// keystroke"). Covers (1) what happened: "Target date can't be in the
+// past." + (3) how to fix: "Pick a future date."; (2) why is implicit
+// (past dates aren't valid for a future-target form).
+const DATE_PAST_ERROR_COPY = "Target date can't be in the past. Pick a future date."
+
 const ONBOARDING_ERROR_ID = "onboarding-targets-error"
+const DATE_ERROR_ID = "onboarding-date-error"
+
+// Validates an ISO date-string from <input type="date"> against today
+// (local midnight). Returns an error string if past, `null` if valid or
+// empty. Empty is allowed (skip-for-now path; the date field is optional).
+//
+// Date parsing nuance: `<input type="date">` produces "YYYY-MM-DD"
+// strings; `new Date("2026-04-15")` would parse as UTC midnight (per
+// ECMAScript spec for date-only ISO strings). The user's mental model is
+// local-calendar — so we manually parse Y/M/D and construct a local-
+// midnight Date. Comparing against local startOfToday gives the
+// user-intended semantic.
+function validateDateNotPast(value: string): string | null {
+	if (value === "") return null
+	const parts = value.split("-")
+	if (parts.length !== 3) return null
+	const yStr = parts[0]
+	const mStr = parts[1]
+	const dStr = parts[2]
+	if (yStr === undefined || mStr === undefined || dStr === undefined) return null
+	const y = Number(yStr)
+	const m = Number(mStr)
+	const d = Number(dStr)
+	if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null
+	const picked = new Date(y, m - 1, d)
+	const today = new Date()
+	today.setHours(0, 0, 0, 0)
+	if (picked < today) {
+		return DATE_PAST_ERROR_COPY
+	}
+	return null
+}
 
 function OnboardingTargets() {
 	const router = useRouter()
@@ -49,8 +88,17 @@ function OnboardingTargets() {
 	const [dateString, setDateString] = React.useState<string>("")
 	const [submitting, setSubmitting] = React.useState(false)
 	const [submitError, setSubmitError] = React.useState<string | null>(null)
+	const [dateError, setDateError] = React.useState<string | null>(null)
 
 	async function onSave() {
+		// Submit-time re-validation defense (closes the type-and-submit-
+		// without-blurring edge case). If the date field has a past value
+		// the user typed but never blurred, validation fires here.
+		const dateValidationError = validateDateNotPast(dateString)
+		if (dateValidationError !== null) {
+			setDateError(dateValidationError)
+			return
+		}
 		// Clear any prior error at retry boundary; success would navigate
 		// away so no clear-on-success path needed.
 		setSubmitError(null)
@@ -86,6 +134,7 @@ function OnboardingTargets() {
 	const percentileSelectValue = percentile === null ? "" : String(percentile)
 	const submitLabel = submitting ? "Saving…" : "Save and continue"
 	const formDescribedBy = submitError !== null ? ONBOARDING_ERROR_ID : undefined
+	const dateDescribedBy = dateError !== null ? DATE_ERROR_ID : undefined
 
 	return (
 		<form
@@ -125,15 +174,31 @@ function OnboardingTargets() {
 					Target date
 				</label>
 				<input
+					aria-describedby={dateDescribedBy}
+					className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					id="onboarding-date"
 					name="targetDate"
-					type="date"
-					value={dateString}
+					onBlur={function onDateBlur(event) {
+						setDateError(validateDateNotPast(event.target.value))
+					}}
 					onChange={function onDateChange(event) {
 						setDateString(event.target.value)
+						// Clear error on next interaction; re-validates on next blur.
+						setDateError(null)
 					}}
-					className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					type="date"
+					value={dateString}
 				/>
+				{dateError !== null && (
+					<p
+						className="text-foreground/80 text-sm"
+						data-testid="onboarding-date-error"
+						id={DATE_ERROR_ID}
+						role="alert"
+					>
+						{dateError}
+					</p>
+				)}
 			</div>
 
 			{submitError !== null && (
