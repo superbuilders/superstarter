@@ -70,6 +70,10 @@
 	--belt-white: oklch(94% 0.005 270);
 	--belt-white-line: oklch(82% 0.012 270);
 	--belt-black: oklch(22% 0.020 270);
+	/* BJJ canonical black-belt red tip (#DC2626 equivalent). Consumed
+	 * only by <BeltGraphic> for the dashboard <BeltStripe>; below the
+	 * .alpha-style.md "below-3 systemic-token" threshold. */
+	--belt-tip-red: oklch(57.5% 0.21 27);
 	--pace-on: oklch(55% 0.180 240);
 	--pace-warn: oklch(70% 0.160 70);
 	--pace-over: oklch(58% 0.200 25);
@@ -152,6 +156,8 @@
 	--text-3: oklch(55% 0.012 270);
 	--belt-white: oklch(68% 0.012 270);
 	--belt-black: oklch(78% 0.012 270);
+	/* Desaturated red tip per ALPHA_DESIGN.md §3 dark-mode rule. */
+	--belt-tip-red: oklch(65% 0.18 27);
 	--chart-1: oklch(0.809 0.105 251.813);
 	--chart-2: oklch(0.623 0.214 259.815);
 	--chart-3: oklch(0.546 0.245 262.881);
@@ -215,6 +221,7 @@
 	--color-belt-white: var(--belt-white);
 	--color-belt-white-line: var(--belt-white-line);
 	--color-belt-black: var(--belt-black);
+	--color-belt-tip-red: var(--belt-tip-red);
 	--color-pace-on: var(--pace-on);
 	--color-pace-warn: var(--pace-warn);
 	--color-pace-over: var(--pace-over);

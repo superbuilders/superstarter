@@ -1,9 +1,19 @@
 // <BeltStripe> — dashboard belt-row primitive. Dashboard PRD §10.1
-// + `docs/plans/dashboard.md` §5 commit 6.
+// + `docs/plans/dashboard.md` §5 commit 6 + Round 1 commit 4 per
+// `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-
+// retrofit.md` §5.4 + §0.13.
 //
-// 22×6 colored stripe with a 4px-wide light cap on the right edge,
-// mirroring the martial-arts belt-tip motif. The cap is what makes
-// it read as a belt rather than a generic colored bar — keep it.
+// Thin layout wrapper around <BeltGraphic>: provides the dashboard's
+// 22×6 dimensions + 1px-border-radius-clipped frame, plus ARIA
+// context-prefixing for the belt-row's category label (e.g.
+// "Antonyms: white belt"). The visual primitive itself — body +
+// offset tip + body sliver — lives in <BeltGraphic>.
+//
+// Pre-§0.13: this file owned an inline-block <span> with a "cap" via
+// a second absolute-positioned <span> using `bg-bg`. The cap created
+// an optical illusion of a tipped belt edge against the page surface.
+// Post-§0.13: the SVG carries the canonical body+tip+sliver structure
+// directly; the cap-illusion technique is no longer needed.
 //
 // NOT to be confused with <BeltIndicator> at
 // src/components/post-session/belt-indicator.tsx (Phase 5 sub-phase
@@ -12,22 +22,10 @@
 // different file. The naming-collision discipline is captured in
 // `docs/plans/dashboard.md` §2.10. The post-session indicator is
 // untouched by the dashboard round.
-//
-// Token consumption (commit-1-established): bg-belt-white,
-// bg-belt-blue, bg-belt-brown, bg-belt-black, border-belt-white-line,
-// bg-bg. The cap's `bg-bg` is intentional — it disappears against
-// the page surface, creating the optical illusion of a wrapped belt
-// edge. Don't substitute white or surface; they break in dark mode.
 
+import { BeltGraphic } from "@/components/dashboard/belt-graphic"
 import { cn } from "@/lib/utils"
 import type { BeltLevel } from "@/server/dashboard/types"
-
-const BELT_BG: Record<BeltLevel, string> = {
-	white: "bg-belt-white border border-belt-white-line",
-	blue: "bg-belt-blue",
-	brown: "bg-belt-brown",
-	black: "bg-belt-black"
-}
 
 interface BeltStripeProps {
 	belt: BeltLevel
@@ -41,17 +39,11 @@ function BeltStripe({ belt, ariaContext, className }: BeltStripeProps) {
 	return (
 		<span
 			className={cn(
-				"relative inline-block h-[6px] w-[22px] rounded-[1px]",
-				BELT_BG[belt],
+				"inline-block h-[6px] w-[22px] overflow-hidden rounded-[1px]",
 				className
 			)}
-			role="img"
-			aria-label={label}
 		>
-			<span
-				aria-hidden="true"
-				className="absolute -top-[1.5px] -right-[1px] -bottom-[1.5px] w-[4px] rounded-[1px] bg-bg"
-			/>
+			<BeltGraphic beltColor={belt} ariaLabel={label} className="block h-full w-full" />
 		</span>
 	)
 }
