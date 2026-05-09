@@ -34,13 +34,26 @@ function isPercentile(n: number): n is TargetPercentile {
 	return false
 }
 
+// Submit-failure error copy per ALPHA_DESIGN §9 Error Formula. The
+// `.catch()` boundary doesn't surface error-type info (Network vs Server
+// vs SchemaThrow), so we render the generic fallback that covers
+// (1) what happened + (3) how to fix; (2) why is implicit. Per Round 2
+// §5.6 + audit doc §A.4.f2.
+const SUBMIT_ERROR_COPY = "We couldn't save your targets. Please try again."
+
+const ONBOARDING_ERROR_ID = "onboarding-targets-error"
+
 function OnboardingTargets() {
 	const router = useRouter()
 	const [percentile, setPercentile] = React.useState<TargetPercentile | null>(null)
 	const [dateString, setDateString] = React.useState<string>("")
 	const [submitting, setSubmitting] = React.useState(false)
+	const [submitError, setSubmitError] = React.useState<string | null>(null)
 
 	async function onSave() {
+		// Clear any prior error at retry boundary; success would navigate
+		// away so no clear-on-success path needed.
+		setSubmitError(null)
 		setSubmitting(true)
 		const targetDateMs = dateString === "" ? undefined : Date.parse(dateString)
 		const targetPercentile = percentile === null ? undefined : percentile
@@ -54,6 +67,7 @@ function OnboardingTargets() {
 			return null
 		})
 		if (result === null) {
+			setSubmitError(SUBMIT_ERROR_COPY)
 			setSubmitting(false)
 			return
 		}
@@ -71,9 +85,11 @@ function OnboardingTargets() {
 
 	const percentileSelectValue = percentile === null ? "" : String(percentile)
 	const submitLabel = submitting ? "Saving…" : "Save and continue"
+	const formDescribedBy = submitError !== null ? ONBOARDING_ERROR_ID : undefined
 
 	return (
 		<form
+			aria-describedby={formDescribedBy}
 			className="space-y-6"
 			onSubmit={async function onSubmit(event) {
 				event.preventDefault()
@@ -119,6 +135,17 @@ function OnboardingTargets() {
 					className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				/>
 			</div>
+
+			{submitError !== null && (
+				<p
+					className="text-foreground/80 text-sm"
+					data-testid="onboarding-targets-error"
+					id={ONBOARDING_ERROR_ID}
+					role="alert"
+				>
+					{submitError}
+				</p>
+			)}
 
 			<div className="flex items-center justify-between gap-4">
 				<button
