@@ -134,11 +134,20 @@ const recognitionClass = "text-foreground/80 text-sm leading-relaxed"
 // option marker (also bg-foreground/5; ring carries the
 // disambiguation). Negative horizontal margin keeps the prose flush
 // with the card's left rule when active.
+//
+// `relative` + the `pointer-coarse:before:*` chain expands the hit
+// area to ≥44×44px on touch devices without changing the visible
+// layout (Round 2 §5.8 + audit doc §B.4 + §A.7.f2 + ALPHA_DESIGN §5).
+// The interactive paragraphs render at ~39px tall on text-sm leading-
+// relaxed + py-2; -top-1 -bottom-1 adds 8px total → ~47px hit area.
+// The pseudo-element only renders on `pointer: coarse` matches; on
+// pointer-fine (desktop) the layout + visual stay bit-for-bit
+// identical.
 const interactiveBaseClass =
-	"block w-full -mx-3 rounded-md px-3 py-2 text-left text-foreground/80 text-sm leading-relaxed cursor-pointer hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-foreground/30 focus-visible:outline-offset-2"
+	"relative block w-full -mx-3 rounded-md px-3 py-2 text-left text-foreground/80 text-sm leading-relaxed cursor-pointer hover:bg-foreground/5 focus-visible:outline-2 focus-visible:outline-foreground/30 focus-visible:outline-offset-2 pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-top-1 pointer-coarse:before:-bottom-1 pointer-coarse:before:content-['']"
 
 const interactiveActiveClass =
-	"block w-full -mx-3 rounded-md px-3 py-2 text-left text-foreground text-sm leading-relaxed cursor-pointer bg-foreground/5 ring-1 ring-foreground/15 focus-visible:outline-2 focus-visible:outline-foreground/30 focus-visible:outline-offset-2"
+	"relative block w-full -mx-3 rounded-md px-3 py-2 text-left text-foreground text-sm leading-relaxed cursor-pointer bg-foreground/5 ring-1 ring-foreground/15 focus-visible:outline-2 focus-visible:outline-foreground/30 focus-visible:outline-offset-2 pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-top-1 pointer-coarse:before:-bottom-1 pointer-coarse:before:content-['']"
 
 function classForInteractive(isActive: boolean): string {
 	if (isActive) return interactiveActiveClass

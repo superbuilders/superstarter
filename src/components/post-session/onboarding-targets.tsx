@@ -156,7 +156,7 @@ function OnboardingTargets() {
 					onChange={function onPercentileChange(event) {
 						onSelectPercentile(event.target.value)
 					}}
-					className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="block pointer-coarse:min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 				>
 					<option value="">Select…</option>
 					{TARGET_PERCENTILES.map(function renderOption(p) {
@@ -175,7 +175,7 @@ function OnboardingTargets() {
 				</label>
 				<input
 					aria-describedby={dateDescribedBy}
-					className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className="block pointer-coarse:min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					id="onboarding-date"
 					name="targetDate"
 					onBlur={function onDateBlur(event) {
@@ -218,7 +218,7 @@ function OnboardingTargets() {
 					onClick={function onSkip() {
 						router.push("/")
 					}}
-					className="text-muted-foreground text-sm underline-offset-4 hover:text-foreground hover:underline"
+					className="relative text-muted-foreground text-sm underline-offset-4 pointer-coarse:before:absolute pointer-coarse:before:inset-x-0 pointer-coarse:before:-top-3 pointer-coarse:before:-bottom-3 pointer-coarse:before:content-[''] hover:text-foreground hover:underline"
 				>
 					Skip for now
 				</button>
