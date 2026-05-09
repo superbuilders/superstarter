@@ -9,9 +9,14 @@
 //   3. Goal — editable popover (numeric input 1..50) wired to
 //      updateGoal Server Action from commit 4.
 //   4. Previous Score — last full-length sim's score (or em-dash if
-//      no sims) + 5-bar sparkline of last 5 sim scores.
+//      no sims) + 5-bar sparkline of last 5 sim scores; horizontal
+//      cobalt-dashed reference line at the user's goal score (Round
+//      1 commit 2).
 //   5. Previous Pace — last full-length sim's median seconds-per-Q
-//      (or em-dash) + 5-bar sparkline of last 5 sim medians.
+//      (or em-dash) + 5-bar sparkline of last 5 sim medians;
+//      horizontal cobalt-dashed reference line at 18s
+//      (TARGET_PACE_SECONDS, the CCAT per-question target; Round 1
+//      commit 2).
 //
 // At sm and below, the 5-stat row wraps responsively beneath the
 // greeting (per ALPHA §8 + practice-round-plan §13's "doesn't break"
@@ -36,6 +41,10 @@ import { Sparkline } from "@/components/dashboard/sparkline"
 import { StatTile } from "@/components/dashboard/stat-tile"
 import { formatToday } from "@/server/dashboard/helpers"
 import type { DashboardData } from "@/server/dashboard/types"
+
+// CCAT per-question target (15 min / 50 q = 18 sec/q). Used as the
+// horizontal reference line on the Previous-pace tile's sparkline.
+const TARGET_PACE_SECONDS = 18
 
 interface ScoreStripProps {
 	firstName: string
@@ -118,7 +127,14 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 						}
 						align="right"
 					/>
-					<Sparkline data={score.last5SimScores} label="Previous score history" />
+					<Sparkline
+						data={score.last5SimScores}
+						label="Previous score history"
+						referenceLine={{
+							value: score.goal,
+							ariaLabel: `Goal score: ${score.goal}`
+						}}
+					/>
 				</div>
 				<div className="flex w-[110px] flex-col items-end text-right">
 					<StatTile
@@ -130,7 +146,14 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 						}
 						align="right"
 					/>
-					<Sparkline data={pace.last5SimMedians} label="Previous pace history" />
+					<Sparkline
+						data={pace.last5SimMedians}
+						label="Previous pace history"
+						referenceLine={{
+							value: TARGET_PACE_SECONDS,
+							ariaLabel: "Target pace: 18 seconds per question"
+						}}
+					/>
 				</div>
 			</div>
 		</section>

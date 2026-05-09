@@ -16,6 +16,14 @@
 // in cobalt; earlier slots use alpha-accent. Empty (undefined) slots
 // always use pale.
 //
+// **Reference line (Round 1 commit 2):** when a `referenceLine` prop
+// is provided, a horizontal dashed cobalt line renders at the
+// reference value's normalized height (Previous Score: user's goal;
+// Previous Pace: 18s CCAT target). The reference value is included
+// in the chart's max (`computeChartMax`) so the line is always within
+// bounds. The line carries its own aria-label per ALPHA_DESIGN §9
+// (alt text describes information, not image).
+//
 // Pure presentational server component. No "use client". Same
 // SVG-with-attributes pattern as <BeltRow>'s progress bar +
 // <PaceMetric>'s bars (per gritql/no-inline-style.grit ban on
@@ -28,15 +36,49 @@ const BAR_COUNT = 5
 const BAR_WIDTH = (CHART_VIEW_WIDTH - BAR_GAP * (BAR_COUNT - 1)) / BAR_COUNT
 const MIN_BAR_HEIGHT = 1
 
+interface ReferenceLine {
+	value: number
+	ariaLabel: string
+}
+
 interface SparklineProps {
 	/** Length-5 array of values, OLDEST-TO-NEWEST. Missing slots are
 	 * undefined. */
 	data: ReadonlyArray<number | undefined>
 	/** Visible label for screen readers (e.g. "Previous score history"). */
 	label: string
+	/** Optional horizontal reference line. When provided, the value is
+	 * included in the chart's max so the line is always visible within
+	 * bounds; the dashed cobalt line carries its own ariaLabel. */
+	referenceLine?: ReferenceLine
 }
 
-function Sparkline({ data, label }: SparklineProps) {
+function computeChartMax(definedValues: number[], referenceLine: ReferenceLine | undefined): number {
+	const candidates: number[] = [1, ...definedValues]
+	if (referenceLine !== undefined) {
+		candidates.push(referenceLine.value)
+	}
+	return Math.max(...candidates)
+}
+
+function buildReferenceLineElement(referenceLine: ReferenceLine, max: number) {
+	const referenceY = CHART_VIEW_HEIGHT - (referenceLine.value / max) * CHART_VIEW_HEIGHT
+	return (
+		<line
+			x1={0}
+			x2={CHART_VIEW_WIDTH}
+			y1={referenceY}
+			y2={referenceY}
+			strokeWidth={1}
+			strokeDasharray="2 2"
+			vectorEffect="non-scaling-stroke"
+			aria-label={referenceLine.ariaLabel}
+			className="stroke-cobalt opacity-60"
+		/>
+	)
+}
+
+function Sparkline({ data, label, referenceLine }: SparklineProps) {
 	const definedValues = data
 		.filter(function isDefined(v): v is number {
 			return v !== undefined
@@ -44,7 +86,7 @@ function Sparkline({ data, label }: SparklineProps) {
 		.map(function abs(v) {
 			return v
 		})
-	const max = definedValues.length === 0 ? 1 : Math.max(...definedValues, 1)
+	const max = computeChartMax(definedValues, referenceLine)
 	// Newest (last defined) slot index, for the cobalt highlight.
 	let newestDefinedIdx = -1
 	for (let i = data.length - 1; i >= 0; i--) {
@@ -85,6 +127,7 @@ function Sparkline({ data, label }: SparklineProps) {
 					/>
 				)
 			})}
+			{referenceLine !== undefined && buildReferenceLineElement(referenceLine, max)}
 		</svg>
 	)
 }
