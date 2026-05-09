@@ -172,7 +172,7 @@ function ContinueButton() {
 				}}
 				data-testid="post-session-continue"
 			>
-				Continue
+				Continue to dashboard
 			</Button>
 		</div>
 	)

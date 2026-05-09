@@ -671,18 +671,18 @@ RETIRED-as-superseded per §5.4a (2026-05-09). Commit 10 in the ledger is now em
 
 ### §5.11 — Commit 11: §A.5.f1 continue-button copy refinement
 
-**Hash:** `<TBD>`.
+**Hash:** `<TBD; backfilled at round-close>`.
 
 **Files touched.**
-- `src/components/post-session/post-session-shell.tsx` — Continue button label: `"Continue"` → `"Go to dashboard"` or `"Continue to dashboard"` (per audit doc §A.5.f1 + ALPHA_DESIGN §9 specific-over-generic).
+- `src/components/post-session/post-session-shell.tsx` — Continue button label inside `<ContinueButton>` sub-component (line 175 pre-commit): `Continue` → **`Continue to dashboard`**. Single-line copy edit.
 
-**Audit step.** Pre-flight: (a) read the button context + surrounding copy; (b) audit doc §A.5.f1 verbatim; (c) ALPHA_DESIGN §9 button-copy guidance — confirm the recommended wording.
+**Audit step.** Pre-flight: (a) located `<ContinueButton>` sub-component at lines 165-178 of `post-session-shell.tsx`. Synchronous `router.push("/")` navigation; no async work between click and navigation. Bare `Continue` JSX text content inside `<Button>` primitive. (b) **No loading-state variant** — `router.push` is synchronous; no `"Continuing…"` parallel copy to update. Skip. (c) `grep -rE "\"Continue\"|>Continue<" src/components/post-session/` returned zero unexpected hits; only the target site. Lowercase "Save and continue" in `<OnboardingTargets>`'s submit copy is correctly excluded (audit doc §A.4 evidence: "verb + object, good"; not in scope). (d) `grep -rE "i18n|useTranslation|next-intl" src/` returned **zero hits** — no translation infrastructure; copy edit lives inline in JSX. (e) **Final wording: `"Continue to dashboard"`** per plan-doc default + Leo's redirect. Preserves "continue" framing of the surface; satisfies ALPHA_DESIGN §9 specific-over-generic ("Verb + object. Never 'OK', 'Submit', 'Yes/No', 'Click here'.").
 
-**Implementation notes.** Single-line copy edit. Pick `"Continue to dashboard"` over `"Go to dashboard"` for consistency with the surface's "continue" framing. Final wording at commit-time review.
+**Implementation notes.** Per audit doc §A.5.f1 + ALPHA_DESIGN §9 + Leo's commit-11 redirect. Single-line copy edit; button styling + click handler + `data-testid` unchanged. Aria-label inherited from text content (no separate aria-label override). Destination consistent across session types (`router.push("/")` regardless of diagnostic / drill / full-length / simulation; the `<ContinueButton>` is rendered for non-diagnostic sessions per `<PostSessionShell>`'s `else` branch, where `/` is unambiguously the dashboard).
 
-**Verification.** Visual diff of post-session shell footer; confirm copy reads as specific-over-generic.
+**Verification.** `bun test` 128 pass / 0 fail / 17 files (matches commit 10; no test cascade). Lint (Biome + super-lint) clean across 1128 files. Typecheck (tsgo --noEmit) clean. Manual visual diff DEFERRED to Leo's review per the round's screenshot-deferred discipline.
 
-**Stop-and-report.** Do not proceed to commit 12 until redirect.
+**Stop-and-report.** Do not proceed to commit 12 (§5.12 structured-explanation rest-state affordance per §A.7.f1) until redirect.
 
 ### §5.12 — Commit 12: §A.7.f1 structured-explanation rest-state affordance
 
@@ -783,6 +783,7 @@ Final state for each Open Q + scope flag (per Leo's 2026-05-09 redirect):
 - **§B.4 touch-targets sub-44px on form + interactive paragraphs (P2):** **RESOLVED via Round 2 commit §5.8**. Per-element-type strategy: replaced elements (`<select>`, `<input type="date">`) got `pointer-coarse:min-h-11` (≥44px enforcement on touch); `<button>` elements (skip-link in `<OnboardingTargets>`; elimination + tie-breaker in `<StructuredExplanation>`) got `relative` + `pointer-coarse:before:absolute … before:content-['']` pseudo-element extending hit area without desktop visual change. Submit `<Button>` primitive **SKIPPED** (out of bounded scope; primitive-level treatment would affect every Button consumer in the app). Pointer-fine (desktop) layout + visuals stay bit-for-bit identical. Real-device verification deferred per Q6.
 - **§A.4.f4 onboarding form fields + skip-link sub-44px (P2):** **RESOLVED via Round 2 commit §5.8** (composed with §B.4 above; same per-element strategy applied to all `<OnboardingTargets>` fields + skip-link).
 - **§A.7.f2 structured-explanation interactive paragraphs sub-44px (P2):** **RESOLVED via Round 2 commit §5.8** (composed with §B.4 above; pseudo-element approach applied to elimination + tie-breaker `<button>` constants).
+- **§A.5.f1 continue-button copy refinement (P2):** **RESOLVED via Round 2 commit §5.11**. `<ContinueButton>` text content `"Continue"` → `"Continue to dashboard"` per ALPHA_DESIGN §9 specific-over-generic ("Verb + object. Never 'OK', 'Submit', 'Yes/No', 'Click here'."). Single-line copy edit; preserves the surface's "continue" framing. Destination is consistent across non-diagnostic session types (`router.push("/")`).
 
 ---
 
