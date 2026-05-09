@@ -71,7 +71,7 @@ function StrategySurface(props: StrategySurfaceProps) {
 			</h2>
 			{display.length === 0 ? (
 				<p
-					className="text-foreground/60 text-sm"
+					className="text-foreground/80 text-sm"
 					data-testid="post-session-strategy-empty"
 				>
 					No sub-types flagged this session — keep going.

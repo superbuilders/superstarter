@@ -355,7 +355,7 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 			</h2>
 			{groups.length === 0 ? (
 				<p
-					className="text-foreground/60 text-sm"
+					className="text-foreground/80 text-sm"
 					data-testid="post-session-wrong-items-empty"
 				>
 					No wrong items this session.
