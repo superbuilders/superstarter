@@ -8,11 +8,14 @@
 //   - Body: full-width rectangle in rank color (`--belt-{white,blue,
 //     brown,black}`); white belt carries a hairline border via
 //     `--belt-white-line` for visibility against light surfaces.
-//   - Tip: offset rectangle near the right (x=80..94 of 100), in
+//   - Tip: offset rectangle near the right (x=74..88 of 100), in
 //     `--belt-black` for white/blue/brown ranks, `--belt-tip-red` for
 //     the black-belt rank (BJJ canon).
-//   - Sliver: body color shows through from x=94..100 because the
-//     tip rect doesn't reach the right edge.
+//   - Sliver: body color shows through from x=88..100 (12% of belt
+//     length) because the tip rect doesn't reach the right edge.
+//     12% sliver matches Leo's reference imagery (commit-4
+//     follow-up-2 calibration; the original 6% from commit 4 placed
+//     the tip too close to the edge).
 //
 // viewBox 100×22 with preserveAspectRatio="none" — caller controls
 // the rendered aspect via `className`. Stroke uses
@@ -74,7 +77,7 @@ function BeltGraphic({ beltColor, className, ariaLabel }: BeltGraphicProps) {
 				strokeWidth={0.5}
 				vectorEffect="non-scaling-stroke"
 			/>
-			<rect x={80} y={0} width={14} height={22} className={tipFillClass} />
+			<rect x={74} y={0} width={14} height={22} className={tipFillClass} />
 		</svg>
 	)
 }
