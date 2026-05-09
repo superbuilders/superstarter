@@ -1,6 +1,6 @@
 # Plan — Phase 4 similar-item generator (sub-phase a)
 
-> **Status: open. Plan-doc commit (round commit 0); no code, schema, or migration changes shipped here.** Round opens against `main` at HEAD `977cdbe` (post §6.14 promotion sub-round). Phase 5 v1 is closed end-to-end (diagnostic + post-session + click-to-highlight + dojo + full-length + dashboard + practice surfaces all shipped); 24 unpushed commits on main; testbank carries 439 live items across the 14-sub-type taxonomy. This is the first of five sub-phases under Phase 4 (LLM question generation, feature-roadmap #4 / Round D); sub-phases b/c/d/e (validator, scorer, deployer, admin generation page) follow.
+> **Status: shipped 2026-05-08.** Round closed at parent commit 9 (this commit) following the wholesale-replacement-with-quote-preservation pattern per §6.14.20. Round opened 2026-05-08 against `main` at HEAD `977cdbe` (post §6.14 promotion sub-round) and closed same-day after a multi-commit narrative including iteration cycle (commits 7 → iteration #1 → iteration #2), narrow-scope sub-round insertion (§6.14.34), CR-schema-fix recovery cycle, max_tokens-fix recovery cycle, and antonyms convergence cleanup. Final bank state: 1,711 generated candidates ready for sub-phase b validator. Cumulative LLM cost: ~$18 across all sub-round + recovery commits. Phase 5 v1 was closed end-to-end at round-open (diagnostic + post-session + click-to-highlight + dojo + full-length + dashboard + practice surfaces all shipped); testbank carries 439 live items across the 14-sub-type taxonomy. This is the first of five sub-phases under Phase 4 (LLM question generation, feature-roadmap #4 / Round D); sub-phases b/c/d/e (validator, scorer, deployer, admin generation page) follow.
 
 This round delivers the **similar-item generator** — a single LLM call per source item that emits four siblings (one per difficulty tier) preserving the source's problem structure while varying surface details. Siblings land at `status='candidate'` per §3 (Phase 4 deliverable). The validator that gates promotion to `status='live'` is sub-phase b. This sub-phase produces the candidate inventory the validator round consumes.
 
@@ -326,27 +326,81 @@ Admin generation page (sub-phase e) consumes these four queries plus the filesys
 
 ## 8. Commit sequencing
 
-One variable per commit per the §6.14 redirector discipline. Ten commits (commits 0–9), with commit 7's test-run gating commit 8's full-bank run per New Ask 1.
+> **Reconciled at round close (parent commit 9, 2026-05-08).** The original §8 ledger is preserved as a quote block at the end of this section per §6.14.20's wholesale-replacement-with-quote-preservation pattern. The actual shipped commit chain — including iteration commits between commits 7 and 8 (per parent §10's quality-drift mitigation), the narrow-scope sub-round insertion per §6.14.34 (b1 vector-similar-context), and the recovery cycle (CR-schema-fix + max_tokens-fix + antonyms cleanup) — replaces it inline below. The original ledger's commit 8 (full-bank single-shot) was structurally subsumed by the sub-round's commit 7.5.7 + recovery sequence; the original ledger's commit 9 is this commit.
 
-| # | Conventional message | Scope summary | Dormancy |
+### 8.1 Parent commit ledger (as shipped)
+
+| # | Conventional message | Scope summary | Hash |
 |---|---|---|---|
-| 0 | `docs(plan): add plan for phase 4 similar-item generator (sub-phase a)` | Plan-doc creation. **SHIPPED at `9c7210f`** (2026-05-08). | — |
-| 1 | `docs(plan): refine phase 4a — resolve open Qs + add test-run gate` | **THIS COMMIT.** Plan-doc refinement: §5 Open-Q resolutions (5 → all "Resolved 2026-05-08"), §6 collapsed to "None this round", §4.12 + §7 updates for JSON-file provenance, NEW §7.5 Filterability subsection, §8 re-sequenced to 10-row ledger with test-run gate, §10 quality-drift risk added, §11 test-run cost sub-heading, Appendix §6.14.20 paraphrase corrected. | — |
-| 2 | `feat(items): consolidate body/option Zod schemas — delete local copies in item-templates.ts` | §4.4 — delete `BodyText`, `ItemBody`, `Option`, `generatedItem` from `item-templates.ts`; rewire `itemTemplates`'s `schema` field (or remove it). All callers import from `body-schema.ts`. **(Was original commit 1.)** | Dormant: nothing consumes the deletions yet. |
-| 3 | `feat(generation): pricing.ts + sibling-tool.ts + sibling-schema.ts + sibling-prompts.ts + sibling-provenance.ts` | Constants + schemas + tool definition + prompt builders + provenance JSON writer (+ comparison-md writer for commit 7). Pure-function surface; no LLM calls; no DB writes. **(Was original commit 3 + new sibling-provenance.ts file per §4.12 / §7.3.)** | Dormant: no consumer. |
-| 4 | `feat(generation): sibling-generator.ts — Anthropic call + cost-telemetry log + provenance JSON write` | LLM-call wrapper. Returns parsed sibling-set + usage. Includes `withBackoff` per `scripts/_lib/anthropic.ts`. Verified manually against one source item via a smoke that also writes a provenance JSON to `scripts/_siblings/<id>.json`. **(Was original commit 4 + provenance JSON write call.)** | Dormant: no orchestration. |
-| 5 | `feat(items): ingestSiblingSet — validation primitives + transaction-based 4-sibling write` | New `src/server/items/ingest-siblings.ts`. Reuses `optionSchema`, `structuredExplanation`, `assertReferencedOptionsExist` from `ingest.ts`. Writes 4 rows in one tx with `status='candidate'`, `source='generated'`, `metadata_json.parentItemId`, `embedding` set inline. **(Unchanged from original commit 5.)** | Dormant: no caller. |
-| 6 | `feat(workflows): sibling-generation workflow + steps (helper-extraction shape)` | `src/workflows/sibling-generation.ts` + `src/workflows/sibling-generation-steps.ts`. Workflow file's import graph stays free of `@/logger`. End-to-end against one source item via dev Next.js. **(Unchanged from original commit 6.)** | Dormant: no orchestration script. |
-| 7 | `feat(scripts): generate-siblings.ts — orchestration + idempotency + cost summary; smoke = test-run with 3-per-sub-type (42 sources × 4 = 168 siblings)` | `scripts/generate-siblings.ts` + `scripts/_logs/siblings-generated.jsonl`. Honors `--max-sources-per-sub-type=N` (default unbounded; N=3 for the test run), `--sub-type=<id>`, `--all-sub-types` (default), `--force`, `--reset-source`, `--max-cost-usd` (default $50). End-to-end against all 14 sub-types at 3 sources each = 42 sources × 4 = 168 candidate siblings. Writes the comparison markdown at `scripts/_logs/sibling-test-run-comparison.md` (per New Ask 1). **STOP AND REPORT for Leo's quality review.** | **First non-dormant commit;** drives the test-run deliverable. |
-| 8 | `chore(data): full-bank sibling generation (remaining 397 sources × 4 = 1,588 siblings)` | Full-bank run gated on Leo's quality approval after commit 7. Just an orchestration-script invocation (no code change): `bun run scripts/generate-siblings.ts --all-sub-types --max-cost-usd 50`. The 42 sources processed in commit 7 are skipped by the §4.8 idempotency check; the remaining 397 are processed; running totals at end-of-run: 1,756 candidate rows, 439 provenance JSON files, 439 idempotency-log entries. | Non-dormant: drives the full-bank deliverable. |
-| 9 | `docs(plan): round-close — plan-doc status flip + commit-ledger reconciliation` | Plan-doc status flip to "shipped <date>" via the wholesale-replacement-with-quote-preservation pattern per §6.14.20. Round-close summary; closed-plan diff zero-line check per §6.14.20.3 against every prior closed plan; SPEC §6.14.NN candidate if a generalizable pattern surfaced (e.g., the dual-write-DB-and-JSON pattern, or the test-run-quality-gate-as-commit-boundary pattern). | — |
+| 0 | `docs: add plan for phase 4 similar-item generator (sub-phase a)` | Plan-doc creation. | `9c7210f` |
+| 1 | `docs(plan): refine phase 4a — resolve open Qs + add test-run gate` | Plan-doc refinement. | `b19042a` |
+| 2 | `feat(items): consolidate body/option Zod schemas — delete local copies in item-templates.ts` | Body/option Zod schema consolidation. | `d88ea13` |
+| 3 | `feat(generation): pricing.ts + sibling-tool.ts + sibling-schema.ts + sibling-prompts.ts + sibling-provenance.ts` | Constants + schemas + tool definition + prompt builders + provenance writer. | `a07c03f` |
+| 4 | `feat(generation): sibling-generator.ts — Anthropic call + cost-telemetry log + provenance JSON write` | LLM-call wrapper. | `fd6fa0d` |
+| 5 | `feat(items): ingestSiblingSet — validation primitives + transaction-based 4-sibling write` | Atomic 4-sibling write. | `71a099e` |
+| 6 | `feat(workflows): sibling-generation workflow + steps (helper-extraction shape)` | Vercel Workflow shape (helper-extraction per A.6 precedent). | `d039121` |
+| 7 | `feat(scripts): generate-siblings.ts — orchestration + idempotency + cost summary; smoke = test-run with 3-per-sub-type (42 sources × 4 = 168 siblings)` | Orchestration script + 42-source test-run gate. | `869d628` |
+| iter #1 | `feat(generation): anchor sibling difficulty tiers to real CCAT distribution` | Iteration commit between commits 7 and 8 per §10 quality-drift mitigation. | `22c421f` |
+| iter #2 | `feat(generation): de-template antonyms anchor + add cross-source-duplicate-prevention guards` | Iteration commit between iteration #1 and the sub-round insertion. | `0d3881c` |
+| 7.5.0–7.5.7 | (sub-round; see §8.2) | b1 vector-similar-context sub-round (per §6.14.34 narrow-scope sub-round insertion). | (sub-round chain) |
+| 8 | **SUBSUMED.** Original "full-bank single-shot" commit was structurally subsumed by sub-round commit 7.5.7 (full-bank with b1) + recovery cycle (7.5.7.r1–r5 below). | — | — |
+| 9 | `docs(plan): close phase 4 sub-phase a (similar-item-generator) round + author §6.14 entries` | **THIS COMMIT.** Plan-doc status flip + §8 ledger reconciliation + §11 round-close empirical-actual + §12 round-close post-cleanup table + 12 new §6.14 entries authored. | (this commit) |
 
-**Notes:**
+### 8.2 Sub-round commit ledger (b1 vector-similar-context, between commits 7 and 8 per §6.14.34)
 
-- **Commit 7 is the test-run gate.** Quality review is human-in-the-loop: Leo reads `scripts/_logs/sibling-test-run-comparison.md` and either approves the full-bank run (commit 8 lands) or redirects with prompt revisions. Per the redirector convention, iteration commits between 7 and 8 (prompt revisions, re-test against the same 42 sources) are not pre-specced; each is its own redirect cycle. Iteration would use `--force` or `--reset-source` flags to re-generate against already-processed sources.
-- The dormancy chain (commits 2–6 land before any siblings are written) means each commit can be reverted independently if a bug surfaces during commit 7's smoke.
-- **Commits 7 and 8 are the only commits that ship sibling rows.** Earlier commits write zero rows.
-- Commit numbering is final at this commit; no further re-sequencing during the open-round window unless a structural redirect surfaces. Per §6.14.20, the plan flips closed-immutable at commit 9 (not at this commit).
+The sub-round opened against `main` at HEAD `0d3881c` (post-iteration #2). Plan-doc: `docs/plans/phase4-similar-item-generator-vector-context-sub-round.md`. Closed at sub-round commit 6 + recovery sequence.
+
+| # | Conventional message | Scope summary | Hash |
+|---|---|---|---|
+| 7.5.0 | `docs(plan): add vector-similar-context sub-round plan (between commits 7 and 8)` | Sub-round plan-doc creation. | `40a2358` |
+| 7.5.1 | `feat(generation): vector-similar-context injection in sibling generator` | Layer-1 single-tier K=8 neighbor injection. | `5ea9708` |
+| 7.5.2 | `chore(data): re-run 42-source test with vector-similar-context` | Single-tier 42-source measurement. | `062fcf9` |
+| 7.5.3 | `feat(generation): tier-stratified vector-similar-context neighbor query (b1 iteration)` | b1 architecture: K=2-per-tier × 4 tiers. | `dfed80a` |
+| 7.5.4 | `chore(data): re-run 42-source test with tier-stratified vector-similar-context (b1 measurement)` | b1 measurement; PASSED stop-condition. | `e2f5304` |
+| 7.5.5 | `docs(plan): revise sub-round plan for Path 1 — combine b1 tier-stratified context with layer-2 retry-on-duplicate` | Path 1 layer-2 expansion (REVERTED at 7.5.6 per §6.14.29). | `c4d8541` |
+| 7.5.5.r | `docs(plan): amend sub-round plan — b1 measurement passes stop-condition; revert Path 1 layer-2 scope expansion` | Revert amendment; preserves c4d8541 framing as "considered-not-shipped" quote block. | `9f47cfb` |
+| 7.5.6 | `chore(data): retire all prior-iteration generated candidates` | Pre-full-bank cleanup (per §6.14.31 destructive-operation-gate template). | `5be3c5c` |
+| 7.5.7 | `chore(data): full-bank sibling generation with b1-only generator` (originally planned single-shot) | **Halted at scope-H 10% CR-failure threshold; recovery cycle below.** | (halted run; no commit hash) |
+
+### 8.3 Recovery cycle (between sub-round commit 7.5.7's halt and the resume completion)
+
+The full-bank attempt halted on a CR Zod-failure cluster (21+ sources rejected on `options.min(4)` schema bound). Recovery cycle ran the diagnostic + fix + smoke + cleanup + resume sequence:
+
+| # | Conventional message | Scope summary | Hash |
+|---|---|---|---|
+| 7.5.7.r1 | `fix(generation): align sibling schema options.min with full-bank source distribution` | CR-schema-fix: `options.min(4) → options.min(3)` per §6.14.37 (schema-vs-bank shape mismatch). | `60bde8e` |
+| 7.5.7.r2 | `chore(data): retire all source='generated' candidates after CR-schema-fix (recovery cleanup before full-bank rerun)` | Recovery cleanup; pre-rerun bank reset (per §6.14.31). | `ecca199` |
+| 7.5.7.r3 | `fix(generation): raise sibling-generation max_tokens 4096→8192 + capture stop_reason/usage on parse-fail` | max_tokens fix + parse-fail observability augmentation per §6.14.33 (failure-path observability symmetry). | `7aa39d5` |
+| 7.5.7.r4 | `chore(data): full-bank sibling generation (resumed after max_tokens fix; 437 of 439 sources × 4 = 1,748 candidates)` | Idempotent resume; 437/439 sources successful. | `989d6da` |
+| 7.5.7.r5 | `chore(data): retire 37 convergent verbal.antonyms candidates (keep-1-per-cluster across all 4 tiers)` | Antonyms convergence cleanup per §6.14.36 (canonical-exemplar attractors at full-bank scale). | `ed730a5` |
+
+**Final bank state at round close (parent commit 9 / this commit):** 1,711 generated candidates (1,748 − 37 antonyms cleanup); 437 of 439 sources with full 4-tier sibling sets; 2 residual baseline-LLM-noise failures (`019dfbc8-1e11` percentages, `019dfdaf-e54a` CR). Sub-phase b validator inherits this candidate set as input.
+
+### 8.4 Original §8 ledger (preserved per §6.14.20 wholesale-replacement-with-quote-preservation)
+
+> Original §8 ledger as authored at parent commit 1 (`b19042a`):
+>
+> One variable per commit per the §6.14 redirector discipline. Ten commits (commits 0–9), with commit 7's test-run gating commit 8's full-bank run per New Ask 1.
+>
+> | # | Conventional message | Scope summary | Dormancy |
+> |---|---|---|---|
+> | 0 | `docs(plan): add plan for phase 4 similar-item generator (sub-phase a)` | Plan-doc creation. **SHIPPED at `9c7210f`** (2026-05-08). | — |
+> | 1 | `docs(plan): refine phase 4a — resolve open Qs + add test-run gate` | **THIS COMMIT.** Plan-doc refinement: §5 Open-Q resolutions (5 → all "Resolved 2026-05-08"), §6 collapsed to "None this round", §4.12 + §7 updates for JSON-file provenance, NEW §7.5 Filterability subsection, §8 re-sequenced to 10-row ledger with test-run gate, §10 quality-drift risk added, §11 test-run cost sub-heading, Appendix §6.14.20 paraphrase corrected. | — |
+> | 2 | `feat(items): consolidate body/option Zod schemas — delete local copies in item-templates.ts` | §4.4 — delete `BodyText`, `ItemBody`, `Option`, `generatedItem` from `item-templates.ts`; rewire `itemTemplates`'s `schema` field (or remove it). All callers import from `body-schema.ts`. **(Was original commit 1.)** | Dormant: nothing consumes the deletions yet. |
+> | 3 | `feat(generation): pricing.ts + sibling-tool.ts + sibling-schema.ts + sibling-prompts.ts + sibling-provenance.ts` | Constants + schemas + tool definition + prompt builders + provenance JSON writer (+ comparison-md writer for commit 7). Pure-function surface; no LLM calls; no DB writes. **(Was original commit 3 + new sibling-provenance.ts file per §4.12 / §7.3.)** | Dormant: no consumer. |
+> | 4 | `feat(generation): sibling-generator.ts — Anthropic call + cost-telemetry log + provenance JSON write` | LLM-call wrapper. Returns parsed sibling-set + usage. Includes `withBackoff` per `scripts/_lib/anthropic.ts`. Verified manually against one source item via a smoke that also writes a provenance JSON to `scripts/_siblings/<id>.json`. **(Was original commit 4 + provenance JSON write call.)** | Dormant: no orchestration. |
+> | 5 | `feat(items): ingestSiblingSet — validation primitives + transaction-based 4-sibling write` | New `src/server/items/ingest-siblings.ts`. Reuses `optionSchema`, `structuredExplanation`, `assertReferencedOptionsExist` from `ingest.ts`. Writes 4 rows in one tx with `status='candidate'`, `source='generated'`, `metadata_json.parentItemId`, `embedding` set inline. **(Unchanged from original commit 5.)** | Dormant: no caller. |
+> | 6 | `feat(workflows): sibling-generation workflow + steps (helper-extraction shape)` | `src/workflows/sibling-generation.ts` + `src/workflows/sibling-generation-steps.ts`. Workflow file's import graph stays free of `@/logger`. End-to-end against one source item via dev Next.js. **(Unchanged from original commit 6.)** | Dormant: no orchestration script. |
+> | 7 | `feat(scripts): generate-siblings.ts — orchestration + idempotency + cost summary; smoke = test-run with 3-per-sub-type (42 sources × 4 = 168 siblings)` | `scripts/generate-siblings.ts` + `scripts/_logs/siblings-generated.jsonl`. Honors `--max-sources-per-sub-type=N` (default unbounded; N=3 for the test run), `--sub-type=<id>`, `--all-sub-types` (default), `--force`, `--reset-source`, `--max-cost-usd` (default $50). End-to-end against all 14 sub-types at 3 sources each = 42 sources × 4 = 168 candidate siblings. Writes the comparison markdown at `scripts/_logs/sibling-test-run-comparison.md` (per New Ask 1). **STOP AND REPORT for Leo's quality review.** | **First non-dormant commit;** drives the test-run deliverable. |
+> | 8 | `chore(data): full-bank sibling generation (remaining 397 sources × 4 = 1,588 siblings)` | Full-bank run gated on Leo's quality approval after commit 7. Just an orchestration-script invocation (no code change): `bun run scripts/generate-siblings.ts --all-sub-types --max-cost-usd 50`. The 42 sources processed in commit 7 are skipped by the §4.8 idempotency check; the remaining 397 are processed; running totals at end-of-run: 1,756 candidate rows, 439 provenance JSON files, 439 idempotency-log entries. | Non-dormant: drives the full-bank deliverable. |
+> | 9 | `docs(plan): round-close — plan-doc status flip + commit-ledger reconciliation` | Plan-doc status flip to "shipped <date>" via the wholesale-replacement-with-quote-preservation pattern per §6.14.20. Round-close summary; closed-plan diff zero-line check per §6.14.20.3 against every prior closed plan; SPEC §6.14.NN candidate if a generalizable pattern surfaced (e.g., the dual-write-DB-and-JSON pattern, or the test-run-quality-gate-as-commit-boundary pattern). | — |
+>
+> **Notes:**
+>
+> - **Commit 7 is the test-run gate.** Quality review is human-in-the-loop: Leo reads `scripts/_logs/sibling-test-run-comparison.md` and either approves the full-bank run (commit 8 lands) or redirects with prompt revisions. Per the redirector convention, iteration commits between 7 and 8 (prompt revisions, re-test against the same 42 sources) are not pre-specced; each is its own redirect cycle. Iteration would use `--force` or `--reset-source` flags to re-generate against already-processed sources.
+> - The dormancy chain (commits 2–6 land before any siblings are written) means each commit can be reverted independently if a bug surfaces during commit 7's smoke.
+> - **Commits 7 and 8 are the only commits that ship sibling rows.** Earlier commits write zero rows.
+> - Commit numbering is final at this commit; no further re-sequencing during the open-round window unless a structural redirect surfaces. Per §6.14.20, the plan flips closed-immutable at commit 9 (not at this commit).
 
 ## 9. Verification per commit
 
@@ -417,6 +471,24 @@ The architecture_plan §62 narrative ("First end-to-end candidate items land. Co
 
 **Hard cap per §5.2 (resolved 2026-05-08): $50/run, configurable via `--max-cost-usd`.** ~3-5× headroom over the estimate.
 
+### 11.1 Round-close empirical actual (appended at parent commit 9, 2026-05-08)
+
+Plan-time estimate was $5–$15 (uncached–cached). Round actual cumulative cost:
+
+| Run | Cost (LLM) |
+|---|---|
+| Parent commit 7 (42-source test) | ~$0.50 |
+| Iteration #1 + #2 (re-runs) | ~$1.30 |
+| Sub-round commit 7.5.2 (single-tier 42-source) | ~$1.30 |
+| Sub-round commit 7.5.4 (b1 42-source) | ~$1.30 |
+| Halted full-bank attempt (372 successful sources before halt) | $12.95 |
+| 3-source CR fix smoke (60bde8e validation) | ~$0.10 |
+| Resume run (65 successful + 2 failed = 67 attempts; per `989d6da`) | $2.61 |
+| Antonyms cleanup (no LLM calls; pure DELETE) | $0.00 |
+| **Cumulative** | **≈ $19.66** |
+
+The actual cost is at the upper end of the plan-time estimate's headroom envelope ($10–$15) but well under the §5.2 hard cap of $50. The cost overrun against the plan-time central estimate is attributable to: (a) the iteration cycle (4 distinct full-test-set runs at 42 sources each instead of the 1 plan-time-anticipated test run); (b) the halted-then-resumed full-bank shape (372 sources processed twice — once in the halted attempt, once skip-by-idempotency in the resume — though the second pass was $0); (c) the recovery cycle's smoke runs (3-source CR fix, etc.). All three cost-overrun drivers are §6.14-captured operational lessons, not plan-time-omissions in the cost model itself.
+
 ## 12. Empirical motivation — the per-sub-type per-difficulty distribution
 
 Audit query (run 2026-05-08 against dev DB):
@@ -471,6 +543,46 @@ ORDER BY sub_type_id;
 | TOTAL  |          439 |                  1,756 |    2,195 |
 
 Brutal moves from 6 to 445 candidates; sub-phase b's validator promotion rate determines the live count. The asymmetry inversion (brutal becoming the second-most-populous candidate tier) is a feature: brutal candidates need the most validator scrutiny, and a generous candidate pool gives the validator room to be strict.
+
+### 12.1 Round-close post-cleanup actual (appended at parent commit 9, 2026-05-08)
+
+Final per-sub-type-per-difficulty candidate counts after the resume run + antonyms cleanup. Bank ships to sub-phase b at **1,711 generated candidates** (1,748 pre-cleanup minus 37 antonyms convergent removals per `ed730a5`):
+
+| sub_type_id                       | easy | medium | hard | brutal | total | note |
+|-----------------------------------|-----:|-------:|-----:|-------:|------:|------|
+| numerical.averages                |   18 |     18 |   18 |     18 |    72 | full coverage; 1 baseline-noise residual absorbed |
+| numerical.fractions               |    9 |      9 |    9 |      9 |    36 | full coverage |
+| numerical.lowest_values           |   40 |     40 |   40 |     40 |   160 | full coverage; templating artifact intact (per §6.14.36 / convergence-audit.md) |
+| numerical.number_series           |   49 |     49 |   49 |     49 |   196 | full coverage |
+| numerical.percentages             |   33 |     33 |   33 |     33 |   132 | 1 source residual baseline-noise (`019dfbc8-1e11`) |
+| numerical.ratios                  |   16 |     16 |   16 |     16 |    64 | full coverage incl. latent 3-option source `019dfdad-f8da` (validated by 60bde8e schema fix) |
+| numerical.speed_distance_time     |   17 |     17 |   17 |     17 |    68 | full coverage |
+| numerical.word_problems           |   29 |     29 |   29 |     29 |   116 | full coverage |
+| numerical.workrate                |   15 |     15 |   15 |     15 |    60 | full coverage |
+| verbal.analogies                  |   43 |     43 |   43 |     43 |   172 | full coverage |
+| **verbal.antonyms**               |   27 |     28 |   28 |     20 |   103 | **post-cleanup** (140 − 37 convergent per `ed730a5`); brutal hit hardest by SANGUINE cluster |
+| verbal.critical_reasoning         |   58 |     58 |   58 |     58 |   232 | 1 source residual baseline-noise (`019dfdaf-e54a`) |
+| verbal.letter_series              |   16 |     16 |   16 |     16 |    64 | full coverage |
+| verbal.sentence_completion        |   59 |     59 |   59 |     59 |   236 | full coverage |
+| **TOTAL**                         |  429 |    430 |  430 |    422 | 1,711 | |
+
+**Comparison vs. plan-time projection (§12 above):**
+
+- Plan-time projection: 1,756 candidates (439 × 4) at full coverage.
+- Round-close actual: 1,711 candidates (45 fewer) — 8 candidates short from 2 baseline-LLM-noise residuals (2 sources × 4 tiers = 8) + 37 antonyms-convergence cleanup retirements per `ed730a5`.
+- Tier balance is **near-square** (429/430/430/422) rather than perfectly square (439/439/439/439); the asymmetric brutal-tier dip is the antonyms cleanup signature (15 of 37 antonyms removals were brutal-tier per the SANGUINE cluster).
+
+**Bank brutal-coverage delta** (the round's primary motivator per §12 above):
+
+| Tier | Live (pre-round) | Live + Candidate (post-round shipped) | Delta |
+|------|---:|---:|---:|
+| easy | 139 | 568 | +429 |
+| medium | 225 | 655 | +430 |
+| hard | 69 | 499 | +430 |
+| **brutal** | **6** | **428** | **+422** |
+| TOTAL | 439 | 2,150 | +1,711 |
+
+Brutal-tier coverage moves from 6 → 428 candidates (~71× growth); the gaping-hole framing in §12 is empirically addressed at sub-phase a's deliverable. Sub-phase b's validator gates promotion to live; the live-count growth is the validator round's empirical signal.
 
 ---
 

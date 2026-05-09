@@ -1524,6 +1524,248 @@ The consuming page reads `DrillInit`, switches on `.kind`, renders the empty-ban
 
 ---
 
+#### 6.14.28 Plan-prose-vs-empirical-truth divergence
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Pattern surfaced across multiple round-instances where load-bearing plan-prose claims about library/SDK/runtime behavior were contradicted by execution-time reality, requiring inline plan-doc amendments at the discovering commit's body.
+
+When a plan's architecture decision rests on a claim about external-system behavior ("library X enforces Y", "SDK Z's start() function works without a runtime", "PK uniqueness on UUIDv7 prevents duplicate inserts"), the claim must be either (i) verified empirically at plan-write time before being load-bearing, or (ii) flagged as plan-time-assumed and re-verified at the first commit that depends on it. Plan-prose claims that turn out empirically false are not just documentation drift — they invalidate the architecture decisions built on top of them and can cascade into round-shape redesign mid-execution.
+
+**Three concrete instances from this round:**
+
+- **UUIDv7 PK uniqueness as a workflow-replay safeguard (parent commit 6).** Plan §10 framed PK uniqueness as the load-bearing mitigation against `writeSiblingSetStep` replay duplicates: "the second insert fails on PK uniqueness for the already-written rows." Empirically false: `uuidv7()` generates a new id on each call, so a replayed step inserts new rows rather than failing. The actual mitigation is `writeSiblingSetStep`'s explicit count-check guard. Plan-doc body amended at commit 6 to record the discrepancy + state the actual mitigation.
+- **`@workflow/api` start() unusable outside Next.js runtime (parent commit 7 / `869d628`).** Plan §7.3 implied the orchestration script could call `start(siblingGenerationWorkflow, ...)` from `@workflow/api`. At commit 7's smoke-write time, `start()` threw `"invalid workflow function"` outside the `@workflow/next` runtime; the `"use workflow"` / `"use step"` directives are no-ops in CLI context. The workflow was invoked DIRECTLY in the orchestration script. Plan-doc body amended.
+- **B1 measurement supersession claim (`c4d8541` → `9f47cfb`).** The c4d8541 plan revision documented Path 1 (layer-2 retry-on-duplicate scope expansion) as the architectural addition the b1 measurement was insufficient to avoid; the b1 measurement at e2f5304 had ALREADY passed the stop-condition before c4d8541 was authored. The 9f47cfb amendment reverted the layer-2 scope expansion as empirically unnecessary investment.
+
+**Convention going forward.** Plan-time claims about external-system behavior get an explicit verification step at plan-write time when the claim is load-bearing. When a claim cannot be cheaply verified pre-write (e.g., requires a smoke run), it gets flagged as plan-time-assumed; the first commit that depends on the claim runs the verification as its audit step and documents the outcome. Plan-prose-as-anchor is fine; plan-prose-as-load-bearing-fact-without-verification is not.
+
+**Cross-references.** Round: `docs/plans/phase4-similar-item-generator.md` (sub-phase a closing this round). Empirical instances: parent commit 6 body (UUIDv7 PK), `869d628` body (start() workflow), `c4d8541` + `9f47cfb` (b1 measurement supersession reversion). Sibling: §6.14.18 (framework constraint audit before pinning architectural detail), §6.14.22 (audit code semantics against consuming code) — both are specializations of the broader "audit against actual artifact" discipline.
+
+---
+
+#### 6.14.29 Empirical-state verification before plan-doc revision
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Sub-pattern of §6.14.21 specialized to in-flight plan-doc revision: when a plan revision is triggered by a pending measurement, the measurement must be verified-passed (or verified-failed) before the revision is authored, not concurrently.
+
+When a round runs an iterative measurement loop ("ship N → measure → if not passing, expand scope; if passing, narrow scope"), the plan-doc revision that responds to the measurement must be authored **after** the measurement's empirical outcome is known. Authoring the revision concurrently with the measurement (or pre-emptively, anticipating a likely outcome) produces revisions that may not match the actual outcome — and the revision-then-revert sequence wastes the round's commit budget AND obscures the real architectural decision in the plan-doc's history.
+
+**The c4d8541-then-9f47cfb sequence as the round's empirical anchor.** Sub-round commits 1, 2, 1.5, 1.6 shipped layer-1 (vector-similar-context: single-tier K=8 → tier-stratified K=2-per-tier × 4 tiers). The b1 measurement at `e2f5304` was the gating empirical signal: did tier-stratification pass the stop-condition (≥2 distinct brutal antonyms across 3 sources, 0 SANGUINE/LOQUACIOUS)? The measurement PASSED at 2/3 distinct (PHLEGMATIC×2 + MERETRICIOUS×1, 0 SANGUINE, 0 LOQUACIOUS). But the c4d8541 plan revision — authored against the iteration #2 baseline before the b1 measurement was empirically read — pre-emptively expanded scope to Path 1 (layer-2 retry-on-duplicate). The 9f47cfb amendment reverted that expansion as empirically unnecessary investment, with the c4d8541 framing preserved as a "considered-not-shipped" quote block.
+
+**The discipline implication.** Plan-doc revisions in iterative-measurement rounds get the verify-then-revise sequence: read the measurement's empirical outcome FIRST, then author the revision against the outcome. The temptation to "document the next-step-anyway" while the measurement is in flight invites the revise-revert cycle. Pre-emptive plan revisions are not free — they're commit-ledger noise that must later be revert-amended with a quote-preserve block.
+
+**Convention going forward.** When a round's commit ledger includes a measurement-gated decision point ("commit N measures; commit N+1 revises plan based on N's outcome"), the revision commit must verify N's outcome before authoring — not author concurrently. The verification step is named explicitly in commit N+1's pre-execution audit. Round-shape protection: verbalize the gate at plan-write time so the gate exists as a checklist item, not just an implicit "we'll see how it goes."
+
+**Cross-references.** Round empirical anchor: `e2f5304` (b1 measurement that passed), `c4d8541` (plan revision authored pre-verification), `9f47cfb` (revert amendment). Plan: `docs/plans/phase4-similar-item-generator-vector-context-sub-round.md` §11 (closed-plan re-opening framing + discipline-outcome paragraph). Parent: §6.14.21 (audit DB row-state against the live DB) — this entry specializes 6.14.21's discipline to in-flight plan revision; same root principle ("verify against actual artifact, not intended state"), different artifact (in-flight measurement vs. live DB).
+
+---
+
+#### 6.14.30 Additive-feature-cascade-undercount
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Pattern surfaced at three round-instances where adding an additive surface (new optional field, new exported symbol, new struct member) cascaded into more call-site updates than the plan-time audit anticipated.
+
+When a plan adds an additive surface — a new optional field on a Zod schema, a new exported symbol, a new member on a TypeScript struct — the plan-time audit step typically counts production-code call-sites that consume the surface. The empirical cascade is broader: test fixtures that construct the struct must add the field; downstream-derived types (e.g., `Awaited<ReturnType<typeof query.execute>>[number]`) carry the new field through to consumers that auto-derive their input shape; ergonomic helpers (e.g., builders) must accept the field. Cascade-undercount produces a multi-commit ripple where the original additive commit lands clean but later commits surface "I forgot to update X" amendments.
+
+**Three concrete instances from this round:**
+
+- **`SiblingProvenancePayload` optional field (parent commit 4).** Adding the optional `templateVersion` field cascaded into the comparison-md writer's input shape, the JSON-shape parser, and the per-source provenance file format. Plan-time audit counted the producer site only; the cascade required follow-up commits.
+- **`optionSchema` export (parent commit 5).** Adding the export from `ingest.ts` to enable reuse in `ingest-siblings.ts` cascaded into the test fixtures (which previously imported a local copy) and into the type-narrowing in the existing ingest happy-path.
+- **`SourceItem.neighbors` member (sub-round commit 1).** Adding the optional `neighbors` array to `SourceItem` cascaded into `buildSiblingUserPrompt`'s rendering branch, the workflow's source-loading step, the loadNearestNeighbors step's return-shape coupling, and the sub-round commit 2's smoke-script's source-construction.
+
+**The discipline implication.** Additive-feature audits get an explicit "consuming surface count" step that walks: production call-sites + test fixtures + auto-derived downstream types + ergonomic helpers. The audit's deliverable is a cascade-list with all sites enumerated, not just the producer-side change. When the cascade-list grows past ~5 sites, the additive feature should be split into multiple commits — one per cascade-layer — so each commit is mechanically reviewable.
+
+**Convention going forward.** When a plan describes an additive feature, the audit step asks: "which test fixtures construct this struct? which downstream types auto-derive from this surface? which ergonomic helpers (builders, factories) accept this struct?" Each answer is a cascade-site that must land in the same commit (or split across multiple commits with explicit sequencing). The default of "the audit counts production-code only" silently undercounts.
+
+**Cross-references.** Round empirical instances: parent commits 4, 5, sub-round commit 1. Plan: `docs/plans/phase4-similar-item-generator.md` §8 (commit 4 + 5 body for SiblingProvenancePayload + optionSchema), `docs/plans/phase4-similar-item-generator-vector-context-sub-round.md` §6 (commit 1 body for SourceItem.neighbors). Sibling: §6.14.19 (type-error-as-audit cascade pattern) — that entry specializes to type-system propagation; this entry generalizes to call-site cascade across both type-system and ergonomic-helper surfaces.
+
+---
+
+#### 6.14.31 Destructive-operation-gate template
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Pattern surfaced at three round-instances of cleanup commits, each preserving real data while removing transient generated state via the same audit-confirm-execute-verify shape.
+
+Destructive operations on shared state (DELETE rows, rm files, truncate logs) follow a five-step gate template that the round demonstrated three times across different cleanup contexts (sub-round retire-prior-iteration, post-CR-fix recovery cleanup, antonyms convergence cleanup). The shape is canonical for any commit that removes rows from DB or files from disk under preserved-companion-state.
+
+**The five-step gate template:**
+
+1. **Pre-flight count audit.** Read the live DB count of rows-to-be-deleted via `psql` (not inferred from prior commits' state). Read the file count of items-to-be-deleted via `ls`. Capture the exact pre-deletion numbers.
+2. **Surface the destructive operation verbatim** to the user before firing. Include the SQL statement (with bound parameters), the filesystem operation (with paths), and the expected outcome. The surface is one-shot read-by-Leo — no cumulative context-build expected.
+3. **Explicit confirmation gate.** User must type "yes" or equivalent before the destructive step fires. The confirmation prompt names the exact destructive operation; "proceed?" alone is insufficient.
+4. **Transactional DELETE with RETURNING count match.** The actual DELETE runs as a single transaction with `RETURNING id` (or equivalent); the returned-row count must match the pre-flight count. Mismatch surfaces as immediate STOP.
+5. **Post-flight byte-equality verification of preserved state.** Real items / real files / real logs that were NOT supposed to be touched must show byte-equal counts pre-and-post. The verification names each preserved surface explicitly.
+
+**Three concrete instances from this round (all `--allow-empty` commits at git level):**
+
+- `5be3c5c` — sub-round commit 5: retire all prior-iteration generated candidates (1.5-iteration mixed-config DB state).
+- `ecca199` — recovery cleanup: retire mixed-config generated candidates after CR-schema-fix, before full-bank rerun.
+- `ed730a5` — antonyms cleanup: retire 37 convergent verbal.antonyms candidates per the cluster audit (keep-1-per-cluster).
+
+Each commit preserved (i) all `source='real'` items at byte-equal count, (ii) all out-of-scope `source='generated'` items at byte-equal count, (iii) untouched diagnostic logs preserved. Each commit followed the five steps verbatim.
+
+**Convention going forward.** Any commit whose deliverable includes deletion of DB rows, deletion of files, or truncation of append-only logs follows the five-step gate. Rounds with more than one destructive commit should explicitly cross-reference the template; rounds with a single destructive commit should still author it against the template rather than improvising. The gate's purpose is twofold: prevent accidental over-deletion AND make destructive commits reviewable as a class (the verifier reads the same five-step shape across rounds).
+
+**Cross-references.** Round empirical instances: `5be3c5c`, `ecca199`, `ed730a5` (this round). Plan: `docs/plans/phase4-similar-item-generator-vector-context-sub-round.md` §6 commit 5 row (the canonical pre-deletion-audit + post-deletion-verification framing). Sibling: §6.14.21 (audit DB row-state against the live DB) — the destructive-operation-gate's step 1 is a specialization of that discipline; §6.14.31 generalizes the full audit-confirm-execute-verify shape into a reusable template.
+
+---
+
+#### 6.14.32 Sonnet 4.6 tool-use Zod-parse failures with scale-dependence
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Pattern surfaced from the round's empirical telemetry across multiple LLM-call run scales: a baseline ~5% noise rate in tool-use parameter compliance plus a scale-dependent regime where prompt-complexity drives output-budget pressure that manifests as new failure modes (empty rawInput, max>5 violations, structuredExplanation parts ordering).
+
+LLM tool-use compliance has two regimes that the round empirically separated:
+
+- **Baseline noise (~5% across the round).** The Sonnet 4.6 tool-use call occasionally emits malformed structured output — duplicate option text, referenced-option-text not exact-match, correctAnswerText not in options, structuredExplanation parts in wrong order. These are well-distributed across sub-types and rules; they're a baseline rate per LLM call that doesn't correlate with prompt complexity. Multiple-instance evidence: 2 percentages failures at sub-round commit 2 (`062fcf9`); 1 workrate at e2f5304; ~11 distributed failures at full-bank commit (`989d6da` resume).
+- **Scale-dependent failures.** As prompt complexity grows, output-budget pressure produces categorically different failure modes — empty rawInput on max_tokens exhaustion, content-pattern attractors that cluster siblings on canonical exemplars, schema bound violations (too_big options) on overly-verbose tiers. These DO correlate with prompt complexity and concentrate in specific sub-types/tiers. Multiple-instance evidence: 21+ CR Zod failures at full-bank pre-fix (60bde8e + 7aa39d5 fixes addressed); empty-rawInput cluster at high-content-tail CR sources (7aa39d5 fix); SANGUINE-and-friends convergence at antonyms across all 4 tiers (ed730a5 cleanup addressed).
+
+**The discipline implication.** Round-planning that relies on LLM tool-use must distinguish baseline-noise from scale-dependent failure modes. Baseline-noise is a "live with it, validate post-hoc" cost; scale-dependent failure is an architectural-or-fix-shape decision. Confusing the two leads to either (a) over-engineering to address noise that's empirically tolerable, or (b) under-engineering to ignore scale-dependent patterns that compound at full-bank scale.
+
+**Operational anchor.** The 10% sub-type failure-rate threshold for "STOP and surface BEFORE the run completes" was the gating discipline for the round's full-bank attempts. The threshold separates baseline-noise (well under 10%) from scale-dependent failure (CR hit 10.9% at scope-H halt). Future LLM-call rounds should anchor on a sub-type-level failure-rate threshold rather than a run-level one — sub-type-level concentration is the structural signal, not the run-aggregate.
+
+**Convention going forward.** Long-running LLM-call orchestrators include a per-sub-type failure-rate gate that halts the run at a threshold (10% as the round's empirical anchor). The captured run log + post-hoc per-sub-type telemetry lets future rounds distinguish baseline noise from scale-dependent failure. Iteration commits that respond to scale-dependent failure modes (the prompt iteration cycle) should anchor on sub-type-level evidence, not run-aggregate.
+
+**Cross-references.** Round empirical instances: `062fcf9` (sub-round commit 2 — 2 percentages failures); `e2f5304` (sub-round commit 1.6 — 1 workrate failure); halted full-bank attempt + recovery cycle (`60bde8e` schema fix, `7aa39d5` max_tokens fix); `989d6da` (resume run baseline noise across 11 failures distributed across 4 sub-types). Plan: `docs/plans/phase4-similar-item-generator.md` §10 (LLM Zod failure handling). Sibling: §6.14.32 sits adjacent to §6.14.31 (destructive-operation-gate) as the runtime-discipline counterpart — both are LLM-orchestration-loop primitives.
+
+---
+
+#### 6.14.33 Failure-path observability symmetry
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Pattern surfaced from two round-instances where LLM-call failure-path logger.error contexts captured insufficient diagnostic fields, requiring additional debug cycles to recover information that was trivially available on the same SDK message object.
+
+LLM-call failure paths must capture the same structured fields the success paths capture. The Anthropic SDK Message object carries `stop_reason`, `usage`, `content` blocks; the success-path's `logger.info` context object captured all three. The pre-fix failure-path's `logger.error` context object captured only `rawInput` (the failed-parse payload) — losing `stop_reason` and `usage`, both of which were diagnostic-bearing on every parse-fail. The asymmetric capture forced the round's debugging cycles to infer root cause via wall-clock + threshold analysis rather than direct evidence.
+
+**Two round-instances of the gap biting twice:**
+
+- **CR Zod-failure round** (60bde8e fix). The prior diagnostic captured rawInput showing 21+ CR sources emitted exactly 3 options where schema required 4-5. The diagnostic could not directly confirm "the LLM is mirroring the source's option-count" because `stop_reason` wasn't logged; inference was via schema-vs-source-bank distribution audit (which revealed 64% of real CR sources had 3 options).
+- **Empty-rawInput cluster** (7aa39d5 fix). The 5 consecutive empty-rawInput CR failures could not be directly diagnosed because `stop_reason` wasn't logged; the diagnostic inferred max_tokens exhaustion via wall-clock (~62s vs ~25s typical) + sub-type concentration (all hard-tier) + bank-distribution correlation (high-content tail).
+
+**The 7aa39d5 fix and its empirical validation.** The fix augmented the parse-fail logger.error context with `stop_reason`, `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens` (snake_case field shape mirroring success-path lines 197-208). The resume run (989d6da) included one parse-fail on `019dfdaf-e54a` with the augmented context: `stop_reason: "tool_use"` immediately surfaced that the failure mode had shifted from max_tokens exhaustion (pre-fix) to a different rule (structuredExplanation parts ordering). Diagnostic cycle collapsed by ~1 redirect compared to the pre-fix shape.
+
+**The discipline implication.** Whenever a function's success path computes structured-log fields from an SDK response object (or any external API response), the failure path's logger.error context object should carry the same fields. If the failure throws BEFORE the success-path normalization (e.g., null-coalescing for nullable fields), the failure path duplicates the normalization inline rather than skipping the fields. The cost of duplication is one or two assignment-line per failure path; the cost of asymmetric capture is one or more debug cycles when the failure mode surfaces.
+
+**Convention going forward.** Code-review checklist for any function that calls an external API and may fail: "if this function's success path logs structured fields from the response object, does the failure path log the same fields?" The default is symmetric capture; asymmetry must be justified with an explicit reason ("this field is sensitive PII" / "this field is the failure cause we're already capturing as `error.message`" / etc.).
+
+**Cross-references.** Round empirical instances: pre-fix gap surfaced at `60bde8e` (CR Zod-failure round diagnostic) + `7aa39d5` body (empty-rawInput round diagnostic + fix authoring); post-fix validation at `989d6da` resume run's single parse-fail event. Plan: `docs/plans/phase4-similar-item-generator.md` §10 (LLM failure-mode handling). Sibling: §6.14.32 (Sonnet 4.6 tool-use Zod-parse failures with scale-dependence) — this entry is the observability-discipline complement to that entry's runtime-discipline.
+
+---
+
+#### 6.14.34 Mid-round narrow-scope sub-round insertion
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Pattern surfaced this round as the canonical shape for handling mid-round empirical evidence that a planned full-bank deliverable would be premature without a structural intervention.
+
+When a round's commit ledger includes a test-run gate (e.g., parent commit 7's 42-source test before parent commit 8's 397-source full-bank run), and the test-run reveals a structural problem that requires architectural intervention (not just prompt iteration), the canonical response is a **narrow-scope sub-round between the existing parent's commits 7 and 8**. The sub-round opens its own plan-doc (`docs/plans/<parent>-<sub-round-name>-sub-round.md`), commits with sub-round-specific commit numbers (commits 7.5.0, 7.5.1, ...), and closes back into the parent at full-bank-run time. The parent round-close (parent commit 9) folds the sub-round outcomes back via `wholesale-replacement-with-quote-preservation` per §6.14.20.
+
+**The round's empirical anchor.** Iteration #1 (`22c421f`, parent iteration commit between commits 7 and 8) anchored sibling difficulty tiers to real CCAT distribution. Iteration #2 (`0d3881c`, parent iteration commit between iteration #1 and the sub-round) de-templated antonyms anchor + added cross-source duplicate-prevention guards. The post-iteration #2 test-run still surfaced canonical-exemplar convergence (3/3 SANGUINE on antonyms-brutal). The sub-round opened (`40a2358` plan-doc) to ship vector-similar-context injection — a structural architectural addition that prompt iteration alone could not address. The sub-round closed at 8 commits + 5 recovery commits; parent commit 9 (this commit) folds the sub-round inline via the §6.14.20 pattern.
+
+**The discipline implication.** Narrow-scope sub-rounds are bounded scope-expansion: the parent round's commit ledger does not absorb the sub-round's commits inline at plan-time; the sub-round opens its own plan-doc, ships its own commit chain, and the parent round-close reconciles via wholesale-replacement-with-quote-preservation. The sub-round preserves the parent's open-round window per §6.14.20.20 (extension to mid-round sub-round insertion). The alternative shapes — (a) absorbing iteration commits into the parent ledger inline with each new iteration getting a new commit number, or (b) closing the parent round and opening a new round — are both worse: (a) inflates the parent's commit count without preserving the empirical-iteration narrative; (b) loses the parent's open-round window and the §6.14.20 immutability constraint kicks in too early.
+
+**Convention going forward.** When a mid-round empirical signal indicates a structural intervention is needed (not just prompt iteration), default to narrow-scope sub-round insertion. The sub-round plan-doc explicitly fences scope ("§3 Out of scope" lists the parent-round surfaces NOT touched). The parent round-close reconciles via §6.14.20's wholesale-replacement-with-quote-preservation pattern.
+
+**Cross-references.** Round empirical instance: this round (parent commit 7's iteration cycle + sub-round insertion + parent commit 9 round-close). Plan: `docs/plans/phase4-similar-item-generator-vector-context-sub-round.md` §11 (closed-plan re-opening framing — the round's explicit reasoning about why the sub-round shape was correct). Sibling: §6.14.20 (closed-plans-immutable as a multi-round convention) — this entry's narrow-scope-sub-round-insertion is a specialization of §6.14.20.20's mid-round insertion extension.
+
+---
+
+#### 6.14.35 Atomic-set contract as structural integrity probe
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Operational pattern: atomic-sibling-set contracts (each parent has exactly K generated children) produce tier-balanced row populations as a structural invariant that pre-destructive-operation audits can probe to verify state integrity.
+
+The round's atomic-sibling-set contract (parent §4.2: each successful source produces exactly 4 generated siblings, one per difficulty tier) implies a structural invariant: across the whole `source='generated'` population, per-tier counts are equal (`COUNT WHERE difficulty='easy' = COUNT WHERE difficulty='medium' = ...`). Any deviation from per-tier balance signals atomic-set contract violation — either (a) a workflow midstream-failure that wrote partial sets, (b) a row-level corruption, or (c) post-write cleanup that didn't preserve the contract. Pre-destructive-operation audits should query this invariant; the result is a cheap structural-integrity probe.
+
+**Empirical use across the round's destructive-operation commits:**
+
+- `5be3c5c` (sub-round commit 5 cleanup): pre-flight count audit verified `easy/medium/hard/brutal = 12/12/12/12 = 48` rows × 4 tiers; post-cleanup verification confirmed all tiers at 0.
+- `ecca199` (recovery cleanup post-CR-fix): pre-flight verified `140/140/140/140 = 560` rows; post-cleanup confirmed 0.
+- `ed730a5` (antonyms cleanup): pre-flight verified `35/35/35/35 = 140` antonyms rows (the atomic-set invariant within the antonyms sub-set); post-cleanup verified the deletion pattern matched the cluster cardinality projection (`27/28/28/20`) and the 21 partial-parents shape was internally consistent (`7×0 + 11×1 + 5×2 + 4×3 + 1×4 = 37` sibling losses).
+
+**The discipline implication.** When a system has an atomic-write contract (multi-row atomic sets, multi-file atomic write, etc.), the contract implies a structural invariant on aggregate state that's cheap to probe via aggregate query. Pre-destructive-operation audits run the probe as part of the pre-flight count audit (per §6.14.31's five-step template); deviations signal investigate-before-destroy.
+
+**Convention going forward.** Round-planning that includes atomic-write contracts also names the aggregate-invariant query that probes the contract. Pre-destructive-operation audits run the query and surface the result. Post-destructive-operation verifications run the query against the post-state and verify the deviation matches the destructive operation's expected impact.
+
+**Cross-references.** Round empirical instances: `5be3c5c`, `ecca199`, `ed730a5` (all three destructive-operation commits). Plan: `docs/plans/phase4-similar-item-generator.md` §4.2 (atomic-set contract definition). Sibling: §6.14.31 (destructive-operation-gate template) — this entry's atomic-set probe is one of step 1's pre-flight audit queries; §6.14.35 generalizes the operational pattern.
+
+---
+
+#### 6.14.36 Canonical-exemplar convergence — architectural-fix-not-prompt-fix
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Round-defining empirical finding: LLM-generated content can converge on a small set of canonical exemplars across many independent generations even when the prompt explicitly forbids surface-cloning, and the fix for this convergence at scale is architectural, not prompt-iteration.
+
+When an LLM generation task (per-sub-type sibling generation in this round's case) has a small target-attribute space ("brutal-tier antonym for a college-register polysemous word"), the LLM converges on a small set of canonical exemplars across many independent calls — even when (a) the prompt explicitly says "produce a different specific word than any prior generation", (b) vector-similar-context injection (the b1 architecture) shows the LLM the prior generations as do-not-duplicate exemplars, and (c) each call has its own distractor option-set produced independently. The convergence is on the **target word (anchor)**, not on the **option-set surface**. The round's empirical evidence: 16 SANGUINE-bearing brutal antonyms across 16 distinct parent sources, with **15 of 16** distinct option-set fingerprints — diversified-distractors with same target word.
+
+**The round's empirical envelope (verbal.antonyms convergence post-resume):**
+
+- Total antonyms candidates: 140 (35 parents × 4 tiers).
+- In-cluster at threshold 0.95: 53 (37.9%) across 16 clusters (easy: 6, medium: 3, hard: 3, brutal: 4).
+- Largest single cluster: SANGUINE (brutal, size 13).
+- Other 13 sub-types: ≤5.6% in-cluster (12 sub-types under 1%).
+- The b1 architecture (tier-stratified vector-similar-context, K=2-per-tier × 4 tiers = 8 neighbors) was empirically validated for 13 of 14 sub-types (`verbal.critical_reasoning` 232 candidates, 0 clusters; `verbal.sentence_completion` 236 candidates, 0 clusters; etc.) AND empirically insufficient for `verbal.antonyms` where canonical-exemplar attractors persisted across all 4 tiers.
+
+**The diversified-distractor finding as the load-bearing characterization.** The 16 SANGUINE-bearing candidates are NOT effectively-cloned output. Each call independently produced its own option-set; the convergence is on the brutal-anchor word selection. This shifts the fix-shape decision: **prompt-iteration** ("the LLM keeps producing SANGUINE — let's tell it more emphatically not to") attacks the wrong target. The right targets are architectural: (a) sub-type-specific brutal-anchor blacklist injected into the prompt, (b) regeneration with anti-anchor signaling when neighbor-context shows the candidate target word repeating, (c) target-word constraint hard-coded out-of-distribution from the LLM's training-bias attractor set.
+
+**Cross-tier cluster-overlap as a dataset-shape consequence.** Single source `019dfdac-b934-72ea-a786-436d334f4057` had its generations clustered at all 4 tiers (Timid-easy, frugal-medium, hard-cluster #2, Sanguine-brutal); the keep-1-per-cluster cleanup retained none of its siblings. This is a downstream consequence of the canonical-exemplar pattern: when a parent's LLM-output stream produces convergent siblings at every tier, no per-cluster retention strategy preserves any of its generations. Future cleanup-policy designs may want a "preserve at least 1 sibling per parent" guard if maintaining coverage breadth across source items is a design goal.
+
+**The discipline implication.** Round-planning that uses LLM generation against a small target-attribute space must anticipate canonical-exemplar attractors as a systemic risk. The b1-architecture validation across 13 of 14 sub-types shows the convergence is sub-type-specific, not generation-pipeline-general; identifying which sub-types fall in the convergence boundary is empirical work that requires full-bank-scale data, not test-run-scale data. The fix-shape decision (architectural intervention vs. cleanup-after-the-fact) is the round's empirical signal.
+
+**Convention going forward.** Future LLM-generation rounds with small target-attribute spaces include a convergence-audit step at full-bank scale (cosine-similarity clustering at thresholds 0.92/0.95/0.97 per cell) BEFORE the round closes. The audit identifies sub-types in the convergence boundary; the cleanup-or-architectural-fix decision is informed by the audit's evidence (in-cluster percentage, distinct-fingerprint vs. effective-clone characterization, cross-tier overlap). Prompt iteration is the wrong tool when the convergence is on target-attribute selection, not on output surface.
+
+**Cross-references.** Round empirical instances: `989d6da` (resume run that surfaced the convergence at full-bank scale); `scripts/_logs/convergence-audit.md` (the cosine-similarity cluster scan that quantified the convergence + characterized it as diversified-distractor); `ed730a5` (the architectural-or-cleanup decision, executed as cleanup-after-the-fact via keep-1-per-cluster). Plan: `docs/plans/phase4-similar-item-generator-vector-context-sub-round.md` §10 (the round's anticipated risk; pre-empirical prediction was "first 1-2 sources converge", empirical reality was 16/35 = 45.7% at brutal). Sibling: §6.14.32 (LLM-output drift) — this entry's canonical-exemplar attractor is a specific instance of LLM-output drift's scale-dependent regime.
+
+---
+
+#### 6.14.37 Schema constraints derived from seed-data must re-verify against full-bank shape
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Pattern surfaced from the round's CR-failure cycle where a Zod schema bound (`options.min(4)`) was correct for the 50-item seed bank but wrong for the 479-item full bank.
+
+When a Zod schema (or any data-shape constraint) is authored against a small seed-data sample, the constraint may not match the full-bank shape. The seed bank in this round had ~50 items at 4-or-5-options; the full bank had 479 items at 3-or-4-or-5-options because the canonical CCAT logic-validity question shape uses exactly 3 options ("Correct / Incorrect / Cannot be determined"), and the full-bank extraction had captured 38 such CR items + 1 ratios item. The schema's `options.min(4)` constraint rejected the 3-option shape that the LLM correctly mirrored (per the prompt's "preserve problem structure" rule).
+
+**The empirical chain of the failure:**
+
+1. Schema authored at parent commit 3 / `a07c03f` with `options: z.array(llmOption).min(4).max(5)` — derived from seed-data inspection.
+2. Test run at parent commit 7 / `869d628` succeeded: 42 sources × 4 = 168 candidates generated. Seed items had 4-or-5 options; the generator mirrored that shape; schema accepted.
+3. Full-bank attempt at the halted full-bank commit: 21+ CR sources rejected on `siblings.{tier}.options too_small minimum=4`. Diagnostic captured the exact rawInput showing every tier emitted exactly 3 options.
+4. Schema-vs-bank distribution audit at the diagnostic phase: 38 of 59 real CR sources have 3 options (64%); 1 of 16 ratios sources has 3 options. Two sub-types affected by the schema-vs-data mismatch.
+5. Fix at `60bde8e`: `options.min(4) → options.min(3)`. Audit-confirmed across all 14 sub-types: no source has option_count > 5.
+
+**The discipline implication.** Schema authoring against seed-data is fine as a starting point; the schema's constraints must be re-verified against the full-bank distribution before the schema is load-bearing on full-bank execution. The verification is a single SQL query (per-sub-type option-count distribution) at schema-definition time. The round's audit query at the recovery cycle's diagnostic phase identified both affected sub-types in seconds; the same query at schema-definition time would have prevented the failure cycle entirely.
+
+**Convention going forward.** When a Zod schema (or any value-bound constraint) is added or modified, the audit step includes a "verify against current full-bank shape" check: enumerate the constraint's bounds, run an SQL query against the live data to check no row violates the bounds, surface the result as part of the commit's pre-execution audit. The check is cheap; the failure mode it prevents is expensive (a full-bank execution cycle that fails partway through).
+
+**Cross-references.** Round empirical instance: `60bde8e` (the schema fix + commit body documenting the seed-vs-bank shape mismatch). Plan: `docs/plans/phase4-similar-item-generator.md` §4.4 (body/option Zod schema consolidation; the schema-derivation site). Sibling: §6.14.21 (audit DB row-state against the live DB) — this entry specializes 6.14.21's discipline to schema-bound verification; same root principle ("verify against actual artifact"), different artifact (schema-bound vs. row-state).
+
+---
+
+#### 6.14.38 Stdout capture for long unattended runs
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Operational pattern: long-running LLM-call orchestration scripts must redirect stdout to disk via `tee` from the very first invocation; stdout-only-to-terminal is a single point of failure for postmortem investigation.
+
+The original full-bank run ran for ~2h45m without `tee` redirect; the run halted at scope H's 10% CR-failure threshold. The script's `logger.error` blocks (with `rawInput`, `issues`, `stop_reason` post-7aa39d5) emitted to stdout; without `tee`, those error blocks were lost when the terminal session ended. Root-cause investigation required an explicit re-run with `tee` to capture failure-path data. The re-run's `cr-diag.log` was the load-bearing artifact for the CR-schema-fix diagnosis; without it, the round's CR-failure cycle would have required guesses-then-verify rather than direct-evidence-then-fix.
+
+**The discipline implication.** Any orchestration script that runs longer than ~5 minutes unattended (= any LLM-call orchestrator at non-trivial scale) must `tee` stdout from the first invocation. The redirect cost is a few KB/MB on disk; the failure-recovery cost without it is 1+ debug cycles per investigation.
+
+**The empirical operational anchor.** The round's recovery cycle defaulted to `bun run scripts/X.ts ... 2>&1 | tee scripts/_logs/<X>.log` for every diagnostic AND every retry AND the resume run AND the antonyms cleanup smoke. Each captured log is a postmortem-ready artifact: `cr-diag.log` (the original CR-failure diagnostic), `cr-fix-smoke.log` (the schema-fix validation smoke), `full-bank-output-resume.log` (the resume run's complete trace including the 1 parse-fail with augmented stop_reason). Future rounds reading these artifacts can trace the empirical chain end-to-end.
+
+**Convention going forward.** Orchestration script invocations in plan-doc audit steps include the `tee` redirect verbatim; round-close summaries reference the captured logs by path. The captured-log paths live alongside the diagnostic artifacts (`scripts/_logs/`); they're preserved across cleanup commits as historical artifacts (not committed to git, but explicitly NOT-DELETED in the cleanup commit's "what NOT to touch" list).
+
+**Cross-references.** Round empirical instances: the lost-stdout from the halted full-bank attempt; the recovery cycle's `cr-diag.log` + `cr-fix-smoke.log` + `full-bank-output.log` + `full-bank-output-resume.log`. Plan: `docs/plans/phase4-similar-item-generator-vector-context-sub-round.md` §6 commit 6 row (post-amendment, the full-bank invocation includes `2>&1 | tee scripts/_logs/full-bank-output-resume.log`). Sibling: §6.14.33 (failure-path observability symmetry) — that entry covers what to log; this entry covers where the log is captured. Both are operational disciplines for LLM-call orchestration.
+
+---
+
+#### 6.14.39 Provenance-JSON partial-invalidation as known state after targeted cleanup
+
+> **Captured 2026-05-08** (phase 4 sub-phase a similar-item-generator round close). Operational note: post-cleanup, a subset of provenance JSONs at `scripts/_siblings/<parentId>.json` encode 4-sibling sets where 1+ siblings have been deleted from DB; the provenance-JSON contract didn't anticipate post-write cluster-cleanup, and downstream consumers (sub-phase b validators) must cross-check against current DB state.
+
+The round's antonyms cleanup commit (`ed730a5`) deleted 37 generated rows across 21 distinct parent items but did NOT touch the corresponding provenance JSONs at `scripts/_siblings/<parentId>.json`. Each JSON encodes the parent's 4-sibling set (LLM-output verbatim, embedding-step result, ingest IDs); after cleanup, 21 of those JSONs encode sibling IDs that no longer exist in the DB. The JSONs are still accurate as a record of "what the LLM produced at generation time" but are NOT accurate as a record of "what's in the bank now". The sub-round-shipping contract didn't anticipate this divergence.
+
+**Three concrete consequences for sub-phase b:**
+
+- **JSON-as-authoritative is wrong.** Validators consuming provenance must cross-check `JSON-encoded sibling IDs` against `current `items` table state` to filter out deleted siblings before assessing the parent's full sibling set.
+- **Per-parent sibling count from DB, not JSON.** Aggregate queries on the bank ("which parents have 4 generated siblings remaining?") should use DB-side aggregate counts, not enumerate JSONs and assume each encodes 4 live rows.
+- **Round-time JSON state vs. cleanup-time JSON state.** The JSONs are write-once-at-generation-time artifacts; cleanup is a separate write to the DB but NOT to JSON. Future cleanup commits in sibling rounds either (a) accept the same partial-invalidation pattern + document it explicitly, OR (b) introduce a JSON-side cleanup pass that prunes deleted-from-DB sibling references. The round chose (a) per scope.
+
+**The discipline implication.** When a write-once external artifact (provenance JSON, audit log, side-effect file) is paired with a mutable primary store (DB row), cleanup operations on the primary store must explicitly classify the external artifact's state: kept-as-historical-artifact (with downstream consumer awareness) OR cleaned-in-parallel (paired DELETE). Round-planning must name the choice; future-Claude reading either side must understand which.
+
+**Convention going forward.** When a round includes both write-once external artifacts and post-write cleanup operations on the primary store, the cleanup commit's body explicitly classifies each external artifact: which are kept-as-historical, which are cleaned in parallel. Downstream consumers (validators, dashboards, audit reports) get an explicit cross-reference if they must adapt their reads.
+
+**Cross-references.** Round empirical instance: `ed730a5` (the antonyms cleanup; commit body documents partial-invalidation explicitly). Plan: `docs/plans/phase4-similar-item-generator.md` §4.12 (provenance shape — write-once-at-generation-time). Sibling: §6.14.31 (destructive-operation-gate template) — this entry covers a specific external-artifact disposition decision that the gate-template's step 5 (post-flight verification) names; §6.14.39 specializes the discussion to write-once-paired-with-DB external artifacts.
+
+---
+
 ## 7. Server actions, route handlers, and workflows
 
 All server actions live at the closest `actions.ts` file under `src/app/(app)/...`. All follow the patterns demonstrated in `src/app/actions.ts`: file-top `"use server"`; mutations use `errors.try` around DB calls (`rules/no-try.md`); errors are logged then thrown via `errors.wrap` (`rules/error-handling.md`); writes call `revalidatePath` after writes (with the specific exception in §7.8).
