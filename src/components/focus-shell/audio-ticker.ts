@@ -1,12 +1,26 @@
 "use client"
 
-// audio-ticker — urgency-loop audio for the focus shell.
+// audio-ticker — urgency audio for the focus shell.
 //
-// Single rule (SPEC §6.12, post-overhaul-fixes round): at session start,
-// pick one MP3 file at random from the bank manifest at
-// src/config/sound-bank.ts. When the per-question target elapses, start
-// the chosen file looping. Stop on advance. Same file replays for every
-// question in the same session; a hard refresh re-picks.
+// Single rule (SPEC §6.12, post-Round-1 commit 9 amendment): at session
+// start, pick one MP3 file at random from the bank manifest at
+// src/config/sound-bank.ts. When the per-question target elapses, the
+// chosen file plays ONCE as a one-shot warning accent. Synth ticks (via
+// playTick) take over for the post-target window — those are scheduled
+// by the focus-shell, not by this module. Stop on advance: the active
+// warning source is cancelled if it's still mid-playback. Same file
+// plays for every question in the same session; a hard refresh re-picks.
+//
+// Pre-amendment behavior: the warning buffer played on a continuous loop
+// (`source.loop = true`) until item advance, with no post-target synth
+// ticks. The Round 1 §5.9 redline retired the loop in favor of warning-
+// once + post-target ticks; SPEC §6.12 + this header reflect the new
+// design. The exported function names (`startUrgencyLoop`,
+// `stopUrgencyLoop`) are intentionally NOT renamed to avoid cascading
+// the rename into the reducer-side `urgencyLoopStartedForCurrentQuestion`
+// flag + `urgency_loop_started` action; the names now read as slight
+// misnomers but every concrete behavior they describe is the warning-
+// once-then-cancel-on-advance contract.
 //
 // Browser autoplay policy gates AudioContext creation behind a user
 // interaction. `unlockAudio()` must be called from a click / pointerdown
@@ -198,7 +212,9 @@ function startUrgencyLoop(): void {
 		const source = ctx.createBufferSource()
 		const gain = ctx.createGain()
 		source.buffer = buf
-		source.loop = true
+		// One-shot per Round 1 §5.9 / SPEC §6.12 amendment — the prior
+		// `source.loop = true` was retired in favor of warning-once +
+		// post-target synth ticks (scheduled by the focus-shell).
 		gain.gain.setValueAtTime(PEAK_GAIN, ctx.currentTime)
 		source.connect(gain).connect(ctx.destination)
 		source.start(0)

@@ -308,12 +308,20 @@ function FocusShell(props: FocusShellProps) {
 	// on EVERY advance regardless, so it's the more reliable trigger.
 	const questionsRemaining = state.questionsRemaining
 	const prevSecondRef = React.useRef<number>(-1)
+	// Round 1 §5.9 (Path C) — second cross-second-detection ref for the
+	// post-target tick stream. Lives parallel to prevSecondRef so the
+	// pre-target and post-target streams don't collide at the boundary
+	// (otherwise a single ref would skip the warning second on the
+	// transition). Reset together on advance.
+	const prevPostTargetSecondRef = React.useRef<number>(-1)
 	React.useEffect(
 		function resetTickTrackingOnAdvance() {
-			// Reset the cross-second-detection ref on advance so the next
-			// item's tick window starts fresh from second 0.
+			// Reset the cross-second-detection refs on advance so the next
+			// item's tick windows (pre-target + post-target) both start
+			// fresh from second 0.
 			void questionsRemaining
 			prevSecondRef.current = -1
+			prevPostTargetSecondRef.current = -1
 		},
 		[questionsRemaining]
 	)
@@ -337,6 +345,12 @@ function FocusShell(props: FocusShellProps) {
 		function maybeStartUrgencyLoop() {
 			if (state.elapsedQuestionMs < props.perQuestionTargetMs) return
 			if (state.urgencyLoopStartedForCurrentQuestion) return
+			// Per Round 1 §5.9 (Path C) + SPEC §6.12 amendment: the
+			// "urgency loop" is now a one-shot warning sample (the
+			// `source.loop = true` flag in audio-ticker was retired).
+			// The reducer flag + action names retain "Loop" for blast-
+			// radius reasons; the behavior they gate is the warning
+			// sample firing once at target crossing.
 			startUrgencyLoop()
 			dispatch({ kind: "urgency_loop_started" })
 		},
@@ -345,6 +359,36 @@ function FocusShell(props: FocusShellProps) {
 			state.urgencyLoopStartedForCurrentQuestion,
 			props.perQuestionTargetMs
 		]
+	)
+	React.useEffect(
+		function maybePlayPostTargetTicks() {
+			// Round 1 §5.9 (Path C) — sibling to maybePlayPreTargetTicks.
+			// Mirrors that effect's strict-greater-than-target structure:
+			// pre-target fires synth ticks at integer seconds in the
+			// half-open range (halfSec, targetSec); this effect fires at
+			// integer seconds strictly greater than targetSec, with no
+			// upper bound (cleanup on advance via questionsRemaining is
+			// the terminator). For an 18s target: pre-target = 10..17,
+			// warning = at second 18, post-target ticks = 19, 20, 21, …
+			// until the user submits or the server advances.
+			if (state.elapsedQuestionMs < props.perQuestionTargetMs) return
+			const secondsElapsed = Math.floor(state.elapsedQuestionMs / 1000)
+			if (secondsElapsed === prevPostTargetSecondRef.current) return
+			const targetSec = props.perQuestionTargetMs / 1000
+			// First post-target tick fires at floor(targetSec) + 1 (so for
+			// an 18s target, second 19). Math.max with the prev ref + 1
+			// preserves the "haven't already fired this second" guard
+			// across re-renders.
+			const start = Math.max(
+				prevPostTargetSecondRef.current + 1,
+				Math.floor(targetSec) + 1
+			)
+			for (let s = start; s <= secondsElapsed; s += 1) {
+				playTick()
+			}
+			prevPostTargetSecondRef.current = secondsElapsed
+		},
+		[state.elapsedQuestionMs, props.perQuestionTargetMs]
 	)
 	React.useEffect(
 		function stopUrgencyLoopOnAdvance() {
