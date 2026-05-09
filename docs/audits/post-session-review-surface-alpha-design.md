@@ -1,6 +1,6 @@
 # Post-Session Review Surface — ALPHA_DESIGN Audit
 
-**Round-close hash**: `<TBD at commit-13>` (this audit ships at commit 12; round-close commit 13 backfills with the closing hash)
+**Round-close hash**: `6122366` (round-close commit, pre-amend; the amend operation that backfills this very value into the frontmatter recomputes the commit hash, so this value is the round-close commit's pre-amend ancestor — the canonical "round-close artifact excluding its own self-reference backfill" hash)
 **Audit-time HEAD hash**: `81fcea5` (post-§0.15 retraction)
 **ALPHA_DESIGN.md hash**: `28d6260` (`docs: add comprehensive Alpha Design Guide for product development`)
 **Audit date**: 2026-05-09

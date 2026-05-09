@@ -1770,6 +1770,48 @@ The round's antonyms cleanup commit (`ed730a5`) deleted 37 generated rows across
 
 ---
 
+#### 6.14.40 Redirector-vs-empirical-state divergence (sub-pattern of §6.14.28)
+
+> **Captured 2026-05-09** (dashboard-drill-diagnostic bug-fix + design-retrofit round close, Round 1). Sub-pattern of §6.14.28 specialized to redirector-supplied path/value/state assumptions. Five round-1 instances substantiate the promotion.
+
+When a round redirector (or plan-doc author) specifies a path, value, or state from training data, prior assumption, or a stale reading of the codebase, that specification is hypothesis-to-verify, not fact-to-implement. The audit-step's first action is empirical-state capture; redirector citations are inputs to the audit, not premises that bypass it.
+
+**Round-1 empirical anchors** (5 instances):
+
+- §0.12 — redirector-cited path `data/images/GJJ_*_Belt.svg` was already moved out-of-session to `public/images/belts/` before audit time. Empirical capture at body-authoring time corrected the plan-doc.
+- §0.14 — redirector-proposed rotating-greeting corpus was framed against an assumed-empty JSX slot; State-C audit finding revealed the slot already carried `deriveHeadline()`'s sim-state editorial signal. Corpus retired entirely.
+- §5.8 finding (a) — redirector-cited `item.subType.id` reachability assumption was empirically incorrect; `ItemForRender` doesn't carry sub-type id. Files-touched expanded 1 → 6 to plumb the prop through the focus-shell chain.
+- §5.8 finding (b) — redirector-cited canonical sub-type id `"number_series"` (or `"12min_number_series"`) was empirically `"numerical.number_series"`; sample query string assumption was incorrect.
+- §0.13 (§6.14.28 undertones) — redirector-specified Wikimedia-CC-BY-SA-3.0 SVG approach abandoned mid-round in favor of first-party `<BeltGraphic>`; the empirical state of the staged-deletion + untracked SVG files was orphan-trending regardless of which approach the round took.
+
+**The discipline rule.** Audit-step (a) — re-confirm empirical state — is the first action of every implementation step, not an optional verification. The audit step's pre-flight READS the cited path / function / file / DB-state and either confirms or contradicts the redirector's specification. When the audit contradicts the redirector, the round's response is to adopt the empirical state and revise the plan-doc, NOT to push for the redirector's specification or to silently reconcile.
+
+**Convention going forward.** Plan-doc §0 audit findings + §5.{n} per-commit audit steps must include an empirical-state capture step BEFORE any "implementation notes" or "files touched" specification. The capture step is cheap (typically `cat`/`grep`/`ls`/short SQL) and catches divergence at audit time rather than commit-execution time. When a redirect specifies a path/value/state, the audit step's first sub-step is "verify the cited specification against current repo state."
+
+**Cross-references.** Round empirical instances: §0.12, §0.14, §5.8 (a + b), §0.13 (undertones); plan-doc `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-retrofit.md` §0.12-§0.15 + §5.8 §6.14.28 addendum. Sibling: §6.14.28 (Plan-prose-vs-empirical-truth divergence) — this entry's redirector-vs-empirical specialization is the audit-step-discipline complement to §6.14.28's plan-prose-discipline. §6.14.41 (audit-vs-revert blindness) is a related-but-distinct sub-pattern: §6.14.40 covers redirector-supplied stale specifications; §6.14.41 covers audit-supplied stale citations of project mechanisms.
+
+---
+
+#### 6.14.41 Audit-vs-revert blindness (audit cites mechanism no longer extant)
+
+> **Captured 2026-05-09** (dashboard-drill-diagnostic bug-fix + design-retrofit round close, Round 1). Single round-1 instance (§0.15) but structurally novel + adversarial-direction; promoted on impact-shape rather than instance-count.
+
+When a plan-doc audit step cites a project mechanism (route, function, gate, server-side cutoff, validator step, etc.) that prior project work has retired, downstream implementation taking the audit citation at face value will silently re-introduce the retired mechanism. The audit's premise is wrong; executing on it produces a regression.
+
+**Round-1 empirical anchor** (1 instance):
+
+- §0.15 — §0.5 audit cited "the server-side 15-minute cutoff that already gates diagnostic submissions" as a project mechanism that the round's diagnostic timer fix (§5.11) would align with. Audit-step (b) at commit-11 implementation time surfaced that the cutoff had been REVERTED earlier in the same round (evidence: `compute.test.ts:5-10` explicit revert testimony; `actions.ts:141-146` overlay/cutoff machinery deleted; zero hits in `submit.ts` for any minute-mark gate). Executing §5.11 as written would have re-introduced the very cap the round reverted, contradicting PRD §4.1 capacity-measurement framing AND the post-session pacing UX. §5.11 retracted; sidecar round queued for diagnostic timing reintroduction.
+
+**The failure-mode shape.** Distinct from §6.14.40 (redirector-vs-empirical-state divergence): §6.14.40's failure is mostly benign (redirector cites a path/value that's adjacent-but-stale; empirical capture corrects cheaply). §6.14.41's failure is adversarial: the audit's citation IS the implementation's premise, so face-value execution silently re-introduces a retired mechanism. Adversarial direction → larger blast radius → promotion warranted on impact-shape.
+
+**The discipline rule.** Audit-step citations of project mechanisms (routes, functions, gates, cutoffs, validators) must include **grep-verify-existence** as an explicit sub-step. When audit prose cites "the {X} cutoff" or "the {Y} gate" or "the {Z} validator," the audit-step's pre-flight greps the cited mechanism's identifier across the codebase and confirms presence (NOT just shape — presence). Cite-without-verify is the adversarial-direction §6.14.28 anti-pattern.
+
+**Convention going forward.** Plan-doc §0 audit prose that cites a project mechanism must show the empirical confirmation. Pattern: "Per [grep result / file:line citation], the {X} mechanism exists at {Y} and behaves as {Z}." Pattern violation: "The {X} mechanism stays unchanged." (claim without verify). The latter pattern triggers a commit-time audit-step (b) that may surface the audit-vs-revert blindness; the round's response is to retract the dependent commit and queue a sidecar round, NOT to push the dependent implementation through.
+
+**Cross-references.** Round empirical instance: §0.15 retraction (commit `81fcea5`) + §5.11 quote-preservation block in `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-retrofit.md`. Plan: same plan-doc §0.5 (the original audit prose, audit-trail-only-marked) + §0.15 (the retraction with three-confirmation evidence chain). Sibling: §6.14.28 (Plan-prose-vs-empirical-truth divergence) — this entry's audit-side specialization complements §6.14.28's plan-prose-side discipline. §6.14.40 (redirector-vs-empirical-state divergence) — related-but-distinct: §6.14.40 covers redirector-supplied stale specifications (benign-direction failure mode); §6.14.41 covers audit-supplied stale mechanism-citations (adversarial-direction failure mode). §6.14.21 + §6.14.22 + §6.14.23 — three faces of "audit / verify against the actual artifact, not the assumed shape" parent discipline; §6.14.41 specializes to mechanism-existence verification specifically.
+
+---
+
 ## 7. Server actions, route handlers, and workflows
 
 All server actions live at the closest `actions.ts` file under `src/app/(app)/...`. All follow the patterns demonstrated in `src/app/actions.ts`: file-top `"use server"`; mutations use `errors.try` around DB calls (`rules/no-try.md`); errors are logged then thrown via `errors.wrap` (`rules/error-handling.md`); writes call `revalidatePath` after writes (with the specific exception in §7.8).

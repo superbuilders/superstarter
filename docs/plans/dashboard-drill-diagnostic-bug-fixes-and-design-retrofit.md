@@ -1,6 +1,6 @@
 # Plan — Dashboard / Drill / Diagnostic Bug-Fix + Design-Retrofit Round
 
-> **Status: planning, commit-0 audit complete, body authored, awaiting commit 1 redirect.** Plan-doc was renamed from `phase5-round1-dashboard-drill-diagnostic.md` per Leo's 2026-05-08 redirect (option 1: rename only — drop the misleading `phase5-round1` prefix; this round is not a master-plan sub-phase).
+> **Status: shipped 2026-05-09.** 12 implementation commits + 1 round-close commit (this slot, §5.13). Three mid-round redirects executed (§0.13 belt-graphic-first-party, §0.14 retire-rotating-greeting-corpora, §0.15 retract-diagnostic-timer). Plan-doc was renamed from `phase5-round1-dashboard-drill-diagnostic.md` per Leo's 2026-05-08 redirect (option 1: rename only — drop the misleading `phase5-round1` prefix; this round is not a master-plan sub-phase).
 >
 > **Round opened against `main` at HEAD `e69e56c`** (post phase-4 sub-phase-a close, 2026-05-08). Sub-phase b (validator) is deferred indefinitely; the 1,711 candidates remain at `status='candidate'` and are NOT touched this round. **This round is a UX/feature pivot, not a continuation of the generation pipeline.**
 
@@ -386,11 +386,13 @@ Commit envelope per Leo's reorder (2026-05-08 redirect): attribution (commit 3) 
 
 **Commit-envelope addendum (§0.15 retraction, 2026-05-09):** §5.11 is RETIRED-not-renumbered (commit-11 audit-step (b) audit-vs-revert blindness; diagnostic timer/bar fix retracted because the cited server-side 15-minute cutoff was reverted earlier in this same round). Round commit count UNCHANGED at 12 (the §0.14 13 → 12 reduction stands); slot 11 is consumed by the §0.15 retraction commit itself, paralleling §0.14's slot-5 model. Commits 12 (ALPHA_DESIGN audit doc) and 13 (round-close) keep their existing slot numbers.
 
+**Round-close addendum (§5.13, 2026-05-09):** Round shipped at 13 total commits (12 implementation + 1 round-close). Slot 3 was REPURPOSED by §0.13; slot 5 was consumed by §0.14 retraction (§5.5 RETIRED); slot 6 was fully retired by §0.14 (§5.6 RETIRED); slot 11 was consumed by §0.15 retraction (§5.11 RETIRED). §5.4 shipped as 3 commits (initial implementation + sizing follow-up + tip-shift follow-up) — all three are listed in §5.4 below. SPEC §6.14 promotions: §6.14.40 (redirector-vs-empirical-state divergence sub-pattern; 5 round-1 instances) + §6.14.41 (audit-vs-revert blindness sub-pattern; 1 round-1 instance). Round-close residuals (12 items) captured in §8.
+
 Each commit follows the `phase4-similar-item-generator.md` + `phase5-data-wipe.md` shape: hash placeholder, files touched, audit step (cheap pre-flight per §6.14.18 / §6.14.21 / §6.14.22), implementation notes, verification step, stop-and-report contract.
 
 ### §5.1 — Commit 1: dashboard top-panel reorder + Mistakes-to-review wire-up
 
-**Hash:** `<TBD>` (filled at round-close).
+**Hash:** `2ebdf1b` — `feat(dashboard): top-panel reorder + Mistakes-to-review reorder-only`.
 
 **Files touched.**
 - `src/components/dashboard/score-strip.tsx` — panel order reorder; mistakes-to-review tile renders `mistakesQueue.count` from prop.
@@ -409,7 +411,7 @@ Each commit follows the `phase4-similar-item-generator.md` + `phase5-data-wipe.m
 
 ### §5.2 — Commit 2: horizontal goal-line + 18s-line
 
-**Hash:** `<TBD>`.
+**Hash:** `5907889` — `feat(dashboard): goal-line on previous-score + 18s-line on previous-pace`.
 
 **Files touched.**
 - `src/components/dashboard/score-strip.tsx` (or sibling tile component — confirm at audit step).
@@ -424,7 +426,7 @@ Each commit follows the `phase4-similar-item-generator.md` + `phase5-data-wipe.m
 
 ### §5.3 — Commit 3: plan-doc revision (REPURPOSED per §0.13 — was ATTRIBUTIONS.md)
 
-**Hash:** `<TBD>` (filled at round-close).
+**Hash:** `8eed33a` — `docs(plan): mid-round redirect — drop Wikimedia SVGs for first-party BeltGraphic`. Slot 3 consumed by the §0.13 redirect commit per the REPURPOSING; original plan was an ATTRIBUTIONS.md authoring commit (quote-preserved below).
 
 **Files touched.**
 - `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-retrofit.md` (this plan-doc) — adds §0.13; revises §1 in-scope list; removes §2.3 body (with quote-preservation); repurposes §5.3 (this commit, with quote-preservation); revises §5.4 to first-party `<BeltGraphic>` (with quote-preservation).
@@ -456,7 +458,11 @@ Each commit follows the `phase4-similar-item-generator.md` + `phase5-data-wipe.m
 
 ### §5.4 — Commit 4: first-party `<BeltGraphic>` implementation (REVISED per §0.13 — was Wikimedia-SVG swap)
 
-**Hash:** `<TBD>` (filled at round-close).
+**Implementation commits (3).** §5.4 shipped as three sequential commits (initial implementation + sizing follow-up + tip-shift follow-up); the original §5.4 entry anticipated a single-commit slot, but commit-time visual review surfaced two follow-on adjustments that warranted separate commits for revertability:
+
+- `c60c5e7` — `feat(dashboard): replace belt-text with first-party BeltGraphic SVG` (initial `<BeltGraphic>` implementation; replaces CSS-class-indirected `<BeltStripe>` consumer; adds `--belt-tip-black` / `--belt-tip-red` / `--belt-stroke` tokens; cleans up the staged-deletion belt SVGs from `data/images/`).
+- `a70915c` — `feat(dashboard): enlarge BeltGraphic for BJJ-belt recognition` (sizing follow-up; widens the belt graphic at the row level for cleaner BJJ-belt recognition at the dashboard's standard render size).
+- `5983eac` — `style(dashboard): shift BeltGraphic tip left for visible body sliver` (tip-shift follow-up; offsets the tip block leftward so the body's right-end sliver remains visible per the BJJ canonical structure).
 
 **Files touched.**
 
@@ -513,6 +519,8 @@ The audit step (b)'s verbatim-token capture is the input; only add net-new token
 
 ### §5.5 — Commit 5: rotating greeting tagline + selection logic — RETIRED per §0.14
 
+**Hash:** RETIRED — slot 5 consumed by §0.14 retraction commit `316339b` (`docs(plan): mid-round redirect — retire rotating greeting + title-quote corpora`). No implementation hash; the §0.14 plan-doc revision IS commit 5 per the slot-consumption model.
+
 RETIRED per §0.14 mid-round redirect. Commit 5 in the ledger is now the plan-doc revision commit that authored §0.14 and the §1 / §2.1 / §2.2 / §5.5 / §5.6 / §5 intro revisions documenting this retirement (i.e., this very commit). The audit-step (a) State-C finding from the prior commit-5 attempt IS the empirical justification for retirement: the existing `deriveHeadline()` system at `src/server/dashboard/helpers.ts:7-13` already populates the italic-cobalt H2 slot at `score-strip.tsx:73-77` with sim-state-driven editorial lines ("Let's begin." / "Steady today." / "You're climbing." / "Reset and reload."), and the rotating greeting tagline corpus would have silently displaced that real product information. No rotating-greeting code shipped; no `deriveGreeting()` helper exists; no implementation files touched. Commit slot 5 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline (commits 7-13 keep their existing slot numbers).
 
 > **Original §5.5 (pre-§0.14 retirement, preserved per SPEC §6.14.20).**
@@ -537,6 +545,8 @@ RETIRED per §0.14 mid-round redirect. Commit 5 in the ledger is now the plan-do
 
 ### §5.6 — Commit 6: expanded title-quote corpus — RETIRED per §0.14
 
+**Hash:** RETIRED — slot 6 fully retired (no commit shipped for this slot). Per the §0.14 model, commit 5 was consumed by the retraction commit; commit 6 was dropped entirely with no replacement. Round commit count drops 13 → 12 from this single slot retirement.
+
 RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "single 'you're climbing'" premise was based on a misreading of the existing `deriveHeadline()` system at `src/server/dashboard/helpers.ts:7-13`: "You're climbing." is the `delta > 0` branch of a 4-state sim-state-driven editorial line, not a single hardcoded surface. Replacing it with a rotated 12-quote corpus would have silently displaced the same sim-state signal that §5.5's retirement was designed to preserve. Corpus preservation captured in §2.2 (also REMOVED per §0.14, with quote-preservation). Commit slot 6 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline; no title-quote-rotation code shipped.
 
 > **Original §5.6 (pre-§0.14 retirement, preserved per SPEC §6.14.20).**
@@ -560,7 +570,7 @@ RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "si
 
 ### §5.7 — Commit 7: drill ranking refresh
 
-**Hash:** `<TBD>`.
+**Hash:** `3484782` — `fix(dashboard): revalidate / on drill completion to refresh rankings`. Partial-fix as shipped: revalidate-path plumbing is correct, but `loadAllBelts()` stub blocks user-visible ranking refresh until the Belts PRD round wires real `mastery_state` reads. Captured in §8 as round-close residual.
 
 **Files touched.**
 - `src/app/(app)/actions.ts` — `endSession` action (around line 129).
@@ -576,7 +586,7 @@ RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "si
 
 ### §5.8 — Commit 8: drill number-series formatting fix
 
-**Hash:** `<TBD>`.
+**Hash:** `a255be2` — `fix(drill): tabular-num formatting for number-series questions`. Files-touched expanded from 1 → 6 per the §6.14.28 commit-time addendum below; sub-type-id plumbing through the focus-shell prop chain. Drill-only scope; diagnostic + full-length per-item-dispatch out of scope.
 
 **Files touched.**
 - `src/components/item/item-prompt.tsx` — extend `renderBody()` with a number-series-aware case.
@@ -593,7 +603,7 @@ RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "si
 
 ### §5.9 — Commit 9: drill warning-sound cadence
 
-**Hash:** `<TBD>`.
+**Hash:** `4f67590` — `fix(drill): warning-once + post-target ticks (Path C, SPEC §6.12 amendment)`. Path C selected per Leo's 2026-05-08 redirect after considering Path A/B/D; included a light SPEC §6.12 amendment. Files-touched expanded from 1 → 4 per the §6.14.28 + new redline-vs-SPEC sub-pattern addendum below; new sub-pattern proposed for round-close §6.14 promotion (see §8 + commit-13 SPEC additions).
 
 **Files touched.**
 - `src/components/focus-shell/audio-ticker.ts` — `startUrgencyLoop()` (line 191) + `source.loop` (line 203).
@@ -610,7 +620,7 @@ RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "si
 
 ### §5.10 — Commit 10: drill top-whitespace removal
 
-**Hash:** `<TBD>`.
+**Hash:** `8bae610` — `style(drill): reduce focus-shell top whitespace`. `py-8` → `pt-4 pb-8` (asymmetric: halve top, preserve bottom). At redirect time the change was already on disk from a prior commit pass; small §6.14.28 audit-step-level instance — captured in §8 as a residual, patterned with §0.12.
 
 **Files touched.**
 - `src/components/focus-shell/focus-shell.tsx` — outermost div at line 498 (currently `className="...py-8"`).
@@ -624,6 +634,8 @@ RETIRED per §0.14 mid-round redirect — bundled with §5.5 retirement. The "si
 **Stop-and-report.** Do not proceed to next commit until redirect.
 
 ### §5.11 — Commit 11: diagnostic timer/bar fix — RETIRED per §0.15
+
+**Hash:** RETIRED — slot 11 consumed by §0.15 retraction commit `81fcea5` (`docs(plan): retract §5.11 + fix stale focus-shell comment`). No diagnostic-flow implementation hash; the §0.15 plan-doc revision (with bundled stale-comment fix at `focus-shell.tsx:415-417`) IS commit 11 per the slot-consumption model.
 
 RETIRED per §0.15 mid-round redirect (2026-05-09). Commit 11 in the ledger is now the plan-doc revision commit that authored §0.15 and the §0.5 / §1 / §5.11 / §5 intro revisions documenting this retirement (i.e., this very commit) plus a single stale-comment fix at `src/components/focus-shell/focus-shell.tsx:415-417` (the comment claimed *"the diagnostic uses the server-side cutoff in submitAttempt instead (polish-plan §3.1 / §4.2)"* — no longer true post-revert; rewritten to reflect current untimed-at-session-level reality per PRD §4.1). The audit-step (b) finding from the commit-11 implementation attempt IS the empirical justification for retraction: the server-side 15-minute cutoff cited by §0.5 was reverted earlier in this same round (evidence: `src/server/mastery/compute.test.ts:5-10`, `src/app/(app)/actions.ts:141-146`, zero hits in `src/server/sessions/submit.ts`); executing §5.11 as written would have re-introduced via `focus-shell.tsx:411-447`'s `maybeAutoEndSession` effect the very 15-min hard cap this round reverted server-side, contradicting PRD §4.1 capacity-measurement framing and the post-session pacing UX at `post-session-shell.tsx:106`. No diagnostic-flow code shipped; `src/app/(diagnostic-flow)/diagnostic/run/content.tsx` is untouched. Commit slot 11 is RETIRED-not-renumbered per SPEC §6.14.20 in-flight discipline (commits 12-13 keep their existing slot numbers).
 
@@ -646,7 +658,7 @@ RETIRED per §0.15 mid-round redirect (2026-05-09). Commit 11 in the ledger is n
 
 ### §5.12 — Commit 12: review-surface ALPHA_DESIGN audit doc
 
-**Hash:** `<TBD>`.
+**Hash:** `699d5f9` — `docs(audit): post-session review surface ALPHA_DESIGN audit (Round 2 prep)`. 527-line audit doc; 18 findings (0 P0 / 2 P1 / 7 P2 / 9 P3). Establishes `docs/audits/` directory convention. ALPHA_DESIGN.md hash-pinned at `28d6260`; round-close hash backfilled into the audit-doc frontmatter at this commit (§5.13) via amend-pattern.
 
 **Files touched.**
 - `docs/audits/post-session-review-surface-alpha-design.md` (NEW).
@@ -662,19 +674,20 @@ RETIRED per §0.15 mid-round redirect (2026-05-09). Commit 11 in the ledger is n
 
 ### §5.13 — Round-close commit (administrative)
 
-**Hash:** `<TBD>`.
+**Hash:** `6122366` (round-close commit, pre-amend; the amend operation that backfills this very value into the §5.13 entry recomputes the commit hash, so this value is the round-close commit's pre-amend ancestor — the canonical "round-close artifact excluding its own self-reference backfill" hash).
 
 **Files touched.**
-- `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-retrofit.md` — status flip from "planning" to "shipped 2026-MM-DD"; hash placeholders in §5.1-§5.12 backfilled with actual commit hashes; §7 resolutions log finalized.
-- `docs/SPEC.md` — IF this round earns a new §6.14 entry (candidates: audit-doc convention establishment; SVG-out-of-session relocation pattern; the §0.12 §6.14.28 instance worth quoting). Per the second-instance discipline: only promote if the pattern recurs or the redline explicitly names a SPEC reconciliation. Default: no SPEC delta for this round.
+- `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-retrofit.md` — status flip "planning" → "shipped 2026-05-09"; hash backfill across §5.1-§5.12 (and across §0.13/§0.14/§0.15 retraction commits); §6 verification protocol update (collateral cleanup per §0.15); §7 resolutions log finalized (Q2 + Q4 retired markers); §8 replaced from "out-of-round flags (none anticipated)" to comprehensive round-close-residuals capture.
+- `docs/audits/post-session-review-surface-alpha-design.md` — frontmatter round-close hash backfill (replace `<TBD at commit-13>` placeholder with this commit's actual hash; via amend-pattern).
+- `docs/SPEC.md` — §6.14.40 + §6.14.41 promotions (redirector-vs-empirical-state divergence sub-pattern + audit-vs-revert blindness sub-pattern; both substantiated by Round 1 instances per §0.15 sub-pattern observation).
 
-**Audit step.** Pre-flight: (a) `git log` to capture all 12 commit hashes; (b) verify no unintended file changes since the last commit (`git status` clean); (c) run `bun test` (or equivalent) one more time to confirm green; (d) verify closed-plans-immutable per §6.14.20 — no edits to any prior closed plan-doc.
+**Audit step.** Pre-flight executed at commit-13 redirect time: (a) `git log --oneline -25` captured all Round 1 commit hashes back to round-open `e69e56c`; (b) `git status --short` confirmed clean working tree (only the unrelated `docs/claude_logs/...` untracked file pre-existing from earlier sessions); (c) closed-plans-immutable verified — `git log --name-only e69e56c..HEAD -- docs/plans/` shows only this round's plan-doc touched (no edits leaked into earlier closed plan-docs); (d) audit-skill convention check — `~/.claude/plugins/marketplaces/alpha-style/.claude/skills/audit/SKILL.md` exists and defines P0/P1/P2/P3 as Blocking/Major/Minor/Polish; the audit doc's classifications are consistent (skip-link contrast → P1; foundation tokens → P1; etc.) though the audit-doc legend prose frames P0 as including WCAG-AA breakage where the skill places WCAG AA at P1. Functional alignment; legend-prose drift only. Captured in §8 as a minor observation, not a residual.
 
-**Implementation notes.** Plan-doc status flip; hash backfill; §7 resolutions log finalized with all final states. SPEC reconciliation deferred unless a candidate pattern surfaced empirically during the round (in which case it earns a §6.14 slot per the second-instance discipline).
+**Implementation notes.** Plan-doc finalization per the round-close redirect's enumerated content. Two SPEC §6.14 promotions per the round-close redirect's sub-pattern decisions. Audit-doc frontmatter backfill via the amend pattern (CLAUDE.md normally prefers new commits over amends, but the redirect explicitly authorizes amend here for the self-referential round-close-hash backfill). Sidecar diagnostic-timing round (forward-pinned in §0.15 + §8) is NOT opened in this commit; opening that round is at Leo's discretion post-Round-1-close.
 
-**Verification.** Render-check the plan-doc; confirm all hash placeholders resolved; confirm §7 has all eight resolution entries (Q1-Q4 + SF-1-SF-3 + plan-doc placement).
+**Verification.** Render-check the plan-doc post-edit; confirm all hash placeholders resolved (§5.1-§5.12 + §5.4's three follow-on commits + §0.13/§0.14/§0.15 redirect commit hashes); confirm §6 verification protocol carries the §0.15 collateral cleanup; confirm §7 carries Q1-Q4 + SF-1-SF-3 + plan-doc placement entries with retirement markers on Q2/Q4 per §0.13/§0.14; confirm §8 has all 12 round-close residuals enumerated; confirm SPEC §6.14.40 + §6.14.41 read clean against existing entries; confirm audit-doc frontmatter post-amend reflects this commit's hash. Pre-commit lint + typecheck must pass.
 
-**Stop-and-report.** Round complete. Plan-doc shipped.
+**Stop-and-report.** Round complete. Plan-doc shipped 2026-05-09. Sidecar round (diagnostic timing reintroduction per §0.15 forward reference) opens at Leo's discretion. Hook re-enable post-round-close per Leo's earlier direction.
 
 ---
 
@@ -682,7 +695,7 @@ RETIRED per §0.15 mid-round redirect (2026-05-09). Commit 11 in the ledger is n
 
 Per the precedent of `phase4-similar-item-generator.md` + prior rounds:
 
-- **Per-commit verification.** Each §5.{n} entry above has its own verification step. Visual reviews on `/` and `/drill/...` and `/diagnostic/...` are the canonical signals for UI-touching commits. `bun test` is the canonical signal for test-touching commits — none anticipated this round, but if any commit's audit step surfaces a test that needs adjustment, that gets called out explicitly per §6.14.34 (mid-round narrow-scope sub-round if expansion is needed).
+- **Per-commit verification.** Each §5.{n} entry above has its own verification step. Visual reviews on `/` and `/drill/...` are the canonical signals for UI-touching commits. The `/diagnostic/...` visual-review signal is now load-bearing only for §5.12 (audit doc evaluation) and §0.9 (audit-doc structure verification) following the §0.15 retraction (the diagnostic surface stays unchanged for Round 1 implementation purposes; diagnostic timing reintroduction is queued for a sidecar round per §0.15 forward reference). `bun test` is the canonical signal for test-touching commits — none anticipated this round, but if any commit's audit step surfaces a test that needs adjustment, that gets called out explicitly per §6.14.34 (mid-round narrow-scope sub-round if expansion is needed).
 - **Real-DB harness.** All audit-step probes that read DB state (e.g., §5.1's mistakes-count probe, §5.8's number-series sample fetch) run against the dev DB, not mocked, per the project's discipline.
 - **No new smokes.** This round doesn't add smoke scripts. Existing smokes under `scripts/dev/smoke/` continue unchanged.
 - **`tee` for any long-running stdout** per §6.14.38; not anticipated this round (no long-running pipelines).
@@ -693,17 +706,58 @@ Per the precedent of `phase4-similar-item-generator.md` + prior rounds:
 
 Final state for each Open Q + scope flag:
 
-- **Q1 mistakes-to-review schema:** RESOLVED-NO migration needed (per §0.2).
-- **Q2 greeting personalization:** RESOLVED-YES first-name available + 50/50 first-name/no-first-name mix per Leo's redirect (per §0.8 + §2.1 + §5.5).
-- **Q3 audit-doc path:** RESOLVED — `docs/audits/post-session-review-surface-alpha-design.md` (Leo redirect 2026-05-08). Establishes new `docs/audits/` directory at commit 12.
-- **Q4 attribution path:** RESOLVED — `ATTRIBUTIONS.md` at repo root (Leo redirect 2026-05-08). Authored at commit 3, sequenced before commit 4 belt swap per CC BY-SA 3.0 distribution requirement.
-- **SF-1 static-asset path mismatch:** RESOLVED — SVGs were moved to `public/images/belts/` outside this Claude Code session before body authoring; verified empirically at body-authoring time (per §0.12). Net commit-envelope cost: zero. Small §6.14.28 (Plan-prose-vs-empirical-truth divergence) instance in benign direction.
-- **SF-2 audit-doc commit isolation:** ACCEPTED — commit 12 is the audit doc, sequenced last per the redline's commit envelope.
-- **SF-3 no other scope expansions:** confirmed; audits §0.4-§0.8 returned single-file or single-prop fix shapes consistent with the redline's commit envelope.
+- **Q1 mistakes-to-review schema:** RESOLVED-NO migration needed (per §0.2). Commit 1 (`2ebdf1b`) shipped wire-up-only / reorder-only.
+- **Q2 greeting personalization:** **Q2 RETIRED per §0.14 mid-round redirect.** Original resolution — RESOLVED-YES first-name available + 50/50 first-name/no-first-name mix — was based on a misreading of the existing `deriveHeadline()` editorial-signal system at `src/server/dashboard/helpers.ts:7-13`. State-C audit finding at commit 5 surfaced the conflict; the rotating-corpus approach was retired entirely (§5.5 + §5.6 RETIRED; §2.1 + §2.2 REMOVED). Existing `deriveHeadline()` system preserved as-is. Q2 retirement consumed by §0.14 redirect commit `316339b`. See §0.14 + §5.5/§5.6 quote-preservation blocks for the original resolution prose.
+- **Q3 audit-doc path:** RESOLVED — `docs/audits/post-session-review-surface-alpha-design.md` (Leo redirect 2026-05-08). Established new `docs/audits/` directory at commit 12 (`699d5f9`).
+- **Q4 attribution path:** **Q4 RETIRED per §0.13 mid-round redirect.** Original resolution — RESOLVED, `ATTRIBUTIONS.md` at repo root, authored at commit 3 before commit 4 belt swap per CC BY-SA 3.0 distribution requirement — was superseded by the §0.13 redirect to first-party `<BeltGraphic>` (no third-party assets in the round → no attribution surface required). `ATTRIBUTIONS.md` was never authored. Q4 retirement consumed by §0.13 redirect commit `8eed33a`. See §0.13 + §5.3 quote-preservation blocks for the original resolution prose.
+- **SF-1 static-asset path mismatch:** RESOLVED-superseded. Original resolution — SVGs were moved to `public/images/belts/` outside this Claude Code session before body authoring (verified empirically per §0.12) — was first valid pre-§0.13 redirect. Per §0.13, the `public/images/belts/` files were never consumed; the first-party `<BeltGraphic>` SVG component (commit 4 = `c60c5e7`) replaced both the staged-deletion files at `data/images/` AND the untracked files at `public/images/belts/`. Net commit-envelope cost: zero (per the original resolution); SF-1 is twice-superseded in the round's audit trail. Small §6.14.28 (Plan-prose-vs-empirical-truth divergence) instance in benign direction; this is the 1st of 6 round instances tracked in §0.15's instance ledger.
+- **SF-2 audit-doc commit isolation:** ACCEPTED — commit 12 (`699d5f9`) is the audit doc, sequenced last per the redline's commit envelope.
+- **SF-3 no other scope expansions:** Round-close re-evaluation: scope DID expand mid-round in 3 places — §5.8 expanded files-touched 1 → 6 (sub-type-id plumbing); §5.9 expanded files-touched 1 → 4 (Path C focus-shell scheduler + SPEC §6.12 amendment); §5.4 expanded commits-shipped 1 → 3 (sizing + tip-shift follow-ups). Each expansion shipped under §6.14.20 + §6.14.34 / §6.14.28 disciplines (mid-round narrow-scope sub-rounds OR commit-time empirical-state corrections). The redline's "no other scope expansions" framing was correct relative to the audit-time scope; the empirical scope landed slightly larger in 3 places. Captured-as-shipped; no SF-3 violation.
 - **Plan-doc placement:** option 1 (rename only) per Leo's redirect 2026-05-08. New filename: `docs/plans/dashboard-drill-diagnostic-bug-fixes-and-design-retrofit.md`. Cross-reference paragraph in header dropped per option 1.
 
 ---
 
-## §8 — Out-of-round flags (none anticipated)
+## §8 — Round-close residuals + forward pins
 
-No out-of-round flags surfaced during commit-0 audit or body authoring. If the per-commit audit steps in §5.{n} surface anything that doesn't fit the round's scope, capture as out-of-round flags here at round close (per `phase5-data-wipe.md` §10.7 precedent).
+12 residuals surfaced during the round; all are forward-pinned to specific future rounds. None block round-close.
+
+1. **Commit 7 partial-fix — drill ranking refresh.** `revalidatePath('/')` plumbing in `endSession` action is correct; user-visible ranking refresh is still blocked because `loadAllBelts()` in `src/server/dashboard/data.ts` is a stub that does NOT yet read real `mastery_state`. Forward-pin: **Belts PRD round** (when authored). The plumbing this round shipped is the prerequisite, not the user-visible fix.
+2. **Commit 4 audit-step (d) blocked.** Visual review of non-white belts (blue / brown / black) + dark-mode review was structurally blocked on the same `loadAllBelts()` stub — no path to render a non-white belt for an authenticated dev user under the current data wiring. White-belt visual review confirmed at commit 4. Forward-pin: **Belts PRD round** (concurrent with #1; once real mastery state flows, the deferred visual review unblocks).
+3. **Commit 8 number-series shape coverage.** The `isSequenceText` heuristic in `src/components/item/body-renderers/number-series.tsx` assumes Shape A (digits + simple delimiters) + Shape B (digits + underscore-blank for the answer slot) are exhaustive across the bank. Sub-phase a's 196 generated number-series candidates have NOT been visually audited for shape conformance against this heuristic. Forward-pin: **post-Belts-PRD or sub-phase b validator round** (whichever opens first; cheap to audit at validator time).
+4. **Commit 9 SPEC amendment scope: light-vs-medium divergence.** Redirect specified a "light" SPEC §6.12 amendment; implementation produced a "medium" amendment (intro paragraph reworded + post-target paragraph split into 2 + reducer-flag note added + audit-trail blockquote). Disposition: ACCEPT-AS-SHIPPED. The medium amendment is more accurate to the new behavior than a light amendment would have been. §5.9 §6.14.28 addendum already records this. No follow-up commit needed.
+5. **Commit 9 naming debt: `urgencyLoop` semantic retained despite Path C retiring the loop.** The exported names `startUrgencyLoop` / `stopUrgencyLoop` + the reducer-side `urgencyLoopStartedForCurrentQuestion` flag + the `urgency_loop_started` action all retain the loop semantic in their identifier strings. Path C dropped the loop entirely (warning-once + post-target ticks); names are now slight misnomers but every concrete behavior they describe IS the warning-once-then-cancel-on-advance contract. Header comments + SPEC §6.12 + §5.9 addendum carry the canonical language; the identifiers stay as-is to avoid a cascading 5-10-file mechanical rename inside a polish round. Forward-pin: **OPTIONAL future round; mechanical rename only**. Low priority.
+6. **Commit 10 already-on-disk: small §6.14.28 audit-step-level instance.** At commit-10 redirect time, the `py-8 → pt-4 pb-8` change was already on disk from a prior commit pass. The redirect's audit step (a) caught the empirical state and the work was effectively a no-op verification. Patterned with §0.12 (out-of-session work absorbed by the next redirect's audit). Captured-as-shipped; documented in §5.10 hash entry. Future-round discipline: redirects' audit-step (a) "re-confirm empirical state" should always run before claiming an implementation change is needed.
+7. **Diagnostic timing reintroduction (§5.11 retracted; sidecar round queued).** §0.15 retracted §5.11 entirely after audit step (b) surfaced that the cited server-side 15-minute cutoff had been reverted earlier in the same round. Diagnostic timing reintroduction is queued as a SIDECAR ROUND (TBD; opens at Leo's discretion post-Round-1-close). Sidecar scope: PRD §4.1 amendment (capacity-measurement-vs-timed-real-CCAT framing decision) + server cutoff re-introduction + client timer (sessionDurationMs={50 * 18_000}) + mastery compute multiplier revert (`compute.ts:55` 1.5× → 1.2×) + post-session pacing copy revision (`post-session-shell.tsx:106`). Forward-pin: **diagnostic-timing sidecar round**.
+8. **§B.1 foundation-tokens retrofit (highest-leverage Round 2 fix).** Per the ALPHA_DESIGN audit (`docs/audits/post-session-review-surface-alpha-design.md` §B.1): foundation tokens in `src/styles/unstyled/globals.css` are pure-grayscale (chroma=0) — `--background`, `--foreground`, `--card`, `--muted-foreground`, `--border`, `--input`, etc. ALPHA_DESIGN §3 mandates tinted neutrals (hue 250-or-270, chroma 0.005-0.012). The retrofit affects ALL authenticated product surfaces, NOT just the post-session 9 components. Round 2 commit-0 audit MUST walk all authenticated surfaces (dashboard, drill, focus-shell, post-session, account, registrations) to scope the retrofit's blast radius before implementing. Forward-pin: **Round 2 commit-1 (token retrofit) + commit-0 audit walking all authenticated surfaces**.
+9. **§B.1 cross-implication for `<BeltIndicator>`.** Post-session belt's black tier currently binds to `--foreground` (pure-grayscale per #8 above); dashboard belt's black tier binds to `#000000` (pure black per the §5.4 black-belt-body color exception). Token retrofit per #8 unifies the post-session black belt with the rest of the surface, BUT the dashboard `<BeltGraphic>` should keep its `#000000` black-belt body per the §5.4 cultural-iconography exception. Round 2 token retrofit must respect both decisions. Forward-pin: **Round 2 plan-doc captures the dual disposition**.
+10. **`--muted-foreground` ≈ 4.0:1 system-level.** Surfaces beyond post-session may inherit the same sub-AA contrast (#8 closes this for the foundation; this residual flags that the audit's confirmed instance — `<OnboardingTargets>` skip-link — is plausibly NOT the only consumer). Round 2 commit-0 audit step: grep for `text-muted-foreground` across `src/components` and `src/app` to enumerate all consumers + assess each per WCAG 1.4.3. Forward-pin: **Round 2 commit-0 audit + retrofit**.
+11. **Real-device verification gaps.** Per ALPHA_DESIGN §8 ("Test on at least one real iPhone, one real Android"), DevTools emulation alone is insufficient. Two specific gaps: §B.4 touch-target verification (`<OnboardingTargets>` form fields + `<StructuredExplanation>` interactive paragraphs both at ~38px height; below 44 floor for `pointer: coarse`); §B.6 mobile responsive verification across the 9 post-session components (no explicit `md:`/`lg:` breakpoints; relies on `max-w-2xl` shell constraint). Forward-pin: **Round 2 commit-0 audit step on real iPhone + Android**.
+12. **Hook re-enable (environmental, not a project residual).** `~/.claude/hooks/cbm-code-discovery-gate` was disabled (`chmod -x`) at commit-11 to unblock Read tool calls during the §0.15 retraction commit (the hook's `$PPID`-marker short-circuit is broken — Claude Code spawns a different PPID per tool invocation, so the marker file never matches). Hook stayed disabled through commits 12 + 13. Re-enable post-round-close per Leo's earlier direction. NOT a project residual; environmental.
+
+### §6.14.28 sub-pattern instance ledger (round-close summary)
+
+Six instances tracked across the round, plus one new sub-pattern variant. Per the §0.15 ledger:
+
+| # | Source | Type | Disposition |
+|---|---|---|---|
+| 1 | §0.12 | redirector-vs-empirical-state (SVG location) | RESOLVED inline |
+| 2 | §0.13 | §6.14.34 redirect with §6.14.28 undertones (Wikimedia → first-party) | RESOLVED inline |
+| 3 | §0.14 | redirector-vs-empirical-state (deriveHeadline State-C) | RESOLVED inline |
+| 4 | §5.8 finding (a) | redirector-vs-empirical-state (`item.subType.id` reachability) | RESOLVED inline |
+| 5 | §5.8 finding (b) | redirector-vs-empirical-state (canonical sub-type id format) | RESOLVED inline |
+| 6 | §0.15 | audit-vs-revert blindness (NEW SUB-PATTERN VARIANT) | RESOLVED inline; sidecar queued |
+
+Round-close §6.14 promotion decisions (per the round-close redirect's evaluation):
+
+- **PROMOTE: §6.14.40 — sub-pattern of §6.14.28: redirector-vs-empirical-state divergence.** Five round-1 instances (§0.12, §0.14, §5.8 finding (a), §5.8 finding (b), plus §0.13's §6.14.28 undertones). Promoted as a dedicated entry codifying the discipline rule "audit-step's first action is empirical-state capture; redirector's specification is hypothesis-to-verify, not fact-to-implement."
+- **PROMOTE: §6.14.41 — audit-vs-revert blindness (audit cites mechanism no longer extant).** Single round-1 instance (§0.15) but structurally novel + adversarial-direction (audit cite leads downstream implementation toward regression). Discipline rule: "audit-step citations of project mechanisms must include grep-verify-existence as a substep; cite-without-verify is adversarial-direction §6.14.28 anti-pattern."
+- **DEFER: redline UX preference vs explicit SPEC documented behavior** (§5.9 audio loop sub-pattern). Single round-1 instance. Adversarial direction (would have shipped SPEC violation). Track for next round; promote on second-instance.
+- **DEFER: three substantive mid-round redirects in one round** (§0.13, §0.14, §0.15). Round-shape commentary, not a discipline rule. Track.
+- **DEFER: audit-disambiguates implementation-vs-cosmetic ambiguity** (commit 1 + commit 5 State A/B/C). Two round-1 instances. Pattern exists but articulation is more procedural than disciplinary. Track for second round-recurrence.
+- **DEFER: deferred visual reviews accumulating to a single late-round walk**, **shipped commit's deferred audit step bundles with new feature/fix request into a single follow-up commit**, **small commit shape doesn't waive audit discipline**. Single-instance or meta-observations. Track.
+
+### Audit-skill convention check (per round-close redirect Flag 1)
+
+`~/.claude/plugins/marketplaces/alpha-style/.claude/skills/audit/SKILL.md` exists and defines: **P0 Blocking** (prevents task completion); **P1 Major** (significant difficulty or WCAG AA violation); **P2 Minor** (annoyance, workaround exists); **P3 Polish** (nice-to-fix, no real user impact). The audit doc's classifications are functionally consistent with the skill — skip-link sub-AA contrast → P1 (matches skill's "WCAG AA violation"); foundation tokens → P1 (matches skill's "significant difficulty"); empty-state inconsistency → P2 (matches skill's "annoyance, workaround exists"); polish opportunities → P3. The audit doc's legend prose drifts slightly: it frames P0 as including WCAG-AA breakage where the skill places WCAG AA at P1. Functional alignment; only the legend prose drifts. Disposition: NOT a fix, NOT a residual; minor observation logged here for round-close completeness.
+
+---
