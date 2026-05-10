@@ -1,75 +1,27 @@
 "use client"
 
-// <WrongItemsBrowser> — display-only per-question review for the
-// post-session surface. Renders ALL attempts in the session — correct,
-// incorrect, and skipped — not just wrong ones (the prior filter was
-// removed at the page-level query). The component name is retained
-// for diff-locality; semantics now cover every item the user saw.
+// <WrongItemsBrowser> — per-question review surface.
 //
-// Plan: docs/plans/phase5-post-session-review.md §8 + §15.2.
+// Each question card mirrors the live practice/drill question page
+// formatting (same body renderers + option-button visual scaffolding),
+// minus the timer/progression bars and the Submit Answer CTA. Review-
+// only adornments — green/red highlight + ✅/❌ marker — sit on top
+// of the practice surface.
 //
-// Scope:
-//   - Grouped by sub-type (sub-type heading + chronological items
-//     within group).
-//   - Sub-type group order: verbal-first then alphabetical by
-//     displayName, matching <AccuracySummary> + <LatencySummary>.
-//   - Within group: ordered by attempt.id ASC (UUIDv7 = chronological).
-//   - Each item renders: status badge (Correct / Incorrect / Skipped),
-//     prompt body, options (with display letters A/B/C/D/E computed
-//     at render time per SPEC §3.3.2), correct-/selected-marker,
-//     prose explanation. Skipped items render no selected-option
-//     marker (selectedAnswer is undefined per submitAttempt's
-//     "no answer" branch).
-//   - Empty state ("No questions in this session.") when items.length
-//     === 0.
-//
-// The §15.2-amendment seam shipped end-to-end at sub-phase 4 — the
-// page query + WrongItem field landed at commit 2; <WrongItemCard>'s
-// strike/highlight Set state + <StructuredExplanation> render landed
-// at commit 4 (this commit). When structuredExplanation is present
-// the card renders it via <StructuredExplanation> + <OptionLine>'s
-// isStruck / isHighlighted props; when absent (the 50 NULL-
-// source_folder seed items) the card falls back to items.explanation
-// prose per plan §3.6 + §11.7.
-//
-// Body + options shapes are validated at the boundary using the
-// existing `itemBody` Zod schema from @/server/items/body-schema and
-// a local options array schema (per rules/zod-usage.md). On parse
-// failure the renderer logs and renders a fallback line for that
-// item — one bad row never crashes the whole list.
-//
-// Display letters A/B/C/D/E are computed via `String.fromCharCode(
-// 0x41 + index)` per SPEC §3.3.2. They are NOT stored; the stable
-// handle is the opaque option id. Decoupling display position from
-// id is what unlocks future per-session option shuffling and
-// click-to-highlight (sub-phase 4) without breaking explanation
-// cross-references.
-//
-// Visual treatment per Alpha Style:
-//   - Sub-type heading: sentence-cased text-sm font-semibold at
-//     text-foreground/80; subordinate to the section heading via
-//     weight+opacity axis (Round 2 §5.13 per audit doc §A.9.f1 +
-//     ALPHA_DESIGN §4 editorial-warmth bias). Pre-Round-2 was small
-//     uppercase tracked label; the prior treatment pushed against
-//     §4's mobile-readability guidance at text-xs.
-//   - Item card: left-rule pl-4 (no nested-card boxes, no shadow).
-//   - Options as <ol> with letter+text+marker.
-//   - Correct option emphasized via subtle bg-foreground/5 + font-
-//     medium + ✓ marker. NO destructive token on text — accent earns
-//     placement; the ✓ symbol carries the positive signal.
-//   - Selected (incorrect) option: muted text + line-through + ✗
-//     marker. The line-through reflects "this is the answer you
-//     picked, and it was wrong" without dual-encoding via color.
-//   - Other options: neutral foreground.
-//
-// Per the systemic note from commit 4's audit, this commit avoids
-// the text-destructive-on-text pattern entirely. If commit 6's full-
-// surface audit surfaces a third occurrence elsewhere, that's the
-// signal for a structural token addition.
+// The toolbar above the list lets the user filter by status, sub-type,
+// difficulty, and time-bucket, and sort by question order, sub-type,
+// time taken, or difficulty in ascending or descending order. Default
+// is "all items, question order, ascending" — i.e., chronological by
+// attempt id.
 
+import { ArrowDownNarrowWideIcon, ArrowUpNarrowWideIcon } from "lucide-react"
 import * as React from "react"
 import { z } from "zod"
-import type { WrongItem } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+import type {
+	ItemDifficulty,
+	WrongItem
+} from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+import { NumberSeriesBody } from "@/components/item/body-renderers/number-series"
 import { TextBody } from "@/components/item/body-renderers/text"
 import {
 	compareBySubTypeDisplay,
@@ -77,6 +29,7 @@ import {
 } from "@/components/post-session/_lib/sub-type-display"
 import { StructuredExplanation } from "@/components/post-session/structured-explanation"
 import type { SubTypeId } from "@/config/sub-types"
+import { cn } from "@/lib/utils"
 import { logger } from "@/logger"
 import { type ItemBody, itemBody } from "@/server/items/body-schema"
 
@@ -85,18 +38,28 @@ interface WrongItemsBrowserProps {
 }
 
 type ItemStatus = "correct" | "incorrect" | "skipped"
+type StatusFilter = "all" | ItemStatus
+type DifficultyFilter = "all" | ItemDifficulty
+type TimeFilter = "all" | "lt10" | "10to20" | "20to30" | "gt30"
+type SubTypeFilter = "all" | SubTypeId
+type SortKey = "question" | "subType" | "latency" | "difficulty"
+type SortDirection = "asc" | "desc"
+
+const NUMBER_SERIES_SUB_TYPE_ID = "numerical.number_series"
+
+const PRACTICE_FONT_CLASS = "font-[ui-sans-serif,system-ui,-apple-system,Arial,sans-serif]"
+
+const DIFFICULTY_RANK: Record<ItemDifficulty, number> = {
+	easy: 0,
+	medium: 1,
+	hard: 2,
+	brutal: 3
+}
 
 function statusFor(item: WrongItem): ItemStatus {
 	if (item.correct) return "correct"
 	if (item.selectedAnswer === undefined) return "skipped"
 	return "incorrect"
-}
-
-interface DisplayGroup {
-	subTypeId: SubTypeId
-	displayName: string
-	section: "verbal" | "numerical"
-	items: WrongItem[]
 }
 
 const optionShapeSchema = z.object({
@@ -108,146 +71,11 @@ const optionsArraySchema = z.array(optionShapeSchema)
 
 type OptionShape = z.infer<typeof optionShapeSchema>
 
-function compareAttemptIdAsc(a: WrongItem, b: WrongItem): number {
-	// UUIDv7 string comparison = chronological order (RFC 9562 byte
-	// order matches lex order on hex form). attempt.id is the
-	// canonical timestamp.
-	if (a.attemptId < b.attemptId) return -1
-	if (a.attemptId > b.attemptId) return 1
-	return 0
-}
-
-function buildDisplayGroups(items: ReadonlyArray<WrongItem>): DisplayGroup[] {
-	const byKey = new Map<SubTypeId, WrongItem[]>()
-	for (const item of items) {
-		const list = byKey.get(item.subTypeId)
-		if (list === undefined) {
-			byKey.set(item.subTypeId, [item])
-		} else {
-			list.push(item)
-		}
-	}
-	const groups: DisplayGroup[] = []
-	for (const [subTypeId, list] of byKey) {
-		const meta = SUB_TYPE_BY_ID.get(subTypeId)
-		if (meta === undefined) continue
-		const sortedItems = [...list].sort(compareAttemptIdAsc)
-		groups.push({
-			subTypeId,
-			displayName: meta.displayName,
-			section: meta.section,
-			items: sortedItems
-		})
-	}
-	groups.sort(compareBySubTypeDisplay)
-	return groups
-}
-
-function letterFor(index: number): string {
-	return String.fromCharCode(0x41 + index)
-}
-
-interface OptionLineProps {
-	letter: string
-	text: string
-	isCorrect: boolean
-	isSelected: boolean
-	isStruck?: boolean
-	isHighlighted?: boolean
-}
-
-function OptionLine(props: OptionLineProps) {
-	let containerClass = "flex items-baseline gap-3 rounded-md px-2 py-1.5 text-sm"
-	let textClass = "flex-1 text-foreground"
-	let marker: React.ReactNode = null
-
-	if (props.isCorrect) {
-		containerClass = `${containerClass} bg-foreground/5 font-medium`
-		marker = (
-			<span aria-label="correct answer" className="text-foreground/80" role="img">
-				✓
-			</span>
-		)
-	} else if (props.isSelected) {
-		// Selected-incorrect: full-contrast text + strikethrough. The
-		// `line-through` is the de-emphasis signal that earns placement
-		// (semantically-conventional struck-out treatment). Earlier
-		// drafts dimmed the text to /55 in addition to line-through —
-		// commit 5's audit flagged this as dual-encoding (same
-		// anti-pattern as commit 4's destructive-on-text issue, just
-		// with opacity) and as sub-WCAG-AA contrast on meaningful body
-		// text. Restored to /80 (matches non-selected) so contrast
-		// passes AA; line-through alone carries the "wrong answer"
-		// signal. Marker bumped from /40 to /55 to clear WCAG 1.4.11
-		// non-text 3:1 floor (~2.5:1 → ~3.7:1).
-		textClass = "flex-1 text-foreground/80 line-through"
-		marker = (
-			<span aria-label="your answer (incorrect)" className="text-foreground/55" role="img">
-				✗
-			</span>
-		)
-	} else {
-		textClass = "flex-1 text-foreground/80"
-	}
-
-	// Click-to-highlight composition (sub-phase 4 commit 4):
-	//   - isStruck adds line-through. Idempotent with isSelected's
-	//     line-through (the user's selected-incorrect option already
-	//     carries it); for non-selected options this is the elimination
-	//     part's effect. Dimmer text tint at /60 conveys "eliminated
-	//     by explanation" vs the selected /80 baseline. The
-	//     line-through composition is CSS-idempotent — adding it twice
-	//     renders identically to once.
-	//   - isHighlighted adds bg-foreground/5 + ring-1 ring-foreground/15.
-	//     bg-foreground/5 may already be present from isCorrect (the
-	//     correct-option marker also uses it); the ring carries the
-	//     visual disambiguation per plan §3.2 + §11.5. When the
-	//     highlighted option IS the correct option, the ring stacks
-	//     on the ✓ marker and reads as "the tie-breaker considered
-	//     this; here's the correct answer."
-	if (props.isStruck === true && props.isSelected !== true) {
-		textClass = `${textClass} line-through text-foreground/60`
-	}
-	if (props.isHighlighted === true) {
-		if (props.isCorrect !== true) {
-			containerClass = `${containerClass} bg-foreground/5`
-		}
-		containerClass = `${containerClass} ring-1 ring-foreground/15`
-	}
-
-	return (
-		<li className={containerClass}>
-			<span aria-hidden="true" className="w-5 shrink-0 font-mono text-foreground/60">
-				{props.letter}.
-			</span>
-			<span className={textClass}>{props.text}</span>
-			{marker}
-		</li>
-	)
-}
-
-function BodyDispatch(props: { body: ItemBody }) {
-	switch (props.body.kind) {
-		case "text":
-			return <TextBody text={props.body.text} />
-		default: {
-			// Exhaustiveness — when future variants land, this fails
-			// the compile until we add a case here.
-			const _exhaustive: never = props.body.kind
-			return <span>{_exhaustive}</span>
-		}
-	}
-}
-
 interface ParsedItem {
 	body: ItemBody
 	options: ReadonlyArray<OptionShape>
 }
 
-// Defensive: ingest enforces these shapes. If parsing fails at the
-// renderer, data drift or schema change has occurred — log + return
-// null so the caller renders a degraded line. `safeParse` already
-// returns a result type, so no errors.try wrapping needed.
 function parseItem(item: WrongItem): ParsedItem | null {
 	const bodyResult = itemBody.safeParse(item.body)
 	if (!bodyResult.success) {
@@ -276,26 +104,100 @@ function parseItem(item: WrongItem): ParsedItem | null {
 	return { body: bodyResult.data, options: optionsResult.data }
 }
 
-interface WrongItemCardProps {
-	item: WrongItem
+function renderBody(body: ItemBody, subTypeId: SubTypeId): React.ReactNode {
+	switch (body.kind) {
+		case "text":
+			if (subTypeId === NUMBER_SERIES_SUB_TYPE_ID) {
+				return <NumberSeriesBody text={body.text} />
+			}
+			return <TextBody text={body.text} />
+		default: {
+			const _exhaustive: never = body.kind
+			return <span>{_exhaustive}</span>
+		}
+	}
+}
+
+interface ReviewOptionButtonProps {
+	text: string
+	isUserAnswer: boolean
+	isCorrect: boolean
+	isStruck: boolean
+	isHighlighted: boolean
+}
+
+function ReviewOptionButton(props: ReviewOptionButtonProps) {
+	const isUserWrong = props.isUserAnswer && !props.isCorrect
+
+	let marker: React.ReactNode = null
+	if (props.isCorrect) {
+		marker = (
+			<span aria-label="correct answer" className="text-base leading-none" role="img">
+				✅
+			</span>
+		)
+	} else if (isUserWrong) {
+		marker = (
+			<span aria-label="your answer (incorrect)" className="text-base leading-none" role="img">
+				❌
+			</span>
+		)
+	}
+
+	const radioBorderClass = props.isUserAnswer ? "border-orange-500" : "border-foreground/40"
+	const dotClass = props.isUserAnswer ? "bg-orange-500 opacity-100" : "opacity-0"
+
+	return (
+		<div
+			className={cn(
+				"flex w-full items-center gap-3 rounded-md border px-4 py-2 text-left text-sm",
+				"border-border bg-background text-foreground",
+				props.isCorrect && "border-emerald-600 bg-emerald-50",
+				isUserWrong && "border-rose-600 bg-rose-50",
+				props.isHighlighted && "ring-1 ring-foreground/15"
+			)}
+			data-user-answer={props.isUserAnswer}
+			data-correct={props.isCorrect}
+		>
+			<span
+				aria-hidden="true"
+				className={cn(
+					"relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+					radioBorderClass
+				)}
+			>
+				<span className={cn("h-2.5 w-2.5 rounded-full transition-opacity", dotClass)} />
+			</span>
+			<span
+				className={cn(
+					"flex-1",
+					props.isCorrect && "text-emerald-700",
+					props.isStruck && "text-foreground/60 line-through"
+				)}
+			>
+				{props.text}
+			</span>
+			{marker}
+		</div>
+	)
 }
 
 interface StatusBadgeProps {
 	status: ItemStatus
 }
 
-function StatusBadge({ status }: StatusBadgeProps) {
+function StatusBadge(props: StatusBadgeProps) {
 	let label = "Correct"
 	let className =
-		"rounded-sm bg-foreground/5 px-[6px] py-[1px] font-medium text-[10px] text-foreground/80 uppercase tracking-[0.06em]"
-	if (status === "incorrect") {
+		"rounded-sm bg-emerald-50 px-[8px] py-[2px] font-medium text-[11px] text-emerald-700 uppercase tracking-[0.06em]"
+	if (props.status === "incorrect") {
 		label = "Incorrect"
 		className =
-			"rounded-sm border border-foreground/20 px-[6px] py-[1px] font-medium text-[10px] text-foreground/80 uppercase tracking-[0.06em]"
-	} else if (status === "skipped") {
+			"rounded-sm bg-rose-50 px-[8px] py-[2px] font-medium text-[11px] text-rose-700 uppercase tracking-[0.06em]"
+	} else if (props.status === "skipped") {
 		label = "Skipped"
 		className =
-			"rounded-sm border border-dashed border-foreground/30 px-[6px] py-[1px] font-medium text-[10px] text-foreground/70 uppercase tracking-[0.06em]"
+			"rounded-sm border border-dashed border-text-3 px-[8px] py-[2px] font-medium text-[11px] text-text-2 uppercase tracking-[0.06em]"
 	}
 	return (
 		<span aria-label={`Status: ${label}`} className={className} role="img">
@@ -304,20 +206,45 @@ function StatusBadge({ status }: StatusBadgeProps) {
 	)
 }
 
-function WrongItemCard(props: WrongItemCardProps) {
+function formatLatencySeconds(latencyMs: number): string {
+	const seconds = latencyMs / 1000
+	return `${seconds.toFixed(1)}s`
+}
+
+interface QuestionCardProps {
+	item: WrongItem
+	index: number
+}
+
+function QuestionCard(props: QuestionCardProps) {
 	const parsed = parseItem(props.item)
 	const [struck, setStruck] = React.useState<ReadonlyArray<string>>([])
 	const [highlighted, setHighlighted] = React.useState<ReadonlyArray<string>>([])
 	const status = statusFor(props.item)
+	const subTypeMeta = SUB_TYPE_BY_ID.get(props.item.subTypeId)
+	const subTypeDisplayName =
+		subTypeMeta === undefined ? props.item.subTypeId : subTypeMeta.displayName
+	const latencyDisplay = formatLatencySeconds(props.item.latencyMs)
+
 	if (parsed === null) {
 		return (
-			<li
-				className="space-y-2 border-foreground/15 border-l pl-4 text-foreground/60 text-sm italic"
+			<article
+				className="overflow-hidden rounded-lg border border-border-soft bg-surface"
 				data-testid={`post-session-wrong-item-degraded-${props.item.attemptId}`}
 			>
-				<StatusBadge status={status} />
-				<p>This item could not be displayed.</p>
-			</li>
+				<header className="flex flex-wrap items-center justify-between gap-3 border-border-soft border-b px-4 py-2">
+					<div className="flex flex-wrap items-center gap-3">
+						<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+							Question {props.index}
+						</span>
+						<span className="text-[12px] text-text-2">{subTypeDisplayName}</span>
+					</div>
+					<StatusBadge status={status} />
+				</header>
+				<p className="px-4 py-4 text-[13px] text-text-3 italic">
+					This item could not be displayed.
+				</p>
+			</article>
 		)
 	}
 
@@ -325,13 +252,6 @@ function WrongItemCard(props: WrongItemCardProps) {
 	const struckSet = new Set(struck)
 	const highlightedSet = new Set(highlighted)
 
-	// Explanation render branch per plan §4.3:
-	//   - structuredExplanation present → <StructuredExplanation>
-	//     with prose fallback inside the component (handles its own
-	//     parse-failure path).
-	//   - structuredExplanation absent + explanation present → prose
-	//     <p> directly (the 50 NULL-source_folder seed-item path).
-	//   - both absent → render nothing (degraded but not crashing).
 	let explanationNode: React.ReactNode = null
 	if (props.item.structuredExplanation !== undefined) {
 		explanationNode = (
@@ -344,79 +264,487 @@ function WrongItemCard(props: WrongItemCardProps) {
 		)
 	} else if (props.item.explanation !== undefined) {
 		explanationNode = (
-			<p className="text-foreground/70 text-sm leading-relaxed">{props.item.explanation}</p>
+			<p className="text-[13px] text-text-2 leading-relaxed">{props.item.explanation}</p>
 		)
 	}
 
 	return (
-		<li
-			className="space-y-3 border-foreground/15 border-l pl-4"
+		<article
+			className="overflow-hidden rounded-lg border border-border-soft bg-surface"
 			data-testid={`post-session-wrong-item-${props.item.attemptId}`}
 			data-item-status={status}
 		>
-			<StatusBadge status={status} />
-			<BodyDispatch body={body} />
-			<ol className="space-y-1">
-				{options.map(function renderOption(option, idx) {
-					const letter = letterFor(idx)
-					const isCorrect = option.id === props.item.correctAnswer
-					const isSelected =
-						props.item.selectedAnswer !== undefined && option.id === props.item.selectedAnswer
-					const isStruck = struckSet.has(option.id)
-					const isHighlighted = highlightedSet.has(option.id)
-					return (
-						<OptionLine
-							key={option.id}
-							letter={letter}
-							text={option.text}
-							isCorrect={isCorrect}
-							isSelected={isSelected}
-							isStruck={isStruck}
-							isHighlighted={isHighlighted}
-						/>
-					)
-				})}
-			</ol>
-			{explanationNode}
-		</li>
+			<header className="flex flex-wrap items-center justify-between gap-3 border-border-soft border-b px-4 py-2">
+				<div className="flex flex-wrap items-center gap-3">
+					<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+						Question {props.index}
+					</span>
+					<span className="text-[12px] text-text-2">{subTypeDisplayName}</span>
+					<span className="text-[11px] text-text-3 capitalize">{props.item.difficulty}</span>
+					<span className="font-mono text-[11px] text-text-3 tabular-nums">{latencyDisplay}</span>
+				</div>
+				<StatusBadge status={status} />
+			</header>
+
+			{/* Practice-formatted question body + options. The font + spacing
+			    mirror the live FocusShell surface so the review reads as
+			    the same artifact, minus the bars and Submit CTA. */}
+			<div className={cn("flex flex-col gap-5 px-5 py-5", PRACTICE_FONT_CLASS)}>
+				<div>{renderBody(body, props.item.subTypeId)}</div>
+				<div className="flex flex-col gap-1.5">
+					{options.map(function renderOption(option) {
+						const isCorrect = option.id === props.item.correctAnswer
+						const isUserAnswer =
+							props.item.selectedAnswer !== undefined && option.id === props.item.selectedAnswer
+						return (
+							<ReviewOptionButton
+								key={option.id}
+								text={option.text}
+								isUserAnswer={isUserAnswer}
+								isCorrect={isCorrect}
+								isStruck={struckSet.has(option.id)}
+								isHighlighted={highlightedSet.has(option.id)}
+							/>
+						)
+					})}
+				</div>
+			</div>
+
+			{explanationNode !== null && (
+				<div className="border-border-soft border-t bg-surface-2/40 px-5 py-4">
+					{explanationNode}
+				</div>
+			)}
+		</article>
 	)
 }
 
+// ---------------- Filter + sort helpers ----------------
+
+function matchesStatus(item: WrongItem, filter: StatusFilter): boolean {
+	if (filter === "all") return true
+	return statusFor(item) === filter
+}
+
+function matchesDifficulty(item: WrongItem, filter: DifficultyFilter): boolean {
+	if (filter === "all") return true
+	return item.difficulty === filter
+}
+
+function matchesSubType(item: WrongItem, filter: SubTypeFilter): boolean {
+	if (filter === "all") return true
+	return item.subTypeId === filter
+}
+
+function matchesTime(item: WrongItem, filter: TimeFilter): boolean {
+	if (filter === "all") return true
+	const ms = item.latencyMs
+	if (filter === "lt10") return ms < 10_000
+	if (filter === "10to20") return ms >= 10_000 && ms < 20_000
+	if (filter === "20to30") return ms >= 20_000 && ms < 30_000
+	return ms >= 30_000
+}
+
+function compareByAttemptId(a: WrongItem, b: WrongItem): number {
+	if (a.attemptId < b.attemptId) return -1
+	if (a.attemptId > b.attemptId) return 1
+	return 0
+}
+
+function compareItems(a: WrongItem, b: WrongItem, key: SortKey): number {
+	if (key === "question") return compareByAttemptId(a, b)
+	if (key === "latency") {
+		const delta = a.latencyMs - b.latencyMs
+		if (delta !== 0) return delta
+		return compareByAttemptId(a, b)
+	}
+	if (key === "difficulty") {
+		const delta = DIFFICULTY_RANK[a.difficulty] - DIFFICULTY_RANK[b.difficulty]
+		if (delta !== 0) return delta
+		return compareByAttemptId(a, b)
+	}
+	const aMeta = SUB_TYPE_BY_ID.get(a.subTypeId)
+	const bMeta = SUB_TYPE_BY_ID.get(b.subTypeId)
+	if (aMeta !== undefined && bMeta !== undefined) {
+		const delta = compareBySubTypeDisplay(a, b)
+		if (delta !== 0) return delta
+	}
+	return compareByAttemptId(a, b)
+}
+
+interface AppliedFilters {
+	status: StatusFilter
+	difficulty: DifficultyFilter
+	time: TimeFilter
+	subType: SubTypeFilter
+}
+
+function filterItems(
+	items: ReadonlyArray<WrongItem>,
+	filters: AppliedFilters
+): ReadonlyArray<WrongItem> {
+	return items.filter(function matchesAll(item) {
+		return (
+			matchesStatus(item, filters.status) &&
+			matchesDifficulty(item, filters.difficulty) &&
+			matchesTime(item, filters.time) &&
+			matchesSubType(item, filters.subType)
+		)
+	})
+}
+
+function sortItems(
+	items: ReadonlyArray<WrongItem>,
+	key: SortKey,
+	direction: SortDirection
+): WrongItem[] {
+	const sorted = [...items].sort(function bySortKey(a, b) {
+		return compareItems(a, b, key)
+	})
+	if (direction === "desc") sorted.reverse()
+	return sorted
+}
+
+// ---------------- Toolbar ----------------
+
+interface ChipOption<T extends string> {
+	value: T
+	label: string
+}
+
+const STATUS_OPTIONS: ReadonlyArray<ChipOption<StatusFilter>> = [
+	{ value: "all", label: "All" },
+	{ value: "correct", label: "Correct" },
+	{ value: "incorrect", label: "Incorrect" },
+	{ value: "skipped", label: "Skipped" }
+]
+
+const DIFFICULTY_OPTIONS: ReadonlyArray<ChipOption<DifficultyFilter>> = [
+	{ value: "all", label: "All" },
+	{ value: "easy", label: "Easy" },
+	{ value: "medium", label: "Medium" },
+	{ value: "hard", label: "Hard" },
+	{ value: "brutal", label: "Brutal" }
+]
+
+const TIME_OPTIONS: ReadonlyArray<ChipOption<TimeFilter>> = [
+	{ value: "all", label: "All" },
+	{ value: "lt10", label: "≤10s" },
+	{ value: "10to20", label: "10–20s" },
+	{ value: "20to30", label: "20–30s" },
+	{ value: "gt30", label: ">30s" }
+]
+
+const SORT_OPTIONS: ReadonlyArray<ChipOption<SortKey>> = [
+	{ value: "question", label: "Question order" },
+	{ value: "subType", label: "Sub-type" },
+	{ value: "latency", label: "Time taken" },
+	{ value: "difficulty", label: "Difficulty" }
+]
+
+interface ChipGroupProps<T extends string> {
+	legend: string
+	options: ReadonlyArray<ChipOption<T>>
+	value: T
+	onChange: (next: T) => void
+}
+
+function ChipGroup<T extends string>(props: ChipGroupProps<T>) {
+	return (
+		<fieldset className="flex flex-wrap items-center gap-2 border-0 p-0">
+			<legend className="float-left mr-2 text-[11px] text-text-3 uppercase tracking-[0.06em]">
+				{props.legend}
+			</legend>
+			<div className="inline-flex flex-wrap gap-1 rounded-lg border border-border-soft bg-surface p-[3px]">
+				{props.options.map(function renderChip(opt) {
+					const isActive = opt.value === props.value
+					const stateClass = isActive
+						? "bg-cobalt text-white"
+						: "text-text-2 hover:bg-lavender hover:text-text-1"
+					return (
+						<button
+							key={opt.value}
+							type="button"
+							aria-pressed={isActive}
+							onClick={function handleClick() {
+								if (!isActive) props.onChange(opt.value)
+							}}
+							className={cn(
+								"rounded-md px-3 py-[5px] font-medium text-[12px] transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
+								stateClass
+							)}
+						>
+							{opt.label}
+						</button>
+					)
+				})}
+			</div>
+		</fieldset>
+	)
+}
+
+interface SubTypeOption {
+	value: SubTypeFilter
+	label: string
+}
+
+function buildSubTypeOptions(items: ReadonlyArray<WrongItem>): ReadonlyArray<SubTypeOption> {
+	const seen = new Set<SubTypeId>()
+	const rows: { id: SubTypeId; displayName: string; section: "verbal" | "numerical" }[] = []
+	for (const item of items) {
+		if (seen.has(item.subTypeId)) continue
+		const meta = SUB_TYPE_BY_ID.get(item.subTypeId)
+		if (meta === undefined) continue
+		seen.add(item.subTypeId)
+		rows.push({ id: item.subTypeId, displayName: meta.displayName, section: meta.section })
+	}
+	rows.sort(function bySubTypeOrder(a, b) {
+		return compareBySubTypeDisplay({ subTypeId: a.id }, { subTypeId: b.id })
+	})
+	const options: SubTypeOption[] = [{ value: "all", label: "All sub-types" }]
+	for (const row of rows) {
+		options.push({ value: row.id, label: row.displayName })
+	}
+	return options
+}
+
+interface SubTypeSelectProps {
+	value: SubTypeFilter
+	options: ReadonlyArray<SubTypeOption>
+	onChange: (next: SubTypeFilter) => void
+}
+
+function SubTypeSelect(props: SubTypeSelectProps) {
+	function onSelectChange(event: React.ChangeEvent<HTMLSelectElement>) {
+		const next = event.target.value
+		const match = props.options.find(function findOption(opt) {
+			return opt.value === next
+		})
+		if (match === undefined) {
+			logger.error({ next }, "SubTypeSelect: unknown option value")
+			return
+		}
+		props.onChange(match.value)
+	}
+	return (
+		<fieldset className="flex flex-wrap items-center gap-2 border-0 p-0">
+			<legend className="float-left mr-2 text-[11px] text-text-3 uppercase tracking-[0.06em]">
+				Sub-type
+			</legend>
+			<select
+				aria-label="Filter by sub-type"
+				className="rounded-lg border border-border-soft bg-surface px-3 py-[6px] font-medium text-[12px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
+				value={props.value}
+				onChange={onSelectChange}
+			>
+				{props.options.map(function renderOption(opt) {
+					return (
+						<option key={opt.value} value={opt.value}>
+							{opt.label}
+						</option>
+					)
+				})}
+			</select>
+		</fieldset>
+	)
+}
+
+interface DirectionToggleProps {
+	direction: SortDirection
+	onToggle: () => void
+}
+
+function DirectionToggle(props: DirectionToggleProps) {
+	const Icon = props.direction === "asc" ? ArrowUpNarrowWideIcon : ArrowDownNarrowWideIcon
+	const label =
+		props.direction === "asc"
+			? "Ascending — switch to descending"
+			: "Descending — switch to ascending"
+	return (
+		<button
+			type="button"
+			aria-label={label}
+			title={label}
+			onClick={props.onToggle}
+			className={cn(
+				"inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border-soft bg-surface transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
+				"text-text-2 hover:bg-lavender hover:text-text-1"
+			)}
+		>
+			<Icon aria-hidden="true" className="h-[14px] w-[14px]" />
+		</button>
+	)
+}
+
+interface ReviewToolbarProps {
+	subTypeOptions: ReadonlyArray<SubTypeOption>
+	filters: AppliedFilters
+	sortKey: SortKey
+	direction: SortDirection
+	onStatusChange: (next: StatusFilter) => void
+	onDifficultyChange: (next: DifficultyFilter) => void
+	onTimeChange: (next: TimeFilter) => void
+	onSubTypeChange: (next: SubTypeFilter) => void
+	onSortKeyChange: (next: SortKey) => void
+	onToggleDirection: () => void
+}
+
+function ReviewToolbar(props: ReviewToolbarProps) {
+	return (
+		<div
+			className="flex flex-col gap-3 rounded-lg border border-border-soft bg-surface px-4 py-3"
+			data-testid="post-session-review-toolbar"
+		>
+			<div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+				<ChipGroup
+					legend="Status"
+					options={STATUS_OPTIONS}
+					value={props.filters.status}
+					onChange={props.onStatusChange}
+				/>
+				<ChipGroup
+					legend="Difficulty"
+					options={DIFFICULTY_OPTIONS}
+					value={props.filters.difficulty}
+					onChange={props.onDifficultyChange}
+				/>
+				<ChipGroup
+					legend="Time"
+					options={TIME_OPTIONS}
+					value={props.filters.time}
+					onChange={props.onTimeChange}
+				/>
+				<SubTypeSelect
+					value={props.filters.subType}
+					options={props.subTypeOptions}
+					onChange={props.onSubTypeChange}
+				/>
+			</div>
+			<div className="flex flex-wrap items-center gap-3 border-border-soft border-t pt-3">
+				<ChipGroup
+					legend="Sort by"
+					options={SORT_OPTIONS}
+					value={props.sortKey}
+					onChange={props.onSortKeyChange}
+				/>
+				<DirectionToggle direction={props.direction} onToggle={props.onToggleDirection} />
+			</div>
+		</div>
+	)
+}
+
+// ---------------- Browser ----------------
+
 function WrongItemsBrowser(props: WrongItemsBrowserProps) {
-	const groups = buildDisplayGroups(props.items)
+	const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
+	const [difficultyFilter, setDifficultyFilter] = React.useState<DifficultyFilter>("all")
+	const [timeFilter, setTimeFilter] = React.useState<TimeFilter>("all")
+	const [subTypeFilter, setSubTypeFilter] = React.useState<SubTypeFilter>("all")
+	const [sortKey, setSortKey] = React.useState<SortKey>("question")
+	const [direction, setDirection] = React.useState<SortDirection>("asc")
+
+	const filters = React.useMemo<AppliedFilters>(
+		function buildFilters() {
+			return {
+				status: statusFilter,
+				difficulty: difficultyFilter,
+				time: timeFilter,
+				subType: subTypeFilter
+			}
+		},
+		[statusFilter, difficultyFilter, timeFilter, subTypeFilter]
+	)
+
+	const subTypeOptions = React.useMemo(
+		function buildOptions() {
+			return buildSubTypeOptions(props.items)
+		},
+		[props.items]
+	)
+
+	const indexByAttemptId = React.useMemo(
+		function buildIndex() {
+			const map = new Map<string, number>()
+			props.items.forEach(function indexItem(item, idx) {
+				map.set(item.attemptId, idx + 1)
+			})
+			return map
+		},
+		[props.items]
+	)
+
+	const visibleItems = React.useMemo(
+		function buildVisible() {
+			const filtered = filterItems(props.items, filters)
+			return sortItems(filtered, sortKey, direction)
+		},
+		[props.items, filters, sortKey, direction]
+	)
+
+	function toggleDirection() {
+		setDirection(function flip(prev) {
+			return prev === "asc" ? "desc" : "asc"
+		})
+	}
+
+	const sourceIsEmpty = props.items.length === 0
+	const filteredIsEmpty = !sourceIsEmpty && visibleItems.length === 0
+
 	return (
 		<section
 			aria-labelledby="post-session-wrong-items-heading"
-			className="space-y-4"
+			className="mx-auto w-full max-w-3xl space-y-5"
 			data-testid="post-session-wrong-items-browser-section"
 		>
-			<h2
-				className="font-medium text-foreground text-sm tracking-tight"
-				id="post-session-wrong-items-heading"
-			>
+			<h2 id="post-session-wrong-items-heading" className="sr-only">
 				Question review
 			</h2>
-			{groups.length === 0 ? (
-				<p className="text-foreground/80 text-sm" data-testid="post-session-wrong-items-empty">
+
+			{!sourceIsEmpty && (
+				<ReviewToolbar
+					subTypeOptions={subTypeOptions}
+					filters={filters}
+					sortKey={sortKey}
+					direction={direction}
+					onStatusChange={setStatusFilter}
+					onDifficultyChange={setDifficultyFilter}
+					onTimeChange={setTimeFilter}
+					onSubTypeChange={setSubTypeFilter}
+					onSortKeyChange={setSortKey}
+					onToggleDirection={toggleDirection}
+				/>
+			)}
+
+			{sourceIsEmpty && (
+				<p
+					className="rounded-lg border border-border-soft bg-surface px-4 py-4 text-[13px] text-text-3"
+					data-testid="post-session-wrong-items-empty"
+				>
 					No questions in this session.
 				</p>
-			) : (
-				<div className="space-y-6">
-					{groups.map(function renderGroup(group) {
-						return (
-							<div
-								key={group.subTypeId}
-								className="space-y-3"
-								data-testid={`post-session-wrong-items-group-${group.subTypeId}`}
-							>
-								<h3 className="font-semibold text-foreground/80 text-sm">{group.displayName}</h3>
-								<ol className="space-y-5">
-									{group.items.map(function renderItem(item) {
-										return <WrongItemCard key={item.attemptId} item={item} />
-									})}
-								</ol>
-							</div>
-						)
+			)}
+
+			{filteredIsEmpty && (
+				<p
+					className="rounded-lg border border-border-soft bg-surface px-4 py-4 text-[13px] text-text-3"
+					data-testid="post-session-wrong-items-filtered-empty"
+				>
+					No questions match the current filters.
+				</p>
+			)}
+
+			{!sourceIsEmpty && !filteredIsEmpty && (
+				<div className="space-y-4">
+					{visibleItems.map(function renderItem(item) {
+						const index = indexByAttemptId.get(item.attemptId)
+						if (index === undefined) {
+							logger.error(
+								{ attemptId: item.attemptId },
+								"WrongItemsBrowser: missing index for attempt"
+							)
+							return null
+						}
+						return <QuestionCard key={item.attemptId} item={item} index={index} />
 					})}
 				</div>
 			)}
@@ -426,11 +754,11 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 
 export type { WrongItemsBrowserProps }
 export {
-	BodyDispatch,
-	buildDisplayGroups,
-	compareAttemptIdAsc,
-	letterFor,
-	OptionLine,
-	WrongItemCard,
+	buildSubTypeOptions,
+	compareItems,
+	filterItems,
+	QuestionCard,
+	ReviewOptionButton,
+	sortItems,
 	WrongItemsBrowser
 }

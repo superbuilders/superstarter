@@ -107,11 +107,15 @@ const getPerSubTypePerformance = db
 // skipped attempts have correct=false + selectedAnswer=NULL per
 // submitAttempt). The projection now also carries `correct` so the
 // renderer can label per-item status (Correct / Incorrect / Skipped).
+type ItemDifficulty = "easy" | "medium" | "hard" | "brutal"
+
 const getWrongItemsForSession = db
 	.select({
 		attemptId: attempts.id,
 		itemId: items.id,
 		subTypeId: sql<SubTypeId>`${items.subTypeId}`,
+		difficulty: sql<ItemDifficulty>`${items.difficulty}`,
+		latencyMs: attempts.latencyMs,
 		body: items.body,
 		optionsJson: items.optionsJson,
 		correctAnswer: items.correctAnswer,
@@ -167,6 +171,8 @@ interface WrongItem {
 	attemptId: string
 	itemId: string
 	subTypeId: SubTypeId
+	difficulty: ItemDifficulty
+	latencyMs: number
 	body: unknown
 	optionsJson: unknown
 	correctAnswer: string
@@ -347,6 +353,8 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			attemptId: r.attemptId,
 			itemId: r.itemId,
 			subTypeId: r.subTypeId,
+			difficulty: r.difficulty,
+			latencyMs: r.latencyMs,
 			body: r.body,
 			optionsJson: r.optionsJson,
 			correctAnswer: r.correctAnswer,
@@ -445,6 +453,7 @@ function PostSessionSkeleton() {
 
 export type {
 	EndSessionTierForRender,
+	ItemDifficulty,
 	PerSubTypePerformance,
 	SessionInfo,
 	SurfacedStrategy,

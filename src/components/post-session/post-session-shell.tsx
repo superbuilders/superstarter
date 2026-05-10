@@ -1,29 +1,19 @@
 "use client"
 
-// <PostSessionShell> — session-type-aware dispatch with locked §10
-// component ordering.
+// <PostSessionShell> — tabbed review surface for practice tests + drills.
 //
-// Plan: docs/plans/phase5-post-session-review.md §10 + §12 commits 1-6;
-// Round 2 §5.4 combined slots 3 + 4 (<AccuracySummary> + <LatencySummary>)
-// into a single <PerformanceSummary> renderer at the slot-3 position.
+// Three tabs at the top of the page:
+//   1. Performance by sub-type   → <PerformanceSummary>
+//   2. Question review           → <WrongItemsBrowser> (practice-style
+//                                  question + option formatting)
+//   3. Strategies to review      → <StrategySurface>
 //
-// Render order (top to bottom):
-//   1. Heading + brief one-line summary.
-//   3. <PerformanceSummary>        — combined accuracy + latency per
-//                                    sub-type (Round 2 §5.4; replaces
-//                                    former slots 3 + 4).
-//   5. <WrongItemsBrowser>         — full per-question review.
-//   6. <StrategySurface>           — kind-preference strategies for
-//                                    struggled sub-types.
-//   7. <OnboardingTargets>         — diagnostic-only, already shipped.
-//   8. Pacing-line sentence        — diagnostic-only, conditional on >15min.
-//   9. Continue CTA                — non-diagnostic only (drill /
-//                                    full-length / simulation).
-//
-// Slot data-testid markers stay on outer wrapper divs.
+// Page chrome mirrors the dashboard / /review listing (max-w-[1100px],
+// bg-surface cards, font-serif headings, dashboard tokens). The
+// authenticated <TopNav> is rendered by the page above the shell.
 
 import { useRouter } from "next/navigation"
-import type * as React from "react"
+import * as React from "react"
 import type {
 	EndSessionTierForRender,
 	PerSubTypePerformance,
@@ -40,43 +30,60 @@ import { Button } from "@/components/ui/button"
 
 type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
 
+type ReviewTab = "performance" | "questions" | "strategies"
+
 interface PostSessionShellProps {
 	sessionType: SessionTypeForShell
 	pacingMinutes?: number
 	performance: PerSubTypePerformance[]
 	wrongItems: WrongItem[]
 	surfacedStrategies: SurfacedStrategy[]
-	// Drill-mode adaptive walker tier reached at session end. Sub-phase
-	// 5 commit 4 wires this; per plan §5.5 the value is null on:
-	//   - non-drill sessions (page-level passes null defensively)
-	//   - drill sessions with zero attempts (component renders nothing
-	//     — heading falls back to the unchanged "Session complete"
-	//     surface)
-	// The shell guards on sessionType === "drill" AND endSessionTier
-	// non-null before rendering the belt; either gate failing keeps
-	// the heading bit-for-bit unchanged for diagnostic / full-length /
-	// simulation render paths.
 	endSessionTier: EndSessionTierForRender | null
 }
+
+interface TabDef {
+	key: ReviewTab
+	label: string
+}
+
+const TABS: ReadonlyArray<TabDef> = [
+	{ key: "performance", label: "Performance by sub-type" },
+	{ key: "questions", label: "Question review" },
+	{ key: "strategies", label: "Strategies to review" }
+]
+
+const ACTIVE_TAB_CLASS =
+	"rounded-md bg-surface-2 px-[12px] py-[8px] font-medium text-[13px] text-text-1"
+const INACTIVE_TAB_CLASS =
+	"rounded-md px-[12px] py-[8px] text-[13px] text-text-2 transition-colors hover:bg-lavender"
 
 function sumCorrectAttempts(sum: number, row: PerSubTypePerformance): number {
 	return sum + row.correct
 }
 
-function PostSessionShell(props: PostSessionShellProps) {
-	const isDiagnostic = props.sessionType === "diagnostic"
-	const heading = isDiagnostic ? "Diagnostic complete" : "Session complete"
+function headingFor(sessionType: SessionTypeForShell): string {
+	if (sessionType === "diagnostic") return "Diagnostic complete"
+	if (sessionType === "drill") return "Drill review"
+	return "Practice test review"
+}
 
-	// Subhead + pacing-line use `text-foreground/80` (~5.7:1 against
-	// light bg) for AA contrast on normal text. Light-mode
-	// `--muted-foreground: oklch(0.556 0 0)` lands at ~4.0:1 —
-	// borderline below AA for normal text. Aligning peer single-line
-	// statements on the post-session shell keeps the surface
-	// consistent. Found by commit 6's full-surface audit.
+function eyebrowFor(sessionType: SessionTypeForShell): string {
+	if (sessionType === "diagnostic") return "Diagnostic"
+	if (sessionType === "drill") return "Drill"
+	if (sessionType === "full_length") return "Practice test"
+	return "Simulation"
+}
+
+function PostSessionShell(props: PostSessionShellProps) {
+	const [activeTab, setActiveTab] = React.useState<ReviewTab>("performance")
+	const isDiagnostic = props.sessionType === "diagnostic"
+	const heading = headingFor(props.sessionType)
+	const eyebrow = eyebrowFor(props.sessionType)
+
 	let subhead: React.ReactNode = null
 	if (isDiagnostic) {
 		subhead = (
-			<p className="text-foreground/80 text-sm">
+			<p className="max-w-[60ch] text-sm text-text-2">
 				Tell us what you're aiming for so we can pace your practice.
 			</p>
 		)
@@ -85,7 +92,7 @@ function PostSessionShell(props: PostSessionShellProps) {
 	let pacingLine: React.ReactNode = null
 	if (isDiagnostic && props.pacingMinutes !== undefined) {
 		pacingLine = (
-			<p className="text-foreground/80 text-sm" data-testid="post-session-pacing-line">
+			<p className="text-sm text-text-2" data-testid="post-session-pacing-line">
 				Your diagnostic took {props.pacingMinutes} minutes. The real CCAT is 15 minutes for 50
 				questions.
 			</p>
@@ -103,14 +110,6 @@ function PostSessionShell(props: PostSessionShellProps) {
 		trailingSection = <ContinueButton />
 	}
 
-	// Heading-area belt indicator (sub-phase 5 commit 4, plan §5.3).
-	// Renders only when the session is drill-mode AND the walker has
-	// produced a tier (non-null). Diagnostic / full-length / simulation
-	// keep the unchanged heading; drill sessions with zero attempts
-	// (endSessionTier === null per plan §5.5 zero-attempt branch) also
-	// keep the unchanged heading. Per plan §2.6 / §5.3 audit (F)
-	// recommendation, this is a heading expansion (slot 1), NOT a new
-	// slot — the slot 2-9 ordering stays untouched.
 	let beltSection: React.ReactNode = null
 	if (props.sessionType === "drill" && props.endSessionTier !== null) {
 		beltSection = (
@@ -122,44 +121,116 @@ function PostSessionShell(props: PostSessionShellProps) {
 		)
 	}
 
-	// Practice-test-only result sound (mounts as a render-null sibling).
-	// Gated to full_length / simulation so drill + diagnostic surfaces
-	// stay silent. Score = sum of per-sub-type correct counts; tier
-	// thresholds + bank routing live in <ResultSoundFx>.
 	let resultSoundFx: React.ReactNode = null
 	if (props.sessionType === "full_length" || props.sessionType === "simulation") {
 		const totalCorrect = props.performance.reduce(sumCorrectAttempts, 0)
 		resultSoundFx = <ResultSoundFx score={totalCorrect} />
 	}
 
+	let panel: React.ReactNode = null
+	if (activeTab === "performance") {
+		panel = (
+			<section
+				className="overflow-hidden rounded-lg border border-border-soft bg-surface"
+				data-testid="post-session-slot-performance-summary"
+			>
+				<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
+					<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+						Performance by sub-type
+					</h3>
+					<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+						Accuracy and median latency
+					</span>
+				</header>
+				<div className="px-4 py-3">
+					<PerformanceSummary rows={props.performance} />
+				</div>
+			</section>
+		)
+	} else if (activeTab === "questions") {
+		panel = (
+			<div data-testid="post-session-slot-wrong-items">
+				<WrongItemsBrowser items={props.wrongItems} />
+			</div>
+		)
+	} else {
+		panel = (
+			<section
+				className="overflow-hidden rounded-lg border border-border-soft bg-surface"
+				data-testid="post-session-slot-strategy-surface"
+			>
+				<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
+					<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+						Strategies to review
+					</h3>
+					<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+						Surfaced for struggled sub-types
+					</span>
+				</header>
+				<div className="px-4 py-3">
+					<StrategySurface strategies={props.surfacedStrategies} />
+				</div>
+			</section>
+		)
+	}
+
 	return (
-		<main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-8 px-6 py-12">
+		<main className="mx-auto max-w-[1100px] px-7 pb-10" data-testid="post-session-heading">
 			{resultSoundFx}
-			<header className="space-y-3" data-testid="post-session-heading">
-				<h1 className="font-semibold text-2xl tracking-tight">{heading}</h1>
+			<header className="mb-3 flex flex-col gap-2 border-border-soft border-b pb-3">
+				<p className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{eyebrow}</p>
+				<h2 className="font-medium font-serif text-[22px] text-text-1 leading-[1.15] tracking-[-0.015em]">
+					{heading}
+				</h2>
 				{subhead}
 				{beltSection}
 			</header>
 
-			{/* Slot 3: <PerformanceSummary> — Round 2 §5.4 combined accuracy
-			    + latency renderer (replaces former slots 3 + 4). */}
-			<div data-testid="post-session-slot-performance-summary">
-				<PerformanceSummary rows={props.performance} />
-			</div>
+			<TabNav activeTab={activeTab} onSelect={setActiveTab} />
 
-			{/* Slot 5: <WrongItemsBrowser> — filled in commit 5 (plan §8). */}
-			<div data-testid="post-session-slot-wrong-items">
-				<WrongItemsBrowser items={props.wrongItems} />
-			</div>
+			<div className="mt-4">{panel}</div>
 
-			{/* Slot 6: <StrategySurface> — filled in commit 6 (plan §9). */}
-			<div data-testid="post-session-slot-strategy-surface">
-				<StrategySurface strategies={props.surfacedStrategies} />
+			<div className="mt-8 flex flex-col gap-4">
+				{trailingSection}
+				{pacingLine}
 			</div>
-
-			{trailingSection}
-			{pacingLine}
 		</main>
+	)
+}
+
+interface TabNavProps {
+	activeTab: ReviewTab
+	onSelect: (tab: ReviewTab) => void
+}
+
+function TabNav(props: TabNavProps) {
+	return (
+		<div
+			aria-label="Review sections"
+			className="flex flex-wrap gap-[2px]"
+			data-testid="post-session-tab-nav"
+			role="tablist"
+		>
+			{TABS.map(function renderTab(tab) {
+				const isActive = tab.key === props.activeTab
+				const className = isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS
+				return (
+					<button
+						key={tab.key}
+						type="button"
+						role="tab"
+						aria-selected={isActive}
+						className={className}
+						data-testid={`post-session-tab-${tab.key}`}
+						onClick={function selectThis() {
+							props.onSelect(tab.key)
+						}}
+					>
+						{tab.label}
+					</button>
+				)
+			})}
+		</div>
 	)
 }
 
