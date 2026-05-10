@@ -343,6 +343,18 @@ Branches are NOT mutually exclusive — Branch 3a + Branch 4 may both land if a 
 - **§6.14.18/21/22 reinforcement at redirector→executor boundary (fourth round-instance):** redirector spec's "drizzle-kit will (try to) update [`_journal.json`]" empirically false; executor surfaced at probe-result inspection. Cohort now: §0.9 reconciliation, §1 commit 1 gitignore catch, §1 commit 1 dead-reference catch, §2.6 drizzle-kit-write-behavior catch.
 - **NEW observation — "methodology-as-primary-finding" (single instance, forward-watch):** when a reproduction probe doesn't reproduce the target bug, the probe's methodological learning becomes the finding. Single-instance from this gate; no promotion; track for re-occurrence in future rounds.
 
+### §2.7 §2 round-close
+
+**Status:** §2 closes at this gate. §2 commit 0 (`e6ffb51`) was the only §2 commit; no §2 commit 1 because Branch 3a ∩ Branch 5 is doc-only.
+
+**Empirical resolution:** drizzle-kit migrate's verbose-flag surface is minimal (`--config` / `--help` / `--version` only). drizzle-kit migrate is journal-driven, not file-system-driven — loose `.sql` files outside the journal are silently ignored. Original `822a674` failure un-reproducible by loose-file probe path; reproducibility likely requires drizzle-kit `generate` workflow (deferred per Option α scope-bounding).
+
+**§6.14.31 destructive-operation-gate template** executed end-to-end with hash-verify across the probe lifecycle (pre-probe / post-probe / post-cleanup, all three identical at `5385521d…707e53f3`). This is the second instance of §6.14.31 application in project history (first: sidecar `822a674` manual-apply); template advances from first-explicit-application to multi-instance.
+
+**Manual-apply workaround procedure** documented in `README.md` (this gate) for any future drizzle-kit migrate opaque failure. The procedure is the operational artifact for residual #12's resolution-as-documented.
+
+**Methodology correction surfaced:** redirector-spec at audit step (f) of §2 commit 0 was empirically falsified by the executor (drizzle-kit migrate is journal-driven, not file-system-driven). This is the third redirector-spec error caught at executor audit-step boundary in this round (after gitignore-path error at §1 commit 1 and sidecar dead-reference at §1 commit 1). Surfaced for §5 promotion-candidate consideration.
+
 ---
 
 ## §3 — Commit ledger
@@ -355,22 +367,80 @@ Populated as commits land. Anticipated shape: 0-2 implementation commits across 
 | 1 | `bc0fe17` | docs(plan): reconcile round HEAD re-anchor; amend §0 with §6.14.40 | — | reconciliation |
 | 2 | `cf2d147` | docs(plan,logs,test): §1 commit 1 — bun-test rerun loop empirical data + interim mitigation | §1 | Branch 1 ∩ 4 forward-pinned |
 | 3 | `df4df7c` | docs(plan): §1 round-close; selection-engine sidecar stub | §1 | round-close |
-| 4 | `<this commit>` | docs(plan,logs): §2 commit 0 — drizzle-kit no-op reproduction probe + branch-selection candidate | §2 | Branch 3a ∩ 5 forward-pinned to round-close |
+| 4 | `e6ffb51` | docs(plan,logs): §2 commit 0 — drizzle-kit no-op reproduction probe + branch-selection candidate | §2 | Branch 3a ∩ 5 forward-pinned to round-close |
+| 5 | `<this commit>` | docs(plan,readme): close tooling-reliability-debug round; close §2; document drizzle-kit manual-apply procedure | §2 + round-close | Branch 3a ∩ 5 (doc-only) |
 
 ---
 
 ## §4 — Round-close residuals (forward-pinned to next round)
 
-Populated at round-close. Expected shape: any §1 or §2 sub-residuals that surface during investigation but are out-of-scope for this round (e.g., a related but distinct flake captured during §1 Step A, or a config-loading robustness gap surfaced during §2 Step A). Forward-pin destination: the diagnostic-timing sidecar (Option 1 per round-opening directive) or Round 3 review-section architecture, depending on residual subject.
+### §4.1 Resolved this round
+
+- **Residual #10 (bun-test flake): RESOLVED-AS-REFRAMED.** Empirically a stochastic correctness defect in selection engine's Pass 4 session-soft fallback, not a tooling-layer flake. Forward-pinned to selection-engine sidecar (stub at [`docs/plans/selection-engine-session-attempted-ids-sidecar.md`](selection-engine-session-attempted-ids-sidecar.md)). Test stays running with interim mitigation comment block above the failing `test(...)` declaration; coverage of the no-re-serve invariant remains active.
+- **Residual #12 (drizzle-kit CLI opaque failure): RESOLVED-AS-DOCUMENTED.** Manual-apply workaround procedure in `README.md`. Single-occurrence pattern; not reproducible by loose-file probe; future occurrence has documented recovery path. If a third instance lands (after `822a674` + this documentation), upstream drizzle-orm GitHub issue with reproduction is the next escalation step.
+
+### §4.2 Forward-pinned to next round-cycle (in order of intended precedence)
+
+1. **SELECTION-ENGINE SIDECAR (NEW — opens immediately after this round closes).** Stub at [`docs/plans/selection-engine-session-attempted-ids-sidecar.md`](selection-engine-session-attempted-ids-sidecar.md). Bug seed in tooling-reliability-debug §1.6. SPEC §9.2 implication captured. Three fix-shape branches (α / β / γ) enumerated; sidecar commit-0 audit selects.
+2. **DIAGNOSTIC-TIMING SIDECAR (Option 1 from prior handoff).** Pushed to slot AFTER selection-engine sidecar per the §1 round-close Option-II decision.
+3. **ROUND 3 — REVIEW-SECTION ARCHITECTURE.** Opens after both sidecars close.
+
+### §4.3 New residuals surfaced this round
+
+- **TEST-SUITE EXPECT-COUNT DETERMINISM (forward-watch).** 25-iteration rerun loop showed expect()-count distribution 641-649 across passing iterations (range 9, mean 645.72, 9 distinct values). Likely sampling-driven conditional `expect()` calls in `selection.test.ts` family (within-cell-determinism + 20-salt-variation tests sample probabilistically). Single observation; forward-pin only; no promotion. Track for future-round surfacings.
+- **DRIZZLE-KIT VERBOSE-FLAG SURFACE CONSTRAINT (forward-watch).** drizzle-kit migrate exposes only `--config`/`--help`/`--version`; no diagnostic flag. Future drizzle-kit failure investigation is structurally constrained — env-var probes (`NODE_DEBUG`, `DRIZZLE_LOGGER`) or pg-side query log are the available signal sources. May warrant upstream drizzle-kit issue at some future occurrence.
+- **HANDOFF-DOC IMPRECISION (one-time fix-forward, not residual).** Handoff §10 cited journal hash `d7103ad6…adab0c4`; that hash is NOT in `_journal.json`'s format (no per-entry content-hash field). Empirical hash format is `sha256sum` of the full file: `5385521d6…707e53f3`. Next handoff doc captures the actual format.
+
+### §4.4 Inherited residuals from prior rounds (carried forward unchanged)
+
+All 12 forward-pinned residuals from sidecar §8 / handoff §9 stay open. The two this round addressed (#10 + #12) are reframed/resolved per §4.1; the other ten carry forward unchanged into the next round-cycle.
 
 ---
 
 ## §5 — §6.14 promotion / reinforcement candidates
 
-Conditional on §1 + §2 outcomes — populated at round-close. Pre-round candidates (per §0.6):
+### §5.1 Reinforcements (no new SPEC entry; existing canon advances)
 
-- §6.14.34 reinforcement (round structure itself).
-- §6.14.31 conditional reinforcement (Branch 3b in §2 only).
-- §6.14.42 conditional reinforcement (Branch 1/4 in §2 if shim or script wiring touched).
-- §6.14.40 conditional reinforcement (Branch 4 in §1 if silent prior fix surfaces).
-- **Sidecar-as-default-narrow-scope-envelope** — single-instance reinforcement at this commit (second consecutive sidecar). Promotion gate: third consecutive sidecar (planned diagnostic-timing sidecar post-round). Track at round-close; do not pre-promote.
+- **§6.14.41 (cite-without-verify; reframing):** residual #10's "bun test flake" citation falsified empirically by the 25-iteration rerun loop (§1.6). Positive-complement instance: rerun-loop investigation = literal verification of the cited pattern. Round-anchor for future §6.14.41 references.
+- **§6.14.31 (destructive-operation-gate template):** SECOND instance of explicit application in project history (first: sidecar `822a674` manual-apply). Template now multi-instance. Pre-state hash → apply/probe → rollback → post-state hash verify cycle followed end-to-end at §2 commit 0 (`e6ffb51`). Pattern advances from first-explicit-application to multi-instance.
+- **§6.14.18/21/22 (audit-first checkpoint per-commit):** heavily reinforced this round (cohort: §0.9 reconciliation, §1 commit 1 gitignore catch, §1 commit 1 dead-reference catch, §2.6 drizzle-kit-write-behavior catch). See PROMOTION CANDIDATE 1 below for the sub-pattern that may warrant separate SPEC entry.
+- **§6.14.34 (mid-round narrow-scope sub-round insertion):** this round itself is a §6.14.34 instance. Reinforcement only; no new SPEC entry.
+- **§6.14.40 (redirector-vs-empirical-state divergence):** reinforced at §0.9 reconciliation (existing commit `9d59922` preserved + working HEAD re-anchored from `b6e180d` to `78136b7`).
+
+### §5.2 PROMOTION CANDIDATES (formally surfaced for redirector decision)
+
+#### PROMOTION CANDIDATE 1 — Redirector-spec error caught at executor audit-step boundary as a §6.14 sub-pattern
+
+**Three instances within this round:**
+
+- **(a) §1 commit 1 (`cf2d147`):** redirector spec authored `scripts/_logs/...log` path without checking gitignore precedent (`.gitignore` line 108); executor surfaced at audit-step. Path Y distillation resolved.
+- **(b) §1 commit 1 (planning, not executor-stop):** interim mitigation comment referenced `docs/plans/selection-engine-...-sidecar.md` path that did not yet exist; redirector caught at gate planning before authoring (resolved by stub authoring at §1 round-close, commit `df4df7c`). **Borderline instance** — caught at redirector self-review, not executor stop. May or may not count toward the same sub-pattern.
+- **(c) §2 commit 0 (`e6ffb51`):** redirector spec at audit step (f) said "drizzle-kit will (try to) update `_journal.json` during migrate"; empirically false (drizzle-kit migrate is journal-driven, not file-system-driven). Executor surfaced at probe-execution.
+
+**Reading:** 3 instances within ONE round, 2 unambiguous (a, c). The discipline pattern is "executor audit-first verifies redirector specs and surfaces empirical contradictions." Sub-pattern of §6.14.18/21/22 + §6.14.40 + §6.14.41; arguably deserves its own number for clarity of citation in future rounds.
+
+**Counter-reading:** the existing trio (§6.14.18/21/22 + §6.14.40 + §6.14.41) already covers the surface conceptually. Promotion adds nominal granularity but may not improve discipline-operation fidelity. Defer promotion until the pattern surfaces across multiple rounds.
+
+**Redirector decision required:** PROMOTE (assigns next §6.14.NN number, requires SPEC.md edit in selection-engine sidecar or a follow-up housekeeping commit) or DEFER (continue to track as reinforcement; revisit at next round if pattern surfaces again).
+
+#### PROMOTION CANDIDATE 2 — Sidecar-as-default-narrow-scope-envelope
+
+**Three consecutive sidecar-shape rounds in project history:**
+
+- **(a) Score-Based Goals Sidecar** (closed `b6e180d`, 2026-05-09).
+- **(b) Tooling-Reliability Debug** (this round).
+- **(c) Selection-Engine Session-Attempted-IDs Sidecar** (opens after this round closes).
+
+Plus the diagnostic-timing sidecar (Option 1) is also planned as sidecar-shape for the round after that. Four-in-a-row is the projected near-future state.
+
+**Reading:** when bounded narrow-scope work surfaces, the project defaults to sidecar-shape envelope (smaller plan-doc, ~3-6 commits, audit-step framework template, single sequential focus area). Pattern is genuinely multi-instance.
+
+**Counter-reading:** 3 samples is small; the recency of all three may be coincidence of recent scope shapes; the round-shape decision space (full-round vs sidecar) was always available and Leo's been picking sidecar for narrow scopes — that's taste, not pattern emergence.
+
+**Redirector decision required:** PROMOTE (codifies "sidecar-shape is the default envelope for narrow-scope work" as a §6.14 entry, with criteria for choosing sidecar over full-round) or DEFER (3 samples isn't enough; revisit at next round-shape decision).
+
+### §5.3 Forward-watch (not promoted, single instance, tracked for future rounds)
+
+- **Test-suite expect-count determinism** — one §2-commit-0 observation; expect-count distribution 641-649 across 25 iterations of `bun test`. Forward-pin only.
+- **Forward-anchor stub pattern** — one §1-round-close instance (`docs/plans/selection-engine-session-attempted-ids-sidecar.md` stub authored to resolve dead-reference state). Watch for re-occurrence; if a fourth instance lands, §6.14 promotion candidate.
+- **Methodology-as-primary-finding** — one §2.6 instance (probe didn't reproduce target bug; methodological learning became the finding). Watch for re-occurrence.

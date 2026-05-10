@@ -364,6 +364,83 @@ Documented in [`rules/rsc-data-fetching-patterns.md`](rules/rsc-data-fetching-pa
 
 ---
 
+## Drizzle-Kit Migrate — Recovery from Opaque Failures
+
+If `bun db:migrate` exits with code 1 and produces minimal diagnostic output (e.g., `[⣷] applying migrations...error: "drizzle-kit" exited with code 1` with no SQL trace, no stack), the failure is structurally opaque. drizzle-kit's verbose-flag surface is minimal: `--config`, `--help`, `--version` only. Standard diagnostic flags (`--verbose`, `--debug`) are not exposed.
+
+Empirical context for this opacity is captured in [`scripts/_logs/drizzle-kit-investigation.summary.md`](scripts/_logs/drizzle-kit-investigation.summary.md) (tooling-reliability-debug round, §2 commit 0).
+
+### Diagnostic steps
+
+Before resorting to manual-apply, try:
+
+1. Re-run `bun db:migrate` once. The failure may be transient.
+2. Inspect the failing migration's SQL file at `drizzle/<NNNN>_*.sql` for syntax errors or schema drift since last `drizzle-kit generate` run.
+3. Verify DB connectivity (e.g., `bun --bun run -e "import { db } from './src/db'; import { sql } from 'drizzle-orm'; await db.execute(sql\`select 1\`)"` or equivalent).
+4. Check the journal at `drizzle/meta/_journal.json` ends at the expected idx; the migration to apply should be the next idx not yet present.
+
+### Manual-apply procedure
+
+When diagnostic steps don't surface a fix, the manual-apply procedure applies the migration's SQL directly via the Drizzle client and inserts the journal row by hand. This procedure follows SPEC §6.14.31 destructive-operation-gate discipline.
+
+**Pre-apply hash capture:**
+
+```bash
+sha256sum drizzle/meta/_journal.json
+# Record this hash for post-apply verification.
+```
+
+**Manual SQL application:**
+
+Author a one-shot script (do NOT commit) that:
+
+1. Reads the failing migration's SQL: `drizzle/<NNNN>_*.sql`.
+2. Executes it via the Drizzle client: `await db.execute(sql\`<SQL content>\`)`.
+3. Computes the migration's content hash (standard drizzle journal format is sha256 of the migration file's SQL bytes).
+4. Inserts the journal row directly:
+
+```typescript
+// pseudocode — adapt to project's Drizzle client conventions
+const journal = JSON.parse(
+    await fs.readFile("drizzle/meta/_journal.json", "utf-8")
+)
+journal.entries.push({
+    idx: <NNNN>,
+    version: "<existing-version-string>",
+    when: Date.now(),
+    tag: "<NNNN>_<migration-name>",
+    breakpoints: true
+})
+await fs.writeFile(
+    "drizzle/meta/_journal.json",
+    JSON.stringify(journal, null, 2) + "\n"
+)
+```
+
+5. Verify the DB schema matches the migration's intended state (e.g., for an `ALTER TABLE ... DROP COLUMN`, query the column list and confirm the column is absent).
+
+**Post-apply hash capture:**
+
+```bash
+sha256sum drizzle/meta/_journal.json
+# Hash must DIFFER from pre-apply (journal row was added).
+# Confirm new entry idx + tag match the migration just applied.
+```
+
+**Cleanup:**
+
+Delete the one-shot script. The journal row + DB schema change ARE intended permanent state; the script is investigative only.
+
+### Historical reference
+
+First instance of this manual-apply procedure: sidecar commit `822a674` (`drop users.target_percentile column`, 2026-05-09). See [`docs/plans/score-based-target-goals-sidecar.md`](docs/plans/score-based-target-goals-sidecar.md) §2 for that round's narrative.
+
+### Future-instance escalation
+
+If drizzle-kit failures occur a second time after this documentation lands (i.e., a third instance overall after `822a674` + this documentation), open an upstream `drizzle-team/drizzle-orm` GitHub issue with reproduction. Multiple instances justify upstream engagement; single-occurrence-then-documented does not.
+
+---
+
 ## Contributing / Phase 2 Readiness
 
 Phase 1 is the foundation. Once `docs/phase-1-manual-verification.md` passes top to bottom, Phase 2 starts: admin ingest form, hand-seeding ~150 real items across the 11 v1 sub-types, embedding-backfill workflow. The Phase 2 prompt for Claude Code will draw from `docs/SPEC.md` §7.6 (`ingestItemAction`), §3.3 (items schema), and §8 (the generation pipeline structure that the ingest flow validates against).
