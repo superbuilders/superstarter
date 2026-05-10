@@ -232,7 +232,7 @@ interface ItemRow {
 	body: unknown
 	optionsJson: unknown
 	sourceFolder: string | null
-	status: "live" | "candidate" | "retired"
+	status: "live" | "candidate" | "retired" | "rejected"
 }
 
 async function loadRows(adminDb: AdminDb, limit: number | null): Promise<ItemRow[]> {
