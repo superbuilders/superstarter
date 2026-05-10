@@ -1,6 +1,6 @@
 # Plan — Score-Based Target Goals (Sidecar; replaces percentile-based targets)
 
-> **Status: planning (commit 0 — plan-doc creation + §0 audit findings).** Body sections (§1 scope fence, §2 captured anchors, §3 SPEC §6.14 cross-references, §4 cost envelope, §5 commit ledger, §6 verification, §7 resolutions, §8 round-close residuals) are deferred until Leo redirects post-§0. Per the round-opening contract: *"Do NOT proceed to commit 1. Wait for redirect."*
+> **Status: shipped 2026-05-09.** All 5 implementation/admin commits + round-close landed at `<TBD>` (per §5.4). Sidecar closed against `main` at HEAD `9f35549` (Round 2 round-close); zero new SPEC §6.14 promotions; 4 round-close commentary entries captured at §9.1-§9.4; 12 residuals forward-pinned at §8 to Round 3+ work.
 >
 > **Sidecar opened against `main` at HEAD `9f35549`** (Round 2 round-close commit; post-amend hash on linear history). Round 2 shipped 2026-05-09 per its own `§5.15` status pin; SPEC §6.14.42 (audit-step grep-verify-consumers when deleting/renaming type-or-function exports) + SPEC §13 (Token architecture) both verified at `docs/SPEC.md:1817` + `docs/SPEC.md:2738` respectively.
 >
@@ -470,18 +470,18 @@ Per redirect's "TARGET_PERCENTILES + TargetPercentile + isPercentile UNCHANGED i
 
 ### §5.4 — Commit 4: round-close (administrative)
 
-**Hash:** `<TBD>`. **Status: SCHEDULED.**
+**Hash:** `<TBD>`. **Status: SHIPPED (round-close).**
 
-**Files anticipated.**
-- `docs/plans/score-based-target-goals-sidecar.md` — status flip "planning" → "shipped {date}"; hash backfill across §5.0-§5.3 (this commit's hash backfilled into §5.4 self-reference). §6.14 promotion candidates evaluation (likely zero net-new — sidecar reinforces §6.14.40 + §6.14.42 without surfacing new patterns).
+**Files touched.**
+- `docs/plans/score-based-target-goals-sidecar.md` — status flip ("planning" → "shipped 2026-05-09"); hash backfill across §5.0-§5.3 confirmed intact (no <TBD> placeholders below §5.4 self-reference, which is retained as <TBD> per Decision C); §5.4 entry authored; §6 final verification entry; §7 final resolutions state; §8 final residuals (12 items); §9 round-close commentary (4 entries) NEW.
 
-**Audit step.** Pre-flight: (a) `git log --oneline 9f35549..HEAD` capture all sidecar commit hashes for backfill; (b) `git status --short` confirms clean working tree; (c) closed-plans-immutable verified per §6.14.20.
+**Audit step.** Pre-flight: (a) `git log --oneline 9f35549..HEAD` captured 5-commit ancestry — `8ba0780` (§5.0) → `729a08e` (§5.1) → `7ee5db9` (Disposition X follow-up; documented in §1.2 envelope, no §5.X slot per body-authoring framework) → `822a674` (§5.2) → `0b4aee5` (§5.3) → THIS commit (§5.4). (b) `git status --short` clean. (c) Closed-plans-immutable verified: `git log --name-only 9f35549..HEAD -- docs/plans/ docs/audits/` returned only `docs/plans/score-based-target-goals-sidecar.md` across all 5 sidecar commits — no Round 1 / Round 2 plan-doc or audit-doc surfaced with edits; canon clean. (d) Final cleanup grep `grep -rE "targetPercentile|TARGET_PERCENTILES|target_percentile" src/` → ZERO HITS (re-confirms §5.3 audit-step (f); cleanup criterion stable at round-close). (e) `bun test` final state: 128 pass / 0 fail / 646 expect() across 17 files; the residual #13 flake didn't surface this run. (f) Drizzle migration 0005 state confirmed: journal id=5 with hash `d7103ad67e501b3ab4540dfd493394fa4bd3167b9bcd231a35e14be30adab0c4` (matches commit 2's recorded value); `users` table information_schema enumeration shows 8 columns (`id`, `name`, `email`, `email_verified_ms`, `image`, `target_date_ms`, `created_at_ms`, `target_score`); `target_percentile` empirically dropped.
 
-**Implementation notes.** Plan-doc finalization per Round 1 / Round 2 round-close patterns. No `--amend` workflow needed (no audit-doc frontmatter pinning the round-close hash; same simplification as Round 2 §5.15).
+**Implementation notes.** Plan-doc finalization per Round 1 / Round 2 round-close patterns. No `--amend` workflow needed (no audit-doc frontmatter pinning the round-close hash; same simplification as Round 2 §5.15). §5.4 self-reference left as `<TBD>` placeholder per Decision C — no cleanup commit; round-close metadata is canonical from the commit hash + git log. Decision A confirmed zero new §6.14 promotions (sidecar reinforced §6.14.31 + §6.14.34 + §6.14.40 sub-pattern + §6.14.42 without surfacing new patterns); commentary captured at §9.1-§9.4 per Decision B. Visual walk deferred per Decision D-defer (see §6 final entry below).
 
-**Verification.** Render-check the plan-doc post-edit; confirm all hash placeholders resolved (§5.0-§5.3 backfilled); pre-commit lefthook lint + typecheck pass.
+**Verification.** Render-check post-edit; lint + typecheck pre-commit lefthook clean; final test count 128/0/646.
 
-**Stop-and-report.** Sidecar complete. Diagnostic-timing sidecar round (Round 1 §0.15) or Round 3 (review-section architecture) opens at Leo's discretion next.
+**Stop-and-report.** Sidecar SHIPPED at this commit's hash. Diagnostic-timing sidecar round (Round 1 §0.15), Round 3 (review-section architecture), or another sidecar opens at Leo's discretion next.
 
 ---
 
@@ -495,6 +495,7 @@ Default carry-forward from Round 2 §6 + sidecar-specific additions:
 - **`tee` for any long-running stdout** per §6.14.38; not anticipated this round (no long-running pipelines).
 - **Test discipline:** `bun test` green at every commit; track `127/1` flake (Round 2 §8 #13 carry-forward; pattern threshold reached at 2 occurrences per §5.1 verification — recommend post-sidecar debugging session).
 - **Lint + typecheck discipline:** lefthook hooks at every commit; zero unused-variable warnings post-`isPercentile` pre-pone (commit 1) + post-`TARGET_PERCENTILES`/`TargetPercentile` deletion (commit 3).
+- **Empirical visual walk: DEFERRED per round-close Decision D-defer.** The sidecar closes without empirical visual verification of commit 1's score-input rendering on the diagnostic post-session screen. Risk: a visual concern (e.g., browser default number-input spinner styling, mobile keyboard mode, focus-ring contrast against the new input shape) surfaces post-close requiring a follow-up bounded round. Acceptable per the round's pace + the strong unit-test + lint + typecheck signal at every commit. Forward-pin: visual concerns surfacing in Round 3+ trigger a small bounded sidecar OR roll into Round 3's broader review-section work, at Leo's discretion.
 
 ---
 
@@ -542,4 +543,43 @@ Default carry-forward from Round 2 §6 + sidecar-specific additions:
 
 ### §8.3 Closing
 
-Sidecar plan-doc body fully authored at this commit (post-Disposition-X follow-up). Awaiting commit 2 (schema drop) redirect.
+Sidecar SHIPPED at §5.4. Total residuals forward-pinned: **12** (10 inherited from Round 2 §8 carry-forward; 2 surfaced this sidecar). Pre-Round-3 debugging session recommended for residuals #10 (`bun test` flake) + #12 (`drizzle-kit migrate` CLI opaque failure) per §9.1's tooling-reliability observation.
+
+---
+
+## §9 — Round-close commentary
+
+Four observations captured at sidecar close per Decision B. None promote to SPEC §6.14 this round (per Decision A); commentary serves as audit-trail-with-pattern-tracking for Round 3+ pattern-recurrence checks.
+
+### §9.1 Tooling reliability concern
+
+Two opaque-tooling-error observations accumulated through Round 2 + sidecar: `bun test` flake (Round 2 commit 14 + sidecar commit 1) and `drizzle-kit migrate` CLI failure (sidecar commit 2). Different tools, different surfaces, **same shape**: opaque errors with no diagnostic detail (test flake fails without isolation; CLI fails with exit code 1 + opaque stderr). Both block development friction; manual workarounds executed in both cases (re-run for flake; manual SQL apply for migration). Round-close recommendation: **pre-Round-3 debugging session** targets both. If either recurs in Round 3 audit-step work, consider §6.14 candidacy as "tooling reliability discipline" or similar pattern.
+
+### §9.2 Plan-doc body-authoring discipline observation
+
+Sidecar opened with explicit *"§1-§8 deferred until Leo redirects post-§0"* framing. Leo's subsequent redirects locked scope decisions but didn't explicitly authorize body authoring; Claude Code interpreted strictly (commit 1 ships implementation-only with no plan-doc body update). Disposition X mid-round insertion (commit `7ee5db9`) required to retroactively author bodies. **Single sidecar instance.** Round-close observation: redirect contracts that lock scope but not body-authoring authorization should explicitly enable inline plan-doc updates per Round 2 pattern. Track for Round 3+ if pattern recurs.
+
+### §9.3 §6.14.31 first-explicit-application
+
+Sidecar commit 2 was the first commit since §6.14.31's promotion (Round 2 round-close addition) to explicitly invoke its destructive-operation-gate template. The commit executed all eight gate sub-steps:
+
+- (a) production-data scope determination (pre-launch; dev-DB-only treatment confirmed),
+- (b) late-introduced-consumer grep (`grep -rnE "targetPercentile|target_percentile|TARGET_PERCENTILES" src/` returned 9 hits, all narrative comments + transient module-top exports — zero ACTIVE code consumers beyond the drop target),
+- (c) DB-state probe (1 row with `target_percentile IS NOT NULL` out of 2373 total users — single dev test row; ≈0.04%; data-loss-acceptance confirmed at commit time per Q6),
+- (d) Drizzle autogen via `bun db:generate` (clean diff: single `ALTER TABLE ... DROP COLUMN` statement),
+- (e) migration apply (drizzle-kit CLI failed opaque; **manual ORM apply workaround** preserved the gate semantic — the destructive operation still executed under audit-step authorization),
+- (f) rollback strategy documented (`ALTER TABLE "users" ADD COLUMN "target_percentile" integer;` recreates the column shape; the 1 row of pre-existing data is unrecoverable per Strategy A acceptance),
+- (g) `users.ts` schema edit verified (paired columns preserved unchanged),
+- (h) post-edit zero-hit grep across `src/db/`.
+
+The rule worked exactly as designed: structural-safety verification before destructive change; rollback strategy documented; data-loss-acceptance confirmed at commit time. **Reinforces parent rule without promotion.**
+
+### §9.4 §6.14.42 first-explicit-applications
+
+Sidecar applied §6.14.42's grep-verify-consumers discipline (Round 2 round-close addition) at three audit-step instances:
+
+- **Commit 0 scope-reducing finding (audit-step (g)).** Caught that `users.targetScore` column + `<GoalEditor>` + `updateGoal` action + `loadUserProfile` real read had **all already shipped at practice round commit 3 + commits 4+9+** — saving 4-5 implementation commits the redirect anticipated. Largest single-step scope reduction observed across Round 1 / Round 2 / sidecar to date.
+- **Commit 1 `isPercentile` pre-pone.** Caught at lint+typecheck cascade (`noUnusedVariables`) when commit 1's redirect anticipated leaving `isPercentile` for commit 3 cleanup; pre-poned deletion to commit 1. Small benign §6.14.40 instance, audit-step granularity.
+- **Commit 2 late-introduced-consumer re-grep.** Re-confirmed zero active consumers before destructive operation; gate-step (b) of §6.14.31's template implementation.
+
+Combined effect: significant scope-reduction at the rule's first post-promotion application. **Reinforces parent rule without promotion.** Round 3 + future schema/type-deletion work should continue applying the discipline at every relevant audit-step.
