@@ -259,15 +259,80 @@ Specifically requested per stop-and-report contract: confirm the §0.13 commit e
 
 ---
 
-## §1 — Round scope (TBD; deferred until §0 redirect)
+## §1 — Round scope
 
-> *Authored at commit-1 prep time after Leo confirms the §0.13 scope reduction. Anchors expected: confirmed empirical scope (4 implementation commits + round-close); explicit deferral of dashboard work + pacing-math work + mastery-compute work as `already-done` rather than `out-of-scope`; cross-references to practice round's commit 3 + 4 + 9 as the empirical-state foundation.*
+### §1.1 In-scope
+
+Three workstreams (per Leo's C2 redirect + §0 audit findings + §0.13 reduced-scope finding):
+
+1. **`<OnboardingTargets>` UI replacement** (commit 1, bundled per Option C2): percentile-select → score-input + `validateScoreRange` helper + `scoreError` state + per-field error region. Round 2 commits 7-9 patterns ported forward (error-state slot + blur-validation + `pointer-coarse:min-h-11`). **STATUS: SHIPPED at `729a08e`.**
+2. **`saveOnboardingTargets` action update** (commit 1, bundled): Zod schema `targetPercentile` literal-union → `targetScore z.number().int().min(1).max(50)`; Drizzle write path replaces `targetPercentile` with `targetScore`. **STATUS: SHIPPED at `729a08e`.**
+3. **Schema drop** (commit 2): drop `users.targetPercentile` column + Drizzle migration 0005. Strategy A — drop without backfill (no production data per Q6 confirmation; column orphaned-since-practice-round-commit-4). **STATUS: SCHEDULED.**
+4. **Doc-comment + dead-code cleanup** (commit 3): drop `TARGET_PERCENTILES` constant + `TargetPercentile` type from `<OnboardingTargets>` (and their exports). Update `data.ts:13` doc-comment ("intentionally NOT read" comment retires post-column-drop). `isPercentile` ALREADY pre-poned to commit 1 per audit-step empirical adjustment. **STATUS: SCHEDULED.**
+5. **Round-close** (commit 4): plan-doc finalization + status flip + hash backfill across §5.0-§5.3 + §6.14 promotion candidates (likely zero net-new — sidecar reinforces §6.14.40 + §6.14.42 without surfacing new patterns). **STATUS: SCHEDULED.**
+
+### §1.2 Commit envelope
+
+Sidecar empirical envelope: **6 commits total** (commit 0 plan-doc + commit 1 UI/action bundled + follow-up plan-doc body authoring + commit 2 schema drop + commit 3 cleanup + commit 4 round-close). Estimated wall time: **half-day** at the round's typical pace.
+
+Mid-round insertions (per §6.14.34 narrow-scope sub-round insertion):
+- **Option C2 simplification**: Leo's C2 redirect bundled commit 1's UI + action update (originally framed as 2 separate commits in the Option C1 redirect). Net envelope effect: −1 commit.
+- **Disposition X mid-round insertion**: this follow-up plan-doc body-authoring commit was inserted after commit 1 ships per Leo's Disposition X redirect (audit-trail consistency with Round 2's inline plan-doc-body-authoring pattern). Net envelope effect: +1 commit.
+- **Net commit count: 6** (commit 0 + 5 sequential commits).
+
+### §1.3 Explicitly deferred out-of-scope
+
+Per §6.14.30 cascade-undercount defense:
+
+| Deferred item | Forward-pin |
+|---|---|
+| Diagnostic timing reintroduction | Diagnostic-timing sidecar round (Round 1 §0.15; opens at Leo's discretion) |
+| Review-section architecture | Round 3 |
+| Review-specific features (line chart, filters, etc.) | Round 4 |
+| §B.5 motion sweep + remaining P3 polish (§A.2.f1, §A.3.f1, §A.7.f3, §A.9.f2) | Future polish round |
+| Sub-phase b validator | Indefinitely deferred (per Round 1 context) |
+| `--border` 1.23:1 sub-3:1 contrast | Future-round token-system follow-up |
+| `.catch()` pattern at `onboarding-targets.tsx:onSave` | Future polish round |
+| Hook re-enable (`~/.claude/hooks/cbm-code-discovery-gate`) | Environmental, not project |
+| Round 1 inherited residuals not closed by Round 2 (`loadAllBelts` stub; non-white belt visual review; number-series shape coverage; `urgencyLoop` naming debt) | Belts PRD round / future polish |
 
 ---
 
-## §2 — Captured anchors (TBD; deferred until §0 redirect)
+## §2 — Captured anchors
 
-> *Authored at commit-1 prep time. Anchors expected: Q1-Q7 final resolutions; per-commit pattern-port from Round 2 commits 7-9 (error-state slot + blur-validation + pointer-coarse) onto the score-input replacement; `<GoalEditor>` validation pattern as the canonical mirror.*
+### §2.1 Q1-Q7 final resolutions
+
+Per §0.12 audit findings + Leo's redirect confirmations:
+
+| Q | Final resolution | Closed at |
+|---|---|---|
+| **Q1 — score-input UI shape** | `<input type="number" min={1} max={50} step={1}>` matching `<GoalEditor>` pattern. Default 40 (Path D2). Round 2 commits 7-9 patterns ported forward. | §5.1 (`729a08e`) |
+| **Q2 — dashboard GOAL edit affordance** | RESOLVED at audit-time (already shipped at practice round commit 9 + ScoreStrip wiring). Zero sidecar work for dashboard. | §5.0 (`8ba0780`) |
+| **Q3 — pacing-math semantic preservation** | RESOLVED at audit-time (never wired to percentile; on score from practice round). | §5.0 (`8ba0780`) |
+| **Q4 — mastery compute integration** | RESOLVED at audit-time (same as Q3). | §5.0 (`8ba0780`) |
+| **Q5 — diagnostic-flow score capture** | RESOLVED — post-diagnostic via `<OnboardingTargets>`; dashboard `<GoalEditor>` for later edits. | §5.0 (`8ba0780`) |
+| **Q6 — Strategy A viability** | RESOLVED-PRE-LAUNCH. Drop column without backfill. | §5.0 (`8ba0780`) (audit-step (c)); §5.2 (commit 2 destructive-operation gate) |
+| **Q7 — sidecar scope reduction** | RESOLVED via Leo's C2 redirect: 4 implementation + 1 round-close = 5 commits (post-Disposition-X follow-up: 6 commits including this plan-doc-body-authoring). | §5.0 (`8ba0780`) (audit-step (g) + §0.13) |
+
+### §2.2 Round 2 patterns ported forward
+
+Sidecar inherits Round 2's `<OnboardingTargets>` discipline:
+
+- **Round 2 commit 7 (`c6d473b`)** — form-level error-state slot. `submitError: string | null` useState + form-level `aria-describedby`-wired `role="alert"` region. Pivot-independent; ports unchanged. Composes with sidecar's commit-1 score-error region (form-level `submitError` + per-field `scoreError` + per-field `dateError` all fire independently).
+- **Round 2 commit 8 (`42b3558`)** — blur-validation discipline. Per-field validation; clear-on-onChange + re-validate-on-blur; submit-time re-validation defense-in-depth. Pivot-independent; ports unchanged for date validation. Sidecar applies parallel discipline to score validation (`validateScoreRange` helper; per-field error region; submit-time re-validation gate AT THE TOP of `onSave`, before date gate).
+- **Round 2 commit 9 (`d72a29f`)** — `pointer-coarse:min-h-11` for replaced elements (`<select>` + `<input type="date">`). Sidecar applies the same to the new `<input type="number">`. Pivot-independent.
+- **Round 2 commit 14 (`69ea647`)** — skip-link copy + focus-visible. `"Skip and go to dashboard"` + canonical focus-visible classes. Pivot-independent; preserved.
+
+### §2.3 `<GoalEditor>` mirror pattern
+
+Sidecar's score-input mirrors `<GoalEditor>` from `src/components/dashboard/goal-editor.tsx` (practice round commit 9):
+
+- Same input shape: `<input type="number" min={1} max={50} step={1}>`.
+- Same range: 1-50 (matches `updateGoal` server action's Zod range — `saveOnboardingTargets` mirrors that range exactly).
+- Parallel validation: `<GoalEditor>` uses single range-only message (`"Goal must be between 1 and 50."`); sidecar SPLITS into two messages (`"Score must be a whole number."` + `"Score must be between 1 and 50."`) per ALPHA_DESIGN §9 specific-over-generic.
+- Server action parallel: `saveOnboardingTargets`'s Zod `z.number().int().min(1).max(50).optional()` mirrors `updateGoal`'s same-range `z.number().int().min(1).max(50)`.
+
+The `<GoalEditor>`-already-shipped reality is the load-bearing anchor for sidecar's reduced scope: dashboard editing was solved at practice round; sidecar just brings the post-onboarding entry flow in line.
 
 ---
 
@@ -288,36 +353,177 @@ Sidecar inherits Round 1 + Round 2 discipline patterns:
 
 ---
 
-## §4 — Cost envelope (TBD; deferred until §0 redirect)
+## §4 — Cost envelope
 
-> *No LLM cost. Empirical commit envelope per §0.13: **5 commits** (1 plan-doc + 4 implementation + round-close subsumed via amend-pattern OR separate ledger slot — decide at body-authoring). Estimated wall time: **half-day** at the round's typical pace (one-third the redirect's 1-2 day estimate).*
+No LLM cost. Round cost is engineer-time only. Empirical envelope per §0.13 + §1.2:
 
----
+- **6 commits total** (commit 0 plan-doc creation + commit 1 UI/action bundled per Option C2 + follow-up plan-doc body authoring per Disposition X + commit 2 schema drop + commit 3 cleanup + commit 4 round-close).
+- Estimated wall time: **half-day** at the round's typical pace.
 
-## §5 — Commit ledger (TBD; deferred until §0 redirect)
-
-> *Per-commit entries authored at commit-N prep time. Each entry follows Round 1 / Round 2 structure: hash placeholder + files-touched + audit step + implementation notes + verification + stop-and-report.*
-
----
-
-## §6 — Verification protocol carry-forward (TBD; deferred until §0 redirect)
-
-> *Default carry-forward from Round 2 §6 + sidecar-specific addition: schema migration verification via `bun db:migrate` against dev DB + post-migration `bun db:studio` or equivalent inspection.*
+The Disposition X mid-round insertion (this commit) trades +1 commit for audit-trail-consistency with Round 2's inline plan-doc-body-authoring pattern. Per §6.14.34, narrow-scope mid-round insertions are explicitly the canonical response when scope shifts mid-round; the +1 commit cost is well below the audit-trail-clarity benefit.
 
 ---
 
-## §7 — Resolutions log (TBD; deferred until §0 redirect)
+## §5 — Commit ledger
 
-> *Q1-Q7 final states logged here at commit-1 prep time after Leo's redirect.*
+Per Round 1 / Round 2 discipline: each entry carries hash + files-touched + audit step + implementation notes + verification + stop-and-report.
+
+### §5.0 — Commit 0: plan-doc creation + §0 audit findings
+
+**Hash:** `8ba0780` — `docs(plan,logs): close Round 2 logs + open score-based-target-goals sidecar`. **Status: SHIPPED.**
+
+**Files touched.**
+- `docs/plans/score-based-target-goals-sidecar.md` — NEW (323 lines at commit-0 close).
+- `docs/claude_logs/session_2026-05-09_11-00_round-2-token-retrofit-and-audit-fixes.md` — NEW (Round 2 session log; bundled into commit 0 per the Round 1→Round 2 transition pattern at `98b54e5`).
+
+**Audit-step (a-j) findings.** See §0.1-§0.11 for verbatim capture. Highlights:
+- §0.2 schema audit surfaced the **critical §6.14.40 instance**: `users.targetScore` already exists at migration `drizzle/0004_square_speedball.sql` per "practice round commit 3"; dashboard `<GoalEditor>` + `updateGoal` action already shipped; pacing math + mastery compute were never wired to percentile. The redirect's 6-8 commit envelope reduces empirically to 4 implementation commits.
+- §0.7 audit-step grep-verify-consumers per §6.14.42 caught the divergence cleanly before code shipped.
+- §0.12 + §0.13 surfaced 7 Open Qs (Q1-Q7); 5 RESOLVED at audit-time per empirical state; 2 (Q6 + Q7) needed Leo's redirect confirmation.
+
+**Stop-and-report contract.** Stopped post-§0; awaited Leo's redirect for scope-reduction confirmation. Leo's C2 redirect confirmed the 4-commit reduced envelope.
+
+### §5.1 — Commit 1: `<OnboardingTargets>` UI replacement + `saveOnboardingTargets` action update (Option C2 bundle)
+
+**Hash:** `729a08e` — `feat(post-session,actions): replace percentile target with score target (sidecar §1)`. **Status: SHIPPED.**
+
+**Files touched.**
+- `src/components/post-session/onboarding-targets.tsx` — modified. Added: `TARGET_SCORE_MIN/MAX/DEFAULT` constants, `SCORE_NOT_INTEGER_COPY` + `SCORE_OUT_OF_RANGE_COPY` error strings, `SCORE_ERROR_ID`, `validateScoreRange` pure-function helper, `scoreString` + `scoreError` useStates, `<input type="number">` JSX with full attribute list, per-field error region. Deleted: `<select>` + `percentile` useState + `onSelectPercentile` + `percentileSelectValue` + `isPercentile` type-guard (audit-step empirical pre-pone). Header doc-comment refreshed.
+- `src/app/(app)/actions.ts` — modified. Deleted: `allowedPercentiles` constant. Refactored: `onboardingTargetsSchema` Zod, `saveOnboardingTargets` signature + write path + `logger.info` structured-arguments. Header doc-comment refreshed.
+
+**Diff:** 2 files changed, +114 / −61 (+53 net).
+
+**Audit-step recap (a-j).**
+
+- **(a)** `<OnboardingTargets>` post-Round-2 surface re-confirmation: 237 lines pre-commit; all §0.4 inventory items captured verbatim; Round 2 commits 7-9 patterns confirmed pivot-independent; no drift.
+- **(b)** `saveOnboardingTargets` action surface verbatim: lines 148-201 captured. Zod uses `z.union([z.literal(50), z.literal(30), z.literal(20), z.literal(10), z.literal(5)])`. Function signature `saveOnboardingTargets(input: { targetPercentile?, targetDateMs? })`. Drizzle write via `db.update(users).set(updateValues).where(eq(users.id, userId))`. `requireUserId()` resolves user; `errors.try()` discipline + `logger.info`/`logger.error` patterns preserved.
+- **(c)** Score validation copy decision: **SPLIT into two errors** per §9 specific-over-generic. `SCORE_NOT_INTEGER_COPY = "Score must be a whole number."` + `SCORE_OUT_OF_RANGE_COPY = "Score must be between 1 and 50."` (template-literal interpolated from `TARGET_SCORE_MIN` / `TARGET_SCORE_MAX` constants).
+- **(d)** Initial state decision: **Path D2 — default 40** via `useState<string>(String(TARGET_SCORE_DEFAULT))`. Skip-path preserved (clear input → empty → null → undefined → Drizzle skips column).
+- **(e)** Per-field error region wired: `scoreError: string | null` useState peer; `scoreDescribedBy = scoreError !== null ? SCORE_ERROR_ID : undefined` extracted const; `aria-describedby={scoreDescribedBy}` on `<input>`; conditional error `<p>` below; clear-on-onChange + re-validate-on-blur + submit-time re-validation gate. Mirrors Round 2 commit 8 semantic.
+- **(f)** `<input type="number">` JSX shape: mirrors `<GoalEditor>` + Round 2 §5.8 `pointer-coarse:min-h-11`. Full attribute list captured at the implementation-notes section. `<label htmlFor="onboarding-score">Target score (out of 50)</label>` paired correctly.
+- **(g)** Submit handler refactor: score validation gate runs FIRST in `onSave` (before date gate, before save call); defense-in-depth. `targetScore = scoreString === "" ? undefined : Number(scoreString)`. `saveOnboardingTargets({ targetScore, targetDateMs: finalDate })`. Error region semantics (`submitError` + `scoreError` + `dateError`) coexist independently.
+- **(h)** `saveOnboardingTargets` action update: `allowedPercentiles` constant deleted (line 148). Zod: `targetPercentile: z.union([z.literal(50), ...])` → `targetScore: z.number().int().min(1).max(50).optional()`. Function signature parallel update. Drizzle write: `updateValues.targetPercentile` → `updateValues.targetScore`. `users.targetScore` column already exists per migration 0004. Logger structured-arguments updated. Header doc-comment refreshed.
+- **(i)** Doc-comment refresh: `<OnboardingTargets>` header (lines 7-22) and `saveOnboardingTargets` action preamble both refreshed citing sidecar §0.13 + §5.1 + cross-reference to `<GoalEditor>` parallel dashboard-edit path.
+- **(j)** Test cascade decision: **zero new tests added**; matches predecessor coverage (no `onboarding-targets.test.ts` exists). `validateScoreRange` helper bounded; if bugs surface, add `_lib/score-validation.test.ts` follow-up. Matches Round 2 §5.7 deferred-but-bounded test pattern.
+
+**Audit-surfaced empirical adjustment — `isPercentile` pre-pone.**
+
+Per redirect's "TARGET_PERCENTILES + TargetPercentile + isPercentile UNCHANGED in this commit" framing: empirically broke down on first lint+typecheck. `isPercentile`'s only caller (`onSelectPercentile`) was deleted with the `<select>`; project's Biome `noUnusedVariables` + tsgo `TS6133` both fired on `isPercentile`. **Pre-poned `isPercentile` deletion to commit 1** (rather than commit 3 as the redirect framed).
+
+`TARGET_PERCENTILES` + `TargetPercentile` (exported at module-top; Biome doesn't flag exports) stay alive per redirect; commit 3 deletes them with the column-drop cleanup.
+
+**Small benign §6.14.40 instance, audit-step granularity.** Per the §6.14.40 sub-pattern note from Round 2 round-close: instance counts at audit-step granularity reinforce parent rule but don't separately promote.
+
+**Verification.**
+- `bun test`: **128 pass / 0 fail / 17 files** (consistent on multiple re-runs).
+- `bun test` flake recurrence: **127/1 once** during commit-1 prep; re-runs consistent at 128/0; tracked from Round 2 §8 #13. **Pattern threshold reached at 2 occurrences (Round 2 commit 14 + sidecar commit 1)** — recommend post-sidecar debugging session.
+- Lint (lefthook v2.1.6): clean.
+- Typecheck (`tsgo --noEmit`): clean.
+
+**Stop-and-report compliance.** Stopped post-commit-1 per redirect; awaited Leo's redirect for commit 2.
+
+### §5.2 — Commit 2: schema drop `users.targetPercentile` column + Drizzle migration 0005
+
+**Hash:** `<TBD>`. **Status: SCHEDULED.**
+
+**Files anticipated.**
+- `src/db/schemas/auth/users.ts` — drop `targetPercentile: integer("target_percentile")` declaration at line 12.
+- `drizzle/0005_*.sql` — autogen migration via `bun db:generate`. Expected statement: `ALTER TABLE "users" DROP COLUMN "target_percentile";`.
+
+**Audit step.** Pre-flight: (a) re-confirm column-drop safety per §0.3 + §0.7 (no production data; column orphaned-since-practice-round-commit-4); (b) `bun db:generate` autogen + manual review per project convention; (c) destructive-operation gate per §6.14.31 — pre-flight DB-state probe (verify no rows depend on the column; the column is unread per `data.ts:13`); (d) rollback strategy = recreate column from migration 0004 if needed.
+
+**Implementation notes.** Drizzle's diff detection produces the migration file; manual review for syntax + ALTER TABLE ordering. `users.ts` updates to drop the column declaration.
+
+**Verification.** Empirical migration apply via `bun db:migrate` against dev DB; verify column dropped via `bun db:studio` or `psql -c "\d+ users"` equivalent; `bun test` clean; lint + typecheck clean.
+
+**Stop-and-report.** Do not proceed to commit 3 until redirect.
+
+### §5.3 — Commit 3: doc-comment + dead-code cleanup
+
+**Hash:** `<TBD>`. **Status: SCHEDULED.**
+
+**Files anticipated.**
+- `src/components/post-session/onboarding-targets.tsx` — drop `TARGET_PERCENTILES` constant + `TargetPercentile` type + module-top exports of both. The transient-region comment (commit 1's `// TARGET_PERCENTILES + TargetPercentile — TRANSIENT module-top exports...`) retires alongside the constants.
+- `src/server/dashboard/data.ts` — update `data.ts:13` doc-comment ("`target_percentile` is intentionally NOT read" → comment retires post-column-drop; replace with score-aware framing OR delete the line entirely depending on surrounding doc-comment continuity).
+- Possibly: any narrative percentile cite elsewhere surfaced by a final grep pass.
+
+**Audit step.** Pre-flight: (a) re-grep for any remaining `TARGET_PERCENTILES` / `TargetPercentile` / `target_percentile` references; verify zero hits across `src/`; (b) doc-comment hygiene per §6.14.20 prose-discipline.
+
+**Implementation notes.** Bounded cleanup. Module-top deletions cascade cleanly post-commit-2 column drop (no schema/Drizzle reference to the type union remains).
+
+**Verification.** `grep -rE "targetPercentile|TARGET_PERCENTILES|target_percentile" src/` returns zero hits post-commit; `bun test` clean; lint + typecheck clean.
+
+**Stop-and-report.** Do not proceed to round-close until redirect.
+
+### §5.4 — Commit 4: round-close (administrative)
+
+**Hash:** `<TBD>`. **Status: SCHEDULED.**
+
+**Files anticipated.**
+- `docs/plans/score-based-target-goals-sidecar.md` — status flip "planning" → "shipped {date}"; hash backfill across §5.0-§5.3 (this commit's hash backfilled into §5.4 self-reference). §6.14 promotion candidates evaluation (likely zero net-new — sidecar reinforces §6.14.40 + §6.14.42 without surfacing new patterns).
+
+**Audit step.** Pre-flight: (a) `git log --oneline 9f35549..HEAD` capture all sidecar commit hashes for backfill; (b) `git status --short` confirms clean working tree; (c) closed-plans-immutable verified per §6.14.20.
+
+**Implementation notes.** Plan-doc finalization per Round 1 / Round 2 round-close patterns. No `--amend` workflow needed (no audit-doc frontmatter pinning the round-close hash; same simplification as Round 2 §5.15).
+
+**Verification.** Render-check the plan-doc post-edit; confirm all hash placeholders resolved (§5.0-§5.3 backfilled); pre-commit lefthook lint + typecheck pass.
+
+**Stop-and-report.** Sidecar complete. Diagnostic-timing sidecar round (Round 1 §0.15) or Round 3 (review-section architecture) opens at Leo's discretion next.
 
 ---
 
-## §8 — Round-close residuals + forward pins (TBD; deferred until round-close)
+## §6 — Verification protocol carry-forward
 
-> *Forward-pinned at audit time:*
-> - *Diagnostic-timing sidecar round (Round 1 §0.15; opens at Leo's discretion).*
-> - *Round 3 (review-section architecture).*
-> - *Round 4 (review-specific features).*
-> - *Future polish round (motion + remaining P3).*
-> - *Sub-phase b validator (indefinitely deferred).*
-> - *Round 1 inherited residuals not closed by Round 2 (loadAllBelts stub; non-white belt visual review; number-series shape coverage; urgencyLoop naming debt).*
+Default carry-forward from Round 2 §6 + sidecar-specific additions:
+
+- **Per-commit verification.** Each §5.{n} entry above has its own verification step. Visual reviews on `/post-session/[sessionId]/...` (diagnostic-mode session for `<OnboardingTargets>` rendering) + `/` (dashboard for `<GoalEditor>` parity) are the canonical signal for sidecar commit 1's UI work. Schema migration (commit 2) verified via `bun db:migrate` + `bun db:studio` post-migration column-drop inspection.
+- **Real-DB harness.** All audit-step probes that read DB state (e.g., commit 0's `target_percentile IS NOT NULL` query if Leo's external knowledge surfaced production data) run against the dev DB, not mocked, per project discipline. Pre-launch state confirmed at commit 0 audit-step (c).
+- **No new smokes.** Sidecar doesn't add smoke scripts. Existing smokes under `scripts/dev/smoke/` continue unchanged.
+- **`tee` for any long-running stdout** per §6.14.38; not anticipated this round (no long-running pipelines).
+- **Test discipline:** `bun test` green at every commit; track `127/1` flake (Round 2 §8 #13 carry-forward; pattern threshold reached at 2 occurrences per §5.1 verification — recommend post-sidecar debugging session).
+- **Lint + typecheck discipline:** lefthook hooks at every commit; zero unused-variable warnings post-`isPercentile` pre-pone (commit 1) + post-`TARGET_PERCENTILES`/`TargetPercentile` deletion (commit 3).
+
+---
+
+## §7 — Resolutions log
+
+| Q / Audit Item | Resolution | Closing commit |
+|---|---|---|
+| Q1 — score-input UI shape | `<input type="number" min={1} max={50}>` per §0.12 + §2.3 mirror pattern | §5.1 (`729a08e`) |
+| Q2 — dashboard GOAL edit affordance | RESOLVED at audit-time (already shipped at practice round) | §5.0 (`8ba0780`) |
+| Q3 — pacing-math semantic | RESOLVED at audit-time (never wired to percentile) | §5.0 (`8ba0780`) |
+| Q4 — mastery compute integration | RESOLVED at audit-time (same as Q3) | §5.0 (`8ba0780`) |
+| Q5 — diagnostic-flow score capture | RESOLVED — post-diagnostic via `<OnboardingTargets>` | §5.0 (`8ba0780`) |
+| Q6 — Strategy A viability | RESOLVED-PRE-LAUNCH (drop column; no backfill) | §5.0 (`8ba0780`) (audit-step (c)); §5.2 (commit 2 destructive-operation gate) |
+| Q7 — sidecar scope reduction | RESOLVED via Leo's C2 redirect | §5.0 (`8ba0780`) (audit-step (g) + §0.13) |
+| `<OnboardingTargets>` UI replacement | RESOLVED via §5.1 | §5.1 (`729a08e`) |
+| `saveOnboardingTargets` action update | RESOLVED via §5.1 (bundled per Option C2) | §5.1 (`729a08e`) |
+| `isPercentile` deletion | RESOLVED via §5.1 (audit-step pre-pone) | §5.1 (`729a08e`) |
+| `users.targetPercentile` column drop | SCHEDULED via §5.2 | §5.2 |
+| `TARGET_PERCENTILES` + `TargetPercentile` deletion | SCHEDULED via §5.3 | §5.3 |
+| `data.ts:13` doc-comment cleanup | SCHEDULED via §5.3 | §5.3 |
+
+---
+
+## §8 — Round-close residuals + forward pins
+
+### §8.1 Inherited from Round 2 §8 (forward-pinned through sidecar)
+
+1. **Diagnostic-timing sidecar round** (Round 1 §0.15) — opens at Leo's discretion.
+2. **Round 3 — review-section architecture.**
+3. **Round 4 — review-specific features.**
+4. **§B.5 motion sweep + remaining P3 polish** (§A.2.f1, §A.3.f1, §A.7.f3, §A.9.f2) — future polish round.
+5. **Sub-phase b validator** — indefinitely deferred (per Round 1 context).
+6. **`--border` 1.23:1 sub-3:1 contrast** — future-round token-system follow-up.
+7. **`.catch()` pattern at `onboarding-targets.tsx:onSave`** — future polish round.
+8. **Hook re-enable** (`~/.claude/hooks/cbm-code-discovery-gate`) — environmental, not project.
+9. **Round 1 inherited residuals not closed by Round 2** (`loadAllBelts` stub; non-white belt visual review; number-series shape coverage; `urgencyLoop` naming debt) — Belts PRD round / future polish.
+10. **`bun test` flake** (Round 2 §8 #13) — pattern threshold reached at 2 occurrences (Round 2 commit 14 + sidecar commit 1). **Recommend post-sidecar debugging session** before opening Round 3.
+
+### §8.2 Sidecar-surfaced new residuals
+
+11. **Plan-doc body-authoring discipline observation.** Sidecar's redirect framing of "deferred until §0 redirect" interacted ambiguously with Leo's "all four as recommended" subsequent redirects. Claude Code interpreted strictly (commit 1 implementation-only); follow-up commit retroactively authored body sections per Disposition X. Round-close commentary candidate (§9-style observation, not a §6.14 promotion): *"redirect contracts that lock scope but not body-authoring authorization should explicitly enable inline plan-doc updates."* **Single instance.** Track for Round 3+ if pattern recurs.
+
+### §8.3 Closing
+
+Sidecar plan-doc body fully authored at this commit (post-Disposition-X follow-up). Awaiting commit 2 (schema drop) redirect.
