@@ -38,6 +38,7 @@ import type {
 import { BeltIndicator } from "@/components/post-session/belt-indicator"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { PerformanceSummary } from "@/components/post-session/performance-summary"
+import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
 import { TriageScoreLine } from "@/components/post-session/triage-score-line"
 import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser"
@@ -66,6 +67,10 @@ interface PostSessionShellProps {
 	endSessionTier: EndSessionTierForRender | null
 }
 
+function sumCorrectAttempts(sum: number, row: PerSubTypePerformance): number {
+	return sum + row.correct
+}
+
 function PostSessionShell(props: PostSessionShellProps) {
 	const isDiagnostic = props.sessionType === "diagnostic"
 	const heading = isDiagnostic ? "Diagnostic complete" : "Session complete"
@@ -88,11 +93,9 @@ function PostSessionShell(props: PostSessionShellProps) {
 	let pacingLine: React.ReactNode = null
 	if (isDiagnostic && props.pacingMinutes !== undefined) {
 		pacingLine = (
-			<p
-				className="text-foreground/80 text-sm"
-				data-testid="post-session-pacing-line"
-			>
-				Your diagnostic took {props.pacingMinutes} minutes. The real CCAT is 15 minutes for 50 questions.
+			<p className="text-foreground/80 text-sm" data-testid="post-session-pacing-line">
+				Your diagnostic took {props.pacingMinutes} minutes. The real CCAT is 15 minutes for 50
+				questions.
 			</p>
 		)
 	}
@@ -127,8 +130,19 @@ function PostSessionShell(props: PostSessionShellProps) {
 		)
 	}
 
+	// Practice-test-only result sound (mounts as a render-null sibling).
+	// Gated to full_length / simulation so drill + diagnostic surfaces
+	// stay silent. Score = sum of per-sub-type correct counts; tier
+	// thresholds + bank routing live in <ResultSoundFx>.
+	let resultSoundFx: React.ReactNode = null
+	if (props.sessionType === "full_length" || props.sessionType === "simulation") {
+		const totalCorrect = props.performance.reduce(sumCorrectAttempts, 0)
+		resultSoundFx = <ResultSoundFx score={totalCorrect} />
+	}
+
 	return (
 		<main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-8 px-6 py-12">
+			{resultSoundFx}
 			<header className="space-y-3" data-testid="post-session-heading">
 				<h1 className="font-semibold text-2xl tracking-tight">{heading}</h1>
 				{subhead}

@@ -2,29 +2,45 @@
 
 // EXEMPT FROM THE PROJECT RULESET. Native console.log etc.
 //
-// Copy top-level MP3 files from data/sounds/ into public/audio/sounds/
-// AND regenerate src/config/sound-bank.ts with the URL manifest. Runs
-// from `bun dev` (predev) and `bun build` (prebuild) — see package.json.
+// Copy per-category MP3 files from data/sounds/<category>/*.mp3 into
+// public/audio/<category>/ AND regenerate src/config/sound-bank.ts with
+// per-category URL manifests. Runs from `bun dev` (predev) and
+// `bun build` (prebuild) — see package.json.
 //
-// Top-level only: nested subdirectories (data/sounds/success/, etc.)
-// are deliberately NOT enumerated. The bank is the top-level *.mp3 files.
-// See data/sounds/LICENSE.md for sourcing notes.
+// Categories enumerated:
+//   - warning   → focus-shell urgency sample (per-question target hit)
+//   - failure   → post-session result sound, raw score 0..29
+//   - almost    → post-session result sound, raw score 30..39
+//   - success   → post-session result sound, raw score 40..50
 //
-// The generated src/config/sound-bank.ts is checked into git so the
-// dev server has it on first start (avoids a chicken-and-egg where
-// importing the manifest in app code would fail before this script
-// has run).
+// Top-level data/sounds/*.mp3 files are NOT copied; only the four named
+// subdirectories above. The generated src/config/sound-bank.ts is
+// checked into git so the dev server has it on first start (avoids a
+// chicken-and-egg where importing the manifest in app code would fail
+// before this script has run).
 
-import { readdirSync, mkdirSync, copyFileSync, writeFileSync, statSync } from "node:fs"
-import { resolve, join, basename } from "node:path"
+import { copyFileSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs"
+import { basename, join, resolve } from "node:path"
 
 const projectRoot = resolve(import.meta.dirname, "..")
-const sourceDir = join(projectRoot, "data", "sounds")
-const publicDir = join(projectRoot, "public", "audio", "sounds")
+const sourceRoot = join(projectRoot, "data", "sounds")
+const publicRoot = join(projectRoot, "public", "audio")
 const manifestPath = join(projectRoot, "src", "config", "sound-bank.ts")
 
-function listTopLevelMp3s(): string[] {
-	const entries = readdirSync(sourceDir, { withFileTypes: true })
+interface CategoryConfig {
+	dirName: string
+	exportName: string
+}
+
+const CATEGORIES: ReadonlyArray<CategoryConfig> = [
+	{ dirName: "warning", exportName: "WARNING_SOUND_URLS" },
+	{ dirName: "failure", exportName: "FAILURE_SOUND_URLS" },
+	{ dirName: "almost", exportName: "ALMOST_SOUND_URLS" },
+	{ dirName: "success", exportName: "SUCCESS_SOUND_URLS" }
+]
+
+function listMp3sIn(dir: string): string[] {
+	const entries = readdirSync(dir, { withFileTypes: true })
 	const out: string[] = []
 	for (const entry of entries) {
 		if (entry.isFile() && entry.name.endsWith(".mp3")) {
@@ -35,51 +51,95 @@ function listTopLevelMp3s(): string[] {
 	return out
 }
 
-function copyFiles(filenames: string[]): void {
-	mkdirSync(publicDir, { recursive: true })
+function copyCategoryFiles(category: string, filenames: string[]): void {
+	const srcDir = join(sourceRoot, category)
+	const destDir = join(publicRoot, category)
+	mkdirSync(destDir, { recursive: true })
 	for (const name of filenames) {
-		const src = join(sourceDir, name)
-		const dest = join(publicDir, name)
+		const src = join(srcDir, name)
+		const dest = join(destDir, name)
 		copyFileSync(src, dest)
 		const sz = statSync(dest).size
-		console.log(`  copied ${name} (${sz} bytes)`)
+		console.log(`  copied ${category}/${name} (${sz} bytes)`)
 	}
 }
 
-function writeManifest(filenames: string[]): void {
-	const urls = filenames.map(function toUrl(name) {
-		return `/audio/sounds/${basename(name)}`
+interface CategoryResult {
+	exportName: string
+	urls: string[]
+}
+
+function processCategory(category: CategoryConfig): CategoryResult {
+	const srcDir = join(sourceRoot, category.dirName)
+	let entries: string[] = []
+	try {
+		entries = listMp3sIn(srcDir)
+	} catch (err) {
+		// Missing source directory — emit an empty bank for this category
+		// rather than crashing the build. The bank stays a no-op at runtime.
+		console.warn(
+			`[copy-sounds-to-public] WARNING: data/sounds/${category.dirName}/ not found; emitting empty bank for ${category.exportName}`
+		)
+		console.warn(`[copy-sounds-to-public]          ${err instanceof Error ? err.message : String(err)}`)
+		return { exportName: category.exportName, urls: [] }
+	}
+	if (entries.length === 0) {
+		console.warn(
+			`[copy-sounds-to-public] WARNING: no *.mp3 files in data/sounds/${category.dirName}/`
+		)
+	} else {
+		copyCategoryFiles(category.dirName, entries)
+	}
+	const urls = entries.map(function toUrl(name) {
+		return `/audio/${category.dirName}/${basename(name)}`
 	})
+	return { exportName: category.exportName, urls }
+}
+
+function writeManifest(results: ReadonlyArray<CategoryResult>): void {
 	const lines: string[] = []
 	lines.push("// AUTO-GENERATED by scripts/copy-sounds-to-public.ts. DO NOT edit by hand.")
-	lines.push("// Source files: data/sounds/*.mp3 (top-level only). Add or remove there;")
-	lines.push("// the prebuild/predev hook regenerates this file.")
+	lines.push("// Source files: data/sounds/<category>/*.mp3 for each named category.")
+	lines.push("// Add or remove there; the prebuild/predev hook regenerates this file.")
 	lines.push("//")
 	lines.push("// At runtime, focus-shell's audio-ticker picks one URL at random per session")
-	lines.push("// and loops it after the per-question target — see SPEC §6.12.")
+	lines.push("// from WARNING_SOUND_URLS and plays it as a one-shot when the per-question")
+	lines.push("// target elapses (see SPEC §6.12). The post-session shell picks one URL at")
+	lines.push("// random from FAILURE_SOUND_URLS / ALMOST_SOUND_URLS / SUCCESS_SOUND_URLS")
+	lines.push("// based on the user's raw score on a full_length / simulation session and")
+	lines.push("// plays it once on mount.")
 	lines.push("")
-	lines.push("const SOUND_BANK_URLS: readonly string[] = [")
-	for (const url of urls) {
-		lines.push(`\t"${url}",`)
+	for (const result of results) {
+		lines.push(`const ${result.exportName}: readonly string[] = [`)
+		for (const url of result.urls) {
+			lines.push(`\t"${url}",`)
+		}
+		lines.push("]")
+		lines.push("")
 	}
-	lines.push("]")
-	lines.push("")
-	lines.push("export { SOUND_BANK_URLS }")
+	const exportNames = results.map(function pickName(r) {
+		return r.exportName
+	})
+	lines.push(`export { ${exportNames.join(", ")} }`)
 	lines.push("")
 	writeFileSync(manifestPath, lines.join("\n"))
-	console.log(`  wrote ${manifestPath} with ${urls.length} URL(s)`)
+	console.log(
+		`  wrote ${manifestPath} with categories: ${results
+			.map(function summarize(r) {
+				return `${r.exportName}=${r.urls.length}`
+			})
+			.join(", ")}`
+	)
 }
 
 function main(): void {
-	console.log("[copy-sounds-to-public] enumerating data/sounds/*.mp3")
-	const filenames = listTopLevelMp3s()
-	if (filenames.length === 0) {
-		console.warn("[copy-sounds-to-public] WARNING: no top-level *.mp3 files found in data/sounds/")
-		console.warn("[copy-sounds-to-public]          The urgency-loop will be silent.")
+	console.log("[copy-sounds-to-public] enumerating data/sounds/<category>/*.mp3")
+	const results: CategoryResult[] = []
+	for (const category of CATEGORIES) {
+		const result = processCategory(category)
+		results.push(result)
 	}
-	console.log(`[copy-sounds-to-public] found ${filenames.length} file(s): ${filenames.join(", ")}`)
-	copyFiles(filenames)
-	writeManifest(filenames)
+	writeManifest(results)
 	console.log("[copy-sounds-to-public] done")
 }
 

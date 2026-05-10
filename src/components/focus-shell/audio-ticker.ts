@@ -39,8 +39,8 @@
 // soft navigation between sessions is not a supported flow today.
 
 import * as errors from "@superbuilders/errors"
+import { WARNING_SOUND_URLS } from "@/config/sound-bank"
 import { logger } from "@/logger"
-import { SOUND_BANK_URLS } from "@/config/sound-bank"
 
 let audioCtx: AudioContext | undefined
 let sessionAudioBuffer: AudioBuffer | undefined
@@ -50,14 +50,17 @@ let activeSourceNode: AudioBufferSourceNode | undefined
 const PEAK_GAIN = 0.8
 
 function pickSessionSound(): string | undefined {
-	if (SOUND_BANK_URLS.length === 0) {
-		logger.warn({}, "audio-ticker: SOUND_BANK_URLS is empty; urgency loop will be silent")
+	if (WARNING_SOUND_URLS.length === 0) {
+		logger.warn({}, "audio-ticker: WARNING_SOUND_URLS is empty; urgency loop will be silent")
 		return undefined
 	}
-	const idx = Math.floor(Math.random() * SOUND_BANK_URLS.length)
-	const url = SOUND_BANK_URLS[idx]
+	const idx = Math.floor(Math.random() * WARNING_SOUND_URLS.length)
+	const url = WARNING_SOUND_URLS[idx]
 	if (url === undefined) {
-		logger.error({ idx, length: SOUND_BANK_URLS.length }, "audio-ticker: pickSessionSound index out of range")
+		logger.error(
+			{ idx, length: WARNING_SOUND_URLS.length },
+			"audio-ticker: pickSessionSound index out of range"
+		)
 		return undefined
 	}
 	return url
