@@ -66,6 +66,17 @@ EXPLICITLY excluded from this round:
 - **Candidate 2 — Sidecar-as-default-narrow-scope-envelope.** UNCHANGED at 3/5 (score-goals + tooling-reliability-debug + selection-engine sidecar). This round does not ship as a sidecar; will not advance the candidate. Stays in DEFER.
 - **Forensic note (round-prep evidence):** SPEC-B (`d592107`) and SPEC-B-followup (`e9f1254`) are two §6.14.41 audit-vs-revert blindness repayments of the same parent commit (`81819e0` triage retirement) within the same round-prep sequence. Forensic evidence that retirement-via-header-banner-only patterns systematically under-clean. Forward-watch: if a future retirement commit triggers a third repayment cycle, candidate for new §6.14 entry on retirement-commit-under-cleaning patterns. Recorded in §0.9.
 
+**Round-prep + §1 instance updates (recorded for round-close §3 SPEC §6.14.43 entry amendment evaluation):**
+
+- **Instance #6** — three-assumption-decomposition pattern at prior commit-0 attempt (banked at prior STOP report).
+- **Instance #7** — commit-message-vs-diff inversion on `fa1c081` (banked at `955ad1d` audit-log §2).
+- **Instance #8** — propagation-through-prior-audit-log (NEW sub-type 5; banked at `d3d3b2a` plan-doc §0.3).
+- **Instance #9** — propagation-within-plan-doc (sub-type 5 territory; banked at `a0a8bb7`).
+- **Instance #10** — redirector-code-draft-vs-project-convention-deviation (ongoing forward-watch; cumulative ~21 deviations across §1.2 commit-0 / commit-1 / commit-2 / §1.3 commit-0 / §1.3 commit-2; sub-type 4 pattern). Examples: `?? 0` fallback bans; `as Record<string, unknown>` casts replaced with Zod safeParse; `console.log` replaced with logger.info; `||` outside conditional position; `tier: "easy" as const` redundancy; cognitive-complexity refactors; pointless-indirection inlines; `require-logger-before-throw` violations; `noUnusedTemplateLiteral`.
+- **Instance #11** — implicit-resolution-selection via metric-conflation (sub-type 4; banked at `8c4dff7` production-batch postverify `hasAnyFlag` re-baseline). The redirector's prompt expected ~435 `hasAnyFlag` candidates but the engine's union semantics produced 791; the conflation was between provenance-batch-reject criterion flag rate and engine aggregate `hasAnyFlag` rate.
+
+Round-close §3 SPEC §6.14.43 entry amendment evaluates whether instances #8 + #9 share sub-type 5 (likely YES — both are canonical-source-deviation-multiplied-via-restatement) and whether instances #10 + #11 deserve a sub-type 6 (redirector-draft-vs-project-state divergence; distinct from sub-type 1 path/reference because the deviation surfaces at lint / postverify boundary, not at file-path boundary).
+
 ### §0.4 §6.14.43 sub-type 4 + 5 discipline application
 
 Explicit declaration of the discipline state and ratifications applied at this commit:
@@ -164,6 +175,10 @@ For each: question + proposed resolution + reasoning-for + reasoning-against + c
 **Reasoning-against:** Validator false-positives create admin overload (every flagged candidate consumes admin time even if mechanically the validator is wrong). Validator false-negatives waste admin time on items that should have been auto-rejected (admin sees a clearly-broken item that mechanical rules should have caught). The thresholds (similarity-too-close / similarity-too-far / generator-run-fail-rate-too-high) are EMPIRICAL and need calibration during §1 implementation; first-cut thresholds will be wrong in some direction. Embedding-distance criterion runs against sequential-scan-only state (no HNSW/IVFFlat index); pairwise-comparison cost is O(n²); at ~1,700 candidates ≈ 3M comparisons; performance acceptable at v1 scale but degrades super-linearly. If the comparison batch becomes a §1 implementation bottleneck, surface as a residual rather than introducing the index in-round (per §0.2 anti-scope).
 
 **Confidence: MEDIUM.** The criteria SET is principled and empirically grounded. The THRESHOLDS are empirical-not-design and will require calibration during §1 implementation. The embedding-distance criterion's performance characteristic is acceptable at v1 scale but a known forward-pin. **Flagged for redirector ratification at stop-and-report.**
+
+**Empirical reframe at §1.2 commit-2 (`965a056`)** — tier-distribution criterion (#2 above): the plan-doc-time framing *"candidate's claimed tier matches generator's claim per provenance"* was structurally degenerate at v1 because `items.difficulty` IS the LLM-emitted tier (siblings inserted by `siblingGenerationWorkflow` get `difficulty = <tier-key>` from the LLM payload's keyed-by-tier structure). There is no separate "actual" to compare against "claimed." Criterion reframed to **provenance-roundtrip verification**: verifies the candidate's id appears in parent's provenance sibling list AND the provenance file's tier label matches the DB row's difficulty. This catches ingest-pipeline drift (rare but possible: a mid-pipeline tier-label flip). Criterion verdict semantics unchanged (pass/flag/error); reason text updated to reflect provenance-roundtrip semantics. Full implementation in `src/server/validator/criteria/tier-distribution.ts` doc-comment.
+
+**Calibration directive scope clarification (§1.3 commit-1 finding)**: the *"loosen if flag rate >40%; tighten if <2%"* directive applies to **tunable criteria only** (embedding-distance per-sub-type ranges, sub-phase-a-failure-modes antonyms-convergence cosine, provenance-batch-reject cohort-failure-rate threshold). Structural criteria (schema-shape, tier-distribution, per-sub-type-structural) have no tunable threshold; their flag rates report candidate-quality signal, not tuning state. At §1.3 commit-1 dry-run: schema-shape 0%, tier-distribution 0%, per-sub-type-structural 0.12% — all reading as "structurally clean candidate corpus" not as "thresholds too tight." Calibration-cycle ratification path is the dry-run output's tunable-criterion subset only.
 
 #### §0.6.2 Q2 — Human-in-the-loop ratio measurement
 
@@ -386,6 +401,26 @@ The validator+admin round is the vehicle for the **δ-branch fix** that the sele
 
 **Convergence trigger (per Q3):** sub-phase b round-level convergence at "all pressure cells filled to target" — pressure-cell debt is the pacing constraint; queue-empty is the alternative pacing constraint when all candidates have been dispositioned.
 
+#### §0.7.1 Post-batch hasAnyFlag re-baseline (§1.3 commit-2 finding)
+
+The plan-doc §0.7 originally framed *"~25.42% of candidates flag for admin review"* by carrying forward the `provenance-batch-reject` criterion's flag rate from §1.3 commit-1 dry-run. The empirical engine `hasAnyFlag` rate at §1.3 commit-2 production batch is **46.2% (791 of 1,711)**, computed as the union of:
+
+- **435** candidates from criterion-6 cohort-batch-reject in three 100%-flagged cohorts (`verbal.analogies`, `numerical.lowest_values`, `verbal.antonyms`).
+- **398** candidates from pressure-cell membership (with overlap with criterion-flagged).
+- Individual criteria 1-5 flags in cohorts below criterion-6's 20% threshold.
+
+Union (with overlap collapsed): **791** candidates with `hasAnyFlag = true`.
+
+**§2 admin queue sizing implication**: queue surfaces ~791 items, not ~435. Sub-type-pattern taxonomy from the production batch's per-cohort flagged breakdown helps admin throughput:
+
+- **Three cohort-rejection-pattern sub-types** (analogies, lowest_values, antonyms = 435 items, ~55% of queue): cohort-level decisions; admin reviews cohort archetype + applies decision en masse.
+- **Eight pressure-cell-pattern sub-types** (word_problems, averages, percentages, ratios, fractions, critical_reasoning, speed_distance_time, workrate; mixed flags ~50% per sub-type): per-item attention.
+- **Three clean sub-types** (sentence_completion, letter_series, number_series): sparse individual flags only (≤25% per cohort).
+
+Admin time estimate: 6.6–19.8 hours total queue throughput at 30–90 sec/item review pace. Spreads across multiple sessions; pressure-cell prioritization (398 items) provides a natural first-priority cohort. Validator-confidence-score sort within pressure cells maximizes throughput.
+
+**§6.14.43 instance #11 banking**: the original §0.7 framing conflated `provenance-batch-reject` criterion flag rate (25.42%) with engine `hasAnyFlag` aggregate rate (46.2%). Sub-type 4 (implicit-resolution-selection via metric-conflation). The redirector's §1.3 commit-2 prompt expected ~435 `hasAnyFlag`; postverify caught the divergence at 791. Banked at this round-close; round-close §3 records into SPEC §6.14.43 amendment evaluation.
+
 ### §0.8 Phase shape
 
 Provisional sub-section structure; revisable at each phase's commit-0 audit per §6.14.18/21/22.
@@ -399,6 +434,38 @@ Provisional sub-section structure; revisable at each phase's commit-0 audit per 
 - **§1.5** Promotion workflow: admin approve → status='live' + cascade (`metadata_json.promotedAt`, `metadata_json.promotedBy`); embedding regen-on-edit if Q5 edit landed during admin review.
 - **§1.6** Validator tests + fixtures: unit tests for each Q1 criterion; fixtures sampled from sub-phase a candidates (with provenance preserved); integration tests at `validator-batch.ts` workflow level.
 - **§1.7** §1 round-close: tests pass; lefthook clean; docs updated; §1 commit ledger.
+
+##### §0.8.1 §1 phase summary (closed at `8c4dff7`)
+
+§1 phase shipped across 8 commits between `d3d3b2a` (round-open) and `8c4dff7` (this round-close):
+
+| # | Hash | Subject |
+|---|---|---|
+| 1 | `a09b087` | §1.0 — Schema migration: items.status enum extension (+`'rejected'`); rejected_at_ms / rejected_by / rejection_reason columns; item_admin_actions table. |
+| 2 | `a0a8bb7` | §1.1 — Admin allowlist populated (`leonardiwata@gmail.com`); plan-doc Q6 spec correction (5 references). |
+| 3 | `f171d35` | §1.2 commit-0 — Validator engine architecture: interface contracts, criterion stubs with intentional error verdicts. |
+| 4 | `b792f45` | §1.2 commit-1 — `promptHash` backfill for sub-phase a candidates (1,711 rows; 14 cohorts; §6.14.31 destructive-operation-gate). |
+| 5 | `965a056` | §1.2 commit-2 — Six criterion implementations + 26 tests. Tier-distribution reframed at empirical finding. Single-pass engine; two-phase deferred to runner. |
+| 6 | `fe737fa` | §1.3 commit-0 — Validator batch runner architecture: workflow + steps + thresholds module + dry-run CLI. Persistence schema decision: `metadata_json.validatorResult`. |
+| 7 | `30f1757` | §1.3 commit-1 — Threshold tuning iteration: embedding-distance defaults loosen (`defaultMin` 0.5→0.3, `defaultMax` 0.97→0.99). Cascade observed; `provenance-batch-reject` unwinds 82.70%→25.42%. |
+| 8 | `8c4dff7` | §1.3 commit-2 — Production batch run: 1,711 candidates written transactionally with `validatorResult` sub-objects; thresholds-hash anchored; §6.14.31 destructive-operation-gate complete. |
+
+**§1 deliverables:**
+
+- **Schema:** items table extended (rejected_at_ms / rejected_by / rejection_reason); item_admin_actions table created; status enum 4 values.
+- **Admin auth:** `requireAdminEmail()` allowlist populated with `leonardiwata@gmail.com`; `(admin)/layout.tsx` gating active.
+- **Validator engine:** 6 criterion implementations; ValidationContext builder with pre-loaded maps; two-phase orchestration at runner level; calibrated thresholds (embedding-distance min=0.3 / max=0.99 defaults + per-sub-type overrides; antonyms-convergence 0.95; provenance-batch-reject 0.20).
+- **Production batch:** 1,711 candidates carry `validatorResult`; thresholds-hash `sha256:111f631af48157...` anchors the calibration; reproducibility surface in place.
+- **Tests:** 204/0/21/823 baseline (+32 tests since round-open `d3d3b2a`).
+
+**Empirical findings landed in §0:**
+
+- §0.6.1 #2 tier-distribution reframe (provenance-roundtrip verification).
+- §0.6.1 calibration directive scope clarification (tunable-criteria only).
+- §0.7.1 `hasAnyFlag` re-baseline (791 candidates flagged, not 435).
+- §0.3 §6.14.43 instance ledger update (instances #6–#11 banked).
+
+§2 phase opens against `8c4dff7` with admin queue surfacing 791 flagged candidates ranked by validator-confidence-score with pressure-cell-first sorting.
 
 #### §2 — Admin review UI
 
@@ -429,16 +496,19 @@ Provisional; revised at §2 commit 0 audit:
 
 ### §0.9 Forward-watch residuals carried in scope
 
-- **Q-pattern instance count:** 3 banked at `a8d83bf`. Round shape (12–20 commits) suggests round-close as a separate commit; instance count likely unchanged unless folded.
+- **Q-pattern instance count:** 3 banked at `a8d83bf`. §1 round-close (this commit) does NOT fold round-close into a code-commit (this is a separate docs-only round-close commit); instance count stays at 3.
 - **`structured-explanation.test.ts:152` ZodError stderr** — suspected stochastic expect()-count contributor; benign per current evidence; not investigated in this round.
-- **Test expect-count determinism** — current baseline ~770 ± few; the round's tests should hold this baseline modulo stochastic variance.
-- **§6.14.43 sub-type 4 + 5 vigilance** throughout the round. Sub-type 5 is newly recognized at this commit (instance #8 banks); SPEC entry amendment scheduled for round-close per §3.
-- **Pressure-cell residuals** not cleared at round-close → carry forward to a future bank-completion round.
-- **Triage code residuals in three smoke/lib files** → future smoke-cleanup pass.
-- **Selection-engine sidecar #1 stale `STATUS: OPEN` header** → minor docs-hygiene future commit.
-- **Retirement-commit-under-cleaning forward-watch.** SPEC-B + SPEC-B-followup are two §6.14.41 audit-vs-revert blindness repayments of `81819e0` (triage retirement). If a future retirement commit triggers a third repayment cycle, candidate for new §6.14 entry on retirement-commit-under-cleaning patterns.
-- **HNSW/IVFFlat index on `items.embedding`** deferred per design decision (sequential scan acceptable at v1 bank scale). Validator embedding-distance criterion may surface as a performance bottleneck during §1 implementation; if so, surface as a residual rather than fix in-round.
-- **Authoritative item-bank counts** at round-open: §1 commit 0 dev-DB query replaces the stale handoff (1,711) and convergence-audit (1,748) snapshots. The audit-step-10 dev-DB query was not executed at this commit-0 audit; deferred to §1 commit 0.
+- **Test expect-count determinism** — baseline trajectory through §1: 803 → 814 → 812 → 823 across §1.2 commit-2 / §1.3 commit-0 / §1.3 commit-1 / §1.3 commit-2. Stochastic-variance precedent holds (±5 expect-count drift per run).
+- **§6.14.43 sub-type 4 + 5 vigilance** throughout the round. Instance #10 (cumulative ~21 convention deviations during §1) and instance #11 (`hasAnyFlag` metric-conflation) banked since §0.3 last update; SPEC entry amendment scheduled for round-close §3.
+- **Pressure-cell residuals** not cleared at round-close → 398 candidates flagged per §0.7.1; admin clears via §2.
+- **Triage code residuals in three smoke/lib files** → still forward-pinned; not in this round's scope.
+- **Selection-engine sidecar #1 stale `STATUS: OPEN` header** → still forward-pinned; minor docs-hygiene future commit.
+- **Retirement-commit-under-cleaning forward-watch.** SPEC-B + SPEC-B-followup are two §6.14.41 audit-vs-revert blindness repayments of `81819e0` (triage retirement). No third instance yet; if a future retirement commit triggers a third repayment cycle, candidate for new §6.14 entry on retirement-commit-under-cleaning patterns.
+- **HNSW/IVFFlat index on `items.embedding`** deferred per design decision. §1.3 commit-2 production batch wall-clock 2.044s (1.504s in `persistResultsStep`) — well under any performance threshold; no action.
+- **Authoritative item-bank counts** at round-open: §1 commit 0 dev-DB query replaced stale snapshots; 1,711 candidates / 439 live confirmed verbatim and stable across §1 phase.
+- **NEW (§1 close)**: provisional sub-section numbering (§1.1 / §1.2 / ... per plan-doc §0.8) vs commit-numbering (§1.0 / §1.1 / ... per redirector convention) divergence resolved at §0.8.1 — provisional labels are scope buckets; commit numbering tracks actual commits. Both conventions coexist; no edit needed.
+- **NEW (§1 close)**: sub-type-pattern taxonomy from §0.7.1 (cohort-rejection / pressure-cell / clean) — forward-pinned for §2 admin queue UI design; queue can offer "review cohort archetype + apply en masse" affordance for the 3 cohort-rejection sub-types (analogies, lowest_values, antonyms = 435 items at 100%-cohort-flagged).
+- **NEW (§1 close)**: persistence reproducibility anchor — every candidate's `validatorResult.thresholdsHash` is `sha256:111f631af48157...`. Future re-runs with different thresholds get a different hash; auditing identifies which verdicts came from which threshold set.
 
 ### §0.10 Cross-project transfer note
 
