@@ -36,7 +36,7 @@ function OptionButtonImpl(props: OptionButtonProps) {
 			aria-pressed={selected}
 			onClick={onSelect}
 			className={cn(
-				"flex w-full items-center gap-4 rounded-md border px-5 py-4 text-left text-base transition-colors",
+				"flex w-full items-center gap-3 rounded-md border px-4 py-2 text-left text-sm transition-colors",
 				"border-border bg-background text-foreground hover:border-foreground/40",
 				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500",
 				// Selected state visual: blue-tinted border + light blue background

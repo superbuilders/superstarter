@@ -541,7 +541,17 @@ function FocusShell(props: FocusShellProps) {
 	return (
 		<div
 			data-strict-mode={strictModeAttr}
-			className={cn("flex min-h-dvh w-full flex-col px-6 pt-4 pb-8")}
+			className={cn(
+				"flex min-h-dvh w-full flex-col px-6 pt-4 pb-8",
+				// Question-page font scoped to <FocusShell>: override the global
+				// Plus Jakarta Sans body font with a neutral system sans (Arial /
+				// Helvetica look) so the live-test surface mirrors the reference
+				// CCAT screenshots. Cascades via CSS inheritance to <ItemPrompt>,
+				// <OptionButton>, and the question body — chronometer + timer
+				// labels inherit too. Underscore is Tailwind's "space inside
+				// arbitrary value" escape.
+				"font-[ui-sans-serif,system-ui,-apple-system,Arial,sans-serif]"
+			)}
 		>
 			<main className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
 				{/* chrome row — chronometer top-right, then progression
@@ -570,7 +580,7 @@ function FocusShell(props: FocusShellProps) {
 				    timer bar moved to the chrome row above (commit 5 of
 				    the focus-shell overhaul) so all three bars (question
 				    progression, per-question, session) stack together. */}
-				<div className="mt-8 flex flex-col gap-6">
+				<div className="mt-6 flex flex-col gap-5">
 					{/*
 					 * LOAD-BEARING: do not remove the `key={state.currentItem.id}`
 					 * prop. The keyed mount is what re-runs <ItemSlot>'s mount
@@ -614,7 +624,7 @@ function FocusShell(props: FocusShellProps) {
 							// Solid blue per the target screenshots (the indigo-ish tone in
 							// example_03/04). `bg-blue-600` matches the closest Tailwind token.
 							// Disabled state collapses to neutral gray via opacity-50.
-							"w-full rounded-md bg-blue-600 px-6 py-4 font-medium text-base text-white transition-colors",
+							"w-full rounded-md bg-blue-600 px-6 py-3 font-medium text-sm text-white transition-colors",
 							"hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600",
 							"disabled:cursor-not-allowed disabled:opacity-50"
 						)}
