@@ -27,7 +27,7 @@
 import "@/env"
 import { expect, test } from "bun:test"
 import * as errors from "@superbuilders/errors"
-import { and, count, eq } from "drizzle-orm"
+import { and, count, eq, sql } from "drizzle-orm"
 import { diagnosticMix } from "@/config/diagnostic-mix"
 import {
 	generateFullLengthSlots,
@@ -211,7 +211,10 @@ test("getNextItem: no re-serve within a session — diagnostic completion produc
 	await using adminDb = await createAdminDb()
 	const rowsResult = await errors.try(
 		adminDb.db
-			.select({ itemId: attempts.itemId })
+			.select({
+				itemId: attempts.itemId,
+				fallbackLevel: sql<string>`${attempts.metadataJson}->>'fallback_level'`
+			})
 			.from(attempts)
 			.where(eq(attempts.sessionId, sessionId))
 	)
@@ -468,6 +471,7 @@ interface FullLengthAttemptRow {
 	itemDifficulty: Difficulty
 	servedAtTier: Difficulty
 	fallbackFromTier: Difficulty | null
+	fallbackLevel: string
 }
 
 const subTypeIdSet: ReadonlySet<string> = new Set<string>(subTypeIds)
@@ -495,7 +499,8 @@ async function readFullLengthAttempts(sessionId: string): Promise<FullLengthAtte
 				subTypeId: items.subTypeId,
 				itemDifficulty: items.difficulty,
 				servedAtTier: attempts.servedAtTier,
-				fallbackFromTier: attempts.fallbackFromTier
+				fallbackFromTier: attempts.fallbackFromTier,
+				fallbackLevel: sql<string>`${attempts.metadataJson}->>'fallback_level'`
 			})
 			.from(attempts)
 			.innerJoin(items, eq(attempts.itemId, items.id))
@@ -515,7 +520,8 @@ async function readFullLengthAttempts(sessionId: string): Promise<FullLengthAtte
 			subTypeId: asSubTypeIdForTest(r.subTypeId),
 			itemDifficulty: r.itemDifficulty,
 			servedAtTier: r.servedAtTier,
-			fallbackFromTier: r.fallbackFromTier
+			fallbackFromTier: r.fallbackFromTier,
+			fallbackLevel: r.fallbackLevel
 		}
 	})
 }

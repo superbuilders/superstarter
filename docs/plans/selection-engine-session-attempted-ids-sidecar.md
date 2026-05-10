@@ -262,6 +262,8 @@ Per redirector decision after commit-0 audit findings:
 
   No empirical probe on `noReServeInSession` before relaxing per redirector (Q) decision; SPEC-derived posture, not empirical-data-derived.
 
+  **Note:** Commit 2 was split into 2a (structural prerequisite — fetch helpers extended to project `metadata_json->>'fallback_level'`) and 2b (test relaxation + interim mitigation removal + round-close fold) per audit at commit-2-attempt-1. Heads-up #2 of that gate's redirect anticipated the marker-strip-at-fetch boundary; audit-first discipline caught the structural prerequisite before edits were attempted. NO PROMOTION CANDIDATE 1 instance from this split — the redirector heads-up explicitly designed the boundary the audit caught. State at split: 4 instances banked, unchanged. JSONB projection syntax used: project convention `sql<string>\`${attempts.metadataJson}->>'fallback_level'\`` (no `.as()`) — discovered via audit (d) probe of `sql<>` template tag uses across `src/`; project consistently omits `.as()` and lets Drizzle infer the alias from the object key.
+
 **Anticipated round-close residuals (forward-pinned to §6):**
 
 - **VALIDATOR ROUND UN-DEFERRED.** Phase 4 sub-phase b moves from "indefinitely deferred" (handoff §9 residual #5; forensics in `convergence-audit.md`) to active forward-pin. Sequencing relative to diagnostic-timing sidecar deferred to that round-close decision.
@@ -273,7 +275,8 @@ Per redirector decision after commit-0 audit findings:
 | # | Hash | Description |
 |---|------|-------------|
 | 0 | ccb3aab | Wholesale-replace stub at f471e83; author plan-doc body §0-§4 + §A quote block; PROMOTION CANDIDATE 1 watch log initialized empty. |
-| 1 | <this commit> | SPEC §9.2 targeted patch (γ branch selection) — within-session-attempted authorized under session-soft fallback. Plan-doc §4.6 branch-selection decision; §0.4 watch-log instance #4 logged (cite-without-verify at quote-prefix-stripping). NO code changes. |
+| 1 | d59f86d | SPEC §9.2 targeted patch (γ branch selection) — within-session-attempted authorized under session-soft fallback. Plan-doc §4.6 branch-selection decision; §0.4 watch-log instance #4 logged (cite-without-verify at quote-prefix-stripping). NO code changes. |
+| 2a | <this commit> | refactor(test): extend `readFullLengthAttempts` SELECT + `FullLengthAttemptRow` type + `noReServeInSession` inline SELECT to project `metadata_json->>'fallback_level'`. Structural prerequisite for 2b's marker-aware assertion. NO behavior change; assertions unchanged; interim mitigation block unchanged. |
 
 ## §6 Round-close residuals
 
