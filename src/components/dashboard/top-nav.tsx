@@ -67,7 +67,7 @@ interface TopNavProps {
 function TopNav({ streakDays, initials }: TopNavProps) {
 	const pathname = usePathname()
 	return (
-		<header className="mx-auto mb-5 flex max-w-[1100px] items-center justify-between border-border-soft border-b px-7 pt-4 pb-[14px]">
+		<header className="mx-auto mb-2 flex max-w-[1100px] items-center justify-between border-border-soft border-b px-7 pt-[10px] pb-2">
 			<Link
 				href="/"
 				className="font-medium font-serif text-[18px] text-indigo tracking-[-0.01em]"

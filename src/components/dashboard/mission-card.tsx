@@ -1,6 +1,6 @@
 // <MissionCard> — "today's mission" card. Two-column grid: text
-// block on the left (eyebrow → serif title → body), CTAs on the
-// right. Dashboard PRD §10.4 + `docs/plans/dashboard.md` §5 commit 7.
+// block on the left (eyebrow → serif title), CTAs on the right.
+// Dashboard PRD §10.4 + `docs/plans/dashboard.md` §5 commit 7.
 //
 // CTAs: primary is a filled dark pill (bg-text-1 + text-bg, with a
 // border in the same color so the geometry matches the alternate
@@ -32,15 +32,14 @@ interface MissionCardProps {
 
 function MissionCard({ mission }: MissionCardProps) {
 	return (
-		<section className="mb-[14px] grid grid-cols-[1fr_auto] items-center gap-4 rounded-lg border border-border-soft bg-surface px-5 py-4">
+		<section className="mb-2 grid grid-cols-[1fr_auto] items-center gap-4 rounded-lg border border-border-soft bg-surface px-5 py-[10px]">
 			<div>
-				<p className="mb-1 font-semibold text-[11px] text-cobalt uppercase tracking-[0.06em]">
+				<p className="mb-[2px] font-semibold text-[11px] text-cobalt uppercase tracking-[0.06em]">
 					{mission.eyebrow}
 				</p>
-				<h3 className="mb-1 font-medium font-serif text-[16px] text-text-1 tracking-[-0.005em]">
+				<h3 className="font-medium font-serif text-[16px] text-text-1 tracking-[-0.005em]">
 					{mission.title}
 				</h3>
-				<p className="text-[13px] text-text-2 leading-relaxed">{mission.body}</p>
 			</div>
 			<div className="flex gap-2">
 				<a

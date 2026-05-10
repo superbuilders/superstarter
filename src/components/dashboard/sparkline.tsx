@@ -101,7 +101,7 @@ function Sparkline({ data, label, referenceLine }: SparklineProps) {
 			preserveAspectRatio="none"
 			role="img"
 			aria-label={label}
-			className="mt-2 h-[22px] w-full"
+			className="h-[22px] w-full"
 		>
 			{data.map(function renderBar(value, i) {
 				const isDefined = value !== undefined

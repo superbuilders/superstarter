@@ -29,7 +29,7 @@ interface DojoCardProps {
 function DojoCard({ title, meta, rows, nowMs }: DojoCardProps) {
 	return (
 		<section className="overflow-hidden rounded-lg border border-border-soft bg-surface">
-			<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-3 pb-2">
+			<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
 				<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
 					{title}
 				</h3>

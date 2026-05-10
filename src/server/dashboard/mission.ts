@@ -200,7 +200,6 @@ async function pickTodaysMission(userId: string): Promise<DashboardData["mission
 	return {
 		eyebrow: "Today's mission",
 		title: "Take your baseline simulation",
-		body: "We'll calibrate your belts and recommend daily missions from your first sim onward.",
 		primaryHref: "/full-length/configure",
 		primaryLabel: "Start full sim",
 		alternateHref: `/drill/${encodeURIComponent(chosen.id satisfies SubTypeId)}/run`,

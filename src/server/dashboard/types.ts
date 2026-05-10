@@ -81,7 +81,6 @@ interface DashboardData {
 	mission: {
 		eyebrow: string
 		title: string
-		body: string
 		primaryHref: string
 		primaryLabel: string
 		alternateHref: string

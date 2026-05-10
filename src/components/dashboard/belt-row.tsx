@@ -69,7 +69,7 @@ function BeltRow({ row, nowMs }: BeltRowProps) {
 	return (
 		<a
 			href={row.href}
-			className="grid grid-cols-[44px_1fr_auto_16px] items-center gap-[10px] border-border-soft border-b px-4 py-[9px] text-sm transition-colors duration-150 ease-out last:border-b-0 hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:-outline-offset-2"
+			className="grid grid-cols-[44px_1fr_auto_16px] items-center gap-[10px] border-border-soft border-b px-4 py-[5px] text-sm transition-colors duration-150 ease-out last:border-b-0 hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:-outline-offset-2"
 		>
 			<BeltStripe belt={row.belt} ariaContext={row.name} />
 			<span className="flex items-center gap-[6px] font-medium text-text-1">

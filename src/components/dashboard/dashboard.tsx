@@ -11,14 +11,14 @@
 //
 // Sort state (added with the dashboard-belt-sort-and-last-drilled
 // redirect): one global sort key + reverse toggle drives both
-// <DojoCard>s. Default is "recent" + non-reversed — most-recently-
-// drilled at top, never-drilled at the bottom — so the strip
-// surfaces the user's active practice on first paint. The reverse
-// toggle (added with the asc/desc follow-up) flips whatever the
-// active sort produces wholesale; see subtype-sort.ts for the
-// per-key semantics. State is component-local (not URL params), so
-// the dashboard's revalidatePath('/') after a drill keeps the
-// user's chosen sort intact.
+// <DojoCard>s. Default is "recent" + reversed — Never/oldest at the
+// top, newest-drilled at the bottom — so the strip surfaces the
+// least-touched sub-types on first paint. The reverse toggle (added
+// with the asc/desc follow-up) flips whatever the active sort
+// produces wholesale; see subtype-sort.ts for the per-key semantics.
+// State is component-local (not URL params), so the dashboard's
+// revalidatePath('/') after a drill keeps the user's chosen sort
+// intact.
 //
 // `nowMs` is resolved once per render at the dashboard root and
 // threaded down to <DojoCard>'s rows so every <BeltRow>'s
@@ -49,7 +49,7 @@ interface DashboardProps {
 function Dashboard({ dataPromise }: DashboardProps) {
 	const data = React.use(dataPromise)
 	const [sortKey, setSortKey] = React.useState<SubtypeSortKey>("recent")
-	const [reversed, setReversed] = React.useState<boolean>(false)
+	const [reversed, setReversed] = React.useState<boolean>(true)
 	const nowMs = Date.now()
 	const sortedVerbal = React.useMemo(function sortVerbal() {
 		return sortSubtypes(data.verbal, sortKey, reversed)
@@ -65,7 +65,7 @@ function Dashboard({ dataPromise }: DashboardProps) {
 	return (
 		<div className="min-h-screen bg-bg text-text-1">
 			<TopNav streakDays={data.user.streakDays} initials={data.user.initials} />
-			<main className="mx-auto max-w-[1100px] px-7 pb-12">
+			<main className="mx-auto max-w-[1100px] px-7 pb-6">
 				<h1 className="sr-only">Dashboard</h1>
 				<ScoreStrip
 					firstName={data.user.firstName}
@@ -75,7 +75,7 @@ function Dashboard({ dataPromise }: DashboardProps) {
 					mistakesQueue={data.mistakesQueue}
 				/>
 				<MissionCard mission={data.mission} />
-				<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+				<div className="mb-2 flex flex-wrap items-center justify-between gap-3">
 					<SubtypeSortSelector
 						value={sortKey}
 						reversed={reversed}

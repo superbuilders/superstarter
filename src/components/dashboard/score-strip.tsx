@@ -70,9 +70,9 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 	const paceDisplay = formatSeconds(pace.previousMedianSeconds)
 
 	return (
-		<section className="mb-5 flex flex-col gap-6 border-border-soft border-b pb-5 md:flex-row md:items-end md:justify-between">
+		<section className="mb-2 flex flex-col gap-4 border-border-soft border-b pb-2 md:flex-row md:items-end md:justify-between">
 			<div>
-				<p className="mb-1 text-[11px] text-text-3 uppercase tracking-[0.06em]">
+				<p className="mb-[2px] text-[11px] text-text-3 uppercase tracking-[0.06em]">
 					{formatToday(greeting.today)}
 				</p>
 				<h2 className="font-medium font-serif text-[22px] text-text-1 leading-[1.15] tracking-[-0.015em]">
@@ -118,6 +118,16 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 					{(close) => <GoalEditor initial={score.goal} onSaved={close} />}
 				</ScoreStripPopover>
 				<div className="flex w-[110px] flex-col items-end text-right">
+					<div className="mb-1 w-full">
+						<Sparkline
+							data={score.last5SimScores}
+							label="Previous score history"
+							referenceLine={{
+								value: score.goal,
+								ariaLabel: `Goal score: ${score.goal}`
+							}}
+						/>
+					</div>
 					<StatTile
 						label="Previous score"
 						value={
@@ -127,16 +137,18 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 						}
 						align="right"
 					/>
-					<Sparkline
-						data={score.last5SimScores}
-						label="Previous score history"
-						referenceLine={{
-							value: score.goal,
-							ariaLabel: `Goal score: ${score.goal}`
-						}}
-					/>
 				</div>
 				<div className="flex w-[110px] flex-col items-end text-right">
+					<div className="mb-1 w-full">
+						<Sparkline
+							data={pace.last5SimMedians}
+							label="Previous pace history"
+							referenceLine={{
+								value: TARGET_PACE_SECONDS,
+								ariaLabel: "Target pace: 18 seconds per question"
+							}}
+						/>
+					</div>
 					<StatTile
 						label="Previous pace"
 						value={
@@ -145,14 +157,6 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 							</span>
 						}
 						align="right"
-					/>
-					<Sparkline
-						data={pace.last5SimMedians}
-						label="Previous pace history"
-						referenceLine={{
-							value: TARGET_PACE_SECONDS,
-							ariaLabel: "Target pace: 18 seconds per question"
-						}}
 					/>
 				</div>
 			</div>
