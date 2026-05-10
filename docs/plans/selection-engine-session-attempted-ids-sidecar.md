@@ -276,15 +276,87 @@ Per redirector decision after commit-0 audit findings:
 |---|------|-------------|
 | 0 | ccb3aab | Wholesale-replace stub at f471e83; author plan-doc body §0-§4 + §A quote block; PROMOTION CANDIDATE 1 watch log initialized empty. |
 | 1 | d59f86d | SPEC §9.2 targeted patch (γ branch selection) — within-session-attempted authorized under session-soft fallback. Plan-doc §4.6 branch-selection decision; §0.4 watch-log instance #4 logged (cite-without-verify at quote-prefix-stripping). NO code changes. |
-| 2a | <this commit> | refactor(test): extend `readFullLengthAttempts` SELECT + `FullLengthAttemptRow` type + `noReServeInSession` inline SELECT to project `metadata_json->>'fallback_level'`. Structural prerequisite for 2b's marker-aware assertion. NO behavior change; assertions unchanged; interim mitigation block unchanged. |
+| 2a | 6db9ca8 | refactor(test): extend `readFullLengthAttempts` SELECT + `FullLengthAttemptRow` type + `noReServeInSession` inline SELECT to project `metadata_json->>'fallback_level'`. Structural prerequisite for 2b's marker-aware assertion. NO behavior change; assertions unchanged; interim mitigation block unchanged. |
+| 2b | <this commit> | feat(test): add `countSessionSoftFallbacks` helper; relax `fullLengthNoReServe:708` and `noReServeInSession:230` to marker-aware invariant `(distinct) + (session-soft) === N` per SPEC §9.2:2355 clause (b); replace 18-line interim mitigation block with 3-line SPEC-reference comment above `fullLengthNoReServe`; add same 3-line comment above `noReServeInSession`. Round-close folded: §6 residuals + §7 candidates. **SIDECAR CLOSES.** |
 
 ## §6 Round-close residuals
 
-*(placeholder — populated at round-close)*
+**Status:** sidecar CLOSES at commit 2b. SPEC §9.2:2355 amended at commit 1 (d59f86d). Fetch helpers extended at commit 2a (6db9ca8). Tests relaxed to marker-aware invariant + interim mitigation removed at commit 2b. Full-suite green: 128/0/649 post-2b.
 
-## §7 §6.14 candidates
+### Forward-pinned residuals
 
-*(placeholder — populated at round-close per `docs/plans/playbook.md` §6.14)*
+1. **VALIDATOR ROUND UN-DEFERRED.** Phase 4 sub-phase b moves from "indefinitely deferred" (handoff §9 residual #5; forensics in `scripts/_logs/convergence-audit.md`) to active forward-pin.
+
+   **Vehicle for (δ) targeted bank-growth:**
+   - 1,711 candidates at `status='candidate'` from sub-phase a.
+   - Validator promotes candidates → `status='live'` for production drill / diagnostic / full_length flows.
+   - Pressure cells empirically identified at this sidecar's commit-0 audit step (d):
+     - Brutal tier (6 items total; only 3 of 14 sub-types have any).
+     - `numerical.fractions:hard=1`
+     - `numerical.workrate:hard=1`
+     - `numerical.averages:hard=1`
+   - Validator round selection should weight candidate review toward these pressure cells.
+
+   **Sequencing:** validator round opens at Leo's discretion. Possible positions:
+   - (a) Before diagnostic-timing sidecar (Option 1).
+   - (b) After diagnostic-timing sidecar.
+   - (c) After Round 3 (review architecture).
+
+   Decision deferred to next round-shape decision gate.
+
+   **Open architectural questions** per `convergence-audit.md` (NOT resolved this sidecar):
+   - Adversarial robustness criteria for validator.
+   - Human-in-the-loop ratio.
+   - Convergence criteria (when does validation "complete"?).
+
+2. **MARKER-AWARE-ASSERTION SUB-PATTERN** (forward-watch). 2 instances surfaced this sidecar (`fullLengthNoReServe` + `noReServeInSession`). Both relaxed at 2b. If a 3rd test in a future round asserts strict session-uniqueness without counting markers, candidate escalates to §6.14 promotion review.
+
+3. **PROMOTION CANDIDATE 1 THRESHOLD PROXIMITY** (forward-watch). State at sidecar close: 4 instances banked. Threshold +1 → 5 → promotes. Diagnostic-timing sidecar (Option 1) is the immediate exposure surface; its plan-doc §0 must carry the watch state forward.
+
+4. **`fallback_level` CONSUMER LIST** (forward-pin). Audit step (c) at commit-1-attempt-1 surfaced producers, consumers, and tests project-wide:
+   - **Producers:** `src/server/items/selection.ts:294` (`"fresh"`), `:300` (`"tier-degraded"`), `:312` (`"recency-soft"`), `:318` (`"tier-degraded"`), `:334` (`"session-soft"`).
+   - **Persistence:** `src/server/sessions/submit.ts:118`.
+   - **Pass-through schemas:** `src/app/(app)/actions.ts:84`, `src/server/sessions/submit.ts:31, :36, :103, :146`, `src/server/items/selection.ts:76, :81, :266, :418, :427, :601, :610`, `src/components/focus-shell/types.ts:15, :20`.
+   - **Tests asserting uniqueness without marker counting (BOTH resolved at 2b):** `selection.test.ts:708 fullLengthNoReServe`, `selection.test.ts:230 noReServeInSession`.
+
+   Future surface for SPEC alignment work if marker semantics evolve.
+
+5. **`structured-explanation.test.ts:152` STOCHASTIC FAILURE SUSPECT** (forward-pin to future tooling round). 2a's pre-edit baseline run reported 1 fail at this test (ZodError on malformed-input parser test). 2a's post-edit run cleared, as did all subsequent runs through 2b's full-suite (128/0/649). Two readings:
+   - **(i)** Prior tooling-reliability-debug §1 audit characterized the ZodError stack trace as expected stderr output of a passing test (Zod-rejection assertion); the "1 fail" report at 2a-pre-edit may be a misread of expected stderr.
+   - **(ii)** The test is a second stochastic failure source distinct from `fullLengthNoReServe`; surfaced once at 2a, cleared on rerun.
+
+   Distinguishing (i) from (ii) requires a rerun-loop probe similar to tooling-reliability-debug §1's investigation. NOT this sidecar's scope. Forward-pin to next tooling round OR ride into the diagnostic-timing sidecar's audit if surfaces during that round.
+
+### Inherited residuals from prior rounds (NOT addressed; carry forward)
+
+- All non-#10/#12 residuals from handoff §9 stay open.
+- Diagnostic-timing sidecar (Option 1) opens after this sidecar closes per Option II at tooling-reliability-debug §1 round-close.
+
+## §7 §6.14 candidates (sidecar consolidation)
+
+### REINFORCEMENTS (no new SPEC entry; existing canon advances)
+
+- **§6.14.20 (wholesale-replacement-with-quote-preservation):** sidecar's §A quote-block preserves the 49-line forward-anchor stub authored at tooling-reliability-debug §1 round-close. Multi-instance pattern; established-use territory.
+- **§6.14.41 (cite-without-verify):** instance #4 of the redirector-spec-error-at-executor-boundary sub-pattern (PROMOTION CANDIDATE 1) is mechanism-class §6.14.41 — the AMENDMENT TEXT pre-state was a citation that empirical disk-state falsified. Audit discipline (executor STOPPED at heads-up #1 violation) is the positive complement.
+- **§6.14.31 (destructive-operation-gate template):** NOT applied this sidecar (no destructive ops). Reinforcement reference only.
+
+### PROMOTION CANDIDATES (state advance, decision deferred)
+
+- **PROMOTION CANDIDATE 1 — Redirector-spec error caught at executor audit-step boundary.** State: 4 instances banked.
+  - 3 from tooling-reliability-debug (gitignore path, sidecar dead-reference, journal-driven-vs-filesystem methodology).
+  - 1 from this sidecar (AMENDMENT TEXT formatting strip via quote-prefix mishandling; mechanism captured at §0.4 instance #4).
+
+  Threshold +1 → 5 → promote. Diagnostic-timing sidecar is the immediate exposure surface. Decision deferred to next instance or round-close commentary review.
+
+- **PROMOTION CANDIDATE 2 — Sidecar-as-default-narrow-scope-envelope.** State: 3 instances (score-goals + tooling-reliability-debug + this sidecar). No round-shape decision was made *during* this sidecar; the decision was made at tooling-reliability-debug §1 round-close (Option II). Threshold per tooling-reliability-debug §5.2: +2 cycles of explicit round-shape reasoning → 5 → promote-or-refine. Counter-state unchanged.
+
+### FORWARD-WATCH (single-pattern, tracked)
+
+- **Marker-aware-assertion sub-pattern.** 2 instances this sidecar (above promotion threshold for sub-pattern but candidate is intra-sidecar; forward-watch posture per §6 residual #2).
+- **Q-pattern (round-close folded into final commit).** 2 instances total (tooling-reliability-debug §2 round-close at f458672 + this sidecar at 2b). Forward-watch.
+- **`structured-explanation.test.ts:152` stochastic suspect.** Forward-pin per §6 residual #5; investigation probe shape when next tooling round opens.
+
+No SPEC.md edits this sidecar to capture promotions; both PROMOTION CANDIDATES remain in DEFER state with structured forward-watch.
 
 ## §A Original stub content as of df4df7c (wholesale-replacement preservation)
 
