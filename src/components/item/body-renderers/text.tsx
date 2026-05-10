@@ -30,7 +30,7 @@ function TextBody(props: TextBodyProps) {
 				// the parent `<ItemSlot>` is already keyed on `item.id` so
 				// cross-item TextBody swaps unmount the entire subtree.
 				return (
-					<p key={index} className="text-foreground text-base leading-snug">
+					<p key={index} className="text-base text-foreground leading-snug">
 						{paragraph}
 					</p>
 				)
