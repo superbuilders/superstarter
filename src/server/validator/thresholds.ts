@@ -47,8 +47,8 @@ const defaultThresholds: ValidatorThresholds = {
 			["numerical.lowest_values", 0.999],
 			["verbal.antonyms", 0.92]
 		]),
-		defaultMin: 0.5,
-		defaultMax: 0.97
+		defaultMin: 0.3,
+		defaultMax: 0.99
 	},
 	subPhaseAFailureModes: {
 		antonymsConvergenceCosine: 0.95
