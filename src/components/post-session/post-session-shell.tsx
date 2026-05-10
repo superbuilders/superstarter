@@ -12,6 +12,7 @@
 // bg-surface cards, font-serif headings, dashboard tokens). The
 // authenticated <TopNav> is rendered by the page above the shell.
 
+import { ChevronDownIcon, SlidersHorizontalIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import * as React from "react"
 import type {
@@ -27,6 +28,7 @@ import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
 import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
 
@@ -67,18 +69,16 @@ function headingFor(sessionType: SessionTypeForShell): string {
 	return "Practice test review"
 }
 
-function eyebrowFor(sessionType: SessionTypeForShell): string {
-	if (sessionType === "diagnostic") return "Diagnostic"
-	if (sessionType === "drill") return "Drill"
-	if (sessionType === "full_length") return "Practice test"
-	return "Simulation"
-}
-
 function PostSessionShell(props: PostSessionShellProps) {
 	const [activeTab, setActiveTab] = React.useState<ReviewTab>("performance")
+	const [filtersOpen, setFiltersOpen] = React.useState<boolean>(false)
 	const isDiagnostic = props.sessionType === "diagnostic"
 	const heading = headingFor(props.sessionType)
-	const eyebrow = eyebrowFor(props.sessionType)
+	function toggleFilters() {
+		setFiltersOpen(function flip(prev) {
+			return !prev
+		})
+	}
 
 	let subhead: React.ReactNode = null
 	if (isDiagnostic) {
@@ -127,6 +127,11 @@ function PostSessionShell(props: PostSessionShellProps) {
 		resultSoundFx = <ResultSoundFx score={totalCorrect} />
 	}
 
+	let filtersToggleNode: React.ReactNode = null
+	if (activeTab === "questions") {
+		filtersToggleNode = <FilterToggle open={filtersOpen} onToggle={toggleFilters} />
+	}
+
 	let panel: React.ReactNode = null
 	if (activeTab === "performance") {
 		panel = (
@@ -150,7 +155,7 @@ function PostSessionShell(props: PostSessionShellProps) {
 	} else if (activeTab === "questions") {
 		panel = (
 			<div data-testid="post-session-slot-wrong-items">
-				<WrongItemsBrowser items={props.wrongItems} />
+				<WrongItemsBrowser items={props.wrongItems} toolbarOpen={filtersOpen} />
 			</div>
 		)
 	} else {
@@ -178,7 +183,6 @@ function PostSessionShell(props: PostSessionShellProps) {
 		<main className="mx-auto max-w-[1100px] px-7 pb-10" data-testid="post-session-heading">
 			{resultSoundFx}
 			<header className="mb-3 flex flex-col gap-2 border-border-soft border-b pb-3">
-				<p className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{eyebrow}</p>
 				<h2 className="font-medium font-serif text-[22px] text-text-1 leading-[1.15] tracking-[-0.015em]">
 					{heading}
 				</h2>
@@ -186,7 +190,7 @@ function PostSessionShell(props: PostSessionShellProps) {
 				{beltSection}
 			</header>
 
-			<TabNav activeTab={activeTab} onSelect={setActiveTab} />
+			<TabNav activeTab={activeTab} onSelect={setActiveTab} filtersToggle={filtersToggleNode} />
 
 			<div className="mt-4">{panel}</div>
 
@@ -201,36 +205,72 @@ function PostSessionShell(props: PostSessionShellProps) {
 interface TabNavProps {
 	activeTab: ReviewTab
 	onSelect: (tab: ReviewTab) => void
+	filtersToggle: React.ReactNode
 }
 
 function TabNav(props: TabNavProps) {
 	return (
-		<div
-			aria-label="Review sections"
-			className="flex flex-wrap gap-[2px]"
-			data-testid="post-session-tab-nav"
-			role="tablist"
-		>
-			{TABS.map(function renderTab(tab) {
-				const isActive = tab.key === props.activeTab
-				const className = isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS
-				return (
-					<button
-						key={tab.key}
-						type="button"
-						role="tab"
-						aria-selected={isActive}
-						className={className}
-						data-testid={`post-session-tab-${tab.key}`}
-						onClick={function selectThis() {
-							props.onSelect(tab.key)
-						}}
-					>
-						{tab.label}
-					</button>
-				)
-			})}
+		<div className="flex flex-wrap items-center justify-between gap-3">
+			<div
+				aria-label="Review sections"
+				className="flex flex-wrap gap-[2px]"
+				data-testid="post-session-tab-nav"
+				role="tablist"
+			>
+				{TABS.map(function renderTab(tab) {
+					const isActive = tab.key === props.activeTab
+					const className = isActive ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS
+					return (
+						<button
+							key={tab.key}
+							type="button"
+							role="tab"
+							aria-selected={isActive}
+							className={className}
+							data-testid={`post-session-tab-${tab.key}`}
+							onClick={function selectThis() {
+								props.onSelect(tab.key)
+							}}
+						>
+							{tab.label}
+						</button>
+					)
+				})}
+			</div>
+			{props.filtersToggle}
 		</div>
+	)
+}
+
+interface FilterToggleProps {
+	open: boolean
+	onToggle: () => void
+}
+
+function FilterToggle(props: FilterToggleProps) {
+	const stateClass = props.open
+		? "bg-cobalt text-white hover:bg-cobalt"
+		: "border border-border-soft bg-surface text-text-2 hover:bg-lavender hover:text-text-1"
+	const chevronClass = props.open ? "rotate-180" : ""
+	return (
+		<button
+			type="button"
+			aria-expanded={props.open}
+			aria-controls="post-session-review-toolbar"
+			data-testid="post-session-filters-toggle"
+			onClick={props.onToggle}
+			className={cn(
+				"inline-flex items-center gap-2 rounded-md px-3 py-[6px] font-medium text-[13px] transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
+				stateClass
+			)}
+		>
+			<SlidersHorizontalIcon aria-hidden="true" className="h-[14px] w-[14px]" />
+			<span>Filters &amp; sort</span>
+			<ChevronDownIcon
+				aria-hidden="true"
+				className={cn("h-[14px] w-[14px] transition-transform duration-150 ease-out", chevronClass)}
+			/>
+		</button>
 	)
 }
 

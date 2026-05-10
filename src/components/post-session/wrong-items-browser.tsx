@@ -14,7 +14,6 @@
 // is "all items, question order, ascending" — i.e., chronological by
 // attempt id.
 
-import { ArrowDownNarrowWideIcon, ArrowUpNarrowWideIcon } from "lucide-react"
 import * as React from "react"
 import { z } from "zod"
 import type {
@@ -27,6 +26,7 @@ import {
 	compareBySubTypeDisplay,
 	SUB_TYPE_BY_ID
 } from "@/components/post-session/_lib/sub-type-display"
+import { LatencyRangeSlider } from "@/components/post-session/latency-range-slider"
 import { StructuredExplanation } from "@/components/post-session/structured-explanation"
 import type { SubTypeId } from "@/config/sub-types"
 import { cn } from "@/lib/utils"
@@ -35,13 +35,20 @@ import { type ItemBody, itemBody } from "@/server/items/body-schema"
 
 interface WrongItemsBrowserProps {
 	items: ReadonlyArray<WrongItem>
+	/** Whether the filter + sort toolbar is expanded. Toggled by the
+	 *  caller (the post-session shell) via a button in the tab nav.
+	 *  Defaults to false at the parent — collapsed on first paint. */
+	toolbarOpen: boolean
 }
 
 type ItemStatus = "correct" | "incorrect" | "skipped"
 type StatusFilter = "all" | ItemStatus
 type DifficultyFilter = "all" | ItemDifficulty
-type TimeFilter = "all" | "lt10" | "10to20" | "20to30" | "gt30"
-type SubTypeFilter = "all" | SubTypeId
+interface TimeRange {
+	minMs: number
+	maxMs: number
+}
+type SubTypeFilter = "all" | "section:numerical" | "section:verbal" | SubTypeId
 type SortKey = "question" | "subType" | "latency" | "difficulty"
 type SortDirection = "asc" | "desc"
 
@@ -333,16 +340,19 @@ function matchesDifficulty(item: WrongItem, filter: DifficultyFilter): boolean {
 
 function matchesSubType(item: WrongItem, filter: SubTypeFilter): boolean {
 	if (filter === "all") return true
+	if (filter === "section:numerical") {
+		const meta = SUB_TYPE_BY_ID.get(item.subTypeId)
+		return meta !== undefined && meta.section === "numerical"
+	}
+	if (filter === "section:verbal") {
+		const meta = SUB_TYPE_BY_ID.get(item.subTypeId)
+		return meta !== undefined && meta.section === "verbal"
+	}
 	return item.subTypeId === filter
 }
 
-function matchesTime(item: WrongItem, filter: TimeFilter): boolean {
-	if (filter === "all") return true
-	const ms = item.latencyMs
-	if (filter === "lt10") return ms < 10_000
-	if (filter === "10to20") return ms >= 10_000 && ms < 20_000
-	if (filter === "20to30") return ms >= 20_000 && ms < 30_000
-	return ms >= 30_000
+function matchesTime(item: WrongItem, range: TimeRange): boolean {
+	return item.latencyMs >= range.minMs && item.latencyMs <= range.maxMs
 }
 
 function compareByAttemptId(a: WrongItem, b: WrongItem): number {
@@ -375,7 +385,7 @@ function compareItems(a: WrongItem, b: WrongItem, key: SortKey): number {
 interface AppliedFilters {
 	status: StatusFilter
 	difficulty: DifficultyFilter
-	time: TimeFilter
+	time: TimeRange
 	subType: SubTypeFilter
 }
 
@@ -407,133 +417,68 @@ function sortItems(
 
 // ---------------- Toolbar ----------------
 
-interface ChipOption<T extends string> {
+interface SelectOption<T extends string> {
 	value: T
 	label: string
 }
 
-const STATUS_OPTIONS: ReadonlyArray<ChipOption<StatusFilter>> = [
-	{ value: "all", label: "All" },
+const STATUS_OPTIONS: ReadonlyArray<SelectOption<StatusFilter>> = [
+	{ value: "all", label: "All statuses" },
 	{ value: "correct", label: "Correct" },
 	{ value: "incorrect", label: "Incorrect" },
 	{ value: "skipped", label: "Skipped" }
 ]
 
-const DIFFICULTY_OPTIONS: ReadonlyArray<ChipOption<DifficultyFilter>> = [
-	{ value: "all", label: "All" },
+const DIFFICULTY_OPTIONS: ReadonlyArray<SelectOption<DifficultyFilter>> = [
+	{ value: "all", label: "All difficulties" },
 	{ value: "easy", label: "Easy" },
 	{ value: "medium", label: "Medium" },
 	{ value: "hard", label: "Hard" },
 	{ value: "brutal", label: "Brutal" }
 ]
 
-const TIME_OPTIONS: ReadonlyArray<ChipOption<TimeFilter>> = [
-	{ value: "all", label: "All" },
-	{ value: "lt10", label: "≤10s" },
-	{ value: "10to20", label: "10–20s" },
-	{ value: "20to30", label: "20–30s" },
-	{ value: "gt30", label: ">30s" }
-]
-
-const SORT_OPTIONS: ReadonlyArray<ChipOption<SortKey>> = [
+const SORT_OPTIONS: ReadonlyArray<SelectOption<SortKey>> = [
 	{ value: "question", label: "Question order" },
 	{ value: "subType", label: "Sub-type" },
 	{ value: "latency", label: "Time taken" },
 	{ value: "difficulty", label: "Difficulty" }
 ]
 
-interface ChipGroupProps<T extends string> {
+const DIRECTION_OPTIONS: ReadonlyArray<SelectOption<SortDirection>> = [
+	{ value: "asc", label: "Ascending" },
+	{ value: "desc", label: "Descending" }
+]
+
+const SELECT_TRIGGER_CLASS =
+	"w-full rounded-lg border border-border-soft bg-surface px-3 py-[6px] font-medium text-[13px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
+
+interface DropdownProps<T extends string> {
 	legend: string
-	options: ReadonlyArray<ChipOption<T>>
+	options: ReadonlyArray<SelectOption<T>>
 	value: T
 	onChange: (next: T) => void
 }
 
-function ChipGroup<T extends string>(props: ChipGroupProps<T>) {
-	return (
-		<fieldset className="flex flex-wrap items-center gap-2 border-0 p-0">
-			<legend className="float-left mr-2 text-[11px] text-text-3 uppercase tracking-[0.06em]">
-				{props.legend}
-			</legend>
-			<div className="inline-flex flex-wrap gap-1 rounded-lg border border-border-soft bg-surface p-[3px]">
-				{props.options.map(function renderChip(opt) {
-					const isActive = opt.value === props.value
-					const stateClass = isActive
-						? "bg-cobalt text-white"
-						: "text-text-2 hover:bg-lavender hover:text-text-1"
-					return (
-						<button
-							key={opt.value}
-							type="button"
-							aria-pressed={isActive}
-							onClick={function handleClick() {
-								if (!isActive) props.onChange(opt.value)
-							}}
-							className={cn(
-								"rounded-md px-3 py-[5px] font-medium text-[12px] transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
-								stateClass
-							)}
-						>
-							{opt.label}
-						</button>
-					)
-				})}
-			</div>
-		</fieldset>
-	)
-}
-
-interface SubTypeOption {
-	value: SubTypeFilter
-	label: string
-}
-
-function buildSubTypeOptions(items: ReadonlyArray<WrongItem>): ReadonlyArray<SubTypeOption> {
-	const seen = new Set<SubTypeId>()
-	const rows: { id: SubTypeId; displayName: string; section: "verbal" | "numerical" }[] = []
-	for (const item of items) {
-		if (seen.has(item.subTypeId)) continue
-		const meta = SUB_TYPE_BY_ID.get(item.subTypeId)
-		if (meta === undefined) continue
-		seen.add(item.subTypeId)
-		rows.push({ id: item.subTypeId, displayName: meta.displayName, section: meta.section })
-	}
-	rows.sort(function bySubTypeOrder(a, b) {
-		return compareBySubTypeDisplay({ subTypeId: a.id }, { subTypeId: b.id })
-	})
-	const options: SubTypeOption[] = [{ value: "all", label: "All sub-types" }]
-	for (const row of rows) {
-		options.push({ value: row.id, label: row.displayName })
-	}
-	return options
-}
-
-interface SubTypeSelectProps {
-	value: SubTypeFilter
-	options: ReadonlyArray<SubTypeOption>
-	onChange: (next: SubTypeFilter) => void
-}
-
-function SubTypeSelect(props: SubTypeSelectProps) {
+function Dropdown<T extends string>(props: DropdownProps<T>) {
 	function onSelectChange(event: React.ChangeEvent<HTMLSelectElement>) {
 		const next = event.target.value
 		const match = props.options.find(function findOption(opt) {
 			return opt.value === next
 		})
 		if (match === undefined) {
-			logger.error({ next }, "SubTypeSelect: unknown option value")
+			logger.error({ next, legend: props.legend }, "Dropdown: unknown option value")
 			return
 		}
 		props.onChange(match.value)
 	}
 	return (
-		<fieldset className="flex flex-wrap items-center gap-2 border-0 p-0">
-			<legend className="float-left mr-2 text-[11px] text-text-3 uppercase tracking-[0.06em]">
-				Sub-type
+		<fieldset className="flex min-w-[160px] flex-1 flex-col gap-1.5 border-0 p-0">
+			<legend className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+				{props.legend}
 			</legend>
 			<select
-				aria-label="Filter by sub-type"
-				className="rounded-lg border border-border-soft bg-surface px-3 py-[6px] font-medium text-[12px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
+				aria-label={props.legend}
+				className={SELECT_TRIGGER_CLASS}
 				value={props.value}
 				onChange={onSelectChange}
 			>
@@ -549,85 +494,136 @@ function SubTypeSelect(props: SubTypeSelectProps) {
 	)
 }
 
-interface DirectionToggleProps {
-	direction: SortDirection
-	onToggle: () => void
+interface SubTypeOption {
+	value: SubTypeFilter
+	label: string
 }
 
-function DirectionToggle(props: DirectionToggleProps) {
-	const Icon = props.direction === "asc" ? ArrowUpNarrowWideIcon : ArrowDownNarrowWideIcon
-	const label =
-		props.direction === "asc"
-			? "Ascending — switch to descending"
-			: "Descending — switch to ascending"
-	return (
-		<button
-			type="button"
-			aria-label={label}
-			title={label}
-			onClick={props.onToggle}
-			className={cn(
-				"inline-flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-border-soft bg-surface transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
-				"text-text-2 hover:bg-lavender hover:text-text-1"
-			)}
-		>
-			<Icon aria-hidden="true" className="h-[14px] w-[14px]" />
-		</button>
-	)
+interface SubTypeRow {
+	id: SubTypeId
+	displayName: string
+}
+
+// Indent the leaf labels with non-breaking spaces so the section
+// parents (`Numerical`, `Verbal`) read as the level-1 headings and
+// each sub-type underneath reads as a level-2 leaf. `<select>`
+// option text doesn't render markup, so a leading whitespace prefix
+// is the cheapest hierarchical signal that survives the platform's
+// option rendering.
+const LEAF_INDENT = "   "
+
+function buildSubTypeOptions(items: ReadonlyArray<WrongItem>): ReadonlyArray<SubTypeOption> {
+	const seen = new Set<SubTypeId>()
+	const numerical: SubTypeRow[] = []
+	const verbal: SubTypeRow[] = []
+	for (const item of items) {
+		if (seen.has(item.subTypeId)) continue
+		const meta = SUB_TYPE_BY_ID.get(item.subTypeId)
+		if (meta === undefined) continue
+		seen.add(item.subTypeId)
+		const row: SubTypeRow = { id: item.subTypeId, displayName: meta.displayName }
+		if (meta.section === "numerical") {
+			numerical.push(row)
+		} else {
+			verbal.push(row)
+		}
+	}
+	numerical.sort(function byDisplayName(a, b) {
+		return a.displayName.localeCompare(b.displayName)
+	})
+	verbal.sort(function byDisplayName(a, b) {
+		return a.displayName.localeCompare(b.displayName)
+	})
+
+	const options: SubTypeOption[] = [{ value: "all", label: "All sub-types" }]
+	if (numerical.length > 0) {
+		options.push({ value: "section:numerical", label: "Numerical" })
+		for (const row of numerical) {
+			options.push({ value: row.id, label: `${LEAF_INDENT}${row.displayName}` })
+		}
+	}
+	if (verbal.length > 0) {
+		options.push({ value: "section:verbal", label: "Verbal" })
+		for (const row of verbal) {
+			options.push({ value: row.id, label: `${LEAF_INDENT}${row.displayName}` })
+		}
+	}
+	return options
 }
 
 interface ReviewToolbarProps {
+	items: ReadonlyArray<WrongItem>
 	subTypeOptions: ReadonlyArray<SubTypeOption>
+	dataMinMs: number
+	dataMaxMs: number
 	filters: AppliedFilters
 	sortKey: SortKey
 	direction: SortDirection
 	onStatusChange: (next: StatusFilter) => void
 	onDifficultyChange: (next: DifficultyFilter) => void
-	onTimeChange: (next: TimeFilter) => void
+	onTimeChange: (next: TimeRange) => void
 	onSubTypeChange: (next: SubTypeFilter) => void
 	onSortKeyChange: (next: SortKey) => void
-	onToggleDirection: () => void
+	onDirectionChange: (next: SortDirection) => void
 }
 
 function ReviewToolbar(props: ReviewToolbarProps) {
+	const latencies = React.useMemo(
+		function buildLatencies() {
+			return props.items.map(function pickLatency(item) {
+				return item.latencyMs
+			})
+		},
+		[props.items]
+	)
 	return (
 		<div
-			className="flex flex-col gap-3 rounded-lg border border-border-soft bg-surface px-4 py-3"
+			className="flex flex-col gap-4 rounded-lg border border-border-soft bg-surface px-4 py-4"
 			data-testid="post-session-review-toolbar"
+			id="post-session-review-toolbar"
 		>
-			<div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-				<ChipGroup
+			<div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+				<Dropdown
 					legend="Status"
 					options={STATUS_OPTIONS}
 					value={props.filters.status}
 					onChange={props.onStatusChange}
 				/>
-				<ChipGroup
+				<Dropdown
 					legend="Difficulty"
 					options={DIFFICULTY_OPTIONS}
 					value={props.filters.difficulty}
 					onChange={props.onDifficultyChange}
 				/>
-				<ChipGroup
-					legend="Time"
-					options={TIME_OPTIONS}
-					value={props.filters.time}
-					onChange={props.onTimeChange}
-				/>
-				<SubTypeSelect
-					value={props.filters.subType}
+				<Dropdown
+					legend="Sub-type"
 					options={props.subTypeOptions}
+					value={props.filters.subType}
 					onChange={props.onSubTypeChange}
 				/>
 			</div>
-			<div className="flex flex-wrap items-center gap-3 border-border-soft border-t pt-3">
-				<ChipGroup
+			<div className="border-border-soft border-t pt-4">
+				<LatencyRangeSlider
+					latenciesMs={latencies}
+					dataMinMs={props.dataMinMs}
+					dataMaxMs={props.dataMaxMs}
+					value={props.filters.time}
+					onChange={props.onTimeChange}
+				/>
+			</div>
+			<div className="grid grid-cols-1 gap-x-4 gap-y-3 border-border-soft border-t pt-4 sm:grid-cols-2">
+				<Dropdown
 					legend="Sort by"
 					options={SORT_OPTIONS}
 					value={props.sortKey}
 					onChange={props.onSortKeyChange}
 				/>
-				<DirectionToggle direction={props.direction} onToggle={props.onToggleDirection} />
+				<Dropdown
+					legend="Order"
+					options={DIRECTION_OPTIONS}
+					value={props.direction}
+					onChange={props.onDirectionChange}
+				/>
 			</div>
 		</div>
 	)
@@ -635,24 +631,66 @@ function ReviewToolbar(props: ReviewToolbarProps) {
 
 // ---------------- Browser ----------------
 
+interface DataLatencyBounds {
+	minMs: number
+	maxMs: number
+}
+
+function computeLatencyBounds(items: ReadonlyArray<WrongItem>): DataLatencyBounds {
+	if (items.length === 0) {
+		return { minMs: 0, maxMs: 60_000 }
+	}
+	let min = Number.POSITIVE_INFINITY
+	let max = 0
+	for (const item of items) {
+		if (item.latencyMs < min) min = item.latencyMs
+		if (item.latencyMs > max) max = item.latencyMs
+	}
+	const lower = Math.floor(min / 1000) * 1000
+	const upper = Math.max(lower + 1000, Math.ceil(max / 1000) * 1000)
+	return { minMs: lower, maxMs: upper }
+}
+
 function WrongItemsBrowser(props: WrongItemsBrowserProps) {
+	const dataBounds = React.useMemo(
+		function memoBounds() {
+			return computeLatencyBounds(props.items)
+		},
+		[props.items]
+	)
+
 	const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
 	const [difficultyFilter, setDifficultyFilter] = React.useState<DifficultyFilter>("all")
-	const [timeFilter, setTimeFilter] = React.useState<TimeFilter>("all")
 	const [subTypeFilter, setSubTypeFilter] = React.useState<SubTypeFilter>("all")
 	const [sortKey, setSortKey] = React.useState<SortKey>("question")
 	const [direction, setDirection] = React.useState<SortDirection>("asc")
+	const [timeRange, setTimeRange] = React.useState<TimeRange>(function initRange() {
+		return { minMs: dataBounds.minMs, maxMs: dataBounds.maxMs }
+	})
+
+	// If the source items change (different session), reset the range to
+	// the new dataset's bounds instead of holding stale numbers.
+	const lastBoundsRef = React.useRef(dataBounds)
+	React.useEffect(
+		function syncRangeToBounds() {
+			const prev = lastBoundsRef.current
+			if (prev.minMs === dataBounds.minMs && prev.maxMs === dataBounds.maxMs) return
+			lastBoundsRef.current = dataBounds
+			setTimeRange({ minMs: dataBounds.minMs, maxMs: dataBounds.maxMs })
+		},
+		[dataBounds]
+	)
 
 	const filters = React.useMemo<AppliedFilters>(
 		function buildFilters() {
 			return {
 				status: statusFilter,
 				difficulty: difficultyFilter,
-				time: timeFilter,
+				time: timeRange,
 				subType: subTypeFilter
 			}
 		},
-		[statusFilter, difficultyFilter, timeFilter, subTypeFilter]
+		[statusFilter, difficultyFilter, timeRange, subTypeFilter]
 	)
 
 	const subTypeOptions = React.useMemo(
@@ -681,12 +719,6 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 		[props.items, filters, sortKey, direction]
 	)
 
-	function toggleDirection() {
-		setDirection(function flip(prev) {
-			return prev === "asc" ? "desc" : "asc"
-		})
-	}
-
 	const sourceIsEmpty = props.items.length === 0
 	const filteredIsEmpty = !sourceIsEmpty && visibleItems.length === 0
 
@@ -700,18 +732,21 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 				Question review
 			</h2>
 
-			{!sourceIsEmpty && (
+			{!sourceIsEmpty && props.toolbarOpen && (
 				<ReviewToolbar
+					items={props.items}
 					subTypeOptions={subTypeOptions}
+					dataMinMs={dataBounds.minMs}
+					dataMaxMs={dataBounds.maxMs}
 					filters={filters}
 					sortKey={sortKey}
 					direction={direction}
 					onStatusChange={setStatusFilter}
 					onDifficultyChange={setDifficultyFilter}
-					onTimeChange={setTimeFilter}
+					onTimeChange={setTimeRange}
 					onSubTypeChange={setSubTypeFilter}
 					onSortKeyChange={setSortKey}
-					onToggleDirection={toggleDirection}
+					onDirectionChange={setDirection}
 				/>
 			)}
 
