@@ -52,7 +52,7 @@ EXPLICITLY excluded from this round:
   - Admin allowlist population: add admin email(s) to `src/config/admins.ts` as part of §1 implementation.
   - Items table `status` enum extension: add `'rejected'` as 4th value (current values: `'live' | 'candidate' | 'retired'`).
   - Item-edit audit trail: new `item_admin_actions` table per Q7.
-  - Soft-delete columns on items: `rejected_at` (bigint ms), `rejected_by` (uuid FK to users.id), `rejection_reason` (nullable text).
+  - Soft-delete columns on items: `rejected_at_ms` (bigint ms), `rejected_by` (uuid FK to users.id), `rejection_reason` (nullable text).
   - Embedding-regeneration on edit semantics: Q5 resolution determines which edits trigger regen.
   - Validator one-shot Vercel Workflow shape per Q10.
   - Pressure-cell prioritization in admin queue surfacing per §0.7.
@@ -122,7 +122,7 @@ The new `/admin/review` route group lands at `src/app/(admin)/admin/review/` alo
 #### §0.5.4 Architectural skeleton
 
 - §1 introduces:
-  - Schema migration: items.status enum extension (add `'rejected'`); rejected_at + rejected_by + rejection_reason columns on items; new item_admin_actions table.
+  - Schema migration: items.status enum extension (add `'rejected'`); rejected_at_ms + rejected_by + rejection_reason columns on items; new item_admin_actions table.
   - Admin allowlist population: at least one admin email added to `src/config/admins.ts`.
   - Validator engine (Q1 auto-detectable criteria implementations).
   - Validator runner (Q10 one-shot Vercel Workflow batch over candidates).
@@ -251,7 +251,7 @@ Two rejection axes are now distinguishable:
 - **`'rejected'`:** admin-judged-bad. This is human-driven rejection at validator+admin time, before the item ever serves users.
 
 Three new columns on `items`:
-- `rejected_at` (bigint, nullable) — UTC ms timestamp of admin rejection.
+- `rejected_at_ms` (bigint, nullable) — UTC ms timestamp of admin rejection.
 - `rejected_by` (uuid, nullable, FK to users.id with ON DELETE SET NULL) — admin who rejected.
 - `rejection_reason` (text, nullable) — admin's free-text justification.
 
@@ -264,6 +264,8 @@ Cascade safety: `attempts.itemId` references `items.id` with **NO CASCADE** per 
 **Reasoning-against:** Bloats items table over time. Mitigation: at v1 scale (1,748 candidates), table bloat is negligible; future bank-completion rounds can archive `'rejected'` items if needed.
 
 **Confidence: HIGH.** Soft-delete is standard practice; audit trail is the value; status-enum extension is a low-risk migration; cascade safety verified.
+
+**Spec correction at §1.1 commit**: column name `rejected_at_ms` (DB) / `rejectedAtMs` (schema property) per project `_ms` suffix convention on bigint epoch columns (PRD §8.1 + precedent at `users.createdAtMs` / `users.targetDateMs` / `users.emailVerifiedMs` / `candidate-promotion-log.decidedAtMs`). The §1.0 migration (a09b087) applied the convention correctly; this commit aligns plan-doc references in §0.2 (line 55), §0.5.4 (line 125), §0.6.5 (line 254), §0.8 (lines 393 + 408) to the canonical state.
 
 #### §0.6.6 Q7 — Audit trail shape
 
@@ -390,7 +392,7 @@ Provisional sub-section structure; revisable at each phase's commit-0 audit per 
 
 #### §1 — Validator engine + promotion workflow + admin allowlist
 
-- **§1.1** Schema migration: items.status enum extension (add `'rejected'`); items new columns (`rejected_at`, `rejected_by`, `rejection_reason`); new `item_admin_actions` table per Q7.
+- **§1.1** Schema migration: items.status enum extension (add `'rejected'`); items new columns (`rejected_at_ms`, `rejected_by`, `rejection_reason`); new `item_admin_actions` table per Q7.
 - **§1.2** Admin allowlist population: add admin email(s) to `src/config/admins.ts`. **REPLACES the prior commit-0 attempt's "Auth.js role gating + session-callback enrichment" sub-section** — Q8 reuse means no role / session-callback work.
 - **§1.3** Validator engine: implementations of Q1's auto-detectable criteria (schema-shape conformance; tier-distribution sanity; embedding-distance per `nearestNeighborInBank` with sibling exemption; per-sub-type structural rules; sub-phase-a-failure-mode heuristics including templating-artifact whitelist and antonyms convergence flagging; provenance-based batch-reject heuristic).
 - **§1.4** Validator runner: `validator-batch.ts` Vercel Workflow over candidates; emits flag+pass dispositions; persists results (validator output landing as `metadata_json.validatorReport` keys per architecture_plan §2395 reservation, or as a new sibling table — decided at §1.3/§1.4 commit 0 audit).
@@ -405,7 +407,7 @@ Provisional; revised at §2 commit 0 audit:
 - **§2.1** Admin queue route: `/admin/review` under `(admin)/` layout (gated by `requireAdminEmail()` inherited from layout); paginated list (cursor-based per past-sessions review-page anchor); sortable (by validator-confidence-score, by sub-type, by tier, by created-at); filterable (by status, sub-type, tier, validator-flag-reason, pressure-cell-membership).
 - **§2.2** Item detail surface: full item rendering reusing `<ItemPrompt>` + `<StructuredExplanation>` (post-triage-retirement state); provenance + validator flags surfaced (parent item id, generator model, template version, prompt hash from `scripts/_siblings/<parentItemId>.json`); audit-history tab.
 - **§2.3** Edit form: per-Q5 editable fields; submit triggers `item_admin_actions` entry (Q7) + status update + embedding regen if applicable (per Q5 regen policy).
-- **§2.4** Approve / Reject actions: per-Q3/Q6; reject triggers soft-delete (status='rejected' + rejected_at + rejected_by + rejection_reason); approve triggers status='live' promotion.
+- **§2.4** Approve / Reject actions: per-Q3/Q6; reject triggers soft-delete (status='rejected' + rejected_at_ms + rejected_by + rejection_reason); approve triggers status='live' promotion.
 - **§2.5** Audit history display per-item: `item_admin_actions` for the item, sorted descending by created_at_ms; before/after diff rendering for edits.
 - **§2.6** Pressure-cell dashboard at queue head per §0.7: current pressure-cell residual; candidates that could relieve each cell.
 - **§2.7** UI tests: component-level (item rendering; edit-form validation) + integration (route-gating; queue-pagination; approve/reject flows).
