@@ -197,6 +197,46 @@ Branches are NOT mutually exclusive at the framing level — Step A's empirical 
 - **(c) Test-count delta** — should be 0 or +1 (regression test); any other delta requires explicit justification at commit message.
 - **(d) Lefthook gate** — full lint/format/type-check passes before commit; per project's standing convention, no `--no-verify` shortcuts.
 
+### §1.6 Empirical results — bun-test rerun loop (Branch 1 ∩ Branch 4 forward-pinned to selection-engine sidecar)
+
+**Loop summary:** 25/25 iterations completed, 3 failures, **12% flake rate** (Wilson 95% CI ~ [4.2%, 30.0%]; n=25 small-sample). Loop wall time ~55s (~2.4s mean per iteration). Full empirical data: [`scripts/_logs/bun-test-flake-rerun.summary.md`](../../scripts/_logs/bun-test-flake-rerun.summary.md). Raw 5.2MB / 109,785-line log preserved locally at `scripts/_logs/bun-test-flake-rerun.log`, gitignored per `.gitignore` line 108 (`scripts/_logs/*.log`) per Path Y of redirector decision.
+
+**Single test owns 100% of failures:**
+
+- Test: `fullLengthNoReServe` — `src/server/items/selection.test.ts:677-685` (line numbers pre-mitigation; comment block adds 18 lines above so the test now sits at `:695-703`)
+- Assertion: `expect(distinct.size).toBe(50)`
+- Received values: 48 (iter 7), 49 (iter 16), 48 (iter 22) — duplication count non-deterministic, indicating multiple collision paths per session not a single deterministic failure point
+
+**Bug location citation (audit step (d) — seed for upcoming sidecar's commit-0 audit):**
+
+- Production entrypoint: `pickWithFallback` at `src/server/items/selection.ts:279-338`
+- Failing branch: Pass 4 "session-soft" last-resort fallback at lines 322-336 — explicitly drops session-uniqueness (`excludedIds: []`) and re-serves a previously-attempted item
+- Comment at lines 274-278 claims "with the 55-item seed bank this is unreachable" — empirically falsified at 12% rate
+- Underlying mechanism: full-length sessions' 50-slot per-decile generator (`generateFullLengthSlots` at `src/config/difficulty-curves.ts`) can request more items at a given (sub-type × tier) cell than the cell holds. After tier-degraded fallback walks through all `tiers = tiersDownFrom(requestedTier)` to `easy` without finding a session-fresh item, Pass 4 fires. Bank-size assumption is unencoded in code (only in comment), making this drift-prone as the bank evolves.
+
+**Reframing (§6.14.41 candidate):** residual #10's "flake" framing was a citation from two single-incident prior observations (Round 2 commit `69ea647`, score-goals sidecar commit `729a08e`). The 25-iteration empirical loop falsified the "flake" framing — the test catches a stochastic real correctness defect at the bug's natural rate, not a runner-side intermittent.
+
+**Branch selection:** §1.4 Branch 1 ∩ Branch 4. Empirical reasoning detailed in summary `.md` (avoiding duplication here).
+
+- Single-test isolation → not Branch 2 (diffuse).
+- Project selection-engine bug, not Bun runner → not Branch 3.
+- 3 > 0 failures → not Branch 5 (rerun-loop-redirect's conditional amendment candidate; not triggered).
+
+**Interim mitigation:** comment block at `src/server/items/selection.test.ts` immediately above the failing `test(...)` declaration (per audit step (f)). Test stays running. Coverage of the no-re-serve invariant remains active. NO `.skip()`, NO `.fails()`, NO neutering. NO source-code changes to the selection engine.
+
+**Forward-pin:** selection-engine sidecar opens after this round's close (after §1 round-close + §2 round-close). Plan-doc path will be `docs/plans/selection-engine-session-attempted-ids-sidecar.md` (created at sidecar open, not now). Sidecar's commit-0 audit will re-investigate fix shape (one-liner Pass-4-removal vs bank-size runtime encoding vs distribution-aware slot generator vs other) before scoping. §6.14.30 awareness (additive-feature-cascade-undercount) flagged.
+
+**Heads-up watch confirmation:**
+
+- **Timing-drift hypothesis (rerun-loop redirect heads-up #2):** **downweighted.** Range 2.22-3.12s, no upward drift across 25 iterations (iter 1 = 2.51s; iter 25 = 2.53s). Resource-accumulation mechanism unlikely.
+- **Expect-count drift (rerun-loop redirect heads-up #1):** **confirmed.** Range 641-649, mean 645.72, 9 distinct values across 25 iterations. Diagnosis (recorded in summary `.md`): stochastic assertion counts in passing tests, likely sampling-driven conditional `expect()` calls in `selection.test.ts` itself (the within-cell-determinism + 20-salt-variation tests sample probabilistically). NOT inter-iteration state leakage (each iteration is a fresh `bun test` process). Forward-pinned to round-close commentary, not §1 investigation scope.
+
+**Round-close §6.14 reinforcement candidates added by this gate:**
+
+- **§6.14.41 (cite-without-verify):** residual #10's "flake" framing was a citation; empirical work falsified it. **First reinforcement instance for this entry from this round.**
+- **§6.14.18/21/22 (audit-first checkpoint discipline):** redirector's §1 commit-1 spec listed `scripts/_logs/...log` as the artifact path without checking project gitignore precedent (`.gitignore` line 108). Executor caught at audit-step boundary, surfaced for redirector decision; Path Y selected. **Second reinforcement instance for this round's audit-first cohort** (first was §0.9's reconciliation event at commit `bc0fe17`).
+- **Test-suite-determinism observation (NEW):** stochastic expect-counts in passing tests; single-instance from this gate; forward-pin only. Not promoted to a §6.14 entry. Watch for re-occurrence in future rounds.
+
 ---
 
 ## §2 — Target 2: drizzle-kit migrate CLI opaque failure (residual #12)
@@ -258,7 +298,8 @@ Populated as commits land. Anticipated shape: 0-2 implementation commits across 
 | # | Hash | Subject | Target | Branch |
 |---|------|---------|--------|--------|
 | 0 | `9d59922` | docs(plan): open tooling-reliability debug round | — | — |
-| 1 | `<this commit>` | docs(plan): reconcile round HEAD re-anchor; amend §0 with §6.14.40 | — | reconciliation |
+| 1 | `bc0fe17` | docs(plan): reconcile round HEAD re-anchor; amend §0 with §6.14.40 | — | reconciliation |
+| 2 | `<this commit>` | docs(plan,logs,test): §1 commit 1 — bun-test rerun loop empirical data + interim mitigation | §1 | Branch 1 ∩ 4 forward-pinned |
 
 ---
 

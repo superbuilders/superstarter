@@ -674,6 +674,24 @@ test("full_length: slot-by-slot integrity — predicted slot matches attempt sub
 	expect(degradedSeen).toBeGreaterThanOrEqual(1)
 }, 120_000)
 
+// KNOWN STOCHASTIC FAILURE — investigation pinned to:
+// docs/plans/selection-engine-session-attempted-ids-sidecar.md
+//
+// This test exercises the selection engine's session-attempted-
+// ids exclusion guarantee. As of the tooling-reliability debug
+// round (commit bc0fe17), 25 rerun-loop iterations surfaced 3
+// failures (12%) all on this single test, all on the
+// expect(distinct.size).toBe(50) assertion. Empirical data:
+// scripts/_logs/bun-test-flake-rerun.summary.md
+//
+// The test is correctly catching a real correctness defect in
+// the selection engine — duplicate item_ids served within a
+// single session in violation of the stated invariant.
+//
+// Interim posture: test stays running. If CI or local runs hit
+// this failure, rerun is the workaround until the sidecar lands
+// a real fix. DO NOT .skip() or .fails() this test — coverage of
+// the invariant must stay active until the bug is fixed.
 test("full_length: no re-serve within session — 50 served item.id values are all distinct", async function fullLengthNoReServe() {
 	const { rows } = await runFullLengthSession("fl-no-reserve")
 	const itemIds = rows.map(function pickItemId(r) {
