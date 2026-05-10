@@ -20,6 +20,7 @@
 
 import * as errors from "@superbuilders/errors"
 import { desc, eq } from "drizzle-orm"
+import { connection } from "next/server"
 import { z } from "zod"
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
 import { subTypeIds } from "@/config/sub-types"
@@ -168,6 +169,16 @@ function aggregateDistribution<K>(
 }
 
 async function loadAdminQueueData(): Promise<AdminQueueData> {
+	// Mark this loader as request-bound for Next.js 16 Cache Components. The
+	// logger.info below (and every other logger call on the path) reads
+	// Date.now() internally via Pino; without an explicit request-data
+	// marker upstream of that read, Cache Components refuses to render
+	// because it can't tell whether the time is supposed to be cached or
+	// per-request. See https://nextjs.org/docs/messages/next-prerender-current-time
+	// — the admin queue is per-request always (validatorResult + status
+	// mutate as admins disposition candidates), so connection() is the
+	// correct semantic, not "use cache".
+	await connection()
 	logger.info("queue-data: loadAdminQueueData starting")
 	const result = await errors.try(
 		db

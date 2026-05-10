@@ -21,6 +21,7 @@
 import * as fs from "node:fs"
 import * as errors from "@superbuilders/errors"
 import { eq, sql } from "drizzle-orm"
+import { connection } from "next/server"
 import { z } from "zod"
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
 import { subTypeIds } from "@/config/sub-types"
@@ -320,6 +321,12 @@ function readProvenanceSnapshot(parentItemId: string): ProvenanceSnapshot | unde
 }
 
 async function loadAdminItemDetail(itemId: string): Promise<AdminItemDetail> {
+	// Mark this loader as request-bound for Next.js 16 Cache Components —
+	// Pino's logger reads Date.now() internally on every log line, which
+	// trips next-prerender-current-time without an explicit upstream marker.
+	// Admin item-detail is per-request always (candidate status + audit
+	// history mutate as admins disposition), so connection() is correct.
+	await connection()
 	logger.info({ itemId }, "item-detail-data: loadAdminItemDetail starting")
 	const candidate = await loadOneById(itemId)
 	if (candidate === undefined) {
