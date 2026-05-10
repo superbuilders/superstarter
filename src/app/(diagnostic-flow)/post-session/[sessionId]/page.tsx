@@ -30,6 +30,7 @@ import { redirect } from "next/navigation"
 import * as React from "react"
 import { PostSessionContent } from "@/app/(diagnostic-flow)/post-session/[sessionId]/content"
 import { auth } from "@/auth"
+import { PageNav } from "@/components/nav/page-nav"
 import type { SessionTypeForShell } from "@/components/post-session/post-session-shell"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
 import { db } from "@/db"
@@ -39,6 +40,7 @@ import { strategies } from "@/db/schemas/catalog/strategies"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
+import { loadNavChrome } from "@/server/nav/chrome"
 import {
 	getEndSessionTierForDrill,
 	type TierForDrillSession
@@ -405,15 +407,31 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 	}
 }
 
+async function loadUserId(): Promise<string> {
+	const session = await auth()
+	if (!session?.user?.id) {
+		redirect("/login")
+	}
+	return session.user.id
+}
+
 function Page(props: PageProps) {
 	const sessionIdPromise = props.params.then(function pickId(p) {
 		return p.sessionId
 	})
 	const sessionPromise = loadSession(sessionIdPromise)
+	const chromePromise = loadUserId().then(function load(userId) {
+		return loadNavChrome(userId)
+	})
 	return (
-		<React.Suspense fallback={<PostSessionSkeleton />}>
-			<PostSessionContent sessionPromise={sessionPromise} />
-		</React.Suspense>
+		<div className="min-h-screen bg-bg text-text-1">
+			<React.Suspense fallback={null}>
+				<PageNav chromePromise={chromePromise} />
+			</React.Suspense>
+			<React.Suspense fallback={<PostSessionSkeleton />}>
+				<PostSessionContent sessionPromise={sessionPromise} />
+			</React.Suspense>
+		</div>
 	)
 }
 

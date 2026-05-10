@@ -14,15 +14,18 @@
 //
 // Sessions still in progress (endedAtMs IS NULL) are filtered out at
 // the SQL layer — they aren't ready for "review."
+//
+// User chrome (initials + streakDays) is loaded via the shared
+// `loadNavChrome` helper (src/server/nav/chrome.ts) so /review's nav
+// stays in sync with every other surface that mounts <TopNav>.
 
 import * as errors from "@superbuilders/errors"
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db } from "@/db"
-import { users } from "@/db/schemas/auth/users"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
-import { computeStreak } from "@/server/dashboard/streak"
+import { loadNavChrome } from "@/server/nav/chrome"
 
 type ReviewSessionType = "drill" | "full_length" | "simulation"
 type ReviewCompletionReason = "completed" | "abandoned"
@@ -50,45 +53,6 @@ interface ReviewPageData {
 	}
 	practiceTests: ReadonlyArray<ReviewSession>
 	drills: ReadonlyArray<ReviewSession>
-}
-
-async function loadUserInitials(userId: string): Promise<string> {
-	const result = await errors.try(
-		db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1)
-	)
-	if (result.error) {
-		logger.error({ error: result.error, userId }, "loadUserInitials: query failed")
-		throw errors.wrap(result.error, "loadUserInitials")
-	}
-	const row = result.data[0]
-	if (row === undefined) {
-		logger.error({ userId }, "loadUserInitials: user row missing")
-		throw errors.new("review user row missing")
-	}
-	if (row.name === null) {
-		logger.error({ userId }, "loadUserInitials: user has no name (auth invariant broken)")
-		throw errors.new("user has no name")
-	}
-	return initialsFor(row.name)
-}
-
-function initialsFor(name: string): string {
-	const parts = name
-		.trim()
-		.split(/\s+/)
-		.filter(function nonEmpty(p) {
-			return p.length > 0
-		})
-	if (parts.length === 0) return "?"
-	if (parts.length === 1) {
-		const single = parts[0]
-		if (single === undefined) return "?"
-		return single.charAt(0).toUpperCase()
-	}
-	const first = parts[0]
-	const last = parts[parts.length - 1]
-	if (first === undefined || last === undefined) return "?"
-	return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase()
 }
 
 async function loadReviewSessions(userId: string): Promise<ReadonlyArray<ReviewSession>> {
@@ -164,11 +128,7 @@ async function loadReviewSessions(userId: string): Promise<ReadonlyArray<ReviewS
 
 async function getReviewPageData(userId: string): Promise<ReviewPageData> {
 	logger.info({ userId }, "review data requested")
-	const [initials, streakDays, sessions] = await Promise.all([
-		loadUserInitials(userId),
-		computeStreak(userId),
-		loadReviewSessions(userId)
-	])
+	const [chrome, sessions] = await Promise.all([loadNavChrome(userId), loadReviewSessions(userId)])
 	const practiceTests = sessions.filter(function isPracticeTest(s) {
 		return s.type === "full_length" || s.type === "simulation"
 	})
@@ -180,7 +140,7 @@ async function getReviewPageData(userId: string): Promise<ReviewPageData> {
 		"review data assembled"
 	)
 	return {
-		user: { initials, streakDays },
+		user: { initials: chrome.initials, streakDays: chrome.streakDays },
 		practiceTests,
 		drills
 	}
