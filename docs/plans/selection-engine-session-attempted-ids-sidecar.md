@@ -31,7 +31,14 @@ Sidecar-shape per Option II at tooling-reliability-debug §1 round-close. Audit-
 
 Threshold: 3 → 5 instances promotes. State at commit 0 = 3 (all from tooling-reliability-debug). Append below if a redirector-spec mismatch surfaces during this sidecar.
 
-> *(empty)*
+**Instance 4 (commit 1, this commit):**
+
+- **Date:** 2026-05-09.
+- **Redirector spec:** AMENDMENT TEXT pre-state authored as plain prose — no `-` bullet, no lead-clause `**bold**`, no backticks around `null` or marker expression.
+- **Empirical state at audit (b) of prior gate (commit-1-attempt-1):** disk has `-` bullet + `**bold**` lead clause + backticks around `null` and marker expression, matching adjacent §9.2 conventions (line 2354's `- **Verification reads REQUESTED tier, not served tier.**`).
+- **Reconciliation:** redirector revised AMENDMENT TEXT this commit with formatting preserved verbatim. Executor STOPPED per heads-up #1 at prior gate; no silent reconciliation occurred.
+- **Mechanism:** cite-without-verify at quote-prefix-stripping step. Redirector worked from tooling-reliability-debug §2 commit 0 audit capture which used `▎` markdown-quote prefixes; stripped `▎` prefixes for the AMENDMENT TEXT but stripped the underlying markdown formatting (bullet, bold, backticks) at the same time without recognizing them as formatting rather than quote machinery.
+- **State after this entry:** 4 instances banked. Threshold +1 → 5 → promote. Diagnostic-timing sidecar (Option 1, opens after this sidecar closes) is the immediate exposure surface.
 
 ### §0.5 Forward-pin
 
@@ -230,11 +237,43 @@ Pigeonhole pressure points:
 
 **Provisional candidate (commit-1 gate decides):** (α) or (α+γ). Empirical findings disfavor (β) (bank already grew 8× without fixing the bug). (γ) loses the invariant the test was authored to protect. Final selection happens against captured facts at commit 1.
 
+### §4.6 Branch-selection decision (γ standalone; δ reframed)
+
+Per redirector decision after commit-0 audit findings:
+
+**(α) REJECTED.** Audit step (e) at commit 0 surfaced that decile-5 full-length sessions need 4-5 brutal-tier items per session, but the bank has only 6 brutal items total distributed across 3 of 14 sub-types. Strict tightening (`excludedIds: args.sessionAttemptedIds`) would push failure to null-returns from `pickWithFallback`, which the caller chain (`getNextFixedCurve` → session orchestration) is not currently architected to handle. Strict (α) creates a worse failure mode (sessions running short of 50 attempts or returning errors mid-drill) than the current bug (silent re-serves under fallback).
+
+**(β) EMPIRICALLY FALSIFIED.** Audit step (d) showed the bank grew 8× from comment-claimed "55 items" to 439 live items, yet bug rate persists at 12%. Non-targeted bank growth is not the fix.
+
+**(γ) SELECTED.** Acknowledge implementation behavior is structurally necessary given current bank. SPEC §9.2:2355 amendment makes implementation honest. Failing tests relax to marker-aware invariant per amendment's clause (b). Closes bug surface; unblocks downstream rounds (diagnostic-timing sidecar, Round 3).
+
+**(δ) REFRAMED.** Targeted bank-growth in pressure cells (especially brutal tier; smallest hard-tier cells: `numerical.fractions:hard=1`, `numerical.workrate:hard=1`, `numerical.averages:hard=1`) is the actual fix to make the SPEC §9.2:2355 escape-hatch rarely fire. Vehicle: un-defer Phase 4 sub-phase b (validator round) — the 1,711 candidates awaiting promotion include items in the pressure cells. Validator round forward-pinned at sidecar round-close (§6).
+
+**(α+γ) NOT PURSUED.** The combination was attractive when the null-handling semantics question seemed manageable; once audit step (e)'s pigeonhole finding surfaced, strict (α) became structurally infeasible for full-length sessions without companion infrastructure (placeholder items, early-termination orchestration, etc.) that exceeds sidecar scope.
+
+**Commit ladder (revised from commit-0 framing):**
+
+- **Commit 1 (this commit):** SPEC §9.2 targeted patch + plan-doc §4.6 branch-selection record + §0.4 watch-log instance #4. NO code changes. NO test changes.
+- **Commit 2:** Test amendment — RELAX BOTH tests per audit (c) consumer list captured at the prior commit-1-attempt-1 gate report:
+  - `fullLengthNoReServe` at `selection.test.ts:702`
+  - `noReServeInSession` at `selection.test.ts:227`
+
+  Both relaxed to marker-aware invariant per SPEC clause (b): `(distinct) + (session-soft fallback rows) === (session length)`. Interim mitigation comment block (authored at tooling-reliability-debug §1 commit 1) removed since the bug is now spec-authorized. Round-close folded into this commit (Q-pattern from tooling-reliability-debug §2): §5/§6/§7 sections close the sidecar atomically with the test fix.
+
+  No empirical probe on `noReServeInSession` before relaxing per redirector (Q) decision; SPEC-derived posture, not empirical-data-derived.
+
+**Anticipated round-close residuals (forward-pinned to §6):**
+
+- **VALIDATOR ROUND UN-DEFERRED.** Phase 4 sub-phase b moves from "indefinitely deferred" (handoff §9 residual #5; forensics in `convergence-audit.md`) to active forward-pin. Sequencing relative to diagnostic-timing sidecar deferred to that round-close decision.
+- **Marker-aware-assertion sub-pattern** (2 instances surfaced this sidecar: `fullLengthNoReServe` + `noReServeInSession`). Forward-watch only; no §6.14 promotion this round (single-sidecar observation; if a 3rd surfaces in a future round, candidate escalates).
+- **PROMOTION CANDIDATE 1 instance #4 logged.** Threshold proximity flagged at round-close commentary (1 more instance promotes).
+
 ## §5 Commit ledger
 
 | # | Hash | Description |
 |---|------|-------------|
-| 0 | <this commit> | Wholesale-replace stub at f471e83; author plan-doc body §0-§4 + §A quote block; PROMOTION CANDIDATE 1 watch log initialized empty. |
+| 0 | ccb3aab | Wholesale-replace stub at f471e83; author plan-doc body §0-§4 + §A quote block; PROMOTION CANDIDATE 1 watch log initialized empty. |
+| 1 | <this commit> | SPEC §9.2 targeted patch (γ branch selection) — within-session-attempted authorized under session-soft fallback. Plan-doc §4.6 branch-selection decision; §0.4 watch-log instance #4 logged (cite-without-verify at quote-prefix-stripping). NO code changes. |
 
 ## §6 Round-close residuals
 
