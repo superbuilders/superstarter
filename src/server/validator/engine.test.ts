@@ -8,16 +8,14 @@ import { expect, test } from "bun:test"
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
 import { embeddingDistanceCriterion } from "@/server/validator/criteria/embedding-distance"
 import { perSubTypeStructuralCriterion } from "@/server/validator/criteria/per-sub-type-structural"
-import {
-	COHORT_FAILURE_THRESHOLD,
-	provenanceBatchRejectCriterion
-} from "@/server/validator/criteria/provenance-batch-reject"
+import { provenanceBatchRejectCriterion } from "@/server/validator/criteria/provenance-batch-reject"
 import { schemaShapeCriterion } from "@/server/validator/criteria/schema-shape"
 import { subPhaseAFailureModesCriterion } from "@/server/validator/criteria/sub-phase-a-failure-modes"
 import { tierDistributionCriterion } from "@/server/validator/criteria/tier-distribution"
 import { emptyValidationContext } from "@/server/validator/context"
 import { validateCandidate } from "@/server/validator/engine"
 import { summarizeForCalibration } from "@/server/validator/calibration"
+import { defaultThresholds } from "@/server/validator/thresholds"
 import type { CandidateForValidation, ValidationContext } from "@/server/validator/types"
 
 // Override fields use single-state optional (?: T) to satisfy
@@ -366,8 +364,9 @@ test("provenance-batch-reject flags cohort with rate above threshold", async () 
 	const candidate = makeCandidate({
 		metadataJson: { parentItemId: "p1", promptHash: "sha256:bad-cohort" }
 	})
+	const threshold = defaultThresholds.provenanceBatchReject.cohortFailureRateThreshold
 	const ctx = emptyValidationContext({
-		cohortFailureRates: new Map([["sha256:bad-cohort", COHORT_FAILURE_THRESHOLD + 0.1]])
+		cohortFailureRates: new Map([["sha256:bad-cohort", threshold + 0.1]])
 	})
 	const verdict = await provenanceBatchRejectCriterion.check(candidate, ctx)
 	expect(verdict.kind).toBe("flag")

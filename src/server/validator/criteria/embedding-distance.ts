@@ -36,16 +36,13 @@ interface SimilarityRange {
 	readonly max: number
 }
 
-const DEFAULT_RANGE: SimilarityRange = { min: 0.5, max: 0.97 }
-
-const PER_SUB_TYPE_RANGE: ReadonlyMap<SubTypeId, SimilarityRange> = new Map([
-	["numerical.lowest_values", { min: 0.5, max: 0.999 }],
-	["verbal.antonyms", { min: 0.5, max: 0.92 }]
-])
-
-function rangeFor(subTypeId: SubTypeId): SimilarityRange {
-	const explicit = PER_SUB_TYPE_RANGE.get(subTypeId)
-	return explicit === undefined ? DEFAULT_RANGE : explicit
+function rangeFor(subTypeId: SubTypeId, ctx: ValidationContext): SimilarityRange {
+	const t = ctx.thresholds.embeddingDistance
+	const explicitMin = t.minBySubType.get(subTypeId)
+	const explicitMax = t.maxBySubType.get(subTypeId)
+	const min = explicitMin === undefined ? t.defaultMin : explicitMin
+	const max = explicitMax === undefined ? t.defaultMax : explicitMax
+	return { min, max }
 }
 
 function cosineSimilarity(a: ReadonlyArray<number>, b: ReadonlyArray<number>): number {
@@ -93,7 +90,7 @@ async function checkEmbeddingDistance(
 		}
 	}
 	const similarity = cosineSimilarity(candidate.embedding, parentEmbedding)
-	const range = rangeFor(candidate.subTypeId)
+	const range = rangeFor(candidate.subTypeId, ctx)
 	if (similarity > range.max) {
 		return {
 			kind: "flag",

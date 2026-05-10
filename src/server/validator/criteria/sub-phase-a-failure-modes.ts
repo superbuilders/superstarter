@@ -31,8 +31,6 @@ import type {
 	ValidatorVerdict
 } from "@/server/validator/types"
 
-const ANTONYMS_NEIGHBOR_THRESHOLD = 0.95
-
 const bodyTextSchema = z.object({ kind: z.literal("text"), text: z.string() })
 
 function getBodyText(candidate: CandidateForValidation): string | null {
@@ -66,6 +64,7 @@ function detectAntonymsConvergence(
 		)
 		return { kind: "pass" }
 	}
+	const threshold = ctx.thresholds.subPhaseAFailureModes.antonymsConvergenceCosine
 	let bestSimilarity = 0
 	let bestPeerId: string | null = null
 	for (const peer of peers) {
@@ -76,7 +75,7 @@ function detectAntonymsConvergence(
 			bestPeerId = peer.id
 		}
 	}
-	if (bestPeerId !== null && bestSimilarity >= ANTONYMS_NEIGHBOR_THRESHOLD) {
+	if (bestPeerId !== null && bestSimilarity >= threshold) {
 		return {
 			kind: "flag",
 			reason: "verbal.antonyms cohort convergence — near-duplicate peer detected",
@@ -84,7 +83,7 @@ function detectAntonymsConvergence(
 				check: "antonyms-convergence",
 				peerItemId: bestPeerId,
 				similarity: bestSimilarity,
-				threshold: ANTONYMS_NEIGHBOR_THRESHOLD
+				threshold
 			}
 		}
 	}

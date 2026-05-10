@@ -30,8 +30,6 @@ import type {
 	ValidatorVerdict
 } from "@/server/validator/types"
 
-const COHORT_FAILURE_THRESHOLD = 0.2
-
 async function checkProvenanceBatchReject(
 	candidate: CandidateForValidation,
 	ctx: ValidationContext
@@ -56,7 +54,8 @@ async function checkProvenanceBatchReject(
 		// Cohort not represented in rate map — treat as pass (no signal).
 		return { kind: "pass" }
 	}
-	if (rate >= COHORT_FAILURE_THRESHOLD) {
+	const threshold = ctx.thresholds.provenanceBatchReject.cohortFailureRateThreshold
+	if (rate >= threshold) {
 		return {
 			kind: "flag",
 			reason: "cohort failure rate at or above batch-reject threshold",
@@ -64,7 +63,7 @@ async function checkProvenanceBatchReject(
 				check: "cohort-batch-reject",
 				cohortKey: promptHash,
 				cohortFailureRate: rate,
-				threshold: COHORT_FAILURE_THRESHOLD
+				threshold
 			}
 		}
 	}
@@ -80,8 +79,4 @@ const provenanceBatchRejectCriterion: ValidatorCriterion = {
 	check: checkProvenanceBatchReject
 }
 
-export {
-	COHORT_FAILURE_THRESHOLD,
-	ErrProvenanceBatchRejectUnreachable,
-	provenanceBatchRejectCriterion
-}
+export { ErrProvenanceBatchRejectUnreachable, provenanceBatchRejectCriterion }

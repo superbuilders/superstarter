@@ -10,6 +10,7 @@
 // (see `src/server/items/queries.ts`); NOT passed through ValidationContext.
 
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
+import type { ValidatorThresholds } from "@/server/validator/thresholds"
 
 // Verdict returned by a single criterion.
 //   - PASS: criterion did not flag this candidate.
@@ -86,6 +87,7 @@ interface ValidationContext {
 	readonly parentEmbeddingByItemId: ReadonlyMap<string, ReadonlyArray<number>>
 	readonly provenanceByParentItemId: ReadonlyMap<string, ReadonlyArray<ProvenanceSiblingRecord>>
 	readonly cohortPeersByCohortKey: ReadonlyMap<string, ReadonlyArray<CohortPeer>>
+	readonly thresholds: ValidatorThresholds
 }
 
 // A single validator criterion. Each of the six auto-detectable criteria
