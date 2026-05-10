@@ -453,20 +453,20 @@ Per redirect's "TARGET_PERCENTILES + TargetPercentile + isPercentile UNCHANGED i
 
 ### §5.3 — Commit 3: doc-comment + dead-code cleanup
 
-**Hash:** `<TBD>`. **Status: SCHEDULED.**
+**Hash:** `<TBD>`. **Status: SHIPPED.**
 
-**Files anticipated.**
-- `src/components/post-session/onboarding-targets.tsx` — drop `TARGET_PERCENTILES` constant + `TargetPercentile` type + module-top exports of both. The transient-region comment (commit 1's `// TARGET_PERCENTILES + TargetPercentile — TRANSIENT module-top exports...`) retires alongside the constants.
-- `src/server/dashboard/data.ts` — update `data.ts:13` doc-comment ("`target_percentile` is intentionally NOT read" → comment retires post-column-drop; replace with score-aware framing OR delete the line entirely depending on surrounding doc-comment continuity).
-- Possibly: any narrative percentile cite elsewhere surfaced by a final grep pass.
+**Files touched.**
+- `src/components/post-session/onboarding-targets.tsx` — deleted (1) the 19-line transient-region comment block (commit 1's `// TARGET_PERCENTILES + TargetPercentile — TRANSIENT module-top exports...`), (2) the `TARGET_PERCENTILES` const + `TargetPercentile` type at the former lines 71-72, and (3) the module-top exports `export type { TargetPercentile }` + `TARGET_PERCENTILES` from the value-export list. The remaining `export { OnboardingTargets }` line is the sole module surface.
+- `src/server/dashboard/data.ts` — Path B2 cleanup: deleted the `target_percentile is intentionally NOT read` assertion + its parenthetical citation `(\`docs/plans/dashboard.md\` §2.4 audit).`. Lines 11-12 (real-read context for `id` / `name` / `targetDateMs` / `targetScore`) and the Practice round commit 4 STUB_GOAL_SCORE→target_score history paragraph preserved unchanged; reflows as a single coherent block once the moot assertion is removed.
+- `src/app/(app)/actions.ts` — line 151 rewrite: `Sidecar §1 replaced the prior targetPercentile field per ...` → `Sidecar §1 replaced the prior percentile-based field per ...`. Preserves the §0.13 + §5.1 cross-reference (audit-trail intent) without leaving the literal `targetPercentile` identifier in the prose.
 
-**Audit step.** Pre-flight: (a) re-grep for any remaining `TARGET_PERCENTILES` / `TargetPercentile` / `target_percentile` references; verify zero hits across `src/`; (b) doc-comment hygiene per §6.14.20 prose-discipline.
+**Audit step.** Pre-flight grep + doc-comment hygiene per §6.14.20 prose-discipline. Audit captured three cleanup targets verbatim before edits: (a) `<OnboardingTargets>` module-top region + exports — straight-delete; (b) `data.ts:13` Path B2 candidate — straight-delete with paragraph reflow; (c) `actions.ts:151` historical narrative — Path B3-light selected (rewrite to "percentile-based" framing rather than full delete; preserves cross-reference value).
 
-**Implementation notes.** Bounded cleanup. Module-top deletions cascade cleanly post-commit-2 column drop (no schema/Drizzle reference to the type union remains).
+**Implementation notes.** Bounded cleanup. Module-top deletions cascade cleanly post-commit-2 column drop (no schema/Drizzle reference to the type union remains). The `actions.ts:151` rewrite chose Path B3-light over Path B-delete because the §0.13 + §5.1 cross-reference is legitimate audit-trail value (commit-message-grade history at the canonical action surface) and the literal-identifier removal alone satisfies the zero-hit grep criterion.
 
-**Verification.** `grep -rE "targetPercentile|TARGET_PERCENTILES|target_percentile" src/` returns zero hits post-commit; `bun test` clean; lint + typecheck clean.
+**Verification.** `grep -rE "targetPercentile|TARGET_PERCENTILES|target_percentile" src/` → ZERO HITS. `bun --bun biome lint` (3 files) → no fixes applied. `bun run scripts/dev/lint.ts` (3 files) → no violations found. `bun typecheck` → clean. `bun test` → 128 pass / 0 fail / 646 expect() across 17 files.
 
-**Stop-and-report.** Do not proceed to round-close until redirect.
+**Stop-and-report.** Plan-doc + commit ready; awaiting commit-message confirmation + push.
 
 ### §5.4 — Commit 4: round-close (administrative)
 
@@ -513,8 +513,9 @@ Default carry-forward from Round 2 §6 + sidecar-specific additions:
 | `saveOnboardingTargets` action update | RESOLVED via §5.1 (bundled per Option C2) | §5.1 (`729a08e`) |
 | `isPercentile` deletion | RESOLVED via §5.1 (audit-step pre-pone) | §5.1 (`729a08e`) |
 | `users.targetPercentile` column drop | RESOLVED via §5.2 (manual ORM apply post-`drizzle-kit` CLI opaque failure; column empirically dropped from dev DB; journal row inserted at id=5) | §5.2 |
-| `TARGET_PERCENTILES` + `TargetPercentile` deletion | SCHEDULED via §5.3 | §5.3 |
-| `data.ts:13` doc-comment cleanup | SCHEDULED via §5.3 | §5.3 |
+| `TARGET_PERCENTILES` + `TargetPercentile` deletion | RESOLVED via §5.3 (transient-region block + const + type + module-top exports all dropped; final grep returned ZERO HITS across `src/`) | §5.3 |
+| `data.ts:13` doc-comment cleanup | RESOLVED via §5.3 (Path B2: assertion + parenthetical citation deleted; surrounding paragraph reflowed) | §5.3 |
+| `actions.ts:151` historical narrative cleanup | RESOLVED via §5.3 (Path B3-light: rewrote `prior targetPercentile field` → `prior percentile-based field`; cross-reference to sidecar §0.13 + §5.1 preserved) | §5.3 |
 
 ---
 

@@ -9,13 +9,11 @@
 // (`docs/plans/dashboard.md` §9 lists the stub-removal sequence).
 //
 // loadUserProfile is private to this file. It reads `users` directly
-// for `id`, `name`, `targetDateMs`, and `targetScore`.
-// `target_percentile` is intentionally NOT read
-// (`docs/plans/dashboard.md` §2.4 audit). Practice round commit 4
-// replaced the previous STUB_GOAL_SCORE=40 constant with a real read
-// of users.target_score: the column was added at practice round
-// commit 3 with NOT NULL DEFAULT 40, so every existing user row has
-// 40 and the read returns a number unconditionally.
+// for `id`, `name`, `targetDateMs`, and `targetScore`. Practice round
+// commit 4 replaced the previous STUB_GOAL_SCORE=40 constant with a
+// real read of users.target_score: the column was added at practice
+// round commit 3 with NOT NULL DEFAULT 40, so every existing user row
+// has 40 and the read returns a number unconditionally.
 //
 // Practice round commit 10 (atomic bottom-strip removal): the
 // orchestrator no longer assembles transitional pace fields

@@ -148,7 +148,7 @@ async function endSession(sessionId: string): Promise<void> {
 // Score range matches users.target_score (1-50; the project's exams are
 // always 50 questions). Mirror of <GoalEditor>'s 1-50 validation + the
 // updateGoal action's range gate (per `goal-editor.tsx` + below).
-// Sidecar §1 replaced the prior targetPercentile field per
+// Sidecar §1 replaced the prior percentile-based field per
 // `docs/plans/score-based-target-goals-sidecar.md` §0.13 + §5.1.
 const onboardingTargetsSchema = z.object({
 	targetScore: z.number().int().min(1).max(50).optional(),

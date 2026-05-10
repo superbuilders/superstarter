@@ -51,26 +51,6 @@ const TARGET_SCORE_DEFAULT = 40
 const SCORE_NOT_INTEGER_COPY = "Score must be a whole number."
 const SCORE_OUT_OF_RANGE_COPY = `Score must be between ${TARGET_SCORE_MIN} and ${TARGET_SCORE_MAX}.`
 
-// TARGET_PERCENTILES + TargetPercentile — TRANSIENT module-top exports
-// from the pre-sidecar percentile-select implementation. Sidecar commit
-// 1 replaced the UI + action write path; commit 3 deletes these
-// declarations + the users.target_percentile column + every consumer
-// of the percentile types end-to-end. They stay as module-top exports
-// here so external imports compile (audit step (a) §6.14.42 grep:
-// zero external consumers; exports are retained per the sidecar
-// redirect's commit-isolation framing).
-//
-// `isPercentile` (the type-guard predicate) was deleted at this commit
-// — its only caller `onSelectPercentile` deleted with the <select>,
-// and the project's noUnusedVariables (biome + typecheck) discipline
-// enforces removal. Small benign §6.14.40 (redirector-vs-empirical-
-// state, audit-step granularity): the redirect's clean separation of
-// "TARGET_PERCENTILES + TargetPercentile + isPercentile UNCHANGED in
-// this commit" doesn't survive the project's noUnusedVariables
-// enforcement; pre-poned `isPercentile` deletion to commit 1.
-const TARGET_PERCENTILES = [50, 30, 20, 10, 5] as const
-type TargetPercentile = (typeof TARGET_PERCENTILES)[number]
-
 // Submit-failure error copy per ALPHA_DESIGN §9 Error Formula. The
 // `.catch()` boundary doesn't surface error-type info (Network vs Server
 // vs SchemaThrow), so we render the generic fallback that covers
@@ -290,5 +270,4 @@ function OnboardingTargets() {
 	)
 }
 
-export type { TargetPercentile }
-export { OnboardingTargets, TARGET_PERCENTILES }
+export { OnboardingTargets }
