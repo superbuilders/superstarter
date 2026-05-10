@@ -283,24 +283,24 @@ function SiblingsBlock({
 				{siblings.map(function renderSibling(sibling) {
 					const isCurrent = sibling.id === currentId
 					const containerClass = isCurrent
-						? "grid grid-cols-[80px_60px_60px_1fr] items-start gap-3 border-border-soft border-b bg-lavender px-4 py-2 text-sm last:border-b-0"
-						: "grid grid-cols-[80px_60px_60px_1fr] items-start gap-3 border-border-soft border-b px-4 py-2 text-sm last:border-b-0"
+						? "grid grid-cols-[80px_110px_130px_1fr] items-start gap-3 border-border-soft border-b bg-lavender px-4 py-2 text-sm last:border-b-0"
+						: "grid grid-cols-[80px_110px_130px_1fr] items-start gap-3 border-border-soft border-b px-4 py-2 text-sm last:border-b-0"
 					const currentMarker = isCurrent ? (
-						<span className="inline-flex items-center rounded-sm bg-cobalt px-[6px] py-[1px] font-medium text-[10px] text-white uppercase tracking-[0.06em]">
+						<span className="inline-flex items-center rounded-sm bg-cobalt px-[10px] py-[3px] font-medium text-[10px] text-white uppercase tracking-[0.06em]">
 							Viewing
 						</span>
 					) : null
 					const flagCountValue = flagCountOf(sibling)
 					const flagBadge =
 						flagCountValue > 0 ? (
-							<span className="inline-flex items-center rounded-sm bg-lavender px-[6px] py-[1px] font-medium text-[10px] text-indigo uppercase tracking-[0.06em]">
+							<span className="inline-flex items-center rounded-sm bg-lavender px-[10px] py-[3px] font-medium text-[10px] text-indigo uppercase tracking-[0.06em]">
 								{flagCountValue} flag{flagCountValue === 1 ? "" : "s"}
 							</span>
 						) : null
 					return (
 						<li key={sibling.id} className={containerClass}>
 							<span className="text-[12px] text-text-3 capitalize">{sibling.difficulty}</span>
-							<span className="inline-flex items-center justify-center rounded-sm border border-border-soft bg-surface-2 px-[6px] py-[2px] font-medium text-[10px] text-text-2 uppercase tracking-[0.06em]">
+							<span className="inline-flex items-center justify-center self-start rounded-sm border border-border-soft bg-surface-2 px-[10px] py-[3px] font-medium text-[10px] text-text-2 uppercase tracking-[0.06em]">
 								{sibling.status}
 							</span>
 							<span className="flex flex-wrap items-center gap-2">

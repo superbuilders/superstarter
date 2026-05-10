@@ -99,7 +99,10 @@ function StemOptionsTab({ candidate }: StemOptionsTabProps) {
 						) : null
 						return (
 							<li key={option.id} className={containerClass}>
-								<span className="w-6 font-mono text-[12px] text-text-3 tabular-nums">
+								<span
+									className="w-20 shrink-0 font-mono text-[11px] text-text-3 tabular-nums"
+									title={`option id: ${option.id}`}
+								>
 									{option.id}
 								</span>
 								<span className="flex-1">{option.text}</span>
