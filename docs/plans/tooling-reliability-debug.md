@@ -105,6 +105,49 @@ The directory is the established home for one-off + reusable dev-side tooling. I
 
 Both targets verified residual at HEAD (§0.2 + §0.3); no §6.14.40 retraction at audit step. **Forward watch:** if §1's rerun-loop investigation surfaces that the flake was *already* root-caused in some commit between residual authoring and HEAD (e.g., a prior dependency bump quietly fixed it but the residual list wasn't updated), that IS a §6.14.40 instance and should be promoted at round-close. Same applies to §2 if drizzle-kit's behavior at HEAD turns out to be silently corrected vs. the residual's authoring state.
 
+### §0.9 Round-open reconciliation event (commit-1 amendment)
+
+**Reinforces SPEC §6.14.40 (redirector-vs-empirical-state divergence) + §6.14.18/21/22 (audit-first checkpoint discipline at fresh-session re-execution).**
+
+Appended additively at commit 1 — NOT a §6.14.20 wholesale-replacement-with-quote-preservation operation, since §0 is mid-round open-work and §0.1-§0.8 remain authoritative as of commit 0 (`9d59922`). §0.9 layers reconciliation context for the round's re-anchored working HEAD.
+
+**Sequence of the divergence event:**
+
+1. Commit 0 (`9d59922`) was authored 2026-05-09 21:00 against HEAD `b6e180d`. Plan-doc framing, audit (a)-(h) findings, §1 + §2 hypothesis spaces all anchored to that HEAD.
+2. Between `9d59922` and round-resume, **three ad-hoc UI/styling commits landed on `main` outside any round envelope**:
+   - `92a33ed feat(dashboard)` — dashboard component padding/margin/accessibility tweaks (10 files, +141/-41).
+   - `808dbb2 style(focus-shell)` — FocusShell typography (5 files, +75/-7).
+   - `78136b7 fix(text-body)` — class name reordering (1 file, +1/-1).
+3. Fresh-session redirect re-issued the commit-0 spec at HEAD `78136b7`. Pre-authoring audit-first discipline (SPEC §6.14.18/21/22) detected the divergence: existing plan-doc on disk (235 lines), existing commit `9d59922` matching the spec's subject + framing + length, HEAD 4 commits ahead of the spec's claimed `b6e180d`. **Refusal to author a duplicate commit 0 is the discipline paying off** — silent overwrite would have destroyed the earlier session's work and created a divergent ledger.
+
+**Redirector judgment (recorded for round-close referencing):**
+
+- The 3 intervening commits are **intentional ad-hoc UI/styling work landed on main outside any round envelope**. Not reverted. Not retroactively classified into this round. Not added to scope.
+- Round working HEAD **re-anchors from `b6e180d` (commit 0's anchor, retained as historical artifact in §0.1) to `78136b7` (current empirical HEAD)**. Going forward, all §1 + §2 audit-step (a) "round-anchor verify" sub-steps verify against the current working HEAD, NOT `b6e180d`.
+- §0.1's open question — "confirm WIP is intentional carry-forward or needs separate handling" — is **answered: intentional carry-forward**, since absorbed into the 3 intervening commits and a session log file (`docs/claude_logs/_session_2026-05-09_18-58_score-based-goals-sidecar.md` + `_2026-05-09_19-30_question-page-typography-tweaks.md`).
+
+**Hypothesis-space invalidation probe (commit-1 audit step (iv)):**
+
+`git diff 9d59922..HEAD --` against tooling-reliability paths produces empty output for: `bunfig.toml`, `drizzle/`, `drizzle.config.ts`, `src/db/scripts/`, `package.json`, `src/test`, `src/test-utils`. Full `--stat` confirms all 15 changed files are in `src/components/{dashboard,focus-shell,item}/` or `src/server/dashboard/` plus 2 session logs in `docs/claude_logs/`. **§1 + §2 hypothesis spaces are uncontaminated by the intervening commits** — neither bun-test infrastructure nor drizzle-kit / migration / journal / `db:migrate` paths were touched. The §0.3 finding (shim does not swallow stdio) and §0.4 version capture (`drizzle-kit@0.31.10`, `drizzle-orm@0.45.2`) remain valid at `78136b7`.
+
+**Bun-test verification-line non-load-bearing note (per redirector):**
+
+Each of the 3 intervening commits carries a "Verification: bun test passed" (or equivalent) line in its message body. These are **NOT load-bearing evidence** for residual #10 (bun-test flake)'s absence — they are 3 single-runs by other authors, each subject to the flake's own intermittent rate. §1.1 pattern history will **NOT** cite them as flake-absence evidence; §1 commit 1's rerun-loop investigation remains the authoritative source for flake characterization.
+
+**Re-baseline bun test at new HEAD (commit-1 audit step (v)):**
+
+```
+128 pass / 0 fail / 644 expect() calls / 17 files / 2.70s
+```
+
+vs §0.7 baseline at `b6e180d`: pass count + file count unchanged (128/17). expect()-call count is **644 vs 645** — a -1 delta consistent with a single expect removal in one of the intervening commits (untriaged; out-of-scope to investigate further at this gate). Single-run cleanliness at `78136b7` does **NOT** count as §1 rerun-loop data — it is round-open re-baseline only, subject to the same single-run-non-evidence reasoning as the 3 intervening commits' verification lines. The flake's intermittent character means single-run non-failure is mute.
+
+**Forward-pin to round-close §5:**
+
+Round-close §5 will record TWO §6.14 reinforcement instances from this reconciliation:
+- **§6.14.40 reinforcement** — redirector-vs-empirical-state divergence detected and reconciled non-destructively (existing commit preserved, working HEAD re-anchored, intervening commits accepted as out-of-scope-on-main without revert).
+- **§6.14.18/21/22 reinforcement** — audit-first discipline at fresh-session re-execution prevented duplicate-commit-0 destruction. Note: this is the discipline's first cross-session save in the project's history (prior reinforcements have been within-session); if a second cross-session save lands in a future round, the cross-session subset becomes a candidate for its own §6.14 entry.
+
 ---
 
 ## §1 — Target 1: bun-test flake (residual #10)
@@ -214,7 +257,8 @@ Populated as commits land. Anticipated shape: 0-2 implementation commits across 
 
 | # | Hash | Subject | Target | Branch |
 |---|------|---------|--------|--------|
-| 0 | `<this commit>` | docs(plan): open tooling-reliability debug round | — | — |
+| 0 | `9d59922` | docs(plan): open tooling-reliability debug round | — | — |
+| 1 | `<this commit>` | docs(plan): reconcile round HEAD re-anchor; amend §0 with §6.14.40 | — | reconciliation |
 
 ---
 
