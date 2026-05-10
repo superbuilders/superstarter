@@ -237,6 +237,28 @@ Branches are NOT mutually exclusive at the framing level — Step A's empirical 
 - **§6.14.18/21/22 (audit-first checkpoint discipline):** redirector's §1 commit-1 spec listed `scripts/_logs/...log` as the artifact path without checking project gitignore precedent (`.gitignore` line 108). Executor caught at audit-step boundary, surfaced for redirector decision; Path Y selected. **Second reinforcement instance for this round's audit-first cohort** (first was §0.9's reconciliation event at commit `bc0fe17`).
 - **Test-suite-determinism observation (NEW):** stochastic expect-counts in passing tests; single-instance from this gate; forward-pin only. Not promoted to a §6.14 entry. Watch for re-occurrence in future rounds.
 
+### §1.7 §1 round-close
+
+**Status:** §1 closes at this gate. §2 (drizzle-kit CLI investigation) opens fresh at the next gate against the post-§1-close HEAD.
+
+**Empirical resolution:** the 25-iteration rerun loop (§1.6) demonstrated that residual #10's "flake" framing was empirically falsified. The failure is a stochastic correctness defect in the selection engine's Pass 4 session-soft fallback, not a tooling-layer flake. Reframing recorded in §1.6.
+
+**Selection-engine sidecar forward-anchor stub authored** at [`docs/plans/selection-engine-session-attempted-ids-sidecar.md`](selection-engine-session-attempted-ids-sidecar.md). Stub resolves the dead-reference state of the interim mitigation comment in `src/server/items/selection.test.ts`. Sidecar opens after this round fully closes (§2 still pending).
+
+#### §6.14 reinforcement candidates surfaced in §1
+
+- **§6.14.41 reinforcement (cite-without-verify reframing):** residual #10's "bun test flake" citation was empirically falsified by the 25-iteration rerun loop. The investigation shape (rerun loop = literal verification of the cited pattern) is the §6.14.41 anti-pattern's positive complement. Round-close commentary in §5.
+- **§6.14.18/21/22 reinforcement at redirector→executor boundary:** two redirector-spec errors caught at audit-step in §1:
+  - §1 commit 1's spec listed `scripts/_logs/...log` path without checking gitignore precedent (executor surfaced at gate; Path Y distillation resolved).
+  - §1 commit 1's interim mitigation comment referenced a plan-doc path that did not yet exist (this stub's authoring resolves; redirector caught at the same gate's planning, not at executor-stop).
+  Cross-session subset noted at commit 1's reconciliation gate (§0.9) — single-instance forward-watch.
+- **Test-suite-determinism observation (single instance, forward-pin only):** expect-count distribution 641-649 (range 9, mean 645.72) across 25 iterations indicates stochastic assertion counts in passing tests — likely sampling-driven conditional `expect()` calls in `selection.test.ts` family. Distinct from residual #10's bug. Single instance; not promoted; tracked for future-round watch.
+- **Forward-anchor stub pattern (single instance, forward-watch):** this gate authors a stub for a downstream sidecar's anchor. Pattern of "stub at round-close to resolve forward-references" surfacing across rounds; if a fourth instance lands, §6.14 promotion candidate. No promotion this round.
+
+#### Summary-target observation (non-promotion commentary)
+
+`scripts/_logs/bun-test-flake-rerun.summary.md` landed at 174 lines vs the spec's 200-400 target. Executor judgment: density appropriate; padding would dilute signal. Redirector concurs. Round-close note: the 200-400 target was guidance, not requirement; under-target with good signal density is preferable to padded-to-target. No discipline amendment.
+
 ---
 
 ## §2 — Target 2: drizzle-kit migrate CLI opaque failure (residual #12)
@@ -299,7 +321,8 @@ Populated as commits land. Anticipated shape: 0-2 implementation commits across 
 |---|------|---------|--------|--------|
 | 0 | `9d59922` | docs(plan): open tooling-reliability debug round | — | — |
 | 1 | `bc0fe17` | docs(plan): reconcile round HEAD re-anchor; amend §0 with §6.14.40 | — | reconciliation |
-| 2 | `<this commit>` | docs(plan,logs,test): §1 commit 1 — bun-test rerun loop empirical data + interim mitigation | §1 | Branch 1 ∩ 4 forward-pinned |
+| 2 | `cf2d147` | docs(plan,logs,test): §1 commit 1 — bun-test rerun loop empirical data + interim mitigation | §1 | Branch 1 ∩ 4 forward-pinned |
+| 3 | `<this commit>` | docs(plan): §1 round-close; selection-engine sidecar stub | §1 | round-close |
 
 ---
 
