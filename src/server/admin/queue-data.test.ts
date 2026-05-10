@@ -6,10 +6,12 @@
 
 import { expect, test } from "bun:test"
 import {
+	aggregateDispositionStats,
 	BODY_PREVIEW_MAX_CHARS,
 	isValidatorStale,
 	parseAdminQueueItem,
 	truncateBodyText,
+	utcMidnightForToday,
 	type CandidateRow
 } from "@/server/admin/queue-data"
 
@@ -180,4 +182,62 @@ test("parseAdminQueueItem: validatorStale=false when validatorResult absent", fu
 	const parsed = parseAdminQueueItem(row)
 	expect(parsed.validatorStale).toBe(false)
 	expect(parsed.staleAfterMs).toBeUndefined()
+})
+
+test("aggregateDispositionStats: empty input → all zeros", function dispositionEmpty() {
+	const stats = aggregateDispositionStats([])
+	expect(stats.approvedCount).toBe(0)
+	expect(stats.rejectedCount).toBe(0)
+	expect(stats.totalDisposedToday).toBe(0)
+})
+
+test("aggregateDispositionStats: approve only", function dispositionApproveOnly() {
+	const stats = aggregateDispositionStats([
+		{ actionType: "approve", count: 17, todayCount: 5 }
+	])
+	expect(stats.approvedCount).toBe(17)
+	expect(stats.rejectedCount).toBe(0)
+	expect(stats.totalDisposedToday).toBe(5)
+})
+
+test("aggregateDispositionStats: reject only", function dispositionRejectOnly() {
+	const stats = aggregateDispositionStats([
+		{ actionType: "reject", count: 8, todayCount: 3 }
+	])
+	expect(stats.approvedCount).toBe(0)
+	expect(stats.rejectedCount).toBe(8)
+	expect(stats.totalDisposedToday).toBe(3)
+})
+
+test("aggregateDispositionStats: both action types sum today correctly", function dispositionBoth() {
+	const stats = aggregateDispositionStats([
+		{ actionType: "approve", count: 25, todayCount: 7 },
+		{ actionType: "reject", count: 12, todayCount: 4 }
+	])
+	expect(stats.approvedCount).toBe(25)
+	expect(stats.rejectedCount).toBe(12)
+	expect(stats.totalDisposedToday).toBe(11)
+})
+
+test("aggregateDispositionStats: ignores unknown action types", function dispositionIgnoresUnknown() {
+	const stats = aggregateDispositionStats([
+		{ actionType: "approve", count: 10, todayCount: 2 },
+		{ actionType: "edit", count: 99, todayCount: 50 },
+		{ actionType: "flag", count: 5, todayCount: 1 }
+	])
+	expect(stats.approvedCount).toBe(10)
+	expect(stats.rejectedCount).toBe(0)
+	expect(stats.totalDisposedToday).toBe(2)
+})
+
+test("utcMidnightForToday: returns UTC midnight for fixed date", function utcMidnight() {
+	const sample = new Date(Date.UTC(2026, 4, 10, 14, 23, 45, 678))
+	const result = utcMidnightForToday(sample)
+	expect(result).toBe(Date.UTC(2026, 4, 10, 0, 0, 0, 0))
+})
+
+test("utcMidnightForToday: collapses any time-of-day to same midnight", function utcMidnightStable() {
+	const morning = new Date(Date.UTC(2026, 0, 1, 0, 0, 1, 0))
+	const evening = new Date(Date.UTC(2026, 0, 1, 23, 59, 59, 999))
+	expect(utcMidnightForToday(morning)).toBe(utcMidnightForToday(evening))
 })

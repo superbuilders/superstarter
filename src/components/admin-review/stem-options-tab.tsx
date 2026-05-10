@@ -32,7 +32,9 @@
 import * as errors from "@superbuilders/errors"
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import * as React from "react"
+import { ApproveStaleConfirm } from "@/components/admin-review/approve-stale-confirm"
 import { BucketChangeConfirm } from "@/components/admin-review/bucket-change-confirm"
+import { RejectConfirm } from "@/components/admin-review/reject-confirm"
 import { NumberSeriesBody } from "@/components/item/body-renderers/number-series"
 import { TextBody } from "@/components/item/body-renderers/text"
 import { Button } from "@/components/ui/button"
@@ -41,6 +43,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { type Difficulty, type SubTypeConfig, type SubTypeId, subTypes } from "@/config/sub-types"
 import { logger } from "@/logger"
+import {
+	approveCandidateAction,
+	rejectCandidateAction
+} from "@/server/admin/disposition-actions"
 import { submitEditAction } from "@/server/admin/edit-actions"
 import type { AdminCandidateRow } from "@/server/admin/item-detail-data"
 import type { ItemBody } from "@/server/items/body-schema"
@@ -108,6 +114,26 @@ interface StemOptionsViewProps {
 	readonly onEdit: () => void
 }
 
+function computeIsValidatorStale(candidate: AdminCandidateRow): boolean {
+	const v = candidate.metadata.validatorResult
+	if (v === undefined) return false
+	if (v.staleAfterMs === undefined) return false
+	return v.staleAfterMs > v.evaluatedAtMs
+}
+
+function readValidatorStaleAfterMs(candidate: AdminCandidateRow): number {
+	const v = candidate.metadata.validatorResult
+	if (v === undefined) return 0
+	if (v.staleAfterMs === undefined) return 0
+	return v.staleAfterMs
+}
+
+function readValidatorEvaluatedAtMs(candidate: AdminCandidateRow): number {
+	const v = candidate.metadata.validatorResult
+	if (v === undefined) return 0
+	return v.evaluatedAtMs
+}
+
 function StemOptionsView({ candidate, onEdit }: StemOptionsViewProps) {
 	const subTypeMeta = SUB_TYPE_NAMES.get(candidate.subTypeId)
 	const subTypeDisplay = subTypeMeta === undefined ? candidate.subTypeId : subTypeMeta.displayName
@@ -128,51 +154,194 @@ function StemOptionsView({ candidate, onEdit }: StemOptionsViewProps) {
 				{candidate.status}
 			</span>
 		)
-	return (
-		<section className="overflow-hidden rounded-lg border border-border-soft bg-surface">
-			<header className="flex flex-wrap items-center gap-3 border-border-soft border-b px-4 py-2">
-				<span className="font-medium text-[13px] text-text-1">{subTypeDisplay}</span>
-				<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{sectionTag}</span>
-				<span className="inline-flex items-center justify-center rounded-sm border border-border-soft bg-surface-2 px-[6px] py-[2px] font-medium text-[10px] text-text-2 uppercase tracking-[0.06em]">
-					{difficultyLabel}
-				</span>
-				{pressureBadge}
-				{statusBadge}
-				<div className="ml-auto">
-					<Button variant="outline" size="sm" onClick={onEdit}>
-						Edit
+
+	const [rejectModalOpen, setRejectModalOpen] = React.useState<boolean>(false)
+	const [approveStaleModalOpen, setApproveStaleModalOpen] = React.useState<boolean>(false)
+	const [rejectReasonDraft, setRejectReasonDraft] = React.useState<string>("")
+	const [dispositionFeedback, setDispositionFeedback] = React.useState<Feedback | undefined>(
+		undefined
+	)
+	const [isDisposing, startDispositionTransition] = React.useTransition()
+
+	const isStale = computeIsValidatorStale(candidate)
+	const validatorStaleAfterMs = readValidatorStaleAfterMs(candidate)
+	const validatorEvaluatedAtMs = readValidatorEvaluatedAtMs(candidate)
+	const dispositionEnabled = candidate.status === "candidate" && !isDisposing
+
+	function submitApprove(acknowledgeStaleVerdict: boolean) {
+		setDispositionFeedback(undefined)
+		startDispositionTransition(async function runApprove() {
+			const result = await errors.try(
+				approveCandidateAction({
+					itemId: candidate.id,
+					acknowledgeStaleVerdict
+				})
+			)
+			if (result.error) {
+				logger.warn(
+					{ itemId: candidate.id, error: result.error },
+					"StemOptionsView: approveCandidateAction failed"
+				)
+				setDispositionFeedback({
+					kind: "err",
+					message: `Approve failed: ${result.error.message}`
+				})
+				return
+			}
+			setApproveStaleModalOpen(false)
+		})
+	}
+
+	function submitReject() {
+		const trimmed = rejectReasonDraft.trim()
+		if (trimmed.length === 0) {
+			setDispositionFeedback({ kind: "err", message: "Rejection reason is required." })
+			return
+		}
+		setDispositionFeedback(undefined)
+		startDispositionTransition(async function runReject() {
+			const result = await errors.try(
+				rejectCandidateAction({ itemId: candidate.id, reasonNote: trimmed })
+			)
+			if (result.error) {
+				logger.warn(
+					{ itemId: candidate.id, error: result.error },
+					"StemOptionsView: rejectCandidateAction failed"
+				)
+				setDispositionFeedback({
+					kind: "err",
+					message: `Reject failed: ${result.error.message}`
+				})
+				return
+			}
+			setRejectModalOpen(false)
+			setRejectReasonDraft("")
+		})
+	}
+
+	function onApproveClick() {
+		if (isStale) {
+			setApproveStaleModalOpen(true)
+			return
+		}
+		submitApprove(false)
+	}
+
+	function onRejectClick() {
+		setDispositionFeedback(undefined)
+		setRejectModalOpen(true)
+	}
+
+	function onRejectCancel() {
+		setRejectModalOpen(false)
+		setRejectReasonDraft("")
+		setDispositionFeedback(undefined)
+	}
+
+	function onApproveStaleCancel() {
+		setApproveStaleModalOpen(false)
+		setDispositionFeedback(undefined)
+	}
+
+	const dispositionFeedbackNode =
+		dispositionFeedback === undefined ? null : <FeedbackBanner feedback={dispositionFeedback} />
+
+	const dispositionBar =
+		candidate.status === "candidate" ? (
+			<div className="flex flex-col gap-2 border-border-soft border-t pt-4">
+				<div className="flex items-center gap-2">
+					<Button
+						variant="default"
+						size="sm"
+						onClick={onApproveClick}
+						disabled={!dispositionEnabled}
+					>
+						Approve
 					</Button>
+					<Button
+						variant="destructive"
+						size="sm"
+						onClick={onRejectClick}
+						disabled={!dispositionEnabled}
+					>
+						Reject
+					</Button>
+					<span className="ml-auto text-[11px] text-text-3 uppercase tracking-[0.06em]">
+						{isStale ? "Verdict stale — re-validate recommended" : "Verdict fresh"}
+					</span>
 				</div>
-			</header>
-			<div className="flex flex-col gap-5 px-5 py-5">
-				<div>{renderBody(candidate.body, candidate.subTypeId)}</div>
-				<ol className="flex flex-col gap-1.5">
-					{candidate.options.map(function renderOption(option) {
-						const isCorrect = option.id === candidate.correctAnswer
-						const containerClass = isCorrect
-							? "flex w-full items-center gap-3 rounded-md border border-cobalt/40 bg-lavender px-4 py-2 text-sm text-text-1"
-							: "flex w-full items-center gap-3 rounded-md border border-border-soft bg-surface px-4 py-2 text-sm text-text-2"
-						const correctMarker = isCorrect ? (
-							<span className="inline-flex items-center rounded-sm bg-cobalt px-[6px] py-[1px] font-medium text-[10px] text-white uppercase tracking-[0.06em]">
-								Correct
-							</span>
-						) : null
-						return (
-							<li key={option.id} className={containerClass}>
-								<span
-									className="w-20 shrink-0 font-mono text-[11px] text-text-3 tabular-nums"
-									title={`option id: ${option.id}`}
-								>
-									{option.id}
-								</span>
-								<span className="flex-1">{option.text}</span>
-								{correctMarker}
-							</li>
-						)
-					})}
-				</ol>
+				{dispositionFeedbackNode}
 			</div>
-		</section>
+		) : null
+
+	return (
+		<>
+			<section className="overflow-hidden rounded-lg border border-border-soft bg-surface">
+				<header className="flex flex-wrap items-center gap-3 border-border-soft border-b px-4 py-2">
+					<span className="font-medium text-[13px] text-text-1">{subTypeDisplay}</span>
+					<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{sectionTag}</span>
+					<span className="inline-flex items-center justify-center rounded-sm border border-border-soft bg-surface-2 px-[6px] py-[2px] font-medium text-[10px] text-text-2 uppercase tracking-[0.06em]">
+						{difficultyLabel}
+					</span>
+					{pressureBadge}
+					{statusBadge}
+					<div className="ml-auto">
+						<Button variant="outline" size="sm" onClick={onEdit}>
+							Edit
+						</Button>
+					</div>
+				</header>
+				<div className="flex flex-col gap-5 px-5 py-5">
+					<div>{renderBody(candidate.body, candidate.subTypeId)}</div>
+					<ol className="flex flex-col gap-1.5">
+						{candidate.options.map(function renderOption(option) {
+							const isCorrect = option.id === candidate.correctAnswer
+							const containerClass = isCorrect
+								? "flex w-full items-center gap-3 rounded-md border border-cobalt/40 bg-lavender px-4 py-2 text-sm text-text-1"
+								: "flex w-full items-center gap-3 rounded-md border border-border-soft bg-surface px-4 py-2 text-sm text-text-2"
+							const correctMarker = isCorrect ? (
+								<span className="inline-flex items-center rounded-sm bg-cobalt px-[6px] py-[1px] font-medium text-[10px] text-white uppercase tracking-[0.06em]">
+									Correct
+								</span>
+							) : null
+							return (
+								<li key={option.id} className={containerClass}>
+									<span
+										className="w-20 shrink-0 font-mono text-[11px] text-text-3 tabular-nums"
+										title={`option id: ${option.id}`}
+									>
+										{option.id}
+									</span>
+									<span className="flex-1">{option.text}</span>
+									{correctMarker}
+								</li>
+							)
+						})}
+					</ol>
+					{dispositionBar}
+				</div>
+			</section>
+			<RejectConfirm
+				open={rejectModalOpen}
+				currentSubType={candidate.subTypeId}
+				currentDifficulty={candidate.difficulty}
+				reasonNoteDraft={rejectReasonDraft}
+				onReasonNoteChange={setRejectReasonDraft}
+				onConfirm={submitReject}
+				onCancel={onRejectCancel}
+				isSubmitting={isDisposing}
+			/>
+			<ApproveStaleConfirm
+				open={approveStaleModalOpen}
+				staleAfterMs={validatorStaleAfterMs}
+				evaluatedAtMs={validatorEvaluatedAtMs}
+				onConfirm={function confirmStale() {
+					submitApprove(true)
+				}}
+				onCancel={onApproveStaleCancel}
+				isSubmitting={isDisposing}
+			/>
+		</>
 	)
 }
 

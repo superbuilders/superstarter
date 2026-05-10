@@ -19,12 +19,13 @@
 // rules/no-timestamp-columns.md).
 
 import * as errors from "@superbuilders/errors"
-import { desc, eq } from "drizzle-orm"
+import { desc, eq, inArray, sql } from "drizzle-orm"
 import { connection } from "next/server"
 import { z } from "zod"
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
 import { subTypeIds } from "@/config/sub-types"
 import { db } from "@/db"
+import { itemAdminActions } from "@/db/schemas/catalog/item-admin-actions"
 import { items } from "@/db/schemas/catalog/items"
 import { logger } from "@/logger"
 import { itemBody } from "@/server/items/body-schema"
@@ -35,6 +36,9 @@ import {
 } from "@/server/admin/validator-result-schema"
 
 const ErrLoadQueueQueryFailed = errors.new("loadAdminQueueData query failed")
+const ErrLoadDispositionStatsQueryFailed = errors.new(
+	"loadAdminQueueData disposition stats query failed"
+)
 const ErrUnknownSubTypeId = errors.new("loadAdminQueueData encountered unknown sub_type_id")
 
 const subTypeIdSet: ReadonlySet<string> = new Set<string>(subTypeIds)
@@ -78,6 +82,12 @@ interface AdminQueueItem {
 	readonly invokedByAdminEmail?: string
 }
 
+interface DispositionStats {
+	readonly approvedCount: number
+	readonly rejectedCount: number
+	readonly totalDisposedToday: number
+}
+
 interface AdminQueueData {
 	readonly items: ReadonlyArray<AdminQueueItem>
 	readonly totalCount: number
@@ -87,6 +97,7 @@ interface AdminQueueData {
 	readonly staleCount: number
 	readonly subTypeDistribution: ReadonlyMap<SubTypeId, number>
 	readonly cohortDistribution: ReadonlyMap<string, number>
+	readonly dispositionStats: DispositionStats
 }
 
 const BODY_PREVIEW_MAX_CHARS = 140
@@ -190,6 +201,42 @@ function aggregateDistribution<K>(
 	return map
 }
 
+interface DispositionStatsRow {
+	readonly actionType: string
+	readonly count: number
+	readonly todayCount: number
+}
+
+// Pure aggregation over GROUP BY rows. Extracted so the v1 disposition-
+// counts surface in the queue header has unit-test coverage independent
+// of the live DB. Unknown action_type values (other enum members like
+// 'edit' or 'flag') are silently ignored — only approve + reject feed
+// the disposition stats.
+function aggregateDispositionStats(
+	rows: ReadonlyArray<DispositionStatsRow>
+): DispositionStats {
+	let approvedCount = 0
+	let rejectedCount = 0
+	let totalDisposedToday = 0
+	for (const row of rows) {
+		if (row.actionType === "approve") {
+			approvedCount = row.count
+			totalDisposedToday += row.todayCount
+		} else if (row.actionType === "reject") {
+			rejectedCount = row.count
+			totalDisposedToday += row.todayCount
+		}
+	}
+	return { approvedCount, rejectedCount, totalDisposedToday }
+}
+
+// UTC-midnight epoch ms for the calendar day containing `now`. Used to
+// gate the totalDisposedToday count via SQL FILTER. UTC (not local) so
+// the cutoff is stable regardless of the admin's browser timezone.
+function utcMidnightForToday(now: Date): number {
+	return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+}
+
 async function loadAdminQueueData(): Promise<AdminQueueData> {
 	// Mark this loader as request-bound for Next.js 16 Cache Components. The
 	// logger.info below (and every other logger call on the path) reads
@@ -245,6 +292,27 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 		return item.cohortKey
 	})
 
+	const todayStartMs = utcMidnightForToday(new Date())
+	const dispositionStatsResult = await errors.try(
+		db
+			.select({
+				actionType: itemAdminActions.actionType,
+				count: sql<number>`COUNT(*)::int`,
+				todayCount: sql<number>`COUNT(*) FILTER (WHERE ${itemAdminActions.createdAtMs} >= ${todayStartMs})::int`
+			})
+			.from(itemAdminActions)
+			.where(inArray(itemAdminActions.actionType, ["approve", "reject"]))
+			.groupBy(itemAdminActions.actionType)
+	)
+	if (dispositionStatsResult.error) {
+		logger.error(
+			{ error: dispositionStatsResult.error },
+			"queue-data: disposition stats SELECT failed"
+		)
+		throw errors.wrap(ErrLoadDispositionStatsQueryFailed, "disposition stats SELECT")
+	}
+	const dispositionStats = aggregateDispositionStats(dispositionStatsResult.data)
+
 	logger.info(
 		{
 			totalCount: parsed.length,
@@ -253,7 +321,10 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 			unvalidatedCount,
 			staleCount,
 			subTypeBuckets: subTypeDistribution.size,
-			cohortBuckets: cohortDistribution.size
+			cohortBuckets: cohortDistribution.size,
+			approvedCount: dispositionStats.approvedCount,
+			rejectedCount: dispositionStats.rejectedCount,
+			totalDisposedToday: dispositionStats.totalDisposedToday
 		},
 		"queue-data: loadAdminQueueData complete"
 	)
@@ -265,17 +336,29 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 		unvalidatedCount,
 		staleCount,
 		subTypeDistribution,
-		cohortDistribution
+		cohortDistribution,
+		dispositionStats
 	}
 }
 
-export type { AdminQueueData, AdminQueueItem, CandidateRow, ParsedValidatorResult, ValidatorVerdict }
+export type {
+	AdminQueueData,
+	AdminQueueItem,
+	CandidateRow,
+	DispositionStats,
+	DispositionStatsRow,
+	ParsedValidatorResult,
+	ValidatorVerdict
+}
 export {
+	aggregateDispositionStats,
+	BODY_PREVIEW_MAX_CHARS,
+	ErrLoadDispositionStatsQueryFailed,
 	ErrLoadQueueQueryFailed,
 	ErrUnknownSubTypeId,
-	BODY_PREVIEW_MAX_CHARS,
 	isValidatorStale,
 	loadAdminQueueData,
 	parseAdminQueueItem,
-	truncateBodyText
+	truncateBodyText,
+	utcMidnightForToday
 }

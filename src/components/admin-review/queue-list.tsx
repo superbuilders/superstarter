@@ -175,7 +175,10 @@ function QueueList({ data }: QueueListProps) {
 		{ label: "Pressure", value: data.pressureCellCount },
 		{ label: "Stale", value: data.staleCount },
 		{ label: "Unvalidated", value: data.unvalidatedCount },
-		{ label: "Visible", value: visible.length }
+		{ label: "Visible", value: visible.length },
+		{ label: "Approved", value: data.dispositionStats.approvedCount },
+		{ label: "Rejected", value: data.dispositionStats.rejectedCount },
+		{ label: "Today", value: data.dispositionStats.totalDisposedToday }
 	]
 
 	const listBody =
@@ -197,7 +200,7 @@ function QueueList({ data }: QueueListProps) {
 
 	return (
 		<div className="flex flex-col gap-4">
-			<section className="grid grid-cols-2 gap-3 rounded-lg border border-border-soft bg-surface px-4 py-3 md:grid-cols-6">
+			<section className="grid grid-cols-2 gap-3 rounded-lg border border-border-soft bg-surface px-4 py-3 md:grid-cols-3 lg:grid-cols-9">
 				{headerStats.map(function renderStat(stat) {
 					return (
 						<div key={stat.label} className="flex flex-col gap-[2px]">
