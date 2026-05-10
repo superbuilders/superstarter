@@ -27,6 +27,11 @@ import { db } from "@/db"
 import { items } from "@/db/schemas/catalog/items"
 import { logger } from "@/logger"
 import { itemBody } from "@/server/items/body-schema"
+import {
+	type ParsedValidatorResult,
+	type ValidatorVerdict,
+	validatorResultSchema
+} from "@/server/admin/validator-result-schema"
 
 const ErrLoadQueueQueryFailed = errors.new("loadAdminQueueData query failed")
 const ErrUnknownSubTypeId = errors.new("loadAdminQueueData encountered unknown sub_type_id")
@@ -48,38 +53,12 @@ function asSubTypeId(s: string): SubTypeId {
 	return matched
 }
 
-const validatorVerdictSchema = z.discriminatedUnion("kind", [
-	z.object({ kind: z.literal("pass") }),
-	z.object({
-		kind: z.literal("flag"),
-		reason: z.string(),
-		metadata: z.record(z.string(), z.unknown())
-	}),
-	z.object({ kind: z.literal("error"), reason: z.string() })
-])
-
-// Mirrors SerializedValidatorResult in src/workflows/validator-batch-steps.ts.
-// Kept separate (rather than importing) because the workflow file is in the
-// workflow VM's import graph guard; this server-only consumer lives outside
-// it and re-declares the shape via Zod for runtime validation.
-const validatorResultSchema = z.object({
-	evaluatedAtMs: z.number(),
-	hasAnyFlag: z.boolean(),
-	isPressureCell: z.boolean(),
-	flagsByName: z.record(z.string(), validatorVerdictSchema),
-	thresholdsHash: z.string(),
-	invokedByAdminEmail: z.string()
-})
-
 const metadataShapeSchema = z
 	.object({
 		promptHash: z.string().optional(),
 		validatorResult: validatorResultSchema.optional()
 	})
 	.passthrough()
-
-type ValidatorVerdict = z.infer<typeof validatorVerdictSchema>
-type ParsedValidatorResult = z.infer<typeof validatorResultSchema>
 
 interface AdminQueueItem {
 	readonly id: string
