@@ -34,11 +34,27 @@
 // typed-routes cache has long since caught up; `<Link>` typechecks
 // cleanly against `/diagnostic/run` now.
 
+import { LogOutIcon } from "lucide-react"
 import Link from "next/link"
+import { signOutAction } from "@/app/(app)/actions"
 
 function Page() {
 	return (
-		<main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col items-stretch justify-center px-6 py-16">
+		<main className="relative mx-auto flex min-h-dvh w-full max-w-2xl flex-col items-stretch justify-center px-6 py-16">
+			<form
+				action={signOutAction}
+				className="absolute top-6 right-6"
+			>
+				<button
+					type="submit"
+					aria-label="Sign out"
+					title="Sign out"
+					className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-foreground/70 text-sm transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				>
+					<LogOutIcon aria-hidden="true" className="h-[14px] w-[14px]" />
+					<span>Sign out</span>
+				</button>
+			</form>
 			<header className="space-y-3">
 				<h1 className="font-semibold text-3xl tracking-tight">Welcome to the diagnostic.</h1>
 				<p className="text-foreground/70 text-sm">Read this once. It will not be shown again.</p>
