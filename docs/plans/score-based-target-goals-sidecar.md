@@ -424,17 +424,30 @@ Per redirect's "TARGET_PERCENTILES + TargetPercentile + isPercentile UNCHANGED i
 
 ### §5.2 — Commit 2: schema drop `users.targetPercentile` column + Drizzle migration 0005
 
-**Hash:** `<TBD>`. **Status: SCHEDULED.**
+**Hash:** `<TBD; backfilled at round-close>` — `feat(db): drop users.target_percentile column (sidecar §2)`. **Status: SHIPPED.**
 
-**Files anticipated.**
-- `src/db/schemas/auth/users.ts` — drop `targetPercentile: integer("target_percentile")` declaration at line 12.
-- `drizzle/0005_*.sql` — autogen migration via `bun db:generate`. Expected statement: `ALTER TABLE "users" DROP COLUMN "target_percentile";`.
+**Files touched.**
+- `src/db/schemas/auth/users.ts` — `targetPercentile: integer("target_percentile")` declaration deleted at former line 12 (post-edit users table has 8 fields; pre-edit had 9).
+- `drizzle/0005_amusing_microchip.sql` — NEW (autogen via `bun db:generate`). Single statement: `ALTER TABLE "users" DROP COLUMN "target_percentile";`. No defensive guards or wrapping; clean diff.
+- `drizzle/meta/0005_snapshot.json` — NEW (Drizzle's table-state snapshot post-edit).
+- `drizzle/meta/_journal.json` — modified (idx 5 entry appended; tag `0005_amusing_microchip`).
 
-**Audit step.** Pre-flight: (a) re-confirm column-drop safety per §0.3 + §0.7 (no production data; column orphaned-since-practice-round-commit-4); (b) `bun db:generate` autogen + manual review per project convention; (c) destructive-operation gate per §6.14.31 — pre-flight DB-state probe (verify no rows depend on the column; the column is unread per `data.ts:13`); (d) rollback strategy = recreate column from migration 0004 if needed.
+**Audit-step recap (a-h).**
 
-**Implementation notes.** Drizzle's diff detection produces the migration file; manual review for syntax + ALTER TABLE ordering. `users.ts` updates to drop the column declaration.
+- **(a)** Production-data scope re-confirmed: `vercel.json` exists (project deployment-ready, region `iad1`, single cron schedule); no `.env.production` reference in repo; no production-deployment commit in git log. Per Q6 pre-launch confirmation, dev-DB-only treatment stands.
+- **(b)** `grep -rnE "targetPercentile|target_percentile|TARGET_PERCENTILES" src/` returned 9 hits — all in narrative comments (commit 1 doc-refresh trail at `actions.ts:151`; `data.ts:13`; `onboarding-targets.tsx:54+57+68`), the schema declaration target itself (`users.ts:12`), or the transient module-top exports (`onboarding-targets.tsx:71-72+294`). **Zero ACTIVE code consumers** beyond commit 2's drop target; the transient exports retire at sidecar commit 3.
+- **(c)** DB-state probe: `1 row` with `target_percentile IS NOT NULL` out of `2373 total users` (≈0.04%; single dev test row). Per Q6 pre-launch confirmation: drop anyway; data unrecoverable per Strategy A. Documented in commit body for forward-traceability.
+- **(d)** Drizzle autogen output: `bun db:generate` produced `drizzle/0005_amusing_microchip.sql` with single statement `ALTER TABLE "users" DROP COLUMN "target_percentile";`. Snapshot at `drizzle/meta/0005_snapshot.json`; journal updated at `drizzle/meta/_journal.json` (idx 5 entry tag `0005_amusing_microchip`). No surprising side-effects — no other tables touched, no defensive wrapping.
+- **(e)** Migration apply: `bun db:migrate` exited with code 1 + opaque error (`error: "drizzle-kit" exited with code 1` + no further detail to stderr). **Workaround:** authored `scripts/_logs/apply-0005-manual.ts` to apply the SQL + insert journal row directly via Drizzle ORM (bypassing drizzle-kit's CLI). Manual apply succeeded: column dropped (post-migration `users` has 8 columns: `id`, `name`, `email`, `email_verified_ms`, `image`, `target_date_ms`, `created_at_ms`, `target_score`); journal row inserted at id=5 with hash `d7103ad67e501b3ab4540dfd493394fa4bd3167b9bcd231a35e14be30adab0c4`. Manual-apply script retired post-execution (one-shot tool; not committed). The drizzle-kit-CLI failure is captured as a Round-3+ residual for investigation.
+- **(f)** Rollback strategy documented in commit body: recreate column via `ALTER TABLE "users" ADD COLUMN "target_percentile" integer;` (no default). The 1 row of pre-existing data is unrecoverable (no backup taken; per Q6 pre-launch confirmation acceptable).
+- **(g)** `users.ts` schema edit verified: `targetPercentile: integer("target_percentile"),` line deleted; `targetDateMs` paired column preserved unchanged at the now-line-12; `targetScore` preserved unchanged at the now-line-20+; column ordering doesn't matter for Drizzle (set of column descriptors).
+- **(h)** Post-edit grep `grep -rnE "targetPercentile|target_percentile" src/db/` returned **zero hits**. Schema clean.
 
-**Verification.** Empirical migration apply via `bun db:migrate` against dev DB; verify column dropped via `bun db:studio` or `psql -c "\d+ users"` equivalent; `bun test` clean; lint + typecheck clean.
+**Application smoke test result.** Post-migration `bun -e` schema query confirmed `users` count = 2385 (tracks pre-migration count + dev seed delta; data integrity preserved). Test count `bun test`: 128 pass / 0 fail / 17 files (matches sidecar commit 1; no regression). Dashboard / post-session view smoke deferred to Leo's manual review per the round's screenshot-deferred discipline.
+
+**Implementation notes.** Per §6.14.31 destructive-operation-gate compliance: pre-flight grep confirmed zero active consumers; DB count documented (1 of 2373); rollback strategy noted; column orphaned-since-practice-round-commit-4 (`loadUserProfile` reads only `target_score`). Strategy A confirmed via Q6 pre-launch state. The drizzle-kit-CLI opaque failure surfaced a residual; manual ORM apply was used as the workaround (forward-traceability via hash + journal row).
+
+**Verification.** `bun test` 128 pass / 0 fail. Lint clean. Typecheck (`tsgo --noEmit`) clean. Schema query confirmed column drop empirically.
 
 **Stop-and-report.** Do not proceed to commit 3 until redirect.
 
@@ -499,7 +512,7 @@ Default carry-forward from Round 2 §6 + sidecar-specific additions:
 | `<OnboardingTargets>` UI replacement | RESOLVED via §5.1 | §5.1 (`729a08e`) |
 | `saveOnboardingTargets` action update | RESOLVED via §5.1 (bundled per Option C2) | §5.1 (`729a08e`) |
 | `isPercentile` deletion | RESOLVED via §5.1 (audit-step pre-pone) | §5.1 (`729a08e`) |
-| `users.targetPercentile` column drop | SCHEDULED via §5.2 | §5.2 |
+| `users.targetPercentile` column drop | RESOLVED via §5.2 (manual ORM apply post-`drizzle-kit` CLI opaque failure; column empirically dropped from dev DB; journal row inserted at id=5) | §5.2 |
 | `TARGET_PERCENTILES` + `TargetPercentile` deletion | SCHEDULED via §5.3 | §5.3 |
 | `data.ts:13` doc-comment cleanup | SCHEDULED via §5.3 | §5.3 |
 
@@ -523,6 +536,8 @@ Default carry-forward from Round 2 §6 + sidecar-specific additions:
 ### §8.2 Sidecar-surfaced new residuals
 
 11. **Plan-doc body-authoring discipline observation.** Sidecar's redirect framing of "deferred until §0 redirect" interacted ambiguously with Leo's "all four as recommended" subsequent redirects. Claude Code interpreted strictly (commit 1 implementation-only); follow-up commit retroactively authored body sections per Disposition X. Round-close commentary candidate (§9-style observation, not a §6.14 promotion): *"redirect contracts that lock scope but not body-authoring authorization should explicitly enable inline plan-doc updates."* **Single instance.** Track for Round 3+ if pattern recurs.
+
+12. **`drizzle-kit migrate` CLI opaque failure (sidecar §5.2).** `bun db:migrate` exited with code 1 emitting only `error: "drizzle-kit" exited with code 1` to stderr — no DB-side error detail, no SQL trace, no stack. Manual ORM-level apply (via Drizzle's `db.execute(sql\`...\`)` directly + journal row insert by hand) succeeded cleanly. The CLI bug — whether environmental, Drizzle-version-specific, or a transient docker-pg interaction — is unidentified at sidecar close. Forward-pin: Round 3+ debugging session. Workaround pattern (manual ORM apply + hash-computed journal row) documented in §5.2 audit-step (e) recap; can be replayed if future migrations hit the same opaque-CLI behavior.
 
 ### §8.3 Closing
 

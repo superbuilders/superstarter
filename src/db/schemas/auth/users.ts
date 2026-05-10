@@ -9,7 +9,6 @@ const users = pgTable(
 		email: varchar("email", { length: 320 }).notNull(),
 		emailVerifiedMs: bigint("email_verified_ms", { mode: "number" }),
 		image: text("image"),
-		targetPercentile: integer("target_percentile"),
 		targetDateMs: bigint("target_date_ms", { mode: "number" }),
 		// Practice round commit 3 (`docs/plans/practice-round.md` §5
 		// commit 3 + decision 2): target raw score the user is aiming
