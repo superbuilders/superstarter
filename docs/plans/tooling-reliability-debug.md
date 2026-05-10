@@ -311,6 +311,38 @@ Branches are NOT mutually exclusive — Branch 3a + Branch 4 may both land if a 
 - **(d) §6.14.42 grep-verify-consumers IF `db:migrate` script or shim modified** — confirm no other script or doc references the prior wiring shape. CI scripts, README, deployment docs all in scope.
 - **(e) Lefthook gate** — full pass before commit; no `--no-verify`.
 
+### §2.6 Empirical results — drizzle-kit migrate CLI no-op reproduction probe
+
+**Reproduction path:** no-op migration per redirector Option II — author `drizzle/0006_test_noop.sql` containing `SELECT 1;`, run `bun db:migrate`, observe behavior, revert cleanly within the same gate envelope.
+
+**Outcome:** **NOT reproduced.** Plain `bun db:migrate` exited 0 against the no-op, but the probe surfaced a methodology finding that explains the non-reproduction: drizzle-kit migrate is **journal-driven, not file-system-driven** — it reads `drizzle/meta/_journal.json` to determine work, ignoring loose `.sql` files entirely. The redirector spec's expectation (audit step (f) note "drizzle-kit will (try to) update [`_journal.json`] during migrate") is empirically false; `migrate` only READS the journal, journal-writes are `generate`'s responsibility. Full detail: [`scripts/_logs/drizzle-kit-investigation.summary.md`](../../scripts/_logs/drizzle-kit-investigation.summary.md).
+
+**Branch selection candidate:** **Branch 3a ∩ Branch 5 (intersection — narrower than either alone, with explicit methodology caveat).**
+
+- **Branch 3a (not reproducible without specific conditions; doc-only):** the journal-driven discovery path means the original `822a674` failure can only be reproduced from a DB state with unapplied journal entries. Loose-SQL probe at HEAD cannot engage the failing path.
+- **Branch 5 (no-op succeeds; original failure conditions-specific):** technically true (exit 0 observed) with caveat that the probe didn't exercise drizzle-kit's SQL-application engine against a new migration.
+- **Branch 1 / 2 / 3b / 4 ruled out:** no verbose flags exposed by drizzle-kit (`migrate --help` lists only `--config`); no upstream issue search executed (next-step gating); no second occurrence to justify Branch 3b reusable tool per Option Y; no project-side error to fix (shim is clean per §0.3 — stdio inherited, exit code forwarded).
+
+**Verbose-flag landscape (audit step (e)):** drizzle-kit exposes NO `--verbose` or `--debug` flag at any subcommand. `migrate --help` lists only `--config` + global `--help/--version`. Future investigation into the `822a674` failure mode cannot rely on flag-only invocation; sidecar-level fix would need env-var probes (`NODE_DEBUG`, `DRIZZLE_LOGGER`), pg-side query log, or source-level instrumentation of drizzle-kit itself.
+
+**Journal integrity (§6.14.31 destructive-operation-gate cycle, second instance):**
+
+| Phase | Hash |
+|-------|------|
+| Pre-probe | `5385521d609b6ad76a78a3460e3ccfe6ef9cba3af5236541099547b3707e53f3` |
+| Post-probe (after `bun db:migrate`) | `5385521d609b6ad76a78a3460e3ccfe6ef9cba3af5236541099547b3707e53f3` |
+| Post-cleanup (after `0006_test_noop.sql` removed) | `5385521d609b6ad76a78a3460e3ccfe6ef9cba3af5236541099547b3707e53f3` |
+
+**Match: yes (all three identical).** Rollback Case **B variant** — drizzle-kit didn't modify journal at all (success-but-no-engagement counterpart of Case B's "failed, unmodified"). No `0006_snapshot.json` auto-generated. `git diff HEAD -- drizzle/meta/_journal.json` empty post-cleanup. Template followed cleanly; pattern advances across two instances (this gate + sidecar `822a674`).
+
+**Forward-pin:** **§2 round-close** at the next gate. Branch 3a ∩ 5 selects a doc-only outcome; no §2 commit 1 fix-shape work. Round-close commentary will record the branch selection + the methodology finding as the load-bearing empirical contribution.
+
+**§6.14 reinforcement candidates added by this gate (round-close):**
+
+- **§6.14.31 destructive-operation-gate (second instance):** template advances; details in summary `.md`.
+- **§6.14.18/21/22 reinforcement at redirector→executor boundary (fourth round-instance):** redirector spec's "drizzle-kit will (try to) update [`_journal.json`]" empirically false; executor surfaced at probe-result inspection. Cohort now: §0.9 reconciliation, §1 commit 1 gitignore catch, §1 commit 1 dead-reference catch, §2.6 drizzle-kit-write-behavior catch.
+- **NEW observation — "methodology-as-primary-finding" (single instance, forward-watch):** when a reproduction probe doesn't reproduce the target bug, the probe's methodological learning becomes the finding. Single-instance from this gate; no promotion; track for re-occurrence in future rounds.
+
 ---
 
 ## §3 — Commit ledger
@@ -322,7 +354,8 @@ Populated as commits land. Anticipated shape: 0-2 implementation commits across 
 | 0 | `9d59922` | docs(plan): open tooling-reliability debug round | — | — |
 | 1 | `bc0fe17` | docs(plan): reconcile round HEAD re-anchor; amend §0 with §6.14.40 | — | reconciliation |
 | 2 | `cf2d147` | docs(plan,logs,test): §1 commit 1 — bun-test rerun loop empirical data + interim mitigation | §1 | Branch 1 ∩ 4 forward-pinned |
-| 3 | `<this commit>` | docs(plan): §1 round-close; selection-engine sidecar stub | §1 | round-close |
+| 3 | `df4df7c` | docs(plan): §1 round-close; selection-engine sidecar stub | §1 | round-close |
+| 4 | `<this commit>` | docs(plan,logs): §2 commit 0 — drizzle-kit no-op reproduction probe + branch-selection candidate | §2 | Branch 3a ∩ 5 forward-pinned to round-close |
 
 ---
 
