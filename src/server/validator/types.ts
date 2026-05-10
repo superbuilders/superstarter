@@ -28,14 +28,21 @@ type ValidatorVerdict =
 // Eager-loaded candidate shape suitable for criterion evaluation. The engine
 // fetches this once per candidate before iterating criteria; each criterion
 // is a pure function of (candidate, context).
+//
+// `body` and `optionsJson` are typed as `unknown` because they hold jsonb
+// data whose runtime shape is verified by criteria via Zod (itemBody schema
+// for body; optionSchema array for optionsJson). `metadataJson` is typed as
+// Record<string, unknown> because the schema's default is `'{}'::jsonb` so
+// the column always holds an object — criteria narrow individual keys via
+// typeof checks at access time.
 interface CandidateForValidation {
 	readonly id: string
 	readonly subTypeId: SubTypeId
 	readonly difficulty: Difficulty
 	readonly source: "real" | "generated"
 	readonly status: "live" | "candidate" | "retired" | "rejected"
-	readonly body: Readonly<Record<string, unknown>>
-	readonly optionsJson: Readonly<Record<string, unknown>>
+	readonly body: unknown
+	readonly optionsJson: unknown
 	readonly correctAnswer: string
 	readonly explanation: string | null
 	readonly embedding: ReadonlyArray<number> | null
@@ -44,22 +51,41 @@ interface CandidateForValidation {
 	readonly sourceFilename: string | null
 }
 
+// Lookup shapes carried in ValidationContext. Each criterion that needs
+// cohort/parent/provenance data reads from these pre-loaded maps so the
+// criterion check function stays a pure (candidate, ctx) computation.
+interface ProvenanceSiblingRecord {
+	readonly insertedItemId: string
+	readonly tier: Difficulty
+}
+
+interface CohortPeer {
+	readonly id: string
+	readonly embedding: ReadonlyArray<number>
+	readonly bodyText: string
+}
+
 // Shared context passed to every criterion. Contains expensive lookups that
-// would be redundant to recompute per-candidate (cohort failure rates for
-// provenance-batch-reject; pressure-cell membership set for Q2 conservative
-// flag policy).
+// would be redundant to recompute per-candidate.
 //
 // pressureCells keys are `${subTypeId}:${difficulty}` (e.g.,
 // "numerical.fractions:hard"). The §1.3 batch runner builds this set from
 // the §1.0 empirical pressure-cell finding plus runtime live-bank state.
 //
-// cohortFailureRates keys are generator-run cohort identifiers (the precise
-// shape — templateVersion alone, generatorModel+templateVersion, or
-// promptHash when populated — is finalized at §1.2 commit-1 implementation
-// per audit step 12 finding that promptHash is NULL across the working set).
+// cohortFailureRates keys are promptHash strings (per §1.2 commit-1 backfill
+// at b792f45 — 14 cohorts, sub-type↔cohort 1:1 at v1; forward-extensible to
+// multi-prompt-per-sub-type futures). Empty Map indicates pass-1 (criteria
+// 1-5) running before cohort rates are computed; criterion 6 defers to pass.
+//
+// parentEmbeddingByItemId, provenanceByParentItemId, cohortPeersByCohortKey
+// are pre-loaded by the §1.3 batch runner. Tests construct a minimal context
+// via `emptyValidationContext()` (see context.ts).
 interface ValidationContext {
 	readonly cohortFailureRates: ReadonlyMap<string, number>
 	readonly pressureCells: ReadonlySet<string>
+	readonly parentEmbeddingByItemId: ReadonlyMap<string, ReadonlyArray<number>>
+	readonly provenanceByParentItemId: ReadonlyMap<string, ReadonlyArray<ProvenanceSiblingRecord>>
+	readonly cohortPeersByCohortKey: ReadonlyMap<string, ReadonlyArray<CohortPeer>>
 }
 
 // A single validator criterion. Each of the six auto-detectable criteria
@@ -89,6 +115,8 @@ interface CandidateValidationResult {
 export type {
 	CandidateForValidation,
 	CandidateValidationResult,
+	CohortPeer,
+	ProvenanceSiblingRecord,
 	ValidationContext,
 	ValidatorCriterion,
 	ValidatorVerdict
