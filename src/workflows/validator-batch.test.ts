@@ -11,17 +11,17 @@
 // invoked" assertion only.
 
 import { expect, test } from "bun:test"
-import * as errors from "@superbuilders/errors"
 import { emptyValidationContext } from "@/server/validator/context"
+import { defaultThresholds } from "@/server/validator/thresholds"
+import { computeThresholdsHash } from "@/server/validator/thresholds-hash"
 import {
 	computeCohortRatesStep,
-	ErrPersistNotYetImplemented,
-	persistResultsStep,
 	runPass1Step,
 	runPass2Step,
+	serializeValidatorResult,
 	summarizeCalibrationStep
 } from "@/workflows/validator-batch-steps"
-import type { CandidateForValidation } from "@/server/validator/types"
+import type { CandidateForValidation, CandidateValidationResult } from "@/server/validator/types"
 
 interface CandidateOverrides {
 	correctAnswer?: string
@@ -152,10 +152,78 @@ test("summarizeCalibrationStep returns calibration summary", async () => {
 	expect(summary.totalCandidates).toBe(1)
 })
 
-test("persistResultsStep stub throws ErrPersistNotYetImplemented", async () => {
-	const stubResult = await errors.try(persistResultsStep([], "leonardiwata@gmail.com"))
-	expect(stubResult.error).toBeDefined()
-	if (stubResult.error !== undefined) {
-		expect(errors.is(stubResult.error, ErrPersistNotYetImplemented)).toBe(true)
+test("serializeValidatorResult round-trips fields and adds threshold + admin metadata", () => {
+	const result: CandidateValidationResult = {
+		itemId: "item-1",
+		flagsByName: new Map([
+			["schema-shape", { kind: "pass" }],
+			["embedding-distance", { kind: "flag", reason: "off-topic", metadata: { check: "off-topic" } }]
+		]),
+		hasAnyFlag: true,
+		isPressureCell: false,
+		evaluatedAtMs: 1_700_000_000_000
 	}
+	const serialized = serializeValidatorResult(result, "sha256:abc", "admin@example.com")
+	expect(serialized.evaluatedAtMs).toBe(1_700_000_000_000)
+	expect(serialized.hasAnyFlag).toBe(true)
+	expect(serialized.isPressureCell).toBe(false)
+	expect(serialized.thresholdsHash).toBe("sha256:abc")
+	expect(serialized.invokedByAdminEmail).toBe("admin@example.com")
+	expect(serialized.flagsByName["schema-shape"]?.kind).toBe("pass")
+	expect(serialized.flagsByName["embedding-distance"]?.kind).toBe("flag")
+	const reparsed = JSON.parse(JSON.stringify(serialized))
+	expect(reparsed.thresholdsHash).toBe("sha256:abc")
+})
+
+test("computeThresholdsHash is deterministic and sensitive to threshold changes", () => {
+	const hashA = computeThresholdsHash(defaultThresholds)
+	const hashB = computeThresholdsHash(defaultThresholds)
+	expect(hashA).toBe(hashB)
+	expect(hashA.startsWith("sha256:")).toBe(true)
+	const tweaked = {
+		embeddingDistance: {
+			...defaultThresholds.embeddingDistance,
+			defaultMin: defaultThresholds.embeddingDistance.defaultMin + 0.01
+		},
+		subPhaseAFailureModes: defaultThresholds.subPhaseAFailureModes,
+		provenanceBatchReject: defaultThresholds.provenanceBatchReject
+	}
+	const hashTweaked = computeThresholdsHash(tweaked)
+	expect(hashTweaked).not.toBe(hashA)
+})
+
+test("computeThresholdsHash ignores Map insertion order (sorted-key invariant)", () => {
+	const a = {
+		embeddingDistance: {
+			minBySubType: new Map([
+				["numerical.lowest_values", 0.5],
+				["verbal.antonyms", 0.5]
+			] as const),
+			maxBySubType: new Map([
+				["numerical.lowest_values", 0.999],
+				["verbal.antonyms", 0.92]
+			] as const),
+			defaultMin: 0.3,
+			defaultMax: 0.99
+		},
+		subPhaseAFailureModes: defaultThresholds.subPhaseAFailureModes,
+		provenanceBatchReject: defaultThresholds.provenanceBatchReject
+	}
+	const b = {
+		embeddingDistance: {
+			minBySubType: new Map([
+				["verbal.antonyms", 0.5],
+				["numerical.lowest_values", 0.5]
+			] as const),
+			maxBySubType: new Map([
+				["verbal.antonyms", 0.92],
+				["numerical.lowest_values", 0.999]
+			] as const),
+			defaultMin: 0.3,
+			defaultMax: 0.99
+		},
+		subPhaseAFailureModes: defaultThresholds.subPhaseAFailureModes,
+		provenanceBatchReject: defaultThresholds.provenanceBatchReject
+	}
+	expect(computeThresholdsHash(a)).toBe(computeThresholdsHash(b))
 })

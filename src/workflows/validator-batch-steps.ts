@@ -24,7 +24,7 @@
 //                                  §1.3 commit-1 implements
 
 import * as errors from "@superbuilders/errors"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { z } from "zod"
 import type { SubTypeId } from "@/config/sub-types"
 import { subTypeIds } from "@/config/sub-types"
@@ -37,14 +37,13 @@ import { validateCandidate } from "@/server/validator/engine"
 import type {
 	CandidateForValidation,
 	CandidateValidationResult,
-	ValidationContext
+	ValidationContext,
+	ValidatorVerdict
 } from "@/server/validator/types"
 
-const ErrPersistNotYetImplemented = errors.new(
-	"validator persistResultsStep stubbed (§1.3 commit-0); implementation lands at §1.3 commit-1"
-)
 const ErrLoadCandidatesQueryFailed = errors.new("loadCandidatesStep query failed")
 const ErrUnknownSubTypeId = errors.new("loadCandidatesStep encountered unknown sub_type_id")
+const ErrPersistTransactionFailed = errors.new("persistResultsStep transaction failed")
 
 const subTypeIdSet: ReadonlySet<string> = new Set<string>(subTypeIds)
 
@@ -293,29 +292,92 @@ function summarizeCalibrationStep(
 	return summarizeForCalibration(results)
 }
 
-async function persistResultsStep(
-	_results: ReadonlyArray<CandidateValidationResult>,
-	_invokedByAdminEmail: string
-): Promise<number> {
-	"use step"
-	logger.error(
-		{ resultCount: _results.length },
-		"validator-batch: persistResultsStep stub invoked (§1.3 commit-0)"
-	)
-	throw errors.wrap(ErrPersistNotYetImplemented, "persistResultsStep")
+interface SerializedValidatorResult {
+	readonly evaluatedAtMs: number
+	readonly hasAnyFlag: boolean
+	readonly isPressureCell: boolean
+	readonly flagsByName: Readonly<Record<string, ValidatorVerdict>>
+	readonly thresholdsHash: string
+	readonly invokedByAdminEmail: string
 }
 
-export type { CohortPass1Stats }
+function serializeValidatorResult(
+	result: CandidateValidationResult,
+	thresholdsHash: string,
+	invokedByAdminEmail: string
+): SerializedValidatorResult {
+	const flagsRecord: Record<string, ValidatorVerdict> = {}
+	for (const [name, verdict] of result.flagsByName) {
+		flagsRecord[name] = verdict
+	}
+	return {
+		evaluatedAtMs: result.evaluatedAtMs,
+		hasAnyFlag: result.hasAnyFlag,
+		isPressureCell: result.isPressureCell,
+		flagsByName: flagsRecord,
+		thresholdsHash,
+		invokedByAdminEmail
+	}
+}
+
+async function persistResultsStep(
+	results: ReadonlyArray<CandidateValidationResult>,
+	thresholdsHash: string,
+	invokedByAdminEmail: string
+): Promise<number> {
+	"use step"
+	logger.info(
+		{ candidateCount: results.length, invokedByAdminEmail, thresholdsHash },
+		"persistResultsStep: starting transactional batch write"
+	)
+	let persistedCount = 0
+	const startedAtMs = Date.now()
+	const txResult = await errors.try(
+		db.transaction(async function persistAllResults(tx) {
+			for (const result of results) {
+				const validatorResult = serializeValidatorResult(
+					result,
+					thresholdsHash,
+					invokedByAdminEmail
+				)
+				const payloadJson = JSON.stringify(validatorResult)
+				await tx
+					.update(items)
+					.set({
+						metadataJson: sql`jsonb_set(${items.metadataJson}, '{validatorResult}', ${payloadJson}::jsonb)`
+					})
+					.where(eq(items.id, result.itemId))
+				persistedCount += 1
+			}
+		})
+	)
+	if (txResult.error) {
+		logger.error(
+			{ error: txResult.error, persistedCount },
+			"persistResultsStep: transaction failed; no rows persisted (rolled back)"
+		)
+		throw errors.wrap(ErrPersistTransactionFailed, "persistResultsStep transaction")
+	}
+	const durationMs = Date.now() - startedAtMs
+	logger.info(
+		{ persistedCount, durationMs },
+		"persistResultsStep: batch write complete"
+	)
+	return persistedCount
+}
+
+export type { CohortPass1Stats, SerializedValidatorResult }
 export {
 	asSubTypeId,
 	buildContextStep,
 	computeCohortRatesStep,
 	ErrLoadCandidatesQueryFailed,
-	ErrPersistNotYetImplemented,
+	ErrPersistTransactionFailed,
 	ErrUnknownSubTypeId,
 	loadCandidatesStep,
 	persistResultsStep,
 	runPass1Step,
 	runPass2Step,
+	serializeValidatorResult,
 	summarizeCalibrationStep
 }

@@ -20,6 +20,8 @@
 // (stubbed at §1.3 commit-0; throws ErrPersistNotYetImplemented). Dry-run
 // mode skips persistence entirely.
 
+import { defaultThresholds } from "@/server/validator/thresholds"
+import { computeThresholdsHash } from "@/server/validator/thresholds-hash"
 import {
 	buildContextStep,
 	computeCohortRatesStep,
@@ -43,10 +45,12 @@ interface ValidatorBatchOutput {
 	readonly calibrationSummary: CalibrationSummary
 	readonly cohortStats: ReadonlyArray<CohortPass1Stats>
 	readonly persistedCount: number
+	readonly thresholdsHash: string
 }
 
 async function validatorBatchWorkflow(input: ValidatorBatchInput): Promise<ValidatorBatchOutput> {
 	"use workflow"
+	const thresholdsHash = computeThresholdsHash(defaultThresholds)
 	const candidates = await loadCandidatesStep()
 	const ctx = await buildContextStep(candidates)
 	const pass1 = await runPass1Step(candidates, ctx)
@@ -55,14 +59,15 @@ async function validatorBatchWorkflow(input: ValidatorBatchInput): Promise<Valid
 	const calibrationSummary = summarizeCalibrationStep(pass2)
 	let persistedCount = 0
 	if (input.mode === "production") {
-		persistedCount = await persistResultsStep(pass2, input.invokedByAdminEmail)
+		persistedCount = await persistResultsStep(pass2, thresholdsHash, input.invokedByAdminEmail)
 	}
 	return {
 		mode: input.mode,
 		candidateCount: candidates.length,
 		calibrationSummary,
 		cohortStats: cohort.stats,
-		persistedCount
+		persistedCount,
+		thresholdsHash
 	}
 }
 
