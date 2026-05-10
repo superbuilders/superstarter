@@ -36,8 +36,8 @@ import { users } from "@/db/schemas/auth/users"
 import { logger } from "@/logger"
 import { loadAllBelts } from "@/server/dashboard/belts"
 import { deriveHeadline } from "@/server/dashboard/helpers"
-import { countMistakes } from "@/server/dashboard/mistakes"
 import { pickTodaysMission } from "@/server/dashboard/mission"
+import { countMistakes } from "@/server/dashboard/mistakes"
 import { computePaceWeek } from "@/server/dashboard/pace"
 import { computeScoreEstimate, getLast5SimScores } from "@/server/dashboard/score"
 import { computeStreak } from "@/server/dashboard/streak"
@@ -61,7 +61,9 @@ interface UserProfile {
  *   - loadAllBelts           → STUB (Belts PRD)
  *   - pickTodaysMission      → real read (practice round commit 7)
  *   - computeScoreEstimate   → real read (practice round commit 5)
- *   - computeStreak          → STUB (Streaks PRD)
+ *   - computeStreak          → real read (consecutive UTC days
+ *                              with ≥1 attempt; src/server/dashboard/
+ *                              streak.ts has the unit tests)
  *   - computePaceWeek        → real read (practice round commit 6;
  *                              transitional fields pruned at
  *                              commit 10)

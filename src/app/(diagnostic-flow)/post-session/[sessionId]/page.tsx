@@ -32,21 +32,20 @@
 // are exported for child components.
 
 import * as errors from "@superbuilders/errors"
-import { and, eq, sql } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { redirect } from "next/navigation"
 import * as React from "react"
+import { PostSessionContent } from "@/app/(diagnostic-flow)/post-session/[sessionId]/content"
 import { auth } from "@/auth"
+import type { SessionTypeForShell } from "@/components/post-session/post-session-shell"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
 import { db } from "@/db"
-import { attempts } from "@/db/schemas/practice/attempts"
-import { items } from "@/db/schemas/catalog/items"
-import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
-import { strategies } from "@/db/schemas/catalog/strategies"
 import { timestampFromUuidv7 } from "@/db/lib/uuid-time"
+import { items } from "@/db/schemas/catalog/items"
+import { strategies } from "@/db/schemas/catalog/strategies"
+import { attempts } from "@/db/schemas/practice/attempts"
+import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
-import { triageScoreForSession, type TriageScore } from "@/server/triage/score"
-import { PostSessionContent } from "@/app/(diagnostic-flow)/post-session/[sessionId]/content"
-import type { SessionTypeForShell } from "@/components/post-session/post-session-shell"
 import {
 	getEndSessionTierForDrill,
 	type TierForDrillSession
@@ -55,6 +54,7 @@ import {
 	deriveStruggledSubTypes,
 	selectStrategiesForStruggledSubTypes
 } from "@/server/post-session/strategy-selection"
+import { type TriageScore, triageScoreForSession } from "@/server/triage/score"
 
 interface PageProps {
 	params: Promise<{ sessionId: string }>
@@ -96,7 +96,7 @@ const getPerSubTypePerformance = db
 	.groupBy(items.subTypeId)
 	.prepare("app_dgflow_post_session_id_per_sub_type_performance")
 
-// Wrong items for the session, chronologically ordered. The §15.2-
+// All items for the session, chronologically ordered. The §15.2-
 // amendment seam shipped end-to-end at sub-phase 4 — commit 2 landed
 // the metadata_json->'structuredExplanation' projection here plus the
 // matching field on the WrongItem interface below; commit 4 wired the
@@ -106,6 +106,13 @@ const getPerSubTypePerformance = db
 // returns NULL for those rows and the boundary normalize maps
 // NULL → undefined per rules/no-null-undefined-union.md, then
 // <WrongItemCard> falls back to items.explanation prose per plan §3.6.
+//
+// Originally filtered to `correct = false` so the surface read as
+// "Items you got wrong." That filter was removed so the post-session
+// review can show every question (correct, incorrect, AND skipped —
+// skipped attempts have correct=false + selectedAnswer=NULL per
+// submitAttempt). The projection now also carries `correct` so the
+// renderer can label per-item status (Correct / Incorrect / Skipped).
 const getWrongItemsForSession = db
 	.select({
 		attemptId: attempts.id,
@@ -115,14 +122,13 @@ const getWrongItemsForSession = db
 		optionsJson: items.optionsJson,
 		correctAnswer: items.correctAnswer,
 		selectedAnswer: attempts.selectedAnswer,
+		correct: attempts.correct,
 		explanation: items.explanation,
 		structuredExplanation: sql<unknown>`${items.metadataJson} -> 'structuredExplanation'`
 	})
 	.from(attempts)
 	.innerJoin(items, eq(attempts.itemId, items.id))
-	.where(
-		and(eq(attempts.sessionId, sql.placeholder("sessionId")), eq(attempts.correct, false))
-	)
+	.where(eq(attempts.sessionId, sql.placeholder("sessionId")))
 	.orderBy(attempts.id)
 	.prepare("app_dgflow_post_session_id_wrong_items")
 
@@ -170,7 +176,10 @@ interface WrongItem {
 	body: unknown
 	optionsJson: unknown
 	correctAnswer: string
+	/** undefined when the user skipped the question (no answer submitted) */
 	selectedAnswer?: string
+	/** Whether the attempt was correct. Skipped attempts are correct=false. */
+	correct: boolean
 	explanation?: string
 	structuredExplanation?: unknown
 }
@@ -314,9 +323,7 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		)
 		throw errors.wrap(performanceResult.error, "per-sub-type performance")
 	}
-	const wrongItemsResult = await errors.try(
-		getWrongItemsForSession.execute({ sessionId: row.id })
-	)
+	const wrongItemsResult = await errors.try(getWrongItemsForSession.execute({ sessionId: row.id }))
 	if (wrongItemsResult.error) {
 		logger.error(
 			{ error: wrongItemsResult.error, sessionId: row.id },
@@ -364,9 +371,9 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			optionsJson: r.optionsJson,
 			correctAnswer: r.correctAnswer,
 			selectedAnswer: r.selectedAnswer === null ? undefined : r.selectedAnswer,
+			correct: r.correct,
 			explanation: r.explanation === null ? undefined : r.explanation,
-			structuredExplanation:
-				r.structuredExplanation === null ? undefined : r.structuredExplanation
+			structuredExplanation: r.structuredExplanation === null ? undefined : r.structuredExplanation
 		}
 	})
 
@@ -400,10 +407,7 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			)
 			throw errors.wrap(strategiesResult.error, "strategies for struggled")
 		}
-		surfacedStrategies = selectStrategiesForStruggledSubTypes(
-			performance,
-			strategiesResult.data
-		)
+		surfacedStrategies = selectStrategiesForStruggledSubTypes(performance, strategiesResult.data)
 	}
 
 	// Drill-only end-session walker tier (sub-phase 5 commit 4, plan

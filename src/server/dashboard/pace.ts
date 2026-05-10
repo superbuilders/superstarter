@@ -71,7 +71,13 @@ async function loadLastSimMedians(userId: string): Promise<ReadonlyArray<SimMedi
 				and(
 					eq(practiceSessions.userId, userId),
 					eq(practiceSessions.type, "full_length"),
-					isNotNull(practiceSessions.endedAtMs)
+					isNotNull(practiceSessions.endedAtMs),
+					// Abandoned sims (the abandon-sweep cron / fresh-start
+					// path writes completionReason='abandoned') represent
+					// sessions where the user wasn't there when the test
+					// ended. Their pace median is not a real signal — keep
+					// the sparkline anchored to actually-completed sims.
+					eq(practiceSessions.completionReason, "completed")
 				)
 			)
 			.groupBy(practiceSessions.id)

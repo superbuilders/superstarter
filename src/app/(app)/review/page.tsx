@@ -1,37 +1,52 @@
-// /review — placeholder route. Dashboard plan §5 commit 4 +
-// Dashboard PRD §4.3.
+// /review — past-sessions surface. Lists every completed practice
+// test and drill the user has taken, ordered newest-first. Each row
+// links to /post-session/<id> so the user can revisit the
+// per-session review surface.
 //
-// Server component, no auth call (the (app)/layout.tsx gate runs
-// once at the route-group level), no data fetching, no client
-// interactivity. The wrong-answers review surface is a follow-up
-// Mistakes PRD per Dashboard PRD §16 + §19; this page exists so the
-// to-be-built TopNav's "Review" link and the dashboard's
-// <MistakesTile> link target don't 404. Copy avoids "spaced review"
-// framing — spaced review was cut from v1 (`064a386`); this surface
-// is a wrong-answers review, not a scheduled-review queue.
+// Server component, NOT async per rules/rsc-data-fetching-patterns.md
+// (Pattern 2 — per-page Suspense; no ViewTransition layout above this
+// route). Initiates the data promise via loadUserId() chained into
+// getReviewPageData(userId), and passes the promise to the client
+// <ReviewView> wrapper inside a <React.Suspense> boundary.
+//
+// The (app)/layout.tsx gate already enforces auth + diagnostic-
+// completed before this page renders; the auth() here is for the
+// userId only and the redirect-on-null is defensive belt-and-
+// suspenders, mirroring the dashboard page.
 
-import Link from "next/link"
+import { redirect } from "next/navigation"
+import * as React from "react"
+import { auth } from "@/auth"
+import { ReviewView } from "@/components/review/review-view"
+import { getReviewPageData } from "@/server/review/data"
 
-function Page() {
+async function loadUserId(): Promise<string> {
+	const session = await auth()
+	if (!session?.user?.id) {
+		redirect("/login")
+	}
+	return session.user.id
+}
+
+function ReviewPage() {
+	const dataPromise = loadUserId().then(function load(userId) {
+		return getReviewPageData(userId)
+	})
 	return (
-		<main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 px-6 py-12">
-			<header className="space-y-2">
-				<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">
-					Review
-				</h1>
-				<p className="text-sm text-text-2">
-					Mistakes review is coming soon. Wrong answers from past sessions will land
-					here.
-				</p>
-			</header>
-			<Link
-				href="/"
-				className="text-cobalt text-sm hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
-			>
-				Back to dashboard
-			</Link>
-		</main>
+		<React.Suspense fallback={<ReviewSkeleton />}>
+			<ReviewView dataPromise={dataPromise} />
+		</React.Suspense>
 	)
 }
 
-export default Page
+function ReviewSkeleton() {
+	return (
+		<div className="min-h-screen bg-bg text-text-1">
+			<main className="mx-auto max-w-[1100px] px-7 pt-12">
+				<p className="text-sm text-text-3">Loading…</p>
+			</main>
+		</div>
+	)
+}
+
+export default ReviewPage

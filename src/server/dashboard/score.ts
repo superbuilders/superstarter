@@ -73,7 +73,14 @@ async function loadLastSimsWithScores(
 				and(
 					eq(practiceSessions.userId, userId),
 					eq(practiceSessions.type, "full_length"),
-					isNotNull(practiceSessions.endedAtMs)
+					isNotNull(practiceSessions.endedAtMs),
+					// Abandoned sims (the abandon-sweep cron / fresh-start
+					// path writes completionReason='abandoned') represent
+					// sessions where the user wasn't there when the test
+					// ended. Their raw score does not reflect performance —
+					// exclude them from "Previous score" + the sparkline
+					// + the delta vs prior sim.
+					eq(practiceSessions.completionReason, "completed")
 				)
 			)
 			.groupBy(practiceSessions.id)
@@ -81,10 +88,7 @@ async function loadLastSimsWithScores(
 			.limit(limit)
 	)
 	if (result.error) {
-		logger.error(
-			{ error: result.error, userId, limit },
-			"loadLastSimsWithScores: query failed"
-		)
+		logger.error({ error: result.error, userId, limit }, "loadLastSimsWithScores: query failed")
 		throw errors.wrap(result.error, "loadLastSimsWithScores")
 	}
 	return result.data.map(function toSimRow(row): SimRow {

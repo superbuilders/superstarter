@@ -1,7 +1,10 @@
 "use client"
 
-// <WrongItemsBrowser> — display-only wrong-items list for the
-// post-session review surface.
+// <WrongItemsBrowser> — display-only per-question review for the
+// post-session surface. Renders ALL attempts in the session — correct,
+// incorrect, and skipped — not just wrong ones (the prior filter was
+// removed at the page-level query). The component name is retained
+// for diff-locality; semantics now cover every item the user saw.
 //
 // Plan: docs/plans/phase5-post-session-review.md §8 + §15.2.
 //
@@ -11,10 +14,13 @@
 //   - Sub-type group order: verbal-first then alphabetical by
 //     displayName, matching <AccuracySummary> + <LatencySummary>.
 //   - Within group: ordered by attempt.id ASC (UUIDv7 = chronological).
-//   - Each item renders: prompt body, options (with display letters
-//     A/B/C/D/E computed at render time per SPEC §3.3.2), correct-/
-//     selected-marker, prose explanation.
-//   - Empty state ("No wrong items this session.") when items.length
+//   - Each item renders: status badge (Correct / Incorrect / Skipped),
+//     prompt body, options (with display letters A/B/C/D/E computed
+//     at render time per SPEC §3.3.2), correct-/selected-marker,
+//     prose explanation. Skipped items render no selected-option
+//     marker (selectedAnswer is undefined per submitAttempt's
+//     "no answer" branch).
+//   - Empty state ("No questions in this session.") when items.length
 //     === 0.
 //
 // The §15.2-amendment seam shipped end-to-end at sub-phase 4 — the
@@ -65,14 +71,25 @@ import * as React from "react"
 import { z } from "zod"
 import type { WrongItem } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { TextBody } from "@/components/item/body-renderers/text"
-import { SUB_TYPE_BY_ID, compareBySubTypeDisplay } from "@/components/post-session/_lib/sub-type-display"
+import {
+	compareBySubTypeDisplay,
+	SUB_TYPE_BY_ID
+} from "@/components/post-session/_lib/sub-type-display"
 import { StructuredExplanation } from "@/components/post-session/structured-explanation"
 import type { SubTypeId } from "@/config/sub-types"
 import { logger } from "@/logger"
-import { itemBody, type ItemBody } from "@/server/items/body-schema"
+import { type ItemBody, itemBody } from "@/server/items/body-schema"
 
 interface WrongItemsBrowserProps {
 	items: ReadonlyArray<WrongItem>
+}
+
+type ItemStatus = "correct" | "incorrect" | "skipped"
+
+function statusFor(item: WrongItem): ItemStatus {
+	if (item.correct) return "correct"
+	if (item.selectedAnswer === undefined) return "skipped"
+	return "incorrect"
 }
 
 interface DisplayGroup {
@@ -165,11 +182,7 @@ function OptionLine(props: OptionLineProps) {
 		// non-text 3:1 floor (~2.5:1 → ~3.7:1).
 		textClass = "flex-1 text-foreground/80 line-through"
 		marker = (
-			<span
-				aria-label="your answer (incorrect)"
-				className="text-foreground/55"
-				role="img"
-			>
+			<span aria-label="your answer (incorrect)" className="text-foreground/55" role="img">
 				✗
 			</span>
 		)
@@ -267,17 +280,43 @@ interface WrongItemCardProps {
 	item: WrongItem
 }
 
+interface StatusBadgeProps {
+	status: ItemStatus
+}
+
+function StatusBadge({ status }: StatusBadgeProps) {
+	let label = "Correct"
+	let className =
+		"rounded-sm bg-foreground/5 px-[6px] py-[1px] font-medium text-[10px] text-foreground/80 uppercase tracking-[0.06em]"
+	if (status === "incorrect") {
+		label = "Incorrect"
+		className =
+			"rounded-sm border border-foreground/20 px-[6px] py-[1px] font-medium text-[10px] text-foreground/80 uppercase tracking-[0.06em]"
+	} else if (status === "skipped") {
+		label = "Skipped"
+		className =
+			"rounded-sm border border-dashed border-foreground/30 px-[6px] py-[1px] font-medium text-[10px] text-foreground/70 uppercase tracking-[0.06em]"
+	}
+	return (
+		<span aria-label={`Status: ${label}`} className={className} role="img">
+			{label}
+		</span>
+	)
+}
+
 function WrongItemCard(props: WrongItemCardProps) {
 	const parsed = parseItem(props.item)
 	const [struck, setStruck] = React.useState<ReadonlyArray<string>>([])
 	const [highlighted, setHighlighted] = React.useState<ReadonlyArray<string>>([])
+	const status = statusFor(props.item)
 	if (parsed === null) {
 		return (
 			<li
-				className="border-foreground/15 border-l pl-4 text-foreground/60 text-sm italic"
+				className="space-y-2 border-foreground/15 border-l pl-4 text-foreground/60 text-sm italic"
 				data-testid={`post-session-wrong-item-degraded-${props.item.attemptId}`}
 			>
-				This item could not be displayed.
+				<StatusBadge status={status} />
+				<p>This item could not be displayed.</p>
 			</li>
 		)
 	}
@@ -305,9 +344,7 @@ function WrongItemCard(props: WrongItemCardProps) {
 		)
 	} else if (props.item.explanation !== undefined) {
 		explanationNode = (
-			<p className="text-foreground/70 text-sm leading-relaxed">
-				{props.item.explanation}
-			</p>
+			<p className="text-foreground/70 text-sm leading-relaxed">{props.item.explanation}</p>
 		)
 	}
 
@@ -315,15 +352,16 @@ function WrongItemCard(props: WrongItemCardProps) {
 		<li
 			className="space-y-3 border-foreground/15 border-l pl-4"
 			data-testid={`post-session-wrong-item-${props.item.attemptId}`}
+			data-item-status={status}
 		>
+			<StatusBadge status={status} />
 			<BodyDispatch body={body} />
 			<ol className="space-y-1">
 				{options.map(function renderOption(option, idx) {
 					const letter = letterFor(idx)
 					const isCorrect = option.id === props.item.correctAnswer
 					const isSelected =
-						props.item.selectedAnswer !== undefined &&
-						option.id === props.item.selectedAnswer
+						props.item.selectedAnswer !== undefined && option.id === props.item.selectedAnswer
 					const isStruck = struckSet.has(option.id)
 					const isHighlighted = highlightedSet.has(option.id)
 					return (
@@ -356,14 +394,11 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 				className="font-medium text-foreground text-sm tracking-tight"
 				id="post-session-wrong-items-heading"
 			>
-				Items you got wrong
+				Question review
 			</h2>
 			{groups.length === 0 ? (
-				<p
-					className="text-foreground/80 text-sm"
-					data-testid="post-session-wrong-items-empty"
-				>
-					No wrong items this session.
+				<p className="text-foreground/80 text-sm" data-testid="post-session-wrong-items-empty">
+					No questions in this session.
 				</p>
 			) : (
 				<div className="space-y-6">
@@ -374,9 +409,7 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 								className="space-y-3"
 								data-testid={`post-session-wrong-items-group-${group.subTypeId}`}
 							>
-								<h3 className="font-semibold text-foreground/80 text-sm">
-									{group.displayName}
-								</h3>
+								<h3 className="font-semibold text-foreground/80 text-sm">{group.displayName}</h3>
 								<ol className="space-y-5">
 									{group.items.map(function renderItem(item) {
 										return <WrongItemCard key={item.attemptId} item={item} />
