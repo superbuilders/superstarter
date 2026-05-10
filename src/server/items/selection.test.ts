@@ -28,20 +28,16 @@ import "@/env"
 import { expect, test } from "bun:test"
 import * as errors from "@superbuilders/errors"
 import { and, count, eq, sql } from "drizzle-orm"
+import type { ItemForRender } from "@/components/focus-shell/types"
 import { diagnosticMix } from "@/config/diagnostic-mix"
-import {
-	generateFullLengthSlots,
-	roundDecile,
-	standardCurve
-} from "@/config/difficulty-curves"
+import { generateFullLengthSlots, roundDecile, standardCurve } from "@/config/difficulty-curves"
 import { type Difficulty, type SubTypeId, subTypeIds } from "@/config/sub-types"
 import { createAdminDb } from "@/db/admin"
-import { attempts } from "@/db/schemas/practice/attempts"
-import { items } from "@/db/schemas/catalog/items"
-import { masteryState } from "@/db/schemas/practice/mastery-state"
 import { users } from "@/db/schemas/auth/users"
+import { items } from "@/db/schemas/catalog/items"
+import { attempts } from "@/db/schemas/practice/attempts"
+import { masteryState } from "@/db/schemas/practice/mastery-state"
 import { logger } from "@/logger"
-import type { ItemForRender } from "@/components/focus-shell/types"
 import { pickItemRow } from "@/server/items/queries"
 import { startSession } from "@/server/sessions/start"
 import { submitAttempt } from "@/server/sessions/submit"
@@ -56,10 +52,7 @@ async function createTestUser(suffix: string): Promise<string> {
 	await using adminDb = await createAdminDb()
 	const email = `selection-test-${suffix}-${Date.now()}@local.dev`
 	const result = await errors.try(
-		adminDb.db
-			.insert(users)
-			.values({ email, name: "Selection Test" })
-			.returning({ id: users.id })
+		adminDb.db.insert(users).values({ email, name: "Selection Test" }).returning({ id: users.id })
 	)
 	if (result.error) {
 		logger.error({ error: result.error, email }, "selection-test: user insert failed")
@@ -172,8 +165,6 @@ test("getNextItem: no re-serve within a session — diagnostic completion produc
 				itemId: next.id,
 				selectedAnswer: next.options[0]?.id,
 				latencyMs: 5000,
-				triagePromptFired: false,
-				triageTaken: false,
 				selection: next.selection
 			})
 		)
@@ -202,8 +193,6 @@ test("getNextItem: no re-serve within a session — diagnostic completion produc
 			itemId: next.id,
 			selectedAnswer: next.options[0]?.id,
 			latencyMs: 5000,
-			triagePromptFired: false,
-			triageTaken: false,
 			selection: next.selection
 		})
 	)
@@ -359,8 +348,6 @@ test("getNextAdaptive: walker holds across first 10 attempts — initial 'medium
 				itemId: next.id,
 				selectedAnswer: correctAnswer,
 				latencyMs: 5_000,
-				triagePromptFired: false,
-				triageTaken: false,
 				selection: next.selection
 			})
 		)
@@ -419,8 +406,6 @@ test("getNextAdaptive: walker steps up after 10 attempts at high performance —
 				itemId: next.id,
 				selectedAnswer,
 				latencyMs: 5_000,
-				triagePromptFired: false,
-				triageTaken: false,
 				selection: next.selection
 			})
 		)
@@ -469,7 +454,9 @@ test("getNextAdaptive: walker steps up after 10 attempts at high performance —
 // multiple sessions to produce a hit.
 
 const ErrFullLengthRowMissing = errors.new("full-length-test: attempt row missing for slot")
-const ErrFullLengthSubTypeMismatch = errors.new("full-length-test: attempt sub_type_id != predicted")
+const ErrFullLengthSubTypeMismatch = errors.new(
+	"full-length-test: attempt sub_type_id != predicted"
+)
 const ErrFullLengthRequestedTierMismatch = errors.new(
 	"full-length-test: attempt requested-tier != predicted"
 )
@@ -517,10 +504,7 @@ async function readFullLengthAttempts(sessionId: string): Promise<FullLengthAtte
 			.orderBy(attempts.id)
 	)
 	if (result.error) {
-		logger.error(
-			{ error: result.error, sessionId },
-			"full-length-test: attempts read failed"
-		)
+		logger.error({ error: result.error, sessionId }, "full-length-test: attempts read failed")
 		throw errors.wrap(result.error, "read attempts")
 	}
 	return result.data.map(function narrowRow(r): FullLengthAttemptRow {
@@ -552,8 +536,6 @@ async function runFullLengthSession(suffix: string): Promise<{
 				itemId: next.id,
 				selectedAnswer: next.options[0]?.id,
 				latencyMs: 5_000,
-				triagePromptFired: false,
-				triageTaken: false,
 				selection: next.selection
 			})
 		)
@@ -579,16 +561,11 @@ async function runFullLengthSession(suffix: string): Promise<{
 			itemId: next.id,
 			selectedAnswer: next.options[0]?.id,
 			latencyMs: 5_000,
-			triagePromptFired: false,
-			triageTaken: false,
 			selection: next.selection
 		})
 	)
 	if (finalResult.error) {
-		logger.error(
-			{ error: finalResult.error, sessionId },
-			"full-length-test: final submit failed"
-		)
+		logger.error({ error: finalResult.error, sessionId }, "full-length-test: final submit failed")
 		throw errors.wrap(finalResult.error, "final submit")
 	}
 	expect(finalResult.data.nextItem).toBeUndefined()

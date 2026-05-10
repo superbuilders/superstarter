@@ -30,14 +30,14 @@ import * as errors from "@superbuilders/errors"
 import { eq, sql } from "drizzle-orm"
 import { diagnosticMix } from "@/config/diagnostic-mix"
 import { createAdminDb } from "@/db/admin"
-import { attempts } from "@/db/schemas/practice/attempts"
-import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { users } from "@/db/schemas/auth/users"
 import { items } from "@/db/schemas/catalog/items"
+import { attempts } from "@/db/schemas/practice/attempts"
+import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
 import { endSession } from "@/server/sessions/end"
 import { startSession } from "@/server/sessions/start"
-import { submitAttempt, type SubmitAttemptResult } from "@/server/sessions/submit"
+import { type SubmitAttemptResult, submitAttempt } from "@/server/sessions/submit"
 
 interface SmokeContext {
 	userId: string
@@ -84,7 +84,11 @@ async function submitOnce(
 	sessionId: string,
 	itemId: string,
 	selectedAnswer: string | undefined,
-	selection: { servedAtTier: "easy" | "medium" | "hard" | "brutal"; fallbackFromTier?: "easy" | "medium" | "hard" | "brutal"; fallbackLevel: "fresh" | "session-soft" | "recency-soft" | "tier-degraded" }
+	selection: {
+		servedAtTier: "easy" | "medium" | "hard" | "brutal"
+		fallbackFromTier?: "easy" | "medium" | "hard" | "brutal"
+		fallbackLevel: "fresh" | "session-soft" | "recency-soft" | "tier-degraded"
+	}
 ): Promise<SubmitOutcome> {
 	const r = await errors.try(
 		submitAttempt({
@@ -92,8 +96,6 @@ async function submitOnce(
 			itemId,
 			selectedAnswer,
 			latencyMs: 5000,
-			triagePromptFired: false,
-			triageTaken: false,
 			selection
 		})
 	)
@@ -167,16 +169,14 @@ async function runSmoke(): Promise<PhaseResult[]> {
 
 	// Submit 2
 	if (submit1.result.nextItem === undefined) {
-		logger.error({ sessionId: start.sessionId }, "smoke: submit 1 returned undefined nextItem (pre-cutoff)")
+		logger.error(
+			{ sessionId: start.sessionId },
+			"smoke: submit 1 returned undefined nextItem (pre-cutoff)"
+		)
 		throw errors.new("smoke: submit 1 returned undefined nextItem (pre-cutoff)")
 	}
 	const item2 = submit1.result.nextItem
-	const submit2 = await submitOnce(
-		start.sessionId,
-		item2.id,
-		item2.options[0]?.id,
-		item2.selection
-	)
+	const submit2 = await submitOnce(start.sessionId, item2.id, item2.options[0]?.id, item2.selection)
 	preCutoffServedSubTypes.push(submit2.nextSubTypeId)
 	phases.push({
 		step: "submit 2 (pre-cutoff)",
@@ -190,7 +190,10 @@ async function runSmoke(): Promise<PhaseResult[]> {
 	// Cutoff path: hand-edit started_at_ms to (now - 16 minutes) so the
 	// next submit lands past the 15-minute threshold.
 	if (submit2.result.nextItem === undefined) {
-		logger.error({ sessionId: start.sessionId }, "smoke: submit 2 returned undefined nextItem (pre-cutoff)")
+		logger.error(
+			{ sessionId: start.sessionId },
+			"smoke: submit 2 returned undefined nextItem (pre-cutoff)"
+		)
 		throw errors.new("smoke: submit 2 returned undefined nextItem (pre-cutoff)")
 	}
 	const item3 = submit2.result.nextItem
@@ -217,12 +220,7 @@ async function runSmoke(): Promise<PhaseResult[]> {
 		)
 	}
 
-	const submit3 = await submitOnce(
-		start.sessionId,
-		item3.id,
-		item3.options[0]?.id,
-		item3.selection
-	)
+	const submit3 = await submitOnce(start.sessionId, item3.id, item3.options[0]?.id, item3.selection)
 	phases.push({
 		step: "submit 3 (post-cutoff) — expect nextItem === undefined",
 		ok: submit3.result.nextItem === undefined,
@@ -235,9 +233,7 @@ async function runSmoke(): Promise<PhaseResult[]> {
 	// The FocusShell's onEndSession callback would fire after seeing
 	// nextItem === undefined; the underlying function is what writes the
 	// session-end columns.
-	const endResult = await errors.try(
-		endSession(start.sessionId, { skipWorkflowTrigger: true })
-	)
+	const endResult = await errors.try(endSession(start.sessionId, { skipWorkflowTrigger: true }))
 	if (endResult.error) {
 		logger.error({ error: endResult.error }, "smoke: endSession failed")
 		throw errors.wrap(endResult.error, "smoke: endSession")
@@ -338,7 +334,10 @@ const phases = main.data
 let allOk = true
 for (const p of phases) {
 	if (!p.ok) allOk = false
-	logger.info({ step: p.step, ok: p.ok, detail: p.detail }, "phase3-polish-commit1 smoke: phase result")
+	logger.info(
+		{ step: p.step, ok: p.ok, detail: p.detail },
+		"phase3-polish-commit1 smoke: phase result"
+	)
 }
 if (!allOk) {
 	logger.error("phase3-polish-commit1 smoke: one or more phases failed")

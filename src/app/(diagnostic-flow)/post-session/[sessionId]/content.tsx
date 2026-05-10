@@ -24,7 +24,6 @@ function PostSessionContent(props: PostSessionContentProps) {
 			pacingMinutes={info.pacingMinutes}
 			performance={info.performance}
 			wrongItems={info.wrongItems}
-			triageScore={info.triageScore}
 			surfacedStrategies={info.surfacedStrategies}
 			endSessionTier={info.endSessionTier}
 		/>

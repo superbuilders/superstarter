@@ -13,21 +13,11 @@
 //   `tick` handler from the action's `nowMs` minus the start values.
 //   They never drift from the start values regardless of how many
 //   ticks were dropped (e.g., when a tab is backgrounded).
-//
-// The diagnostic overtime-note reducer machinery (the
-// `diagnostic_overtime_note_shown` action,
-// `diagnosticOvertimeNoteShown` / `diagnosticOvertimeNoteVisibleUntilMs`
-// state fields, the DIAGNOSTIC_OVERTIME_* constants) is removed. The
-// diagnostic is untimed at the session level under the capacity-
-// measurement framing (PRD §4.1, plan
-// docs/plans/phase3-diagnostic-flow.md §4); pacing feedback after the
-// session is rendered post-session as a derived sentence (plan §6).
 
 import * as errors from "@superbuilders/errors"
 import type { ItemForRender } from "@/components/focus-shell/types"
 import { logger } from "@/logger"
 
-const TRIAGE_TAKEN_WINDOW_MS = 3000
 const INTER_QUESTION_FADE_MS = 200
 
 interface ShellState {
@@ -42,9 +32,6 @@ interface ShellState {
 	sessionStartedAtMs: number
 	elapsedQuestionMs: number
 	elapsedSessionMs: number
-	triagePromptFired: boolean
-	triagePromptFiredAtMs?: number
-	triageTaken: boolean
 	selectedOptionId?: string
 	interQuestionVisible: boolean
 	interQuestionVisibleUntilMs?: number
@@ -67,9 +54,9 @@ interface ShellState {
 	urgencyLoopStartedForCurrentQuestion: boolean
 	// Session-level auto-end gate (commit 7). True after the session
 	// timer has reached zero AND the FocusShell has fired its auto-end
-	// flow exactly once. Same double-guard pattern as
-	// dongPlayedForCurrentQuestion: the reducer flag is canonical state
-	// and a synchronous useRef prevents intra-render-batch double-fires.
+	// flow exactly once. Same double-guard pattern used elsewhere: the
+	// reducer flag is canonical state and a synchronous useRef
+	// prevents intra-render-batch double-fires.
 	sessionEnded: boolean
 }
 
@@ -77,7 +64,6 @@ type ShellAction =
 	| { kind: "tick"; nowMs: number }
 	| { kind: "select"; optionId: string }
 	| { kind: "submit"; nowMs: number }
-	| { kind: "triage_take"; nowMs: number }
 	| { kind: "submit_started" }
 	| { kind: "advance"; next: ItemForRender; nowMs: number }
 	| { kind: "set_question_started"; nowMs: number }
@@ -97,9 +83,6 @@ function initShellState(args: InitArgs): ShellState {
 		sessionStartedAtMs: args.startMs,
 		elapsedQuestionMs: 0,
 		elapsedSessionMs: 0,
-		triagePromptFired: false,
-		triagePromptFiredAtMs: undefined,
-		triageTaken: false,
 		selectedOptionId: undefined,
 		interQuestionVisible: false,
 		interQuestionVisibleUntilMs: undefined,
@@ -116,17 +99,13 @@ interface TickContext {
 }
 
 function reduceTick(state: ShellState, nowMs: number, ctx: TickContext): ShellState {
+	// `ctx` is currently unused by the reducer (the per-question target
+	// is consumed by audio-loop effects in FocusShell, not by the
+	// reducer's state derivation). Kept on the signature so future tick
+	// work can reach for it without touching the reducer factory shape.
+	void ctx
 	const elapsedQuestionMs = nowMs - state.questionStartedAtMs
 	const elapsedSessionMs = nowMs - state.sessionStartedAtMs
-
-	// Triage prompt fires the first time elapsedQuestionMs crosses the
-	// per-question target. Persistent — never auto-dismisses (see plan §5.2).
-	let triagePromptFired = state.triagePromptFired
-	let triagePromptFiredAtMs = state.triagePromptFiredAtMs
-	if (!triagePromptFired && elapsedQuestionMs >= ctx.perQuestionTargetMs) {
-		triagePromptFired = true
-		triagePromptFiredAtMs = elapsedQuestionMs
-	}
 
 	// Inter-question card auto-clears when its visibility deadline elapses,
 	// so an idle reducer (waiting for advance) doesn't leave the card stuck.
@@ -142,44 +121,7 @@ function reduceTick(state: ShellState, nowMs: number, ctx: TickContext): ShellSt
 		...state,
 		elapsedQuestionMs,
 		elapsedSessionMs,
-		triagePromptFired,
-		triagePromptFiredAtMs,
 		interQuestionVisible
-	}
-}
-
-function reduceTriageTake(
-	state: ShellState,
-	action: { kind: "triage_take"; nowMs: number }
-): ShellState {
-	// Argument's nowMs is unused — the reducer compares elapsed values to
-	// `state.triagePromptFiredAtMs`, both of which are derived from the
-	// same `tick` action stream. Reserved for future use where the
-	// component might want to override the elapsed comparison.
-	void action
-	// Idempotent against an in-flight submit, same rationale as the
-	// `submit` action's guard above.
-	if (state.submitPending) return state
-	let triageTakenInWindow = state.triageTaken
-	if (
-		state.triagePromptFired &&
-		state.triagePromptFiredAtMs !== undefined &&
-		state.elapsedQuestionMs - state.triagePromptFiredAtMs <= TRIAGE_TAKEN_WINDOW_MS
-	) {
-		triageTakenInWindow = true
-	}
-	// Triage-take semantics (plan §3.3): submit whatever the user has
-	// selected, blank if nothing. The previous random-pick behavior was
-	// dropped in commit 3 — it modeled "guess and advance" too literally.
-	// The BrainLift reframe is "knowing when to abandon a question is
-	// the strategic skill" (handoff §2). Abandoning cleanly with no
-	// selection is the right behavior for a user who has no leaning;
-	// random picks contaminate the mastery model with noise that looks
-	// like real-but-wrong attempts.
-	return {
-		...state,
-		triageTaken: triageTakenInWindow,
-		submitPending: true
 	}
 }
 
@@ -195,30 +137,17 @@ function reduceSubmitStarted(state: ShellState): ShellState {
 	}
 }
 
-function reduceAdvance(
-	state: ShellState,
-	next: ItemForRender,
-	nowMs: number
-): ShellState {
+function reduceAdvance(state: ShellState, next: ItemForRender, nowMs: number): ShellState {
 	return {
 		...state,
 		currentItem: next,
 		selectedOptionId: undefined,
-		triagePromptFired: false,
-		triagePromptFiredAtMs: undefined,
-		triageTaken: false,
 		interQuestionVisible: false,
 		interQuestionVisibleUntilMs: undefined,
 		questionsRemaining: state.questionsRemaining - 1,
 		// `questionStartedAtMs` is reset to the advance time so the very
 		// first `tick` action after advance computes a small
-		// `elapsedQuestionMs` instead of `nowMs - OLD_questionStartedAtMs`
-		// (which would be ~20s+ on a triage-take advance). Without this
-		// reset, that spurious tick fires `reduceTick`'s
-		// `if (!triagePromptFired && elapsedQuestionMs >= target)` branch,
-		// re-flipping `triagePromptFired: true` and stranding the prompt
-		// visible on the new question — observed in dogfooding as
-		// "Best move: guess and advance" not going away.
+		// `elapsedQuestionMs` instead of `nowMs - OLD_questionStartedAtMs`.
 		// `set_question_started` (from the next <ItemSlot>'s mount effect)
 		// then OVERRIDES this with the more precise paint-time value. On
 		// a same-id advance where ItemSlot doesn't remount, this advance-
@@ -234,10 +163,6 @@ function reduceAdvance(
 		// fire (e.g., server returns the same item id as the next item,
 		// which can happen on small bank fallbacks — see
 		// docs/plans/focus-shell-post-overhaul-fixes.md §2 candidate #4).
-		// The original race the comment guarded against (double-Enter
-		// during the await) is closed by the dispatch-site guards in
-		// FocusShell + reduceTriageTake's `submitPending` early return,
-		// so clearing here is safe.
 		submitPending: false,
 		// Per-question audio gate — reset so the next item's per-question
 		// target re-arms the urgency loop.
@@ -245,9 +170,6 @@ function reduceAdvance(
 	}
 }
 
-// Dispatch is split into two halves so neither exceeds biome's
-// noExcessiveCognitiveComplexity threshold of 15. The `tick` action is
-// handled by the outer reducer (it needs ctx), so neither half sees it.
 function dispatchPrimary(state: ShellState, action: ShellAction): ShellState | undefined {
 	if (action.kind === "select") return { ...state, selectedOptionId: action.optionId }
 	if (action.kind === "submit") {
@@ -258,7 +180,6 @@ function dispatchPrimary(state: ShellState, action: ShellAction): ShellState | u
 		if (state.submitPending) return state
 		return { ...state, submitPending: true }
 	}
-	if (action.kind === "triage_take") return reduceTriageTake(state, action)
 	if (action.kind === "submit_started") return reduceSubmitStarted(state)
 	if (action.kind === "advance") return reduceAdvance(state, action.next, action.nowMs)
 	if (action.kind === "set_question_started") {
@@ -266,17 +187,7 @@ function dispatchPrimary(state: ShellState, action: ShellAction): ShellState | u
 			...state,
 			questionStartedAtMs: action.nowMs,
 			elapsedQuestionMs: 0,
-			submitPending: false,
-			// Belt-and-suspenders: reset the triage-prompt flags here too.
-			// `reduceAdvance` already resets them, but if any tick action
-			// fires between `advance` and this dispatch (the mount effect
-			// fires after React's commit phase, with possibly-multiple
-			// ticks queued from earlier RAF frames), `reduceTick` could
-			// re-flip `triagePromptFired: true` based on a stale
-			// `questionStartedAtMs`. The `nowMs` reset in reduceAdvance
-			// closes the primary window; this is the secondary defense.
-			triagePromptFired: false,
-			triagePromptFiredAtMs: undefined
+			submitPending: false
 		}
 	}
 	return undefined
@@ -301,21 +212,14 @@ function makeReducer(ctx: TickContext): (state: ShellState, action: ShellAction)
 		if (fromPrimary !== undefined) return fromPrimary
 		const fromSecondary = dispatchSecondary(state, action)
 		if (fromSecondary !== undefined) return fromSecondary
-		// Exhaustiveness: every ShellAction.kind is handled by the two
-		// dispatch halves above. If a new kind is added, the compile-time
-		// `never` check below catches it inside dispatchPrimary or
-		// dispatchSecondary's hidden default branch — but since both
-		// helpers return `undefined` for unknown kinds, this final guard
-		// is the runtime safety net.
+		// Exhaustiveness safety net. Both dispatch helpers return
+		// `undefined` for unknown kinds, so a new ShellAction.kind that
+		// isn't wired falls through to here and surfaces explicitly
+		// instead of silently no-op'ing.
 		logger.error({ kind: action.kind }, "shell-reducer: unhandled action kind")
 		throw errors.new("shell-reducer: unhandled action kind")
 	}
 }
 
 export type { InitArgs, ShellAction, ShellState, TickContext }
-export {
-	INTER_QUESTION_FADE_MS,
-	TRIAGE_TAKEN_WINDOW_MS,
-	initShellState,
-	makeReducer
-}
+export { INTER_QUESTION_FADE_MS, initShellState, makeReducer }

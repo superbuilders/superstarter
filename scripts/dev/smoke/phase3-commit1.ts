@@ -27,10 +27,10 @@ import "@/env"
 import * as errors from "@superbuilders/errors"
 import { eq } from "drizzle-orm"
 import { createAdminDb } from "@/db/admin"
+import { users } from "@/db/schemas/auth/users"
 import { items } from "@/db/schemas/catalog/items"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
-import { users } from "@/db/schemas/auth/users"
 import { logger } from "@/logger"
 import { endSession } from "@/server/sessions/end"
 import { startSession } from "@/server/sessions/start"
@@ -106,8 +106,6 @@ async function runSmoke(): Promise<PhaseResult[]> {
 			itemId: start.firstItem.id,
 			selectedAnswer: start.firstItem.options[0]?.id,
 			latencyMs: 1234,
-			triagePromptFired: false,
-			triageTaken: false,
 			selection: start.firstItem.selection
 		})
 	)
@@ -131,9 +129,7 @@ async function runSmoke(): Promise<PhaseResult[]> {
 		{ sessionId: start.sessionId, skipWorkflowTrigger: true },
 		"smoke: calling underlying endSession with skipWorkflowTrigger=true"
 	)
-	const endResult = await errors.try(
-		endSession(start.sessionId, { skipWorkflowTrigger: true })
-	)
+	const endResult = await errors.try(endSession(start.sessionId, { skipWorkflowTrigger: true }))
 	if (endResult.error) {
 		logger.error({ error: endResult.error }, "smoke: endSession failed")
 		throw errors.wrap(endResult.error, "smoke: endSession")

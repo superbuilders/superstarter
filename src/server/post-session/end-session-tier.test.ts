@@ -19,10 +19,10 @@ import * as errors from "@superbuilders/errors"
 import { eq } from "drizzle-orm"
 import type { Difficulty } from "@/config/sub-types"
 import { createAdminDb } from "@/db/admin"
-import { attempts } from "@/db/schemas/practice/attempts"
-import { items } from "@/db/schemas/catalog/items"
-import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { users } from "@/db/schemas/auth/users"
+import { items } from "@/db/schemas/catalog/items"
+import { attempts } from "@/db/schemas/practice/attempts"
+import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
 import { getEndSessionTierForDrill } from "@/server/post-session/end-session-tier"
 
@@ -98,11 +98,7 @@ async function createSession(
 async function pickLiveItem(subTypeId: string): Promise<string> {
 	await using adminDb = await createAdminDb()
 	const result = await errors.try(
-		adminDb.db
-			.select({ id: items.id })
-			.from(items)
-			.where(eq(items.subTypeId, subTypeId))
-			.limit(1)
+		adminDb.db.select({ id: items.id }).from(items).where(eq(items.subTypeId, subTypeId)).limit(1)
 	)
 	if (result.error) {
 		logger.error(
@@ -134,9 +130,7 @@ async function insertAttempts(
 				correct: f.correct,
 				latencyMs: 5_000,
 				servedAtTier: f.servedAtTier,
-				fallbackFromTier: f.fallbackFromTier,
-				triagePromptFired: false,
-				triageTaken: false
+				fallbackFromTier: f.fallbackFromTier
 			})
 		)
 		if (result.error) {
@@ -218,9 +212,7 @@ test("getEndSessionTierForDrill: non-drill session type → null (defensive)", a
 	const userId = await createTestUser("nondrill")
 	const sessionId = await createSession(userId, "diagnostic", null)
 	const itemId = await pickLiveItem("verbal.antonyms")
-	await insertAttempts(sessionId, itemId, [
-		{ servedAtTier: "easy", correct: true }
-	])
+	await insertAttempts(sessionId, itemId, [{ servedAtTier: "easy", correct: true }])
 	const result = await getEndSessionTierForDrill(sessionId)
 	expect(result).toBeNull()
 })

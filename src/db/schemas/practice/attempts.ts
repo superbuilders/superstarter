@@ -18,8 +18,6 @@ const attempts = pgTable(
 		latencyMs: integer("latency_ms").notNull(),
 		servedAtTier: itemDifficulty("served_at_tier").notNull(),
 		fallbackFromTier: itemDifficulty("fallback_from_tier"),
-		triagePromptFired: boolean("triage_prompt_fired").notNull().default(false),
-		triageTaken: boolean("triage_taken").notNull().default(false),
 		metadataJson: jsonb("metadata_json").notNull().default(sql`'{}'::jsonb`)
 	},
 	(table) => [

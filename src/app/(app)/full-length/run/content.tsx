@@ -6,9 +6,9 @@
 //
 // Full-length config (per SPEC §10.3 + plan §4):
 //   - sessionDurationMs: 900_000 (15 minutes — time-boxed)
-//   - perQuestionTargetMs: 18_000 (standard 18-second triage anchor;
-//     Q12.4 — same target as drill / diagnostic; the 15min/50q math
-//     coincides with this by design)
+//   - perQuestionTargetMs: 18_000 (standard 18-second per-question
+//     target; Q12.4 — same target as drill / diagnostic; the 15min/50q
+//     math coincides with this by design)
 //   - paceTrackVisible: true (50 blocks at first render)
 //   - targetQuestionCount: 50 (fixed; Q12.6 — no length picker)
 //   - strictMode: false (simulation Phase 6 is the strict variant)
@@ -27,9 +27,9 @@
 import { useRouter } from "next/navigation"
 import * as React from "react"
 import { endSession, submitAttempt } from "@/app/(app)/actions"
+import type { RunInit } from "@/app/(app)/full-length/run/page"
 import { FocusShell } from "@/components/focus-shell/focus-shell"
 import type { SubmitAttemptInput } from "@/components/focus-shell/types"
-import type { RunInit } from "@/app/(app)/full-length/run/page"
 
 const FULL_LENGTH_DURATION_MS = 900_000
 const FULL_LENGTH_PER_QUESTION_TARGET_MS = 18_000
@@ -43,12 +43,9 @@ function FullLengthRunContent(props: FullLengthRunContentProps) {
 	const init = React.use(props.initPromise)
 	const router = useRouter()
 
-	const onSubmitAttempt = React.useCallback(
-		function onSubmitAttempt(input: SubmitAttemptInput) {
-			return submitAttempt(input)
-		},
-		[]
-	)
+	const onSubmitAttempt = React.useCallback(function onSubmitAttempt(input: SubmitAttemptInput) {
+		return submitAttempt(input)
+	}, [])
 
 	const onEndSession = React.useCallback(
 		async function onEndSession() {

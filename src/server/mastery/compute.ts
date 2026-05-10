@@ -50,8 +50,8 @@ function sourceParams(s: MasterySource): SourceParams {
 	if (s === "diagnostic") {
 		// 1.5× — diagnostic is untimed at the session level (PRD §4.1, plan
 		// docs/plans/phase3-diagnostic-flow.md §4). The diagnostic measures
-		// the user's untimed capacity baseline before triage training; this
-		// generous latency multiplier reflects "capacity, not triage." The
+		// the user's untimed capacity baseline; this generous latency
+		// multiplier reflects "capacity, not pacing." The
 		// polish round briefly calibrated this to 1.2× under a 15-minute
 		// session-level cutoff that has since been reverted.
 		return { minAttempts: 3, latencyMultiplier: 1.5, allowMastered: false }
@@ -98,10 +98,7 @@ function computeMastery(input: ComputeMasteryInput): MasteryLevel {
 	// `decayed` only reachable from a previously-mastered state. Symmetric to
 	// the mastered guard: drop to decayed when the user falls below the
 	// fluent latency or accuracy bar AFTER having been mastered.
-	if (
-		input.previousState === "mastered" &&
-		(accuracy < 0.8 || medianLatency > adjustedThreshold)
-	) {
+	if (input.previousState === "mastered" && (accuracy < 0.8 || medianLatency > adjustedThreshold)) {
 		return "decayed"
 	}
 

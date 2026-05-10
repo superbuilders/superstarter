@@ -25,8 +25,8 @@
 // surfaces with different copy and different write semantics.
 
 import * as errors from "@superbuilders/errors"
-import { revalidatePath } from "next/cache"
 import { eq } from "drizzle-orm"
+import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { auth, signOut } from "@/auth"
 import { subTypeIds } from "@/config/sub-types"
@@ -35,10 +35,10 @@ import { users } from "@/db/schemas/auth/users"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
 import * as sessionEnd from "@/server/sessions/end"
-import * as sessionStart from "@/server/sessions/start"
 import type { StartSessionInput, StartSessionResult } from "@/server/sessions/start"
-import * as sessionSubmit from "@/server/sessions/submit"
+import * as sessionStart from "@/server/sessions/start"
 import type { SubmitAttemptInput, SubmitAttemptResult } from "@/server/sessions/submit"
+import * as sessionSubmit from "@/server/sessions/submit"
 
 const ErrUnauthorized = errors.new("unauthorized")
 const ErrInvalidActionInput = errors.new("invalid action input")
@@ -76,8 +76,6 @@ const submitAttemptInputSchema = z.object({
 	itemId: z.string().uuid(),
 	selectedAnswer: z.string().min(1).optional(),
 	latencyMs: z.number().int().nonnegative(),
-	triagePromptFired: z.boolean(),
-	triageTaken: z.boolean(),
 	selection: z.object({
 		servedAtTier: z.enum(["easy", "medium", "hard", "brutal"]),
 		fallbackFromTier: z.enum(["easy", "medium", "hard", "brutal"]).optional(),
@@ -94,10 +92,7 @@ async function assertSessionOwnedBy(sessionId: string, userId: string): Promise<
 			.limit(1)
 	)
 	if (result.error) {
-		logger.error(
-			{ error: result.error, sessionId, userId },
-			"assertSessionOwnedBy: read failed"
-		)
+		logger.error({ error: result.error, sessionId, userId }, "assertSessionOwnedBy: read failed")
 		throw errors.wrap(result.error, "assertSessionOwnedBy")
 	}
 	const row = result.data[0]
@@ -178,9 +173,7 @@ async function saveOnboardingTargets(input: {
 		revalidatePath("/")
 		return
 	}
-	const result = await errors.try(
-		db.update(users).set(updateValues).where(eq(users.id, userId))
-	)
+	const result = await errors.try(db.update(users).set(updateValues).where(eq(users.id, userId)))
 	if (result.error) {
 		logger.error({ error: result.error, userId }, "saveOnboardingTargets: update failed")
 		throw errors.wrap(result.error, "saveOnboardingTargets")
@@ -253,10 +246,7 @@ async function updateTargetDate(input: { targetDateMs: number }): Promise<{ succ
 		)
 	}
 	const result = await errors.try(
-		db
-			.update(users)
-			.set({ targetDateMs: parsed.data.targetDateMs })
-			.where(eq(users.id, userId))
+		db.update(users).set({ targetDateMs: parsed.data.targetDateMs }).where(eq(users.id, userId))
 	)
 	if (result.error) {
 		logger.error(

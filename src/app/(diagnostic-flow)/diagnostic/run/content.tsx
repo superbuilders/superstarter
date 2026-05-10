@@ -8,11 +8,11 @@
 //
 // Diagnostic config (capacity-measurement framing, PRD §4.1):
 //   - sessionDurationMs: null  (the diagnostic is untimed at the session
-//     level — capacity, not triage. The chronometer and session-progress
+//     level — capacity, not pacing. The chronometer and session-progress
 //     bar do not render in the diagnostic flow.)
 //   - paceTrackVisible: false  (the diagnostic is not paced)
 //   - perQuestionTargetMs: 18000 (real-CCAT per-question target — drives
-//     the per-question dual-bar timer and the 18s triage prompt)
+//     the per-question dual-bar timer)
 //   - targetQuestionCount: 50  (matches diagnosticMix.length)
 //
 // On the last submit, the FocusShell's `onEndSession` callback fires the
@@ -39,12 +39,9 @@ function DiagnosticContent(props: DiagnosticContentProps) {
 	const { sessionId, firstItem } = React.use(props.sessionPromise)
 	const router = useRouter()
 
-	const onSubmitAttempt = React.useCallback(
-		function onSubmitAttempt(input: SubmitAttemptInput) {
-			return submitAttempt(input)
-		},
-		[]
-	)
+	const onSubmitAttempt = React.useCallback(function onSubmitAttempt(input: SubmitAttemptInput) {
+		return submitAttempt(input)
+	}, [])
 
 	const onEndSession = React.useCallback(
 		async function onEndSession() {

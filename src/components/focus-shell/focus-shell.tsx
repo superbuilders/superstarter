@@ -9,8 +9,7 @@
 // mode — grows left-to-right as the session elapses), small "Question
 // N / 50" label, thin divider, large question text, optional
 // per-question timer above the options, tall option buttons,
-// full-width "Submit Answer" CTA. Triage prompt re-docked top-center
-// per §5.4.
+// full-width "Submit Answer" CTA.
 //
 // Focus-shell overhaul commit 2 removed the 18-block per-question
 // countdown depletion that previously sat above the question. The
@@ -19,13 +18,10 @@
 // Owns:
 // - the useReducer state (shell-reducer.ts)
 // - the requestAnimationFrame tick loop (dispatches `tick` every frame)
-// - the Space-key listener for triage-take (only fires when the triage
-//   prompt is visible — see commit 3 / plan §3.2). The real CCAT has
-//   NO keyboard shortcuts; the Space-on-triage shortcut survives only
-//   because the triage prompt is our pedagogical layer, not CCAT
-//   mechanics. Digit / letter / Enter shortcuts were stripped in
-//   commit 3 / plan §3.0.
 // - the async server-action calls (onSubmitAttempt, onEndSession)
+//
+// The shell has NO keyboard shortcuts — the real CCAT is mouse-and-click
+// only and we mirror that.
 //
 // Renders:
 // - chrome row: chronometer top-right + session-progress bar +
@@ -33,33 +29,31 @@
 // - content area: per-question timer above the <ItemSlot>
 //   (latency-anchor host, KEYED on currentItem.id), then the
 //   full-width Submit Answer CTA
-// - overlays: <TriagePrompt> (top-center), <InterQuestionCard>,
-//   <Heartbeat> (sibling to <ItemSlot>)
-//
-// The diagnostic overtime-note machinery was removed in this commit —
-// the diagnostic now hard-stops at 15 minutes server-side
-// (commit 1's `submitAttempt` cutoff). The cosmetic last-question
-// indicator below replaces the soft note.
+// - overlays: <InterQuestionCard>, <Heartbeat> (sibling to <ItemSlot>)
 
 import * as errors from "@superbuilders/errors"
 import { useRouter } from "next/navigation"
 import * as React from "react"
-import { playTick, startUrgencyLoop, stopUrgencyLoop, unlockAudio } from "@/components/focus-shell/audio-ticker"
+import {
+	playTick,
+	startUrgencyLoop,
+	stopUrgencyLoop,
+	unlockAudio
+} from "@/components/focus-shell/audio-ticker"
 import { Heartbeat } from "@/components/focus-shell/heartbeat"
 import { InterQuestionCard } from "@/components/focus-shell/inter-question-card"
 import { ItemSlot } from "@/components/focus-shell/item-slot"
 import { QuestionProgressionBar } from "@/components/focus-shell/question-progression-bar"
 import { QuestionTimerBarStack } from "@/components/focus-shell/question-timer-bar-stack"
-import { SessionTimerBar, formatRemaining } from "@/components/focus-shell/session-timer-bar"
+import { formatRemaining, SessionTimerBar } from "@/components/focus-shell/session-timer-bar"
 import {
-	type TickContext,
 	initShellState,
-	makeReducer
+	makeReducer,
+	type TickContext
 } from "@/components/focus-shell/shell-reducer"
-import { TriagePrompt } from "@/components/focus-shell/triage-prompt"
 import type { FocusShellProps, SubmitAttemptInput } from "@/components/focus-shell/types"
-import { logger } from "@/logger"
 import { cn } from "@/lib/utils"
+import { logger } from "@/logger"
 
 function FocusShell(props: FocusShellProps) {
 	const tickCtx: TickContext = React.useMemo(
@@ -85,10 +79,9 @@ function FocusShell(props: FocusShellProps) {
 		})
 	})
 
-	// requestAnimationFrame tick loop — drives elapsed values and
-	// triage-prompt firing. The diagnostic-overtime-note check that
-	// previously also lived here was removed in commit 2 (see file
-	// header).
+	// requestAnimationFrame tick loop — drives elapsed values for the
+	// per-question and session timers + the inter-question card's
+	// auto-clear deadline.
 	React.useEffect(function startTickLoop() {
 		let rafId = 0
 		function tick() {
@@ -104,12 +97,10 @@ function FocusShell(props: FocusShellProps) {
 	const stateRef = React.useRef(state)
 	// `useLayoutEffect` (not `useEffect`) so the ref syncs synchronously
 	// after commit, before any browser-paint-or-event handler can read a
-	// stale value. The Space-key listener and other event handlers read
-	// `stateRef.current` to make decisions; with a regular `useEffect`,
-	// a Space keypress in the microsecond window between commit and the
-	// post-paint useEffect would read stale `triagePromptFired` /
-	// `submitPending` flags. See docs/plans/focus-shell-post-overhaul-
-	// fixes.md §2 candidate #3.
+	// stale value. The submit handlers read `stateRef.current` to make
+	// decisions; with a regular `useEffect`, a click in the microsecond
+	// window between commit and the post-paint useEffect would read
+	// stale `submitPending` / `selectedOptionId` flags.
 	React.useLayoutEffect(
 		function syncStateRef() {
 			stateRef.current = state
@@ -125,17 +116,12 @@ function FocusShell(props: FocusShellProps) {
 		async function performSubmit(): Promise<void> {
 			const snapshot = stateRef.current
 			const submitNowMs = performance.now()
-			const latencyMs = Math.max(
-				0,
-				Math.floor(submitNowMs - snapshot.questionStartedAtMs)
-			)
+			const latencyMs = Math.max(0, Math.floor(submitNowMs - snapshot.questionStartedAtMs))
 			const input: SubmitAttemptInput = {
 				sessionId,
 				itemId: snapshot.currentItem.id,
 				selectedAnswer: snapshot.selectedOptionId,
 				latencyMs,
-				triagePromptFired: snapshot.triagePromptFired,
-				triageTaken: snapshot.triageTaken,
 				selection: snapshot.currentItem.selection
 			}
 			dispatch({ kind: "submit_started" })
@@ -151,10 +137,7 @@ function FocusShell(props: FocusShellProps) {
 			if (result.nextItem === undefined) {
 				const endResult = await errors.try(onEndSession())
 				if (endResult.error) {
-					logger.error(
-						{ error: endResult.error, sessionId },
-						"focus-shell: onEndSession threw"
-					)
+					logger.error({ error: endResult.error, sessionId }, "focus-shell: onEndSession threw")
 				}
 				return
 			}
@@ -167,63 +150,22 @@ function FocusShell(props: FocusShellProps) {
 		[onSubmitAttempt, onEndSession, sessionId]
 	)
 
-	// Drive the async submit when submitPending flips true. We use a
-	// flag-on-state-and-effect pattern so triage_take and the Submit
-	// button funnel through the same path.
+	// Drive the async submit when submitPending flips true. The
+	// `submit` action and the Submit button funnel through the same
+	// flag-on-state-and-effect pattern.
 	React.useEffect(
 		function runSubmitWhenPending() {
 			if (!state.submitPending) return
 			async function run() {
 				const result = await errors.try(performSubmit())
 				if (result.error) {
-					logger.error(
-						{ error: result.error, sessionId },
-						"focus-shell: performSubmit threw"
-					)
+					logger.error({ error: result.error, sessionId }, "focus-shell: performSubmit threw")
 				}
 			}
 			void run()
 		},
 		[state.submitPending, performSubmit, sessionId]
 	)
-
-	// Space-key listener for triage-take. Per plan §3.2, this is the
-	// only keyboard shortcut in the focus shell. Fires only when the
-	// triage prompt is visible (`triagePromptFired === true`); when the
-	// prompt is hidden, Space does nothing (no submit, no select). The
-	// reducer's own `submitPending` guard is the secondary defense
-	// against double-take.
-	//
-	// `event.code === "Space"` is layout-independent (Dvorak / AZERTY
-	// users get the same physical key). `event.key === " "` is the
-	// fallback for environments where `code` is unavailable.
-	React.useEffect(function attachTriageKeyboard() {
-		function onKey(event: KeyboardEvent) {
-			const target = event.target
-			if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-				return
-			}
-			// `event.code === "Space"` is layout-independent (Dvorak / AZERTY
-			// users get the same physical key). `event.key === " "` is the
-			// fallback for environments where `code` is unavailable. The
-			// boolean OR sits inside an `if` test (allowed by
-			// no-logical-or-fallback rule's "boolean conditionals" carve-out)
-			// rather than being assigned to a const.
-			if (event.code !== "Space" && event.key !== " ") return
-			if (!stateRef.current.triagePromptFired) return
-			event.preventDefault()
-			if (stateRef.current.submitPending) return
-			// User interaction — unlock audio (idempotent) so the
-			// triage-take's potential dong-firing window has a live
-			// AudioContext.
-			unlockAudio()
-			dispatch({ kind: "triage_take", nowMs: performance.now() })
-		}
-		window.addEventListener("keydown", onKey)
-		return function detachTriageKeyboard() {
-			window.removeEventListener("keydown", onKey)
-		}
-	}, [])
 
 	// Three-layer audio-unlock defense for the FocusShell entry path.
 	// All three layers stay; redundancy is the design (audio-unlock can
@@ -258,9 +200,9 @@ function FocusShell(props: FocusShellProps) {
 		// navigation from `/diagnostic`. `unlockAudio()` is idempotent
 		// (checks `audioCtx === undefined` before construction; checks
 		// `state === "suspended"` before resume), so the post-mount
-		// handlers (option-select, submit, triage Space, triage Take,
-		// layer 3's listener) continue to call it as no-ops once the
-		// context is open. Returns nothing — no cleanup needed because
+		// handlers (option-select, submit, layer 3's listener) continue
+		// to call it as no-ops once the context is open. Returns nothing
+		// — no cleanup needed because
 		// the AudioContext lives at module scope in audio-ticker.ts and
 		// outlives any single FocusShell mount.
 		unlockAudio()
@@ -354,11 +296,7 @@ function FocusShell(props: FocusShellProps) {
 			startUrgencyLoop()
 			dispatch({ kind: "urgency_loop_started" })
 		},
-		[
-			state.elapsedQuestionMs,
-			state.urgencyLoopStartedForCurrentQuestion,
-			props.perQuestionTargetMs
-		]
+		[state.elapsedQuestionMs, state.urgencyLoopStartedForCurrentQuestion, props.perQuestionTargetMs]
 	)
 	React.useEffect(
 		function maybePlayPostTargetTicks() {
@@ -379,10 +317,7 @@ function FocusShell(props: FocusShellProps) {
 			// an 18s target, second 19). Math.max with the prev ref + 1
 			// preserves the "haven't already fired this second" guard
 			// across re-renders.
-			const start = Math.max(
-				prevPostTargetSecondRef.current + 1,
-				Math.floor(targetSec) + 1
-			)
+			const start = Math.max(prevPostTargetSecondRef.current + 1, Math.floor(targetSec) + 1)
 			for (let s = start; s <= secondsElapsed; s += 1) {
 				playTick()
 			}
@@ -396,10 +331,9 @@ function FocusShell(props: FocusShellProps) {
 			// advance regardless of whether the server returned the same
 			// item id (see SPEC §6.14.5 / "currentItemId vs
 			// questionsRemaining" rationale above). Stops the urgency
-			// loop uniformly across every advance path: Submit click,
-			// Space-triage take, click-triage take, server-end. The
-			// cleanup also fires on component unmount, which catches the
-			// "user navigated away mid-question" case.
+			// loop uniformly across every advance path: Submit click and
+			// server-end. The cleanup also fires on component unmount,
+			// which catches the "user navigated away mid-question" case.
 			void questionsRemaining
 			return function cleanup() {
 				stopUrgencyLoop()
@@ -478,8 +412,7 @@ function FocusShell(props: FocusShellProps) {
 	// which fired red on Q1 the moment any time elapsed.
 	const currentQuestionIndex = props.targetQuestionCount - state.questionsRemaining
 	const behindPaceThresholdMs = (currentQuestionIndex + 1) * props.perQuestionTargetMs
-	const behindPace =
-		sessionDurationMs !== null && state.elapsedSessionMs > behindPaceThresholdMs
+	const behindPace = sessionDurationMs !== null && state.elapsedSessionMs > behindPaceThresholdMs
 
 	// Build the peripheral nodes inside narrowed branches so we don't
 	// have to re-check `sessionDurationMs !== null` when passing as a
@@ -613,9 +546,9 @@ function FocusShell(props: FocusShellProps) {
 							if (state.submitPending) return
 							// User interaction — unlock audio (idempotent). The
 							// blank-submit path (no option selected) is the only
-							// FocusShell entry where neither <ItemPrompt> nor the
-							// triage Space-press has fired first, so this is the
-							// late-binding unlock for that flow.
+							// FocusShell entry where <ItemPrompt> hasn't fired
+							// first, so this is the late-binding unlock for that
+							// flow.
 							unlockAudio()
 							dispatch({ kind: "submit", nowMs: performance.now() })
 						}}
@@ -635,19 +568,6 @@ function FocusShell(props: FocusShellProps) {
 			</main>
 
 			{/* overlays — outside the central column. */}
-			<TriagePrompt
-				visible={state.triagePromptFired}
-				onTake={function takeTriage() {
-					// User interaction — unlock audio (idempotent). The
-					// click path through <TriagePrompt> didn't previously
-					// call unlock; without it, a triage take from a
-					// suspended-AudioContext state would never resume the
-					// context and subsequent ticks/loops would silently
-					// fail. The Space-key path already unlocks.
-					unlockAudio()
-					dispatch({ kind: "triage_take", nowMs: performance.now() })
-				}}
-			/>
 			<InterQuestionCard visible={state.interQuestionVisible} />
 			<Heartbeat sessionId={props.sessionId} />
 		</div>

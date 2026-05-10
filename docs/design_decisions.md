@@ -1,5 +1,16 @@
 # 18 Seconds — Design Decisions
 
+> **Triage feature removed 2026-05-10.** §3 ("Focus shell, timers,
+> triage"), §3.1 ("No auto-submit"), §3.2 ("Triage shortcut is the T
+> key"), §3.3 ("Triage score denominator…"), §5.6 ("NarrowingRamp
+> obstacle algorithm: top-2-by-weakness + reserved triage slot"), and
+> any other entry describing triage as a live feature now describe
+> historical decisions for a feature that no longer ships. The
+> in-flow popup, the `triage_take` reducer action, the
+> `attempts.triage_*` columns, and the post-session adherence line
+> are all gone. The per-question 18-second target still drives the
+> timer bar and warning sound; it just no longer fires a popup.
+
 This document is the audit trail of every product and engineering decision made while shaping the build. Each entry records the question that came up, the options considered, the option chosen, and the rationale. New contributors should be able to read this end-to-end and understand why the system has the shape it has, without having to reconstruct any of the reasoning from the SPEC.
 
 Decisions are grouped by topic. Within a topic they are ordered roughly in the order the decision affects the build.

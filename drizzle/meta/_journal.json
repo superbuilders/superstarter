@@ -43,6 +43,13 @@
       "when": 1778372218819,
       "tag": "0005_amusing_microchip",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778423043781,
+      "tag": "0006_friendly_switch",
+      "breakpoints": true
     }
   ]
 }

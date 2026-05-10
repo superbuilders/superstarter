@@ -9,9 +9,7 @@
 // docs/plans/phase-3-polish-practice-surface-features.md §3.0 / §3.1.
 // The real CCAT is a browser-based mouse-and-click test with no
 // keyboard shortcuts; training muscle memory the real test won't honor
-// is a regression dressed as ergonomics. Selection is now click-only.
-// The triage prompt's `Space` shortcut stays because the triage prompt
-// is our pedagogical layer, not CCAT mechanics.
+// is a regression dressed as ergonomics. Selection is click-only.
 
 import type * as React from "react"
 import { NumberSeriesBody } from "@/components/item/body-renderers/number-series"

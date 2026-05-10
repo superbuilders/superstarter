@@ -1,5 +1,15 @@
 # 18 Seconds — Engineering Specification
 
+> **Triage feature removed 2026-05-10.** Every prior reference in this
+> document to `<TriagePrompt>`, the `triage_take` reducer action,
+> `triagePromptFired` / `triageTaken` reducer state, the
+> `attempts.triage_prompt_fired` / `attempts.triage_taken` columns,
+> the `@/server/triage/score` module, and the `<TriageScoreLine>`
+> post-session slot 2 describes a feature that no longer ships.
+> Migration `0006_friendly_switch.sql` drops the columns; the related
+> source modules and prop chains have been removed. Sections below
+> that describe these are historical only.
+
 This document is the engineering plan for building 18 Seconds on top of the Superbuilder superstarter scaffold currently checked into this repository. It translates `docs/PRD.md` into concrete file paths, schemas, server actions, and component boundaries that respect the conventions enforced in `rules/` and `gritql/`. Every claim cites either the PRD, a rule file, a `.grit` file, or an existing source file in this repo.
 
 The rationale for every decision in this document is recorded in `docs/design_decisions.md`. The single-page architectural overview is in `docs/architecture_plan.md`. This SPEC is for **what to build**; the other two documents are for **why** and the **shape**.

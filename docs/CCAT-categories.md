@@ -191,7 +191,7 @@ Common topics: cost / price / discount, probability of independent events, combi
 
 ## Strategic Implications
 
-The CCAT rewards triage discipline more than per-question speed. The test-takers who score highest are not those who answer every question faster — they are those who recognize unsolvable-in-18-seconds questions early and abandon them with a guess.
+The CCAT rewards knowing when to abandon a question more than per-question speed. The test-takers who score highest are not those who answer every question faster — they are those who recognize unsolvable-in-18-seconds questions early and move on with a guess.
 
 Highest-leverage skills:
 
@@ -199,7 +199,7 @@ Highest-leverage skills:
 - Fluent fraction, percentage, and lowest-value comparison without full calculation.
 - Disciplined ratio-setup (`7x + 9x = total`) before computing splits.
 - Recognizing the canonical work-rate / speed-distance-time relationship and applying it without re-deriving.
-- Quick triage of wordy arithmetic problems and dense critical-reasoning passages.
+- Quick recognition + abandonment of wordy arithmetic problems and dense critical-reasoning passages.
 
 Lowest-leverage skills (despite being intuitive places to invest prep time):
 

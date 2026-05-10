@@ -17,12 +17,9 @@
 //
 // Manual checks (per plan §10 commit 2):
 // 1. First-item paint visible immediately.
-// 2. Pressing 1–5 selects an option.
-// 3. Pressing Enter submits; the displayed latency value is plausible.
-// 4. At t=18s the triage prompt overlay fades in and stays visible until
-//    the user clicks/presses T. Confirm NO auto-submit at t=30s by
-//    leaving the prompt on screen for 60s.
-// 5. DevTools Network tab: <Heartbeat> fires sendBeacon at the 30s mark
+// 2. Selection by mouse click; submission via the Submit Answer button.
+// 3. The displayed latency value is plausible after submission.
+// 4. DevTools Network tab: <Heartbeat> fires sendBeacon at the 30s mark
 //    (the route handler lands in commit 3, so the request 404s — that's
 //    expected for this smoke).
 
@@ -98,8 +95,6 @@ interface SubmitLogEntry {
 	itemId: string
 	selectedAnswer: string | undefined
 	latencyMs: number
-	triagePromptFired: boolean
-	triageTaken: boolean
 }
 
 // `?qt=` query-string flag dropped 2026-05-04 (v1-code-cleanup
@@ -129,29 +124,26 @@ function PhaseThreeSmokePage() {
 	const itemIndexRef = React.useRef<number>(0)
 	const [sessionDurationMs] = React.useState<number>(readSessionDurationMs)
 
-	const onSubmitAttempt = React.useCallback(
-		async function onSubmitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptResult> {
-			const idx = itemIndexRef.current
-			setSubmitLog(function append(prev) {
-				return [
-					...prev,
-					{
-						idx,
-						itemId: input.itemId,
-						selectedAnswer: input.selectedAnswer,
-						latencyMs: input.latencyMs,
-						triagePromptFired: input.triagePromptFired,
-						triageTaken: input.triageTaken
-					}
-				]
-			})
-			itemIndexRef.current = idx + 1
-			const next = STUB_ITEMS[idx + 1]
-			if (next === undefined) return {}
-			return { nextItem: next }
-		},
-		[]
-	)
+	const onSubmitAttempt = React.useCallback(async function onSubmitAttempt(
+		input: SubmitAttemptInput
+	): Promise<SubmitAttemptResult> {
+		const idx = itemIndexRef.current
+		setSubmitLog(function append(prev) {
+			return [
+				...prev,
+				{
+					idx,
+					itemId: input.itemId,
+					selectedAnswer: input.selectedAnswer,
+					latencyMs: input.latencyMs
+				}
+			]
+		})
+		itemIndexRef.current = idx + 1
+		const next = STUB_ITEMS[idx + 1]
+		if (next === undefined) return {}
+		return { nextItem: next }
+	}, [])
 
 	const onEndSession = React.useCallback(async function onEndSession(): Promise<void> {
 		// Smoke-only — production wiring lands in commit 4.
@@ -198,12 +190,10 @@ function PhaseThreeSmokePage() {
 						}
 						return (
 							<li key={entry.idx} className="font-mono">
-								<div>#{entry.idx} latency={entry.latencyMs}ms</div>
-								<div>sel={selectedDisplay}</div>
 								<div>
-									tFired={String(entry.triagePromptFired)} tTaken=
-									{String(entry.triageTaken)}
+									#{entry.idx} latency={entry.latencyMs}ms
 								</div>
+								<div>sel={selectedDisplay}</div>
 							</li>
 						)
 					})}

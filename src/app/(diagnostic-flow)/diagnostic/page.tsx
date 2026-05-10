@@ -40,36 +40,43 @@ function Page() {
 	return (
 		<main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col items-stretch justify-center px-6 py-16">
 			<header className="space-y-3">
-				<h1 className="font-semibold text-3xl tracking-tight">
-					Welcome to the diagnostic.
-				</h1>
-				<p className="text-foreground/70 text-sm">
-					Read this once. It will not be shown again.
-				</p>
+				<h1 className="font-semibold text-3xl tracking-tight">Welcome to the diagnostic.</h1>
+				<p className="text-foreground/70 text-sm">Read this once. It will not be shown again.</p>
 			</header>
 
 			<ul className="mt-10 space-y-4 text-base">
 				<li className="flex items-start gap-3">
-					<span aria-hidden="true" className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60" />
+					<span
+						aria-hidden="true"
+						className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60"
+					/>
 					<span>
-						<strong className="font-semibold">50 questions in 15 minutes.</strong>{" "}
-						This is the same pacing the real CCAT uses.
+						<strong className="font-semibold">50 questions in 15 minutes.</strong> This is the same
+						pacing the real CCAT uses.
 					</span>
 				</li>
 				<li className="flex items-start gap-3">
-					<span aria-hidden="true" className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60" />
+					<span
+						aria-hidden="true"
+						className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60"
+					/>
 					<span>
-						The diagnostic is designed to train your{" "}
-						<strong className="font-semibold">triage discipline</strong> —
-						knowing when to abandon a question and move on.
+						The diagnostic measures{" "}
+						<strong className="font-semibold">
+							how many you can answer accurately in 15 minutes
+						</strong>{" "}
+						— pace yourself and move on when a question stalls.
 					</span>
 				</li>
 				<li className="flex items-start gap-3">
-					<span aria-hidden="true" className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60" />
+					<span
+						aria-hidden="true"
+						className="mt-2 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-foreground/60"
+					/>
 					<span>
 						You are not expected to finish all 50.{" "}
-						<strong className="font-semibold">That's by design.</strong> The
-						clock is the test; what you finish is your baseline.
+						<strong className="font-semibold">That's by design.</strong> The clock is the test; what
+						you finish is your baseline.
 					</span>
 				</li>
 			</ul>

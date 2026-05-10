@@ -7,7 +7,8 @@
 //   - sessionDurationMs: drillLength * 18000
 //     (matches one of the timer-bar Map entries: 90000 / 180000 / 360000)
 //   - paceTrackVisible: true
-//   - perQuestionTargetMs: 18000  (triage prompt fires)
+//   - perQuestionTargetMs: 18000  (per-question target — drives the
+//     per-question timer bar + warning sound)
 //   - targetQuestionCount: drillLength
 //
 // After the last submit, `endSession` resolves and we route to
@@ -21,9 +22,9 @@
 import { useRouter } from "next/navigation"
 import * as React from "react"
 import { endSession, submitAttempt } from "@/app/(app)/actions"
+import type { RunInit } from "@/app/(app)/drill/[subTypeId]/run/page"
 import { FocusShell } from "@/components/focus-shell/focus-shell"
 import type { SubmitAttemptInput } from "@/components/focus-shell/types"
-import type { RunInit } from "@/app/(app)/drill/[subTypeId]/run/page"
 
 interface DrillRunContentProps {
 	initPromise: Promise<RunInit>
@@ -33,12 +34,9 @@ function DrillRunContent(props: DrillRunContentProps) {
 	const init = React.use(props.initPromise)
 	const router = useRouter()
 
-	const onSubmitAttempt = React.useCallback(
-		function onSubmitAttempt(input: SubmitAttemptInput) {
-			return submitAttempt(input)
-		},
-		[]
-	)
+	const onSubmitAttempt = React.useCallback(function onSubmitAttempt(input: SubmitAttemptInput) {
+		return submitAttempt(input)
+	}, [])
 
 	const onEndSession = React.useCallback(
 		async function onEndSession() {

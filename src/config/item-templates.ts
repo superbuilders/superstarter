@@ -26,7 +26,7 @@ function difficultyHint(difficulty: Difficulty): string {
 	if (difficulty === "hard") {
 		return "Difficulty: hard. The expected solver hits this in 14–18 seconds; clear traps for inattention."
 	}
-	return "Difficulty: brutal. The expected solver hits this only above the 18-second target; should reward triage."
+	return "Difficulty: brutal. The expected solver hits this only above the 18-second target; should reward knowing when to move on."
 }
 
 function buildTemplate(

@@ -6,26 +6,21 @@
 // Plan: docs/plans/phase5-post-session-review.md §10 + §12 commits 1-6;
 // Round 2 §5.4 combined slots 3 + 4 (<AccuracySummary> + <LatencySummary>)
 // into a single <PerformanceSummary> renderer at the slot-3 position.
-// Slot 4's data-testid wrapper is retired; the locked §10 ordering now has
-// 8 visible slots after the merge (numbering preserved for cross-doc
-// stability — slot 4 is empty-not-renumbered in the in-flight ledger).
 //
-// Render order (top to bottom), per §10 + Round 2 §5.4:
+// Render order (top to bottom):
 //   1. Heading + brief one-line summary.
-//   2. <TriageScoreLine>           — filled (commit 3, plan §7).
-//   3. <PerformanceSummary>        — filled (Round 2 §5.4; combined
-//                                    accuracy + latency per sub-type;
-//                                    replaces former slots 3 + 4).
-//   5. <WrongItemsBrowser>         — filled (commit 5, plan §8).
-//   6. <StrategySurface>           — filled (commit 6, plan §9).
+//   3. <PerformanceSummary>        — combined accuracy + latency per
+//                                    sub-type (Round 2 §5.4; replaces
+//                                    former slots 3 + 4).
+//   5. <WrongItemsBrowser>         — full per-question review.
+//   6. <StrategySurface>           — kind-preference strategies for
+//                                    struggled sub-types.
 //   7. <OnboardingTargets>         — diagnostic-only, already shipped.
 //   8. Pacing-line sentence        — diagnostic-only, conditional on >15min.
 //   9. Continue CTA                — non-diagnostic only (drill /
 //                                    full-length / simulation).
 //
-// Slot data-testid markers stay on outer wrapper divs so DOM-order
-// assertions across commits 1-6 keep working — components fill the
-// wrappers, the wrappers stay anchored.
+// Slot data-testid markers stay on outer wrapper divs.
 
 import { useRouter } from "next/navigation"
 import type * as React from "react"
@@ -40,10 +35,8 @@ import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { PerformanceSummary } from "@/components/post-session/performance-summary"
 import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
-import { TriageScoreLine } from "@/components/post-session/triage-score-line"
 import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser"
 import { Button } from "@/components/ui/button"
-import type { TriageScore } from "@/server/triage/score"
 
 type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
 
@@ -52,7 +45,6 @@ interface PostSessionShellProps {
 	pacingMinutes?: number
 	performance: PerSubTypePerformance[]
 	wrongItems: WrongItem[]
-	triageScore: TriageScore
 	surfacedStrategies: SurfacedStrategy[]
 	// Drill-mode adaptive walker tier reached at session end. Sub-phase
 	// 5 commit 4 wires this; per plan §5.5 the value is null on:
@@ -76,9 +68,9 @@ function PostSessionShell(props: PostSessionShellProps) {
 	const heading = isDiagnostic ? "Diagnostic complete" : "Session complete"
 
 	// Subhead + pacing-line use `text-foreground/80` (~5.7:1 against
-	// light bg) to inherit <TriageScoreLine>'s documented AA rationale.
-	// Light-mode `--muted-foreground: oklch(0.556 0 0)` lands at ~4.0:1
-	// — borderline below AA for normal text. Aligning peer single-line
+	// light bg) for AA contrast on normal text. Light-mode
+	// `--muted-foreground: oklch(0.556 0 0)` lands at ~4.0:1 —
+	// borderline below AA for normal text. Aligning peer single-line
 	// statements on the post-session shell keeps the surface
 	// consistent. Found by commit 6's full-surface audit.
 	let subhead: React.ReactNode = null
@@ -148,11 +140,6 @@ function PostSessionShell(props: PostSessionShellProps) {
 				{subhead}
 				{beltSection}
 			</header>
-
-			{/* Slot 2: <TriageScoreLine> — filled in commit 3 (plan §7). */}
-			<div data-testid="post-session-slot-triage-score">
-				<TriageScoreLine score={props.triageScore} />
-			</div>
 
 			{/* Slot 3: <PerformanceSummary> — Round 2 §5.4 combined accuracy
 			    + latency renderer (replaces former slots 3 + 4). */}

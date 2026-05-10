@@ -1,7 +1,6 @@
 // submitAttempt — underlying function. Writes one row to `attempts`,
 // then asks the selection engine for the next item. SPEC §7.2 / Plan §4.4
-// (selection echo-back) and §4.5 (triage column writes — native columns,
-// not metadata_json-nested).
+// (selection echo-back).
 //
 // The `selection` payload is opaque from the FocusShell's perspective: it
 // receives an ItemSelection on the previous getNextItem call and echoes
@@ -18,8 +17,17 @@ import type { Difficulty } from "@/config/sub-types"
 import { db } from "@/db"
 import { attempts } from "@/db/schemas/practice/attempts"
 import { logger } from "@/logger"
-import { getNextItem, type FallbackLevel, type ItemForRender, type ItemSelection } from "@/server/items/selection"
-import { ErrSessionAlreadyEnded, readItemAnswerAndDifficulty, readSession } from "@/server/sessions/queries"
+import {
+	type FallbackLevel,
+	getNextItem,
+	type ItemForRender,
+	type ItemSelection
+} from "@/server/items/selection"
+import {
+	ErrSessionAlreadyEnded,
+	readItemAnswerAndDifficulty,
+	readSession
+} from "@/server/sessions/queries"
 
 const ErrLatencyAnchorBroken = errors.new("latency anchor produced an out-of-band value")
 const ErrInvalidSubmitInput = errors.new("invalid submitAttempt input")
@@ -41,8 +49,6 @@ const submitInputSchema = z.object({
 	itemId: z.string().uuid(),
 	selectedAnswer: z.string().min(1).optional(),
 	latencyMs: z.number().int().nonnegative(),
-	triagePromptFired: z.boolean(),
-	triageTaken: z.boolean(),
 	selection: selectionSchema
 })
 
@@ -51,8 +57,6 @@ interface SubmitAttemptInput {
 	itemId: string
 	selectedAnswer?: string
 	latencyMs: number
-	triagePromptFired: boolean
-	triageTaken: boolean
 	selection: ItemSelection
 }
 
@@ -63,10 +67,7 @@ interface SubmitAttemptResult {
 async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptResult> {
 	const parsed = submitInputSchema.safeParse(input)
 	if (!parsed.success) {
-		logger.error(
-			{ issues: parsed.error.issues },
-			"submitAttempt: input failed schema validation"
-		)
+		logger.error({ issues: parsed.error.issues }, "submitAttempt: input failed schema validation")
 		throw errors.wrap(ErrInvalidSubmitInput, "input schema")
 	}
 	const data = parsed.data
@@ -80,10 +81,7 @@ async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptRe
 			{ sessionId: data.sessionId, itemId: data.itemId, latencyMs: data.latencyMs },
 			"submitAttempt: latency anchor tripwire fired (>5 minutes)"
 		)
-		throw errors.wrap(
-			ErrLatencyAnchorBroken,
-			`latencyMs ${data.latencyMs} exceeds 5 minutes`
-		)
+		throw errors.wrap(ErrLatencyAnchorBroken, `latencyMs ${data.latencyMs} exceeds 5 minutes`)
 	}
 
 	const sessionRow = await readSession(data.sessionId)
@@ -113,8 +111,6 @@ async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptRe
 				latencyMs: Math.floor(data.latencyMs),
 				servedAtTier,
 				fallbackFromTier,
-				triagePromptFired: data.triagePromptFired,
-				triageTaken: data.triageTaken,
 				metadataJson: { fallback_level: fallbackLevel }
 			})
 			.returning({ id: attempts.id })
@@ -144,8 +140,6 @@ async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptRe
 			servedAtTier,
 			fallbackFromTier,
 			fallbackLevel,
-			triagePromptFired: data.triagePromptFired,
-			triageTaken: data.triageTaken,
 			attemptId: inserted.id
 		},
 		"submitAttempt: attempt inserted"
@@ -159,9 +153,4 @@ async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptRe
 }
 
 export type { SubmitAttemptInput, SubmitAttemptResult }
-export {
-	ErrInsertFailed,
-	ErrInvalidSubmitInput,
-	ErrLatencyAnchorBroken,
-	submitAttempt
-}
+export { ErrInsertFailed, ErrInvalidSubmitInput, ErrLatencyAnchorBroken, submitAttempt }

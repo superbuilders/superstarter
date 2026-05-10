@@ -12,20 +12,13 @@
 //        - getPerSubTypePerformance → PerSubTypePerformance[]
 //          (consolidated accuracy + latency per sub-type; Round 2 §5.4)
 //        - getWrongItemsForSession  → WrongItem[]
-//        - triageScoreForSession    → TriageScore
 //        - pacing-line read (existing, unchanged)
 //   4. Derives the "struggled" sub-type set from accuracy + latency
 //      per plan §9 (accuracy < 70% OR median > threshold), then chains
-//      into getStrategiesForSubTypes for that set. The kind-preference
-//      selection per plan §9 is deferred to commit 6 alongside
-//      <StrategySurface>; commit 2 returns ALL strategies for each
-//      struggled sub-type.
+//      into getStrategiesForSubTypes for that set.
 //   5. Passes the bundle to <PostSessionContent> (a client component)
 //      which consumes the promise via React.use() and drills resolved
-//      values to <PostSessionShell>. The shell does NOT yet render the
-//      new fields — slots 2-6 stay as locked-§10-ordering placeholders;
-//      this commit only adds the data flow, not the render. Visible
-//      behavior is unchanged from commit 1.
+//      values to <PostSessionShell>.
 //
 // Per rules/rsc-data-fetching-patterns.md, prepared statements colocate
 // in the page that initiates them and types derived via Awaited<...>
@@ -54,7 +47,6 @@ import {
 	deriveStruggledSubTypes,
 	selectStrategiesForStruggledSubTypes
 } from "@/server/post-session/strategy-selection"
-import { type TriageScore, triageScoreForSession } from "@/server/triage/score"
 
 interface PageProps {
 	params: Promise<{ sessionId: string }>
@@ -195,16 +187,13 @@ interface EndSessionTierForRender extends TierForDrillSession {
 	subTypeDisplayName: string
 }
 
-// Bundle returned to content.tsx. Five new fields layered onto the
-// existing { sessionId, sessionType, pacingMinutes? } meta plus the
-// drill-only endSessionTier (sub-phase 5 commit 4).
+// Bundle returned to content.tsx.
 interface SessionInfo {
 	sessionId: string
 	sessionType: SessionTypeForShell
 	pacingMinutes?: number
 	performance: PerSubTypePerformance[]
 	wrongItems: WrongItem[]
-	triageScore: TriageScore
 	surfacedStrategies: SurfacedStrategy[]
 	endSessionTier: EndSessionTierForRender | null
 }
@@ -307,12 +296,10 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 
 	// Parallel reads against the resolved sessionId. The pacing-line
 	// read keeps its existing inline (non-prepared) shape; the
-	// performance + wrong-items + triage-score aggregations fire
-	// alongside. Round 2 commit §5.4 consolidated the prior two
-	// per-sub-type queries (accuracy + latency) into a single
-	// `getPerSubTypePerformance` round-trip; transient projection
-	// shims (above) project per-axis shapes for `strategy-selection.ts`
-	// consumption until §5.4b retires the per-axis types.
+	// performance + wrong-items aggregations fire alongside. Round 2
+	// commit §5.4 consolidated the prior two per-sub-type queries
+	// (accuracy + latency) into a single `getPerSubTypePerformance`
+	// round-trip.
 	const performanceResult = await errors.try(
 		getPerSubTypePerformance.execute({ sessionId: row.id })
 	)
@@ -330,14 +317,6 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 			"/post-session: wrong-items query failed"
 		)
 		throw errors.wrap(wrongItemsResult.error, "wrong-items")
-	}
-	const triageScoreResult = await errors.try(triageScoreForSession(row.id))
-	if (triageScoreResult.error) {
-		logger.error(
-			{ error: triageScoreResult.error, sessionId: row.id },
-			"/post-session: triage-score query failed"
-		)
-		throw errors.wrap(triageScoreResult.error, "triage score")
 	}
 	const lastAttemptResult = await errors.try(
 		db
@@ -357,7 +336,6 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 
 	const performance = performanceResult.data
 	const wrongItemsRaw = wrongItemsResult.data
-	const triageScore = triageScoreResult.data
 	const lastAttemptRow = lastAttemptResult.data[0]
 
 	// Normalize null → undefined at the boundary
@@ -422,7 +400,6 @@ async function loadSession(sessionIdPromise: Promise<string>): Promise<SessionIn
 		pacingMinutes,
 		performance,
 		wrongItems,
-		triageScore,
 		surfacedStrategies,
 		endSessionTier
 	}

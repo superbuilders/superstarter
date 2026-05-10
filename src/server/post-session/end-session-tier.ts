@@ -28,12 +28,11 @@
 // Sibling-module placement (rather than colocation in page.tsx) per
 // the audit-against-actual-artifact finding: sub-phase 1's pure
 // aggregations colocate as prepared statements (PerSubTypePerformance
-// etc.), but query-with-logic functions live as sibling modules
-// (triageScoreForSession at @/server/triage/score). This function
-// carries logic (null-on-non-drill, null-on-empty, isPreFloor calc),
-// so it follows the triage precedent. Plan §5.4's "colocated in
-// page.tsx" framing is superseded by the audit; flagged in commit
-// message.
+// etc.), but query-with-logic functions live as sibling modules. This
+// function carries logic (null-on-non-drill, null-on-empty, isPreFloor
+// calc), so it follows the sibling-module pattern. Plan §5.4's
+// "colocated in page.tsx" framing is superseded by the audit; flagged
+// in commit message.
 
 import * as errors from "@superbuilders/errors"
 import { eq, sql } from "drizzle-orm"
@@ -50,9 +49,7 @@ interface TierForDrillSession {
 	isPreFloor: boolean
 }
 
-async function getEndSessionTierForDrill(
-	sessionId: string
-): Promise<TierForDrillSession | null> {
+async function getEndSessionTierForDrill(sessionId: string): Promise<TierForDrillSession | null> {
 	const result = await errors.try(
 		db
 			.select({
@@ -72,10 +69,7 @@ async function getEndSessionTierForDrill(
 			.groupBy(practiceSessions.id, practiceSessions.type)
 	)
 	if (result.error) {
-		logger.error(
-			{ error: result.error, sessionId },
-			"getEndSessionTierForDrill: query failed"
-		)
+		logger.error({ error: result.error, sessionId }, "getEndSessionTierForDrill: query failed")
 		throw errors.wrap(result.error, "getEndSessionTierForDrill")
 	}
 	const row = result.data[0]

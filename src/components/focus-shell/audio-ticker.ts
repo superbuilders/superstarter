@@ -123,8 +123,7 @@ function unlockAudio(): void {
 		if (url === undefined) return
 		// Fire-and-forget the buffer load. The startUrgencyLoop call will
 		// silently no-op if the buffer hasn't finished decoding by the time
-		// the per-question target fires (e.g., very fast first-question
-		// triage on a slow connection); the next question will catch up.
+		// the per-question target fires; the next question will catch up.
 		const ctx = audioCtx
 		loadBuffer(ctx, url).catch(function noop() {
 			// errors.try inside loadBuffer already logs; nothing to do here.

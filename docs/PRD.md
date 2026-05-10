@@ -1,5 +1,16 @@
 # 18 Seconds — Product Requirements Document
 
+> **Triage feature removed 2026-05-10.** Every prior reference in this
+> document to a "triage prompt," "triage trainer," "triage adherence
+> score," "triage event," or related copy describes a feature that no
+> longer ships. The per-question 18-second target still exists (it
+> drives the timer bar + warning sound), but the in-flow popup
+> ("Best move: guess and advance"), the `triage_take` action, the
+> `triage_prompt_fired` / `triage_taken` columns on `attempts`, and
+> the post-session triage adherence line are all gone. Sections below
+> that describe these are historical only — treat them as cut, not as
+> spec.
+
 A self-service web application for adults preparing for the Criteria Cognitive Aptitude Test (CCAT). Users practice over 1–4 week prep cycles, building speed and accuracy across the 14 text-based question sub-types that v1 covers.
 
 The CCAT itself is 50 multiple-choice questions in 15 minutes (~18 seconds per question). v1 of 18 Seconds covers the 14 text-based sub-types defined below. No calculator. Score is raw correct out of 50; average is 24/50.

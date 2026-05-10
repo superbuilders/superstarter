@@ -32,8 +32,6 @@ interface SubmitAttemptInput {
 	itemId: string
 	selectedAnswer?: string
 	latencyMs: number
-	triagePromptFired: boolean
-	triageTaken: boolean
 	selection: ItemSelection
 }
 
@@ -53,8 +51,8 @@ interface FocusShellProps {
 	// §6.14.28 addendum).
 	subTypeId?: string
 	// `null` for sessions with no session-level duration. The diagnostic
-	// passes `null` (untimed at the session level — capacity measurement,
-	// not triage; see plan docs/plans/phase3-diagnostic-flow.md §4). Drill,
+	// passes `null` (untimed at the session level — capacity measurement;
+	// see plan docs/plans/phase3-diagnostic-flow.md §4). Drill,
 	// full-length, and simulation pass a positive number which drives the
 	// session-progress bar, the chronometer, and the auto-end effect.
 	sessionDurationMs: number | null
