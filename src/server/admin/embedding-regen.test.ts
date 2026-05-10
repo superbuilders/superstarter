@@ -1,25 +1,34 @@
-// Pure-function tests for enqueueEmbeddingRegen stub.
+// §2.3 commit-1: enqueueEmbeddingRegen is now a real wrapper around
+// embedText (no longer a stub-throw). The function's logic is:
 //
-// Confirms the safeguard pattern: invocation throws ErrRegenNotYetImplemented
-// so §2.3 commit-1 must wire this in before it can be silently a no-op.
+//   1. logger.info before call
+//   2. errors.try(embedText(newBodyText))
+//   3. wrap + rethrow on error
+//   4. logger.info after
+//   5. return embedding array
+//
+// All of those are I/O wrappers; the only unit-testable piece is the
+// type signature. The actual embedText integration is exercised by the
+// real-DB manual verification path (audit step 4 in §2.3 commit-1) and
+// by the existing sibling-generation + embedding-backfill workflows
+// that share the same embedText call site.
+//
+// We avoid mocking embedText to stay consistent with the project's
+// test discipline (no DB or external-API mocks in unit tests).
 
-import * as errors from "@superbuilders/errors"
 import { expect, test } from "bun:test"
 import {
 	enqueueEmbeddingRegen,
-	ErrRegenNotYetImplemented
+	type RegenReason
 } from "@/server/admin/embedding-regen"
 
-test("enqueueEmbeddingRegen: throws ErrRegenNotYetImplemented on body-edit reason", async function stubThrows() {
-	const result = await errors.try(
-		enqueueEmbeddingRegen("019e0967-62a7-73c3-8126-4fabe217a8c1", { kind: "body-edit" })
-	)
-	expect(result.error).toBeDefined()
-	if (result.error) {
-		expect(errors.is(result.error, ErrRegenNotYetImplemented)).toBe(true)
-	}
+test("enqueueEmbeddingRegen: signature accepts body-edit reason variant", function typeShape() {
+	const fnTypeCheck: (id: string, r: RegenReason, t: string) => Promise<number[]> =
+		enqueueEmbeddingRegen
+	expect(typeof fnTypeCheck).toBe("function")
 })
 
-test("ErrRegenNotYetImplemented message mentions commit-1", function sentinelMessage() {
-	expect(ErrRegenNotYetImplemented.message).toContain("§2.3 commit-1")
+test("RegenReason: body-edit variant is constructible", function variantSanity() {
+	const reason: RegenReason = { kind: "body-edit" }
+	expect(reason.kind).toBe("body-edit")
 })

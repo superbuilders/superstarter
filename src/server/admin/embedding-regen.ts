@@ -1,37 +1,53 @@
 // Embedding-regen helper for admin item-edit (Phase 4 sub-phase b §2.3
-// commit 0).
+// commit 1).
 //
-// SCAFFOLD ONLY. Called by submitEditAction's commit-1 implementation when
-// body text edits land. Throws ErrRegenNotYetImplemented on invocation
-// today — same safeguard pattern as §1.2 commit-0 criterion stubs and
-// §1.3 commit-0 persistResultsStep stub: ensures §2.3 commit-1 cannot
-// ship without wiring this in.
+// Path A per the commit-1 spec: the named helper is preserved over an
+// inline `embedText(text)` call in submitEditAction. The boundary buys
+// us future async-queue migration room (e.g., batch admin edits firing a
+// workflow step) without touching the action's site.
 //
-// Embedding scope: BODY TEXT ONLY. Verified at audit step 12 against
-// `src/workflows/embedding-backfill-steps.ts:64` (`textForBody` returns
-// body.text only) and `src/workflows/sibling-generation-steps.ts:408`
-// (`resolvedSiblings.map((r) => r.body.text)`). NOT body+options. NOT
-// body+options+explanation. Option-text edits do NOT trigger regen at
-// the current embedding scope. If future scope changes to include
-// option text, add a new RegenReason variant + update commit-1's
-// implementation in lockstep.
+// Embedding scope: BODY TEXT ONLY (verified at §2.3 commit-0 audit step
+// 12 against `src/workflows/embedding-backfill-steps.ts:64` and
+// `src/workflows/sibling-generation-steps.ts:408`). NOT body+options.
+// Option-text edits and explanation edits do NOT trigger regen.
+// RegenReason currently has one variant — add new variants in lockstep
+// with submitEditAction's call sites if scope ever broadens.
+//
+// Called synchronously inside submitEditAction's transaction (§2.3
+// commit-1 spec): the OpenAI API call (~500ms-2s) holds the row open
+// for the duration. Trade-off accepted at admin-edit volume (low
+// concurrency); not acceptable at batch scale. A future round adds an
+// async queue if admin edit throughput surfaces as a real problem.
 
 import * as errors from "@superbuilders/errors"
 import { logger } from "@/logger"
-
-const ErrRegenNotYetImplemented = errors.new(
-	"enqueueEmbeddingRegen not yet implemented (§2.3 commit-1)"
-)
+import { embedText } from "@/server/generation/embeddings"
 
 type RegenReason = { readonly kind: "body-edit" }
 
-async function enqueueEmbeddingRegen(itemId: string, reason: RegenReason): Promise<void> {
+async function enqueueEmbeddingRegen(
+	itemId: string,
+	reason: RegenReason,
+	newBodyText: string
+): Promise<number[]> {
 	logger.info(
-		{ itemId, reasonKind: reason.kind },
-		"enqueueEmbeddingRegen: stub invoked"
+		{ itemId, reasonKind: reason.kind, charCount: newBodyText.length },
+		"enqueueEmbeddingRegen: invoking embedText"
 	)
-	throw errors.wrap(ErrRegenNotYetImplemented, "stub")
+	const result = await errors.try(embedText(newBodyText))
+	if (result.error) {
+		logger.error(
+			{ itemId, reasonKind: reason.kind, error: result.error },
+			"enqueueEmbeddingRegen: embedText failed"
+		)
+		throw errors.wrap(result.error, "enqueueEmbeddingRegen embedText")
+	}
+	logger.info(
+		{ itemId, reasonKind: reason.kind, dimensions: result.data.length },
+		"enqueueEmbeddingRegen: embedding produced"
+	)
+	return result.data
 }
 
 export type { RegenReason }
-export { enqueueEmbeddingRegen, ErrRegenNotYetImplemented }
+export { enqueueEmbeddingRegen }

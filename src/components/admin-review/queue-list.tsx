@@ -30,6 +30,7 @@ import {
 	type FlagFilter,
 	type PressureFilter,
 	type SortKey,
+	type StaleFilter,
 	type SubTypeFilter
 } from "@/components/admin-review/queue-filters"
 import type { Difficulty } from "@/config/sub-types"
@@ -48,6 +49,12 @@ const PRESSURE_OPTIONS: ReadonlyArray<{ value: PressureFilter; label: string }> 
 	{ value: "pressure", label: "Pressure cells" },
 	{ value: "non-pressure", label: "Non-pressure" },
 	{ value: "all", label: "All cells" }
+]
+
+const STALE_OPTIONS: ReadonlyArray<{ value: StaleFilter; label: string }> = [
+	{ value: "all", label: "All freshness" },
+	{ value: "stale", label: "Stale only" },
+	{ value: "fresh", label: "Fresh only" }
 ]
 
 const SORT_OPTIONS: ReadonlyArray<{ value: SortKey; label: string }> = [
@@ -112,6 +119,11 @@ function asDifficultyFilter(value: string): DifficultyFilter {
 	return DEFAULT_FILTER_STATE.difficulty
 }
 
+function asStaleFilter(value: string): StaleFilter {
+	if (value === "all" || value === "stale" || value === "fresh") return value
+	return DEFAULT_FILTER_STATE.stale
+}
+
 const SELECT_CLASS =
 	"h-8 rounded-md border border-border-soft bg-surface px-2 text-[12px] text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
 
@@ -151,10 +163,17 @@ function QueueList({ data }: QueueListProps) {
 		})
 	}
 
+	function onStaleChange(event: React.ChangeEvent<HTMLSelectElement>) {
+		setFilterState(function update(prev) {
+			return { ...prev, stale: asStaleFilter(event.target.value) }
+		})
+	}
+
 	const headerStats = [
 		{ label: "Total", value: data.totalCount },
 		{ label: "Flagged", value: data.flaggedCount },
 		{ label: "Pressure", value: data.pressureCellCount },
+		{ label: "Stale", value: data.staleCount },
 		{ label: "Unvalidated", value: data.unvalidatedCount },
 		{ label: "Visible", value: visible.length }
 	]
@@ -178,7 +197,7 @@ function QueueList({ data }: QueueListProps) {
 
 	return (
 		<div className="flex flex-col gap-4">
-			<section className="grid grid-cols-2 gap-3 rounded-lg border border-border-soft bg-surface px-4 py-3 md:grid-cols-5">
+			<section className="grid grid-cols-2 gap-3 rounded-lg border border-border-soft bg-surface px-4 py-3 md:grid-cols-6">
 				{headerStats.map(function renderStat(stat) {
 					return (
 						<div key={stat.label} className="flex flex-col gap-[2px]">
@@ -259,6 +278,23 @@ function QueueList({ data }: QueueListProps) {
 							return (
 								<option key={d} value={d}>
 									{d}
+								</option>
+							)
+						})}
+					</select>
+				</label>
+				<label className="flex flex-col gap-1 text-[11px] text-text-3 uppercase tracking-[0.06em]">
+					Freshness
+					<select
+						value={filterState.stale}
+						onChange={onStaleChange}
+						className={SELECT_CLASS}
+						aria-label="Filter by validator freshness"
+					>
+						{STALE_OPTIONS.map(function renderOption(opt) {
+							return (
+								<option key={opt.value} value={opt.value}>
+									{opt.label}
 								</option>
 							)
 						})}

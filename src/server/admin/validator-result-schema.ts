@@ -28,7 +28,15 @@ const validatorResultSchema = z.object({
 	isPressureCell: z.boolean(),
 	flagsByName: z.record(z.string(), validatorVerdictSchema),
 	thresholdsHash: z.string(),
-	invokedByAdminEmail: z.string()
+	invokedByAdminEmail: z.string(),
+	// Stale-marker per §2.3 commit-1 Option (b) ratification. Set to
+	// Date.now() on every successful admin edit (submitEditAction inside
+	// the same transaction as the items update). Consumers compute
+	// staleness via `staleAfterMs > evaluatedAtMs` — absent OR equal-or-
+	// less means fresh. Re-running the validator against the candidate
+	// produces a new evaluatedAtMs that's > staleAfterMs, restoring
+	// freshness without needing to clear the field.
+	staleAfterMs: z.number().optional()
 })
 
 type ValidatorVerdict = z.infer<typeof validatorVerdictSchema>

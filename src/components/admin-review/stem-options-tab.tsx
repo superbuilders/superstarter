@@ -30,6 +30,7 @@
 // commit-1 if the discard-on-tab-switch friction matters.
 
 import * as errors from "@superbuilders/errors"
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import * as React from "react"
 import { BucketChangeConfirm } from "@/components/admin-review/bucket-change-confirm"
 import { NumberSeriesBody } from "@/components/item/body-renderers/number-series"
@@ -294,6 +295,32 @@ function StemOptionsEdit({ candidate, onCancel }: StemOptionsEditProps) {
 		})
 	}
 
+	function moveOptionUp(index: number) {
+		setOptions(function applyMove(prev) {
+			if (index <= 0 || index >= prev.length) return prev
+			const next = prev.slice()
+			const swap = next[index]
+			const before = next[index - 1]
+			if (swap === undefined || before === undefined) return prev
+			next[index - 1] = swap
+			next[index] = before
+			return next
+		})
+	}
+
+	function moveOptionDown(index: number) {
+		setOptions(function applyMove(prev) {
+			if (index < 0 || index >= prev.length - 1) return prev
+			const next = prev.slice()
+			const swap = next[index]
+			const after = next[index + 1]
+			if (swap === undefined || after === undefined) return prev
+			next[index + 1] = swap
+			next[index] = after
+			return next
+		})
+	}
+
 	const feedbackNode = feedback === undefined ? null : <FeedbackBanner feedback={feedback} />
 	const saveLabel = isSubmitting ? "Saving…" : "Save"
 
@@ -333,8 +360,12 @@ function StemOptionsEdit({ candidate, onCancel }: StemOptionsEditProps) {
 
 				<fieldset className="flex flex-col gap-2">
 					<legend className="font-medium text-[13px] text-text-1">Options</legend>
-					{options.map(function renderOptionInput(option) {
+					{options.map(function renderOptionInput(option, index) {
 						const isCorrect = option.id === correctAnswer
+						const isFirst = index === 0
+						const isLast = index === options.length - 1
+						const moveUpDisabled = isFirst ? true : isSubmitting
+						const moveDownDisabled = isLast ? true : isSubmitting
 						return (
 							<div
 								key={option.id}
@@ -362,6 +393,32 @@ function StemOptionsEdit({ candidate, onCancel }: StemOptionsEditProps) {
 										setOptionText(option.id, event.target.value)
 									}}
 								/>
+								<div className="flex shrink-0 items-center gap-1">
+									<Button
+										type="button"
+										variant="outline"
+										size="icon-xs"
+										aria-label={`Move option ${option.id} up`}
+										disabled={moveUpDisabled}
+										onClick={function onMoveUp() {
+											moveOptionUp(index)
+										}}
+									>
+										<ChevronUpIcon aria-hidden="true" />
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										size="icon-xs"
+										aria-label={`Move option ${option.id} down`}
+										disabled={moveDownDisabled}
+										onClick={function onMoveDown() {
+											moveOptionDown(index)
+										}}
+									>
+										<ChevronDownIcon aria-hidden="true" />
+									</Button>
+								</div>
 							</div>
 						)
 					})}

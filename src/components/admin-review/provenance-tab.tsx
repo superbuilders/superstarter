@@ -166,6 +166,13 @@ function FlagDetail({ name, verdict }: { name: string; verdict: ValidatorVerdict
 	)
 }
 
+function isStaleValidator(candidate: AdminCandidateRow): boolean {
+	const v = candidate.metadata.validatorResult
+	if (v === undefined) return false
+	if (v.staleAfterMs === undefined) return false
+	return v.staleAfterMs > v.evaluatedAtMs
+}
+
 function ValidatorFlagsBlock({ candidate }: { candidate: AdminCandidateRow }) {
 	const validator = candidate.metadata.validatorResult
 	const entries =
@@ -174,6 +181,8 @@ function ValidatorFlagsBlock({ candidate }: { candidate: AdminCandidateRow }) {
 			: Object.entries(validator.flagsByName).map(function toEntry(e) {
 					return { name: e[0], verdict: e[1] }
 				})
+	const stale = isStaleValidator(candidate)
+	const staleBannerNode = stale ? <StaleBanner candidate={candidate} /> : null
 	let body: React.ReactNode
 	if (entries.length === 0) {
 		body = (
@@ -200,8 +209,25 @@ function ValidatorFlagsBlock({ candidate }: { candidate: AdminCandidateRow }) {
 					Per criterion
 				</span>
 			</header>
+			{staleBannerNode}
 			{body}
 		</section>
+	)
+}
+
+function StaleBanner({ candidate }: { candidate: AdminCandidateRow }) {
+	const validator = candidate.metadata.validatorResult
+	if (validator === undefined) return null
+	if (validator.staleAfterMs === undefined) return null
+	const editedAt = new Date(validator.staleAfterMs).toISOString()
+	return (
+		<div className="border-cobalt/30 border-b bg-lavender/40 px-4 py-2 text-[12px] text-cobalt">
+			<span className="font-medium uppercase tracking-[0.06em]">Stale</span>
+			<span className="ml-2 text-text-2">
+				Edited <span className="font-mono">{editedAt}</span> — verdicts below predate the
+				edit. Re-run the validator to refresh.
+			</span>
+		</div>
 	)
 }
 

@@ -33,6 +33,8 @@ function makeItem(over: Partial<AdminQueueItem> & { id: string }): AdminQueueIte
 		isPressureCell: over.isPressureCell === undefined ? false : over.isPressureCell,
 		flagsByName: over.flagsByName === undefined ? baseFlags : over.flagsByName,
 		evaluatedAtMs: over.evaluatedAtMs,
+		staleAfterMs: over.staleAfterMs,
+		validatorStale: over.validatorStale === undefined ? false : over.validatorStale,
 		cohortKey: over.cohortKey,
 		invokedByAdminEmail: over.invokedByAdminEmail
 	}
@@ -62,7 +64,8 @@ test("matchesFilters: 'all' state passes everything", function allPass() {
 		flag: "all",
 		pressure: "all",
 		subType: "all",
-		difficulty: "all"
+		difficulty: "all",
+		stale: "all"
 	}
 	expect(matchesFilters(item, state)).toBe(true)
 })
@@ -73,7 +76,8 @@ test("matchesFilters: flag='flagged' rejects clean rows", function flaggedOnly()
 		flag: "flagged",
 		pressure: "all",
 		subType: "all",
-		difficulty: "all"
+		difficulty: "all",
+		stale: "all"
 	}
 	expect(matchesFilters(item, state)).toBe(false)
 })
@@ -84,7 +88,8 @@ test("matchesFilters: flag='clean' rejects flagged rows", function cleanOnly() {
 		flag: "clean",
 		pressure: "all",
 		subType: "all",
-		difficulty: "all"
+		difficulty: "all",
+		stale: "all"
 	}
 	expect(matchesFilters(item, state)).toBe(false)
 })
@@ -95,7 +100,8 @@ test("matchesFilters: pressure='pressure' rejects non-pressure rows", function p
 		flag: "all",
 		pressure: "pressure",
 		subType: "all",
-		difficulty: "all"
+		difficulty: "all",
+		stale: "all"
 	}
 	expect(matchesFilters(item, state)).toBe(false)
 })
@@ -106,13 +112,15 @@ test("matchesFilters: subType filter matches exact id", function subTypeMatch() 
 		flag: "all",
 		pressure: "all",
 		subType: "numerical.fractions",
-		difficulty: "all"
+		difficulty: "all",
+		stale: "all"
 	}
 	const stateMiss: FilterState = {
 		flag: "all",
 		pressure: "all",
 		subType: "verbal.antonyms",
-		difficulty: "all"
+		difficulty: "all",
+		stale: "all"
 	}
 	expect(matchesFilters(item, stateMatch)).toBe(true)
 	expect(matchesFilters(item, stateMiss)).toBe(false)
@@ -124,13 +132,15 @@ test("matchesFilters: difficulty filter matches exact tier", function difficulty
 		flag: "all",
 		pressure: "all",
 		subType: "all",
-		difficulty: "hard"
+		difficulty: "hard",
+		stale: "all"
 	}
 	const stateMiss: FilterState = {
 		flag: "all",
 		pressure: "all",
 		subType: "all",
-		difficulty: "easy"
+		difficulty: "easy",
+		stale: "all"
 	}
 	expect(matchesFilters(item, stateMatch)).toBe(true)
 	expect(matchesFilters(item, stateMiss)).toBe(false)
@@ -147,7 +157,8 @@ test("applyFilters: combines multiple criteria conjunctively", function combineA
 		flag: "flagged",
 		pressure: "pressure",
 		subType: "verbal.antonyms",
-		difficulty: "all"
+		difficulty: "all",
+		stale: "all"
 	}
 	const out = applyFilters(queueItems, state)
 	expect(out.map(function id(item) { return item.id })).toEqual(["a"])
@@ -207,6 +218,43 @@ test("applySort: produces a new array (does not mutate input)", function noMutat
 test("DEFAULT_FILTER_STATE: focuses queue on flagged candidates", function defaultFlagged() {
 	expect(DEFAULT_FILTER_STATE.flag).toBe("flagged")
 	expect(DEFAULT_FILTER_STATE.pressure).toBe("all")
+	expect(DEFAULT_FILTER_STATE.stale).toBe("all")
+})
+
+test("matchesFilters: stale='stale' rejects fresh rows", function staleOnlyExcludesFresh() {
+	const fresh = makeItem({ id: "a", validatorStale: false })
+	const state: FilterState = {
+		flag: "all",
+		pressure: "all",
+		subType: "all",
+		difficulty: "all",
+		stale: "stale"
+	}
+	expect(matchesFilters(fresh, state)).toBe(false)
+})
+
+test("matchesFilters: stale='stale' accepts stale rows", function staleOnlyAcceptsStale() {
+	const stale = makeItem({ id: "a", validatorStale: true })
+	const state: FilterState = {
+		flag: "all",
+		pressure: "all",
+		subType: "all",
+		difficulty: "all",
+		stale: "stale"
+	}
+	expect(matchesFilters(stale, state)).toBe(true)
+})
+
+test("matchesFilters: stale='fresh' rejects stale rows", function freshOnlyExcludesStale() {
+	const stale = makeItem({ id: "a", validatorStale: true })
+	const state: FilterState = {
+		flag: "all",
+		pressure: "all",
+		subType: "all",
+		difficulty: "all",
+		stale: "fresh"
+	}
+	expect(matchesFilters(stale, state)).toBe(false)
 })
 
 test("DEFAULT_SORT_KEY: highest-flag-count first by default", function defaultSort() {

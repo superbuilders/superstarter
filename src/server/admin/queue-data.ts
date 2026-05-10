@@ -72,6 +72,8 @@ interface AdminQueueItem {
 	readonly isPressureCell: boolean
 	readonly flagsByName: Readonly<Record<string, ValidatorVerdict>>
 	readonly evaluatedAtMs?: number
+	readonly staleAfterMs?: number
+	readonly validatorStale: boolean
 	readonly cohortKey?: string
 	readonly invokedByAdminEmail?: string
 }
@@ -82,6 +84,7 @@ interface AdminQueueData {
 	readonly flaggedCount: number
 	readonly pressureCellCount: number
 	readonly unvalidatedCount: number
+	readonly staleCount: number
 	readonly subTypeDistribution: ReadonlyMap<SubTypeId, number>
 	readonly cohortDistribution: ReadonlyMap<string, number>
 }
@@ -135,6 +138,8 @@ function parseAdminQueueItem(row: CandidateRow): AdminQueueItem {
 	const emptyFlags: Record<string, ValidatorVerdict> = {}
 	const flagsByName = validator === undefined ? emptyFlags : validator.flagsByName
 	const evaluatedAtMs = validator === undefined ? undefined : validator.evaluatedAtMs
+	const staleAfterMs = validator === undefined ? undefined : validator.staleAfterMs
+	const validatorStale = isValidatorStale(evaluatedAtMs, staleAfterMs)
 	const cohortKey = meta.promptHash
 	const invokedByAdminEmail = validator === undefined ? undefined : validator.invokedByAdminEmail
 	return {
@@ -148,9 +153,26 @@ function parseAdminQueueItem(row: CandidateRow): AdminQueueItem {
 		isPressureCell,
 		flagsByName,
 		evaluatedAtMs,
+		staleAfterMs,
+		validatorStale,
 		cohortKey,
 		invokedByAdminEmail
 	}
+}
+
+// Validator results are stale when the candidate has been edited since
+// the last validator run. The marker compares `staleAfterMs` (set on edit)
+// against `evaluatedAtMs` (set on validator run); only when stale > evaluated
+// is the candidate's verdict outdated. Re-running the validator produces a
+// new evaluatedAtMs that supersedes the existing staleAfterMs, restoring
+// freshness without needing to clear the field.
+function isValidatorStale(
+	evaluatedAtMs: number | undefined,
+	staleAfterMs: number | undefined
+): boolean {
+	if (staleAfterMs === undefined) return false
+	if (evaluatedAtMs === undefined) return true
+	return staleAfterMs > evaluatedAtMs
 }
 
 function aggregateDistribution<K>(
@@ -208,10 +230,12 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 	let flaggedCount = 0
 	let pressureCellCount = 0
 	let unvalidatedCount = 0
+	let staleCount = 0
 	for (const item of parsed) {
 		if (item.hasAnyFlag) flaggedCount += 1
 		if (item.isPressureCell) pressureCellCount += 1
 		if (item.evaluatedAtMs === undefined) unvalidatedCount += 1
+		if (item.validatorStale) staleCount += 1
 	}
 
 	const subTypeDistribution = aggregateDistribution(parsed, function bySubType(item) {
@@ -227,6 +251,7 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 			flaggedCount,
 			pressureCellCount,
 			unvalidatedCount,
+			staleCount,
 			subTypeBuckets: subTypeDistribution.size,
 			cohortBuckets: cohortDistribution.size
 		},
@@ -238,6 +263,7 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 		flaggedCount,
 		pressureCellCount,
 		unvalidatedCount,
+		staleCount,
 		subTypeDistribution,
 		cohortDistribution
 	}
@@ -248,6 +274,7 @@ export {
 	ErrLoadQueueQueryFailed,
 	ErrUnknownSubTypeId,
 	BODY_PREVIEW_MAX_CHARS,
+	isValidatorStale,
 	loadAdminQueueData,
 	parseAdminQueueItem,
 	truncateBodyText

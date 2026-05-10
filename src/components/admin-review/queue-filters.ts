@@ -14,23 +14,42 @@ type FlagFilter = "all" | "flagged" | "clean"
 type PressureFilter = "all" | "pressure" | "non-pressure"
 type SubTypeFilter = "all" | SubTypeId
 type DifficultyFilter = "all" | Difficulty
+type StaleFilter = "all" | "stale" | "fresh"
 
 interface FilterState {
 	readonly flag: FlagFilter
 	readonly pressure: PressureFilter
 	readonly subType: SubTypeFilter
 	readonly difficulty: DifficultyFilter
+	readonly stale: StaleFilter
 }
 
 type SortKey = "newest" | "oldest" | "flag-count" | "sub-type"
 
+function matchesFlag(flag: FlagFilter, hasAnyFlag: boolean): boolean {
+	if (flag === "flagged") return hasAnyFlag
+	if (flag === "clean") return !hasAnyFlag
+	return true
+}
+
+function matchesPressure(pressure: PressureFilter, isPressureCell: boolean): boolean {
+	if (pressure === "pressure") return isPressureCell
+	if (pressure === "non-pressure") return !isPressureCell
+	return true
+}
+
+function matchesStale(stale: StaleFilter, validatorStale: boolean): boolean {
+	if (stale === "stale") return validatorStale
+	if (stale === "fresh") return !validatorStale
+	return true
+}
+
 function matchesFilters(item: AdminQueueItem, state: FilterState): boolean {
-	if (state.flag === "flagged" && !item.hasAnyFlag) return false
-	if (state.flag === "clean" && item.hasAnyFlag) return false
-	if (state.pressure === "pressure" && !item.isPressureCell) return false
-	if (state.pressure === "non-pressure" && item.isPressureCell) return false
+	if (!matchesFlag(state.flag, item.hasAnyFlag)) return false
+	if (!matchesPressure(state.pressure, item.isPressureCell)) return false
 	if (state.subType !== "all" && item.subTypeId !== state.subType) return false
 	if (state.difficulty !== "all" && item.difficulty !== state.difficulty) return false
+	if (!matchesStale(state.stale, item.validatorStale)) return false
 	return true
 }
 
@@ -88,12 +107,21 @@ const DEFAULT_FILTER_STATE: FilterState = {
 	flag: "flagged",
 	pressure: "all",
 	subType: "all",
-	difficulty: "all"
+	difficulty: "all",
+	stale: "all"
 }
 
 const DEFAULT_SORT_KEY: SortKey = "flag-count"
 
-export type { DifficultyFilter, FilterState, FlagFilter, PressureFilter, SortKey, SubTypeFilter }
+export type {
+	DifficultyFilter,
+	FilterState,
+	FlagFilter,
+	PressureFilter,
+	SortKey,
+	StaleFilter,
+	SubTypeFilter
+}
 export {
 	applyFilters,
 	applySort,

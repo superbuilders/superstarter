@@ -7,6 +7,7 @@
 import { expect, test } from "bun:test"
 import {
 	BODY_PREVIEW_MAX_CHARS,
+	isValidatorStale,
 	parseAdminQueueItem,
 	truncateBodyText,
 	type CandidateRow
@@ -128,4 +129,55 @@ test("parseAdminQueueItem: throws on unknown sub_type_id", function unknownSubTy
 	expect(function attempt() {
 		parseAdminQueueItem(row)
 	}).toThrow()
+})
+
+test("isValidatorStale: false when staleAfterMs absent", function staleAbsent() {
+	expect(isValidatorStale(1000, undefined)).toBe(false)
+})
+
+test("isValidatorStale: false when evaluatedAtMs > staleAfterMs (post-revalidation)", function postRevalidate() {
+	expect(isValidatorStale(2000, 1000)).toBe(false)
+})
+
+test("isValidatorStale: false when evaluatedAtMs equal to staleAfterMs", function equalTimestamps() {
+	expect(isValidatorStale(1000, 1000)).toBe(false)
+})
+
+test("isValidatorStale: true when staleAfterMs > evaluatedAtMs (edit after validation)", function staleAfterEdit() {
+	expect(isValidatorStale(1000, 2000)).toBe(true)
+})
+
+test("isValidatorStale: true when evaluatedAtMs undefined but staleAfterMs present", function impossibleStateGuard() {
+	// Defensive: an item with a stale marker but no evaluation timestamp
+	// shouldn't occur in practice (submitEditAction sets staleAfterMs only
+	// on rows that already had a validator run). If it does happen, treat
+	// as stale to surface the anomaly in the queue.
+	expect(isValidatorStale(undefined, 1000)).toBe(true)
+})
+
+test("parseAdminQueueItem: validatorStale=true when staleAfterMs > evaluatedAtMs", function parsedStale() {
+	const row = makeRow({
+		id: "01abc",
+		metadataJson: {
+			validatorResult: {
+				evaluatedAtMs: 1_700_000_000_000,
+				hasAnyFlag: false,
+				isPressureCell: false,
+				flagsByName: {},
+				thresholdsHash: "sha256:thresh",
+				invokedByAdminEmail: "admin@example.com",
+				staleAfterMs: 1_700_000_000_001
+			}
+		}
+	})
+	const parsed = parseAdminQueueItem(row)
+	expect(parsed.validatorStale).toBe(true)
+	expect(parsed.staleAfterMs).toBe(1_700_000_000_001)
+})
+
+test("parseAdminQueueItem: validatorStale=false when validatorResult absent", function parsedNoValidator() {
+	const row = makeRow({ id: "01abc", metadataJson: {} })
+	const parsed = parseAdminQueueItem(row)
+	expect(parsed.validatorStale).toBe(false)
+	expect(parsed.staleAfterMs).toBeUndefined()
 })

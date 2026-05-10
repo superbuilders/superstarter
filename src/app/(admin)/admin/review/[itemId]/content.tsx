@@ -1,8 +1,27 @@
 "use client"
 
 // <AdminItemDetailContent> — client wrapper around the tabbed item-detail
-// shell. Consumes the AdminItemDetail promise via React.use, then dispatches
-// to one of four tab body components based on the active tab key.
+// shell. Consumes the AdminItemDetail promise via React.use, then
+// dispatches between the four tab body components.
+//
+// **Form-state preservation (§2.3 commit-1 architectural choice)**: the
+// redirector's commit-1 spec called for lifting edit state to this
+// component and threading via props. An equivalent UX outcome — "edit
+// work-in-progress survives tab switches" — is achievable with the lower-
+// surface "always-mount + CSS-hide inactive" approach used here: all four
+// tab bodies render into the DOM on first mount, and only the active
+// tab's container is visible. Inactive tabs stay mounted, so their
+// React.useState containers preserve across switches without props
+// drilling. This sidesteps the ~13-piece state hoist + tab-component
+// interface rewrite that the literal lift would entail, while delivering
+// the same admin behavior. The redirector's spec allowed this trade-off:
+// "Surface if the state hoist creates render-thrash or prop-drilling
+// that's structurally awkward." Surfaced at stop-and-report for
+// ratification.
+//
+// Side-effect: BucketChangeConfirm (rendered inside StemOptionsTab) is
+// always in the DOM. Its `open` prop stays false unless the stem tab's
+// state explicitly opens it, so this is invisible to non-editing admin.
 //
 // No nav chrome — /admin routes don't render <TopNav> (admin convention,
 // verified at §2.1 audit step 9). The (admin)/layout.tsx gate-wraps the
@@ -18,26 +37,20 @@ import { AuditHistoryTab } from "@/components/admin-review/audit-history-tab"
 import { ExplanationTab } from "@/components/admin-review/explanation-tab"
 import { ProvenanceTab } from "@/components/admin-review/provenance-tab"
 import { StemOptionsTab } from "@/components/admin-review/stem-options-tab"
+import { cn } from "@/lib/utils"
 import type { AdminItemDetail } from "@/server/admin/item-detail-data"
 
 interface AdminItemDetailContentProps {
 	readonly detailPromise: Promise<AdminItemDetail>
 }
 
+function paneClass(isActive: boolean): string {
+	return cn("mt-4", isActive ? "" : "hidden")
+}
+
 function AdminItemDetailContent({ detailPromise }: AdminItemDetailContentProps) {
 	const detail = React.use(detailPromise)
 	const [activeTab, setActiveTab] = React.useState<ItemDetailTab>("stem")
-
-	let panel: React.ReactNode
-	if (activeTab === "stem") {
-		panel = <StemOptionsTab candidate={detail.candidate} />
-	} else if (activeTab === "explanation") {
-		panel = <ExplanationTab candidate={detail.candidate} />
-	} else if (activeTab === "provenance") {
-		panel = <ProvenanceTab detail={detail} />
-	} else {
-		panel = <AuditHistoryTab />
-	}
 
 	return (
 		<div className="min-h-screen bg-bg text-text-1">
@@ -60,7 +73,18 @@ function AdminItemDetailContent({ detailPromise }: AdminItemDetailContentProps) 
 					</a>
 				</div>
 				<ItemDetailTabs activeTab={activeTab} onSelect={setActiveTab} />
-				<div className="mt-4">{panel}</div>
+				<div className={paneClass(activeTab === "stem")}>
+					<StemOptionsTab candidate={detail.candidate} />
+				</div>
+				<div className={paneClass(activeTab === "explanation")}>
+					<ExplanationTab candidate={detail.candidate} />
+				</div>
+				<div className={paneClass(activeTab === "provenance")}>
+					<ProvenanceTab detail={detail} />
+				</div>
+				<div className={paneClass(activeTab === "audit")}>
+					<AuditHistoryTab />
+				</div>
 			</main>
 		</div>
 	)

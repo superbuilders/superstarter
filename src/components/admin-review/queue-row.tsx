@@ -71,6 +71,14 @@ function QueueRow({ item }: QueueRowProps) {
 				Unvalidated
 			</span>
 		) : null
+	const staleBadge = item.validatorStale ? (
+		<span
+			className="inline-flex items-center rounded-sm border border-cobalt/40 bg-surface px-[6px] py-[1px] font-medium text-[10px] text-cobalt uppercase tracking-[0.06em]"
+			title="Validator verdict predates the most recent edit; re-run validator to refresh"
+		>
+			Stale
+		</span>
+	) : null
 	const bodyPreview = item.bodyPreview.length === 0 ? "(no preview)" : item.bodyPreview
 	const cohortKey = cohortKeyDisplay(item.cohortKey)
 	return (
@@ -91,6 +99,7 @@ function QueueRow({ item }: QueueRowProps) {
 			<span className="flex items-center gap-[6px]">
 				{pressureBadge}
 				{flagBadge}
+				{staleBadge}
 				{unvalidatedBadge}
 			</span>
 			<span className="whitespace-nowrap font-mono text-[11px] text-text-3 tabular-nums">
