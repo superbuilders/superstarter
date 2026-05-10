@@ -40,8 +40,10 @@
 //   - "/stats"                → stub page (dashboard round commit 4)
 // All five resolve to a 200 by the time this nav renders.
 
+import { LogOutIcon } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { signOutAction } from "@/app/(app)/actions"
 import { StreakChip } from "@/components/dashboard/streak-chip"
 
 const NAV: ReadonlyArray<{
@@ -97,6 +99,16 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 				>
 					{initials}
 				</span>
+				<form action={signOutAction}>
+					<button
+						type="submit"
+						aria-label="Sign out"
+						title="Sign out"
+						className="grid h-7 w-7 place-items-center rounded-full text-text-2 transition-colors duration-150 ease-out hover:bg-lavender hover:text-indigo focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
+					>
+						<LogOutIcon aria-hidden="true" className="h-[14px] w-[14px]" />
+					</button>
+				</form>
 			</div>
 		</header>
 	)
