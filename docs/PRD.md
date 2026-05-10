@@ -117,8 +117,6 @@ Every answered question produces an attempt record:
 - Selected answer (or null if skipped/timed out)
 - Correct (boolean)
 - Latency in milliseconds (from question render to answer submit)
-- Triage prompt fired (boolean)
-- Triage prompt taken (boolean)
 
 ---
 
@@ -129,7 +127,7 @@ Every answered question produces an attempt record:
 The seed bank is built from screenshots of actual CCAT items, via two parallel ingest paths:
 
 1. **Manual entry through an internal admin form.** The admin types or pastes the question text, options, correct answer, and explanation; an LLM call tags the sub-type and difficulty tier; the admin can override before saving. This path covers small batches and one-off items. Access is gated behind a hardcoded list of admin email addresses in `src/config/admins.ts`.
-2. **OCR pipeline for bulk ingest from screenshot folders.** A two-pass LLM pipeline (extract / explain) reads CCAT practice-test PNGs, classifies the sub-type and difficulty, captures the answer key from the screenshot, and synthesizes a triage-style explanation. The explain pass takes the source PNG as a vision-input alongside the text content so chart-bearing items can describe their chart data quantitatively in the recognition step. Implemented as offline scripts (`scripts/import-questions.ts`, `scripts/generate-explanations.ts`). The legacy solve+verify branch is preserved as a defensive fallback for source classes where answers are not visible (unreached for the v1 testbank under the post-2026-05-05 screenshot drops). Source provenance — the originating folder under `data/testbank/` and the PNG filename — is recorded in `items.source_folder` + `items.source_filename` columns at ingest time, queryable by future admin-portal filters. The same admin route is the write boundary, so the bank shape is identical regardless of which path the item came in through.
+2. **OCR pipeline for bulk ingest from screenshot folders.** A two-pass LLM pipeline (extract / explain) reads CCAT practice-test PNGs, classifies the sub-type and difficulty, captures the answer key from the screenshot, and synthesizes a structured explanation. The explain pass takes the source PNG as a vision-input alongside the text content so chart-bearing items can describe their chart data quantitatively in the recognition step. Implemented as offline scripts (`scripts/import-questions.ts`, `scripts/generate-explanations.ts`). The legacy solve+verify branch is preserved as a defensive fallback for source classes where answers are not visible (unreached for the v1 testbank under the post-2026-05-05 screenshot drops). Source provenance — the originating folder under `data/testbank/` and the PNG filename — is recorded in `items.source_folder` + `items.source_filename` columns at ingest time, queryable by future admin-portal filters. The same admin route is the write boundary, so the bank shape is identical regardless of which path the item came in through.
 
 In both cases the item is saved with `source: real`, `status: live`, and an embedding is computed and stored. The admin page is not exposed to end users.
 
@@ -221,7 +219,7 @@ Identical to the full-length practice test but with stricter UI: no pause button
 
 ### 5.1 The focus-mode shell
 
-> **Timer-toggles cut from v1 2026-05-04** (both question-timer toggle and session-timer toggle, per the user-facing toggle UI and per-user persistence). Section preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. In v1, timer visibility is **static per session type**: session timer + pace track ON for full-length tests, simulations, drills, and the diagnostic; question timer OFF everywhere (the underlying 18-second elapsed-time tracking still drives the triage prompt — only the visible chronometer is hidden). The focus-mode shell itself is core to v1 and ships as specified below; only the toggle controls and the per-user-persisted visibility state are cut.
+> **Timer-toggles cut from v1 2026-05-04** (both question-timer toggle and session-timer toggle, per the user-facing toggle UI and per-user persistence). Section preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. In v1, timer visibility is **static per session type**: session timer + pace track ON for full-length tests, simulations, drills, and the diagnostic; question timer OFF everywhere. The focus-mode shell itself is core to v1 and ships as specified below; only the toggle controls and the per-user-persisted visibility state are cut.
 
 Every practice session — diagnostic, drill, full-length test, and simulation — runs inside a shell with strict UI rules.
 
@@ -245,15 +243,15 @@ The shell supports three independent peripheral elements: the session timer, the
 
   Both bars share the same visual register (same height, same color treatment, same dimming). The pace track is non-interactive — it is purely a visualization of the question-budget remaining versus the time-budget remaining. The pace track's visibility is tied to the session timer's visibility (toggling one toggles both).
 
-- **Question timer (per-question).** An 18-second countdown for the current question (or the per-question target for the active drill mode, if different), rendered as a horizontal bar that depletes from the left edge inward, so the remaining-time portion shrinks toward the right edge of the screen. The bar starts full when the question renders and reaches zero at the per-question target. When it reaches zero, the triage prompt fires. Default state: OFF for all session types unless the user enables it. The user can toggle it mid-session without ending the question.
+- **Question timer (per-question).** An 18-second countdown for the current question (or the per-question target for the active drill mode, if different), rendered as a horizontal bar that depletes from the left edge inward, so the remaining-time portion shrinks toward the right edge of the screen. The bar starts full when the question renders and reaches zero at the per-question target. Default state: OFF for all session types unless the user enables it. The user can toggle it mid-session without ending the question.
 
 When any element is toggled OFF, its visual element is fully hidden (not greyed out). Timer visibility state is persisted per user (so if a user turns the question timer on during one drill, it stays on for their next drill until they toggle it off).
 
-**Triage prompt (see section 6.1):**
+**Triage prompt — REMOVED 2026-05-10 (historical only):**
 
-When a question's elapsed time exceeds 18 seconds, the periphery flashes a single message: "Best move: guess and advance." This is the only mid-question UI element that appears regardless of timer settings.
+> **Removed 2026-05-10.** The mid-question "Best move: guess and advance." periphery prompt, its 18-second trigger, and the §6.1 triage trainer it was paired with have all been removed. See header banner.
 
-**Implementation note:** Build the shell as a reusable component (e.g., `<FocusShell>{children}</FocusShell>`). All session types render through it. The shell owns the dimming, all three timers, the triage prompt, the timer toggle controls, and the inter-question card.
+**Implementation note:** Build the shell as a reusable component (e.g., `<FocusShell>{children}</FocusShell>`). All session types render through it. The shell owns the dimming, all three timers, the timer toggle controls, and the inter-question card.
 
 ### 5.2 Mastery Map (home screen)
 
@@ -268,7 +266,7 @@ What's NOT on this screen: percentage progress, calendar view, multi-week roadma
 
 ### 5.3 NarrowingRamp (pre-session protocol)
 
-> **Cut from v1 2026-05-04.** Section preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. v1 launches sessions directly from the Mastery Map start-session button without the 75-second pre-session protocol; the if-then-plan stored on the session, visual narrowing step, session brief, and launch countdown are all deferred. The mid-session if-then plan-trigger flash is also deferred — the generic triage prompt (§6.1) fires instead.
+> **Cut from v1 2026-05-04.** Section preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. v1 launches sessions directly from the Mastery Map start-session button without the 75-second pre-session protocol; the if-then-plan stored on the session, visual narrowing step, session brief, and launch countdown are all deferred. The mid-session if-then plan-trigger flash is also deferred.
 
 An optional 75-second protocol that runs before any drill, full-length test, or simulation. The user can skip it via a small link, but it's the default flow. Not used before the diagnostic.
 
@@ -292,16 +290,9 @@ A simple chronological list of past sessions. Each row: date, session type, sub-
 
 ## 6. Speed-Test-Specific Features
 
-### 6.1 Triage trainer
+### 6.1 Triage trainer — REMOVED 2026-05-10 (historical only)
 
-When the timer for the current question crosses 18 seconds, the focus shell flashes a single message in the periphery: "Best move: guess and advance." If the user clicks it (or presses a configured shortcut), they advance with whatever option is currently selected (or a random one if none).
-
-Each triage event is logged on the attempt:
-- Prompt fired: yes/no
-- User took the prompt: yes/no (computed: did the user submit within ~3 seconds of the prompt firing?)
-- Question outcome: correct, incorrect, skipped
-
-The user's **triage score** = % of questions where the prompt fired AND the user took it. Surfaced in post-session review and on the Mastery Map (small, secondary).
+> **Removed 2026-05-10.** The mid-question "Best move: guess and advance." prompt, the 18-second elapsed-time trigger, the per-attempt prompt-fired / prompt-taken booleans, and the post-session triage score have all been removed. Migration `0006_friendly_switch.sql` drops the underlying `attempts.triage_*` columns. Section number preserved as a gap.
 
 ### 6.2 Speed ramp drill mode
 
@@ -341,7 +332,6 @@ Strategies never appear during an active question.
 
 After every session (drill, full-length test, simulation, diagnostic), the user lands on a review screen. Contents:
 
-- Triage score for the session (rendered first per the calibration-discipline framing in §1).
 - Accuracy summary by sub-type (categorical: ✓ / ✗ counts, no percentages on this screen).
 - Median latency by sub-type, with the threshold marked.
 - Any wrong items, browsable. Each shows the prompt, options, correct answer, explanation. The explanation renders as structured parts (recognition / elimination / [optional] tie-breaker); clicking the elimination part strikes through the options it eliminates, clicking the tie-breaker part highlights the options it considers, with state toggling per click and resetting per session.
@@ -350,7 +340,7 @@ After every session (drill, full-length test, simulation, diagnostic), the user 
 - Diagnostic only, conditional on session duration > 15 minutes: a derived pacing-line sentence ("Your diagnostic took N minutes. The real CCAT is 15 minutes for 50 questions.").
 - Drill / full-length / simulation: a single "Continue" button → `/`. Diagnostic mode dismisses via the `<OnboardingTargets>` form; both flows call `router.push("/")`.
 
-> **30-second strategy-review gate cut from v1 2026-05-04** (post-full-length only). Paragraph below preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. In v1, the post-session review is dismissible immediately for **all** session types (drill, full-length, simulation, diagnostic). The rest of §6.5 (the post-session review surface itself — accuracy, latency, triage score, wrong items, surfaced strategies) remains in scope and shipped 2026-05-04.
+> **30-second strategy-review gate cut from v1 2026-05-04** (post-full-length only). Paragraph below preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04 for rationale. In v1, the post-session review is dismissible immediately for **all** session types (drill, full-length, simulation, diagnostic). The rest of §6.5 (the post-session review surface itself — accuracy, latency, wrong items, surfaced strategies) remains in scope and shipped 2026-05-04.
 
 After a full-length practice test only, an additional 30-second strategy-review prompt runs before the user can dismiss the screen. The system picks one strategy (paired with the question type the user struggled most with in the test) and displays it. The user must view it before "completing" the test in the system.
 
@@ -415,7 +405,7 @@ The stack is anchored on the Superbuilders [`superstarter`](https://github.com/s
 ### Focus shell implementation specifics
 
 - Single component (`<FocusShell>{children}</FocusShell>`) with internal state for timer visibility, dim level, current item, and elapsed time. Not fragmented across multiple components — visual coherence depends on shared state.
-- **Layout:** CSS Grid with named template areas (`header` for timer bars and pace track, `content` for the salient question, `footer` for the question timer when enabled, `peripheral` for the triage prompt overlay). Dimming is animated by tweening `opacity` on each named area independently.
+- **Layout:** CSS Grid with named template areas (`header` for timer bars and pace track, `content` for the salient question, `footer` for the question timer when enabled). Dimming is animated by tweening `opacity` on each named area independently.
 - **Timer animations:** `requestAnimationFrame` (not `setInterval`). Smoother depletion, easier pause/resume, no clock drift.
 - **Latency measurement:** the `Performance` API (`performance.now()`). Sub-millisecond precision. Latency starts at first paint of the question, ends at submit click.
 
@@ -467,7 +457,7 @@ items (id, sub_type_id, difficulty, source, status, prompt, options_json,
 sessions (id, user_id, type, started_at_ms, ended_at_ms,
           narrowing_ramp_completed, if_then_plan)
 attempts (id, session_id, item_id, selected_answer, correct, latency_ms,
-          triage_prompt_fired, triage_taken, created_at_ms)
+          created_at_ms)
 mastery_state (user_id, sub_type_id, current_state, updated_at_ms)
 review_queue (id, user_id, item_id, due_at_ms, interval_days)
 strategies (id, sub_type_id, text)
@@ -520,7 +510,7 @@ A 2-week build plan, in priority order.
 
 6. LLM generation pipeline (generator + validator + scorer + deploy).
 7. Adaptive difficulty ~~+ spaced-repetition queue~~. (**Cut from v1 2026-05-04** — SR queue cut, §4.3 marker. Adaptive difficulty stays in v1 — Phase 5 sub-phase 2. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
-8. Triage trainer ~~+ speed ramp + brutal drill modes + question timer toggle~~. (**Cut from v1 2026-05-04** — speed-ramp + brutal drill modes (§4.4 marker) + question-timer toggle (§5.1 marker) all cut. Triage trainer stays in v1. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
+8. ~~Triage trainer + speed ramp + brutal drill modes + question timer toggle~~. (**Cut from v1**: speed-ramp + brutal drill modes (§4.4 marker) + question-timer toggle (§5.1 marker) cut 2026-05-04; **triage trainer removed 2026-05-10** per header banner. Build-order step preserved as historical reference. See `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
 9. ~~NarrowingRamp +~~ score-to-target + post-session review. (**NarrowingRamp cut from v1 2026-05-04** — §5.3 marker. Score-to-target and post-session review both stay in v1; **post-session review shipped Phase 5 sub-phase 1, 2026-05-04.** See `docs/plans/phase5-post-session-review.md` and `docs/plans/feature-roadmap.md` § Cut from v1 2026-05-04.)
 10. Strategy library + test-day simulation mode + history tab.
 

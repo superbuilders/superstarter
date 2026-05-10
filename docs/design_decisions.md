@@ -188,9 +188,8 @@ Decisions are grouped by topic. Within a topic they are ordered roughly in the o
 
 **Chosen.** Option 1 — untimed.
 
-**Rationale.** The diagnostic measures **capacity**, not triage. Three refinements:
+**Rationale.** The diagnostic measures **capacity**. Two refinements:
 - The pace track is hidden for `sessionType: 'diagnostic'` because there's no session budget to compare against.
-- Triage prompts still fire at 18s; triage events are still logged. The diagnostic isn't training triage but capturing whether the user naturally triages is useful signal for post-diagnostic strategy surfacing.
 - A one-time, non-blocking peripheral note appears at the 15-minute mark: "you're at the real-test time limit; keep going to finish the calibration." Note duration is 15s, then auto-dismisses. The substantive feedback on overrun lives in the post-session review.
 
 ### 2.3 Diagnostic composition is a hand-tuned 50-row config
@@ -254,37 +253,23 @@ Speed-ramp drills shift the tier down by one (`mastered → medium`, `fluent →
 
 ---
 
-## 3. Focus shell, timers, triage
+## 3. Focus shell and timers
 
 ### 3.1 Question timer never auto-submits
 
 **Question.** When the per-question timer hits zero, does the question auto-submit?
 
-**Chosen.** **No auto-submit.** The triage prompt fires at 18s and remains persistently visible (with subtly increasing visual intensity between 18–30s, then plateauing) until the user submits or takes the prompt. The session timer is the only hard cutoff.
+**Chosen.** **No auto-submit.** The session timer is the only hard cutoff.
 
-**Rationale.** The CCAT has exactly one timer (15 min session-level); per-question pacing is a self-coaching skill, not a system rule. Auto-submitting destroys the triage score's meaning: the metric is "% of 18s+ questions where the user **chose** to take the prompt and advance." If the system auto-submits, every question becomes a triage event by default and the score collapses to "did the system run out of patience?" The triage trainer's pedagogy is that the user must make the choice; the prompt is a coach, not a referee.
+**Rationale (historical — original triage-pedagogy framing retired 2026-05-10).** The CCAT has exactly one timer (15 min session-level); per-question pacing is a self-coaching skill, not a system rule. The original justification (preserving triage-score meaning) no longer applies post-triage retirement; the no-auto-submit decision is preserved on the simpler ground that the per-question target is a pacing reference, not a deadline. In code, the per-question 18s target continues to drive the timer-bar color change and warning sound at zero-remaining; submission still requires explicit user action.
 
-### 3.2 Triage shortcut is the `T` key
+### 3.2 Triage shortcut — REMOVED 2026-05-10 (historical only)
 
-**Question.** What keyboard shortcut takes the triage prompt?
+> **Removed 2026-05-10.** The `T` keyboard shortcut and the triage prompt it dismissed are gone. Section number preserved as a gap.
 
-**Options.**
-1. Spacebar.
-2. `T`.
-3. Escape.
-4. Click-only (no shortcut).
+### 3.3 Triage score denominator — REMOVED 2026-05-10 (historical only)
 
-**Chosen.** Option 2 — `T`.
-
-**Rationale.** Spacebar conflicts with the browser's default radio-button selection; preventing default on space breaks radio-button behavior elsewhere in the focus shell. `T` is unused, sits under the index finger when the user's hand is on the home row, and doesn't require any default-prevention. Discoverability comes from a small `(T)` suffix on the triage prompt's text once it appears. Number keys `1–5` and letters `A–E` select corresponding options for keyboard-driven users; `Enter` submits the selected option.
-
-### 3.3 Triage score denominator is "questions where the prompt fired"
-
-**Question.** What's the denominator for the triage adherence percentage?
-
-**Chosen.** Denominator = questions where the prompt fired; numerator = of those, the ones taken (within 3 seconds of the prompt firing). When a session has fewer than 3 triage events, the post-session review shows "small sample — N triage events" instead of a percentage. The Mastery Map shows a rolling 30-day aggregate, not the latest session. Zero-event sessions are framed positively: "no triage events: you stayed under 18s on every question."
-
-**Rationale.** Sessions where the prompt never fires aren't 0% triage adherence — they're N/A. A blended metric that punishes fast users for not hitting triage events is misleading. Single-session percentages are too noisy to be a useful tracking metric anyway; the user's question is "am I getting better at triage" which is a multi-session question.
+> **Removed 2026-05-10.** The triage adherence percentage, its denominator semantics, the small-sample / N/A branches, and the rolling 30-day Mastery Map aggregate are all gone. Section number preserved as a gap.
 
 ### 3.4 Difficulty progression curve is hand-tuned per decile
 
@@ -320,7 +305,7 @@ Largest-remainder rounding within each 10-item decile, ties broken by lower-tier
 
 **Question.** What does the pace track do during a diagnostic, which has no session budget?
 
-**Chosen.** Hidden entirely. The session timer bar is also hidden; only the per-question timer (if user has it on) and the triage prompt remain. Hiding is per-session-type config, not a runtime degenerate-value path.
+**Chosen.** Hidden entirely. The session timer bar is also hidden; only the per-question timer (if user has it on) remains. Hiding is per-session-type config, not a runtime degenerate-value path.
 
 **Rationale.** The pace track's job is "blocks remaining vs time remaining"; without a session budget there's nothing to compare. Rendering it with degenerate values would be UI lying.
 
@@ -445,13 +430,15 @@ If absent, redirect to `/diagnostic`. Layout-level protection covers every route
 
 **Rationale.** v1 bands are uncalibrated guesses for the highest-stakes period of the bank's life. Tight bands retire correct items. Tighter bands are easy to apply later when data exists; reversing wrong retirements is harder.
 
-### 5.6 NarrowingRamp obstacle algorithm: top-2-by-weakness + reserved triage slot
+### 5.6 NarrowingRamp obstacle algorithm — historical (NarrowingRamp cut from v1; reserved triage slot removed 2026-05-10)
+
+> **NarrowingRamp protocol cut from v1 2026-05-04** per PRD §5.3. The component, the server-side `suggestObstacleOptions(userId)` helper, and the reserved triage slot are all unreachable in v1. The triage-specific portion is additionally retired 2026-05-10. The decision below is preserved as historical reference for the cut feature's design.
 
 **Question.** How are the three obstacle options computed?
 
-**Chosen.** Slot 1 and 2: top 2 sub-types by composite weakness score `(1 - rolling_30d_accuracy) * (median_latency / threshold)`. Filter requires ≥ 5 attempts in the rolling 30-day window. Slot 3: reserved for a triage-related obstacle if the user's 30-day triage adherence < 70% or has < 3 triage events; otherwise the third weakest sub-type. Each slot maps to an **observable trigger → bounded action** template (Gollwitzer implementation-intentions form). The triage slot's template is the canonical 18-second one. Sub-type-specific slots use templates calibrated to that sub-type's failure mode (slow-and-wrong → triage-flavored; fast-and-wrong → recognition-pause: "If I'm about to commit a synonym answer in under 3 seconds, I will read all options first").
+**Chosen (historical).** Slot 1 and 2: top 2 sub-types by composite weakness score `(1 - rolling_30d_accuracy) * (median_latency / threshold)`. Filter requires ≥ 5 attempts in the rolling 30-day window. Slot 3 originally reserved for a triage-related obstacle (since removed); the as-designed fallback was the third weakest sub-type. Each slot mapped to an **observable trigger → bounded action** template (Gollwitzer implementation-intentions form).
 
-**Rationale.** The reserved triage slot is load-bearing — triage discipline is the highest-leverage skill on the CCAT but it's invisible in per-sub-type accuracy data. Templates with bounded actions ("If I see a matrix problem, I will skip it") are unactionable; observable trigger → bounded action templates are.
+**Rationale (historical).** Templates with bounded actions ("If I see a matrix problem, I will skip it") are unactionable; observable trigger → bounded action templates are.
 
 ### 5.7 LLM cost telemetry via Pino logs + admin dashboard
 

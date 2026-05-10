@@ -27,7 +27,7 @@ Architectural shape:
 - **Server actions for mutations**, with `revalidatePath` after writes (`src/app/actions.ts`).
 - **Vercel Workflows** (`"use workflow"` / `"use step"`) for asynchronous, retriable work.
 - **Vercel Cron Jobs** (`vercel.json`) for periodic work — abandon sweep (every minute) and candidate promotion (nightly at 04:00 UTC).
-- **A single `<FocusShell>` client component** that owns timers, dimming, the persistent triage prompt, the inter-question card, and heartbeats.
+- **A single `<FocusShell>` client component** that owns timers, dimming, the inter-question card, and heartbeats.
 - **Auth.js v5 with the Drizzle adapter** wrapped in a thin shim that converts `Date ↔ ms` so every Auth.js timestamp column lands as `bigint(_ms)` per `rules/no-timestamp-columns.md`.
 - **PostgreSQL via Drizzle ORM**, with every PK as `uuid("id").primaryKey().notNull().default(sql\`uuidv7()\`)` per `rules/no-uuid-default-random.md`.
 - **`pgvector` extension** on the `items.embedding` column for the validator's uniqueness check at cosine-similarity threshold 0.92 (PRD §3.2, §7).
@@ -117,9 +117,7 @@ src/
 │   │   ├── similarity.ts                                      # NEW: nearestNeighborInBank(subTypeId, embedding)
 │   │   └── pricing.ts                                         # NEW: per-model unit pricing for cost estimation
 │   ├── narrowing-ramp/
-│   │   └── obstacle.ts                                        # NEW: suggestObstacleOptions(userId) — top-2 weakness + reserved triage slot
-│   └── triage/
-│       └── score.ts                                           # NEW: triageScoreForSession(sessionId), triageRolling30d(userId)
+│   │   └── obstacle.ts                                        # NEW: suggestObstacleOptions(userId) — top-2 weakness
 │
 ├── workflows/
 │   ├── item-generation.ts                                     # NEW: itemGenerationWorkflow(input) — four pipeline stages as steps
@@ -135,7 +133,6 @@ src/
 │   │   ├── session-timer-bar.tsx                              # NEW: <SessionTimerBar>
 │   │   ├── pace-track.tsx                                     # NEW: <PaceTrack>
 │   │   ├── question-timer-bar.tsx                             # NEW: <QuestionTimerBar>
-│   │   ├── triage-prompt.tsx                                  # NEW: persistent overlay with subtle escalating intensity 18s..30s
 │   │   ├── inter-question-card.tsx                            # NEW: <InterQuestionCard>
 │   │   ├── heartbeat.tsx                                      # NEW: client hook that posts sendBeacon every 30s + on pagehide
 │   │   └── shell-reducer.ts                                   # NEW: pure reducer for FocusShell state
@@ -145,7 +142,7 @@ src/
 │   │   └── body-renderers/
 │   │       └── text.tsx                                       # NEW: { kind: 'text' } — the single v1 body variant
 │   ├── mastery-map/
-│   │   ├── mastery-map.tsx                                    # NEW: 14-icon grid + near-goal line + start CTA + low-contrast triage adherence
+│   │   ├── mastery-map.tsx                                    # NEW: 14-icon grid + near-goal line + start CTA
 │   │   ├── mastery-icon.tsx                                   # NEW: per-section lucide icons (BookOpen for verbal / Calculator for numerical)
 │   │   ├── near-goal-line.tsx                                 # NEW: single text line, no graph
 │   │   └── start-session-button.tsx                           # NEW: primary CTA
@@ -156,7 +153,7 @@ src/
 │   │   ├── session-brief.tsx                                  # NEW: 15s plain-text preview
 │   │   └── launch-countdown.tsx                               # NEW: 15s countdown
 │   └── post-session/
-│       ├── post-session-review.tsx                            # NEW: accuracy/latency/triage/wrong-items
+│       ├── post-session-review.tsx                            # NEW: accuracy/latency/wrong-items
 │       ├── strategy-review-gate.tsx                           # NEW: 30s strategy gate after full-length tests only
 │       ├── wrong-items-list.tsx                               # NEW: browsable wrong-item list with explanations
 │       └── onboarding-targets.tsx                             # NEW: target-percentile + target-date capture (post-diagnostic only)
@@ -525,8 +522,6 @@ Recover `created_at` via `timestampFromUuidv7(row.id)`. `started_at_ms` is recor
 | `latency_ms` | `integer` | `notNull` |
 | `served_at_tier` | `pgEnum('item_difficulty', ['easy','medium','hard','brutal'])` | `notNull` |
 | `fallback_from_tier` | `pgEnum('item_difficulty', ['easy','medium','hard','brutal'])` | nullable |
-| `triage_prompt_fired` | `boolean` | `notNull`, `default false` |
-| `triage_taken` | `boolean` | `notNull`, `default false` |
 | `metadata_json` | `jsonb` | `notNull`, `default '{}'` (carries `fallback_level`) |
 
 Indexes:
@@ -928,8 +923,6 @@ interface ShellState {
     sessionStartedAtMs: number
     elapsedQuestionMs: number            // updated by requestAnimationFrame
     elapsedSessionMs: number
-    triagePromptFired: boolean           // flips true once elapsedQuestionMs >= perQuestionTargetMs
-    triagePromptFiredAtMs?: number       // for the 3-second triage_taken window
     selectedOptionId?: string
     interQuestionVisible: boolean
     questionsRemaining: number
@@ -939,7 +932,6 @@ type ShellAction =
     | { kind: "tick"; nowMs: number }
     | { kind: "select"; optionId: string }
     | { kind: "submit" }
-    | { kind: "triage_take" }
     | { kind: "advance"; next?: ItemForRender }
 ```
 
@@ -962,7 +954,7 @@ content region:
 
 - The three bars stack with consistent vertical rhythm; their labels (`Per question time`, `Overall time`) sit immediately below the corresponding bar.
 - The progression bar is unconditional — it renders for every session type. The session bar + chronometer are hidden when `sessionDurationMs === null` (diagnostic only); visible otherwise. The per-question bar is always visible. (v1 post-cleanup-commit-2 2026-05-04: timer visibility is static per session type — toggle UX cut, no `timerPrefs` state, no user-facing visibility controls.)
-- `<TriagePrompt>` is rendered as an overlay layer outside the chrome row + content region. `<InterQuestionCard>` and `<Heartbeat>` are siblings to the main column.
+- `<InterQuestionCard>` and `<Heartbeat>` are siblings to the main column.
 
 ### 6.4 Timer animation strategy
 
@@ -995,26 +987,15 @@ The two per-question bars are wrapped by a shared `<QuestionTimerBarStack>` pare
 
 **Bar color allocation.** The progression bar is always blue — it's a question-count indicator with no time semantics. The session bar carries both the elapsed-time signal (the fill ratio) AND the pace-deficit signal (the fill color). An earlier post-overhaul-fixes commit put the pace-deficit color on the progression bar in addition to the session bar's static red; the doubled signal was visually noisy and the progression bar's color was distracting from its "K of N" job, so the color was consolidated onto the session bar in a follow-up.
 
-### 6.7 Triage prompt — persistent, never auto-submits
+### 6.7 Triage prompt — REMOVED 2026-05-10 (historical only)
 
-When `elapsedQuestionMs >= perQuestionTargetMs` and `triagePromptFired` is false, the reducer flips `triagePromptFired = true`, captures `triagePromptFiredAtMs = elapsedQuestionMs`, and the `<TriagePrompt>` overlay fades in. **The prompt is persistent — it stays visible until the user submits or takes it.** Visual intensity may subtly increase between the per-question target and 30 seconds, then plateaus. There is **no auto-submit** at any time during a question; the session timer is the only hard cutoff.
-
-When `sessionDurationMs !== null` and `elapsedSessionMs >= sessionDurationMs`, the focus shell auto-calls `onEndSession()` (wrapped in `errors.try()` so a server-action failure logs but doesn't strand the user) and navigates to `/post-session/[sessionId]`. The diagnostic case (`sessionDurationMs === null`) is exempt — the diagnostic is untimed at the session level (PRD §4.1, capacity measurement) and ends only when all 50 attempts are submitted. Pacing feedback for the diagnostic surfaces post-session as a derived sentence, not in-flow; see §6.10.
-
-Render rule: always show `Best move: guess and advance.` with `(Space)` suffix. (v1 post-cleanup-commit-2 2026-05-04: the prior "if ifThenPlan is non-empty, render it instead" branch was dropped — NarrowingRamp protocol cut from v1 means no `ifThenPlan` reaches the prompt. The prop chain through `<TriagePrompt>` was removed.)
-
-The user can take the prompt by:
-- Clicking it.
-- Pressing the `T` key.
-
-Taking it dispatches `triage_take`, which auto-submits the currently-selected option (or a random option per PRD §6.1 if none is selected). The reducer marks `triageTaken = true` only if the take happens within 3000ms of `triagePromptFiredAtMs`.
-
-Triage rendering is independent of timer-bar visibility — it appears regardless of toggle state.
+> **Removed 2026-05-10.** The `<TriagePrompt>` overlay, the persistent fade-in, the `triage_take` reducer action, the 3-second `triage_taken` window, and the `T` keyboard shortcut have all been removed. Migration `0006_friendly_switch.sql` drops the underlying columns. Section number preserved as a gap; subsequent §-numbering unchanged.
+>
+> Session-level auto-end behavior (formerly described inside this section) is unchanged and now described in §6.6 (peripheral elements) and §10.x session flows: when `sessionDurationMs !== null` and `elapsedSessionMs >= sessionDurationMs`, the focus shell calls `onEndSession()` and navigates to `/post-session/[sessionId]`. The diagnostic case (`sessionDurationMs === null`) ends only when all 50 attempts are submitted; pacing feedback surfaces post-session per §6.10.
 
 ### 6.8 Keyboard shortcuts
 
 Active inside the FocusShell:
-- `T` — take the triage prompt.
 - `1`–`5` — select option at index 0–4.
 - `A`–`E` — same as 1–5 (the letter-labeled alternative shorthand).
 - `Enter` — submit the currently selected option.
@@ -1027,11 +1008,11 @@ After `submit` and before the next item paints, `<InterQuestionCard>` fades in f
 
 ### 6.10 Post-session pacing line (replaces the in-flow overtime note)
 
-The diagnostic is untimed at the session level (PRD §4.1, capacity measurement, not triage). The focus shell renders no in-flow overtime overlay. Pacing feedback is derived post-session and surfaces as a single neutral sentence beneath the onboarding-targets form on `/post-session/[sessionId]`:
+The diagnostic is untimed at the session level (PRD §4.1, capacity measurement). The focus shell renders no in-flow overtime overlay. Pacing feedback is derived post-session and surfaces as a single neutral sentence beneath the onboarding-targets form on `/post-session/[sessionId]`:
 
 > Your diagnostic took {N} minutes. The real CCAT is 15 minutes for 50 questions.
 
-The sentence renders only when the user took longer than 15 minutes (`elapsedMs > 900_000`); otherwise it is omitted. The phrasing is intentionally informational — the user calibrates against the real-CCAT reference without being primed by a triage frame the diagnostic isn't training. Drills will train pacing toward the same 15-min/50-question reference.
+The sentence renders only when the user took longer than 15 minutes (`elapsedMs > 900_000`); otherwise it is omitted. The phrasing is intentionally informational — the user calibrates against the real-CCAT reference. Drills will train pacing toward the same 15-min/50-question reference.
 
 `pacingMinutes` is derived in `loadSession` (`src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx`) on every load:
 
@@ -1072,7 +1053,7 @@ The focus shell uses a hybrid two-path audio model — synthesized ticks both be
 
 **Pre-target ticks.** A soft 880 Hz sine pip fires at every integer second strictly greater than half the per-question target and strictly less than the target itself. For an 18-second target this lands as eight ticks at seconds 10, 11, 12, 13, 14, 15, 16, 17. Each tick is ~50 ms, peak gain 0.12, synthesized via `OscillatorNode` + `GainNode`. AudioContext is created lazily on first user interaction; calls before that unlock are silent no-ops. There is no synth dong at second 18 — the warning sample's first playback replaces it.
 
-**Target-crossing warning sample.** At session start (the same first-interaction moment that creates the AudioContext), one MP3 file is picked at random from the bank manifest at `src/config/sound-bank.ts`. The manifest is build-time-generated by `scripts/copy-sounds-to-public.ts` from the top-level `*.mp3` files in `data/sounds/` — subdirectories under `data/sounds/` (e.g., `success/`, `failure/`, `ticks/`) are deliberately NOT enumerated; the bank is the top-level files only. The chosen file's `AudioBuffer` is fetched and decoded once. When `elapsedQuestionMs` first crosses `perQuestionTargetMs`, that buffer plays **once** at peak gain ~0.8 as a one-shot warning accent (the `source.loop = true` from the pre-Round-1 design was retired per the commit-9 amendment above). The active source is cancelled mid-playback if an item advance fires before the sample completes — same cleanup-on-`currentItem.id`-change effect that handles every advance path (Submit click, Space-triage take, click-triage take, server-end). The same file plays for every question in the session; a hard refresh re-picks.
+**Target-crossing warning sample.** At session start (the same first-interaction moment that creates the AudioContext), one MP3 file is picked at random from the bank manifest at `src/config/sound-bank.ts`. The manifest is build-time-generated by `scripts/copy-sounds-to-public.ts` from the top-level `*.mp3` files in `data/sounds/` — subdirectories under `data/sounds/` (e.g., `success/`, `failure/`, `ticks/`) are deliberately NOT enumerated; the bank is the top-level files only. The chosen file's `AudioBuffer` is fetched and decoded once. When `elapsedQuestionMs` first crosses `perQuestionTargetMs`, that buffer plays **once** at peak gain ~0.8 as a one-shot warning accent (the `source.loop = true` from the pre-Round-1 design was retired per the commit-9 amendment above). The active source is cancelled mid-playback if an item advance fires before the sample completes — same cleanup-on-`currentItem.id`-change effect that handles every advance path (Submit click, server-end). The same file plays for every question in the session; a hard refresh re-picks.
 
 **Post-target ticks.** Synth ticks identical in shape to the pre-target ticks (880 Hz, ~50 ms, peak gain 0.12) fire at integer seconds strictly greater than the per-question target, with no upper bound — the cleanup-on-`currentItem.id`-change effect is the terminator. For an 18-second target this lands as ticks at seconds 19, 20, 21, … until the user submits or the server advances. The pre-target and post-target streams share the same `playTick` function but use independent cross-second-detection refs (`prevSecondRef` for pre-target, `prevPostTargetSecondRef` for post-target) so the boundary at second 18 doesn't drop or duplicate either stream.
 
@@ -1082,9 +1063,9 @@ Audio is implemented in `src/components/focus-shell/audio-ticker.ts`. The reduce
 
 ### 6.13 Submit semantics
 
-Submit is always enabled. Clicking Submit with no option selected records `selected_answer: NULL` in `attempts` and advances to the next item. Blank attempts are a real signal in the mastery model, not a UI error state — the user choosing to abandon a question cleanly is the strategic skill the triage prompt is designed to reinforce.
+Submit is always enabled. Clicking Submit with no option selected records `selected_answer: NULL` in `attempts` and advances to the next item. Blank attempts are a real signal in the mastery model, not a UI error state — the user choosing to abandon a question cleanly is a strategic signal.
 
-The Space-key triage take uses the same submit path: it submits whatever's currently selected (blank if nothing). Random-pick "guess and advance" was dropped in the polish-plan commit 3 — random picks contaminate the mastery model with attempts that look real-but-wrong.
+Random-pick "guess and advance" was dropped in the polish-plan commit 3 — random picks contaminate the mastery model with attempts that look real-but-wrong.
 
 ### 6.14 Implementation notes for contributors
 
@@ -1133,7 +1114,7 @@ Programmatic `.click()` calls don't satisfy the "trusted user gesture" requireme
 
 #### 6.14.5 Session-engine same-id-advance bug (server-side, masked by client)
 
-`getNextUniformBand` (in `src/server/items/selection.ts`) can re-serve a session-attempted item via the `session-soft` fallback level when the bank for a sub-type is small. With a 5-item `numerical.fractions` bank and a few attempts already in session, the fallback chain exhausts uniqueness and the server returns `nextItem.id === currentItem.id`. The focus shell's `<ItemSlot key={state.currentItem.id}>` keyed mount doesn't re-fire when the key doesn't change — which previously left `submitPending: true` indefinitely after triage take, producing the frozen-UI symptom.
+`getNextUniformBand` (in `src/server/items/selection.ts`) can re-serve a session-attempted item via the `session-soft` fallback level when the bank for a sub-type is small. With a 5-item `numerical.fractions` bank and a few attempts already in session, the fallback chain exhausts uniqueness and the server returns `nextItem.id === currentItem.id`. The focus shell's `<ItemSlot key={state.currentItem.id}>` keyed mount doesn't re-fire when the key doesn't change — which previously left `submitPending: true` indefinitely, producing the frozen-UI symptom.
 
 Commit 1 of the post-overhaul-fixes round added `submitPending: false` to `reduceAdvance`, which **masks** this server-side bug — the user is now unblocked even when the same item is re-served. They see the same options again, can re-answer, and proceed. The server-side aspect remains a real bug worth investigating (filed as a follow-up in `docs/plans/focus-shell-post-overhaul-fixes.md` §10). Don't remove the `submitPending: false` clear in `reduceAdvance` thinking it's redundant — it's load-bearing for this case.
 
@@ -1919,8 +1900,6 @@ async function submitAttempt(input: {
     itemId: string
     selectedAnswer?: string
     latencyMs: number
-    triagePromptFired: boolean
-    triageTaken: boolean
     selection: ItemSelection      // echoed back from the rendered item
 }): Promise<{ nextItem?: ItemForRender }>
 ```
@@ -2489,12 +2468,9 @@ function deriveNearGoal(input: {
 }
 ```
 
-### 9.7 Triage scoring
+### 9.7 Triage scoring — REMOVED 2026-05-10 (historical only)
 
-`src/server/triage/score.ts` exposes:
-
-- `triageScoreForSession(sessionId)` — returns `{ fired: number; taken: number; ratio: number | null }`. `ratio` is `taken / fired` when `fired >= 3`, otherwise `null` (post-session review renders "small sample — N triage events" instead of a percentage). `fired === 0` is rendered positively: "no triage events: you stayed under 18s on every question."
-- `triageRolling30d(userId)` — same shape, rolling over the past 30 days. Used for the Mastery Map's low-contrast triage adherence indicator.
+> **Removed 2026-05-10.** The `src/server/triage/score.ts` module and the `triageScoreForSession(sessionId)` / `triageRolling30d(userId)` queries have all been deleted; the underlying `attempts.triage_*` columns were dropped via migration `0006_friendly_switch.sql`. Section number preserved as a gap; subsequent §-numbering unchanged.
 
 ---
 
@@ -2512,7 +2488,7 @@ PRD §4.1. Fires when `(app)/layout.tsx` finds no completed-and-not-abandoned di
 2. `/diagnostic/run/page.tsx` server component calls `startSession({ userId, type: "diagnostic" })`. Idempotent: returns the existing in-progress sessionId on a fresh-resume; finalizes a stale orphan as `'abandoned'` and inserts fresh otherwise (see §7.1). Skips the NarrowingRamp.
 3. `/diagnostic/run/content.tsx` (`"use client"`) renders `<FocusShell>` with:
    - `sessionDurationMs: null` (untimed at the session level — the session timer bar, pace track, and chronometer are hidden).
-   - `perQuestionTargetMs: 18000` (the per-question dual-bar timer + 18s triage prompt still fire).
+   - `perQuestionTargetMs: 18000` (the per-question dual-bar timer still fires).
    - `paceTrackVisible: false`.
    - `targetQuestionCount: 50`.
    - The first item is server-rendered into the page response; subsequent items come via `submitAttempt`.
@@ -2531,9 +2507,9 @@ PRD §4.4.
 2. With a populated bank, the configure page renders a length picker (5 / 10 / 20, default 10). **Phase 3 wires only `standard` timer mode** — `speed_ramp` and `brutal` ship in Phase 5; the configure page's timer-mode selector is correspondingly absent in Phase 3. The PRD §4.4 timer-mode-selection narrative applies to Phase 5+.
 3. Form submit `GET`s to `/drill/[subTypeId]/run?length=N`. The run page calls `startSession({ userId, type: "drill", subTypeId, timerMode: "standard", drillLength })`. **Phase 3 ships no NarrowingRamp** — `startSession` is invoked directly. PRD §5.3 NarrowingRamp ships in Phase 5.
 4. `<FocusShell>` runs with `sessionDurationMs = drillLength * 18000`, `perQuestionTargetMs: 18000`, `paceTrackVisible: true`. **Selection strategy is `'uniform_band'`** in Phase 3 (§9.2 deferred-adaptive note); the requested tier is constant across the drill, derived from `mastery_state` per §9.1's initial-tier table.
-5. After the last submit, `endSession` then `router.push("/post-session/" + sessionId)` — drills land on the post-session review surface (PRD §6.5 / §10.7). The drill post-session shell renders triage / accuracy / latency / wrong-items / strategy summaries plus a single "Continue" button → `/`. **Code shipped 2026-05-04 (Phase 5 sub-phase 1, commit `c1ee435`).** Pre-shipped phrasing — "drills land on the Mastery Map directly, NOT through `/post-session/[sessionId]`. Drill post-session UI is Phase 5" — preserved as historical reference for the Phase 3 sub-phase 3 default. See `docs/plans/phase5-post-session-review.md` for the round.
+5. After the last submit, `endSession` then `router.push("/post-session/" + sessionId)` — drills land on the post-session review surface (PRD §6.5 / §10.7). The drill post-session shell renders accuracy / latency / wrong-items / strategy summaries plus a single "Continue" button → `/`. **Code shipped 2026-05-04 (Phase 5 sub-phase 1, commit `c1ee435`).** Pre-shipped phrasing — "drills land on the Mastery Map directly, NOT through `/post-session/[sessionId]`. Drill post-session UI is Phase 5" — preserved as historical reference for the Phase 3 sub-phase 3 default. See `docs/plans/phase5-post-session-review.md` for the round.
 
-**Sign-out button.** The Mastery Map's header (top-right) renders `<SignOutButton>` for users not currently inside a session — see §10.1's flow paragraph. The button is deliberately absent from `/diagnostic/run` and `/drill/[subTypeId]/run` (the focus shell strips chrome to maintain session focus) and from the diagnostic explainer at `/diagnostic` (mid-flow surface). Visual treatment is `text-foreground/70` with a `hover:text-foreground` transition — distinct from the footer's low-contrast `<TriageAdherenceLine>` because sign-out is an ACTION, not a STATUS, and inheriting the periphery treatment would make it harder to find.
+**Sign-out button.** The Mastery Map's header (top-right) renders `<SignOutButton>` for users not currently inside a session — see §10.1's flow paragraph. The button is deliberately absent from `/diagnostic/run` and `/drill/[subTypeId]/run` (the focus shell strips chrome to maintain session focus) and from the diagnostic explainer at `/diagnostic` (mid-flow surface). Visual treatment is `text-foreground/70` with a `hover:text-foreground` transition — sign-out is an ACTION, not a STATUS, so it does not inherit a low-contrast periphery treatment that would make it harder to find.
 
 The session-timer toggle does NOT live on the configure page — it's a focus-shell periphery control only. (v1 2026-05-04: timer-toggle UX cut entirely, PRD §5.1 + SPEC §6.6 markers. Sentence preserved as historical reference for the configure-page placement decision.)
 
@@ -2589,9 +2565,9 @@ Lives at `src/components/narrowing-ramp/narrowing-ramp.tsx`. Pure client compone
 
 ### 10.7 Post-session review composition
 
-> **Code shipped 2026-05-04 (Phase 5 sub-phase 1).** Seven commits: `c1ee435` (round setup + shell-shape refactor + drill landing flip), `0ec6f4f` (server-side aggregation queries), `a0aa1fd` (`<TriageScoreLine>` + `<AccuracySummary>`), `c71770c` (`<LatencySummary>`), `8d4195e` (`<WrongItemsBrowser>`), `eaeb882` (`<StrategySurface>` + struggled-sub-type derivation + drill Continue button + full-surface audit + polish), this commit (doc reconciliation + plan close). See `docs/plans/phase5-post-session-review.md` for the round. Pre-shipped phrasing — the `<PostSessionReview>` / `<WrongItemsList>` composer vocabulary that this section previously projected — was a plan-time draft; the shipped composition is described below.
+> **Code shipped 2026-05-04 (Phase 5 sub-phase 1).** Seven commits: `c1ee435` (round setup + shell-shape refactor + drill landing flip), `0ec6f4f` (server-side aggregation queries), `a0aa1fd` (`<AccuracySummary>` + originally-shipped `<TriageScoreLine>`, since removed 2026-05-10), `c71770c` (`<LatencySummary>`), `8d4195e` (`<WrongItemsBrowser>`), `eaeb882` (`<StrategySurface>` + struggled-sub-type derivation + drill Continue button + full-surface audit + polish), this commit (doc reconciliation + plan close). See `docs/plans/phase5-post-session-review.md` for the round. Pre-shipped phrasing — the `<PostSessionReview>` / `<WrongItemsList>` composer vocabulary that this section previously projected — was a plan-time draft; the shipped composition is described below.
 
-`/post-session/[sessionId]/page.tsx` lives at `src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx`. It is a server component (NOT `async`, per `rules/rsc-data-fetching-patterns.md`) that resolves the session row + auth check + four review aggregations + the triage score + the surfaced-strategies query in parallel, and passes the bundle to `<PostSessionContent>` (a `"use client"` component) which consumes the promise via `React.use()` and drills resolved values to `<PostSessionShell>`.
+`/post-session/[sessionId]/page.tsx` lives at `src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx`. It is a server component (NOT `async`, per `rules/rsc-data-fetching-patterns.md`) that resolves the session row + auth check + four review aggregations + the surfaced-strategies query in parallel, and passes the bundle to `<PostSessionContent>` (a `"use client"` component) which consumes the promise via `React.use()` and drills resolved values to `<PostSessionShell>`.
 
 **Page-level data flow.** Four prepared statements colocated in `page.tsx` per `rules/rsc-data-fetching-patterns.md`:
 
@@ -2618,7 +2594,7 @@ Lives at `src/components/narrowing-ramp/narrowing-ramp.tsx`. Pure client compone
 **Render composition.** `<PostSessionShell>` (`src/components/post-session/post-session-shell.tsx`) is a session-type-aware dispatcher with a locked nine-slot ordering (top to bottom):
 
 1. Heading + brief one-line summary ("Diagnostic complete" / "Session complete").
-2. `<TriageScoreLine>` — single line; PRD §6.5; SPEC §9.7 small-sample / N/A branches.
+2. ~~`<TriageScoreLine>`~~ — **slot 2 removed 2026-05-10 along with the triage feature. Slot number preserved as a gap; subsequent slots retain their numbering. The `post-session-shell.tsx` slot-locking discipline is amended at `81819e0` to drop slot 2's render branch.**
 3. `<AccuracySummary>` — per-sub-type ✓/✗ counts, NO percentages (PRD §6.5).
 4. `<LatencySummary>` — per-sub-type median with horizontal SVG track + threshold tick + above/below-threshold marker color.
 5. `<WrongItemsBrowser>` — sub-type grouped (verbal-first, alphabetical within section), chronological within group via `attempts.id` ASC. Display letters A-E computed via `String.fromCharCode(0x41 + index)` at render time per SPEC §3.3.2 — letters are NOT stored. **Click-to-highlight extension — shipped in Phase 5 sub-phase 4 (2026-05-07).** The per-card explanation render dispatches three ways: (a) when `structuredExplanation` is present (389 / 439 live items), `<StructuredExplanation>` (`src/components/post-session/structured-explanation.tsx`) renders recognition / elimination / [optional] tie-breaker parts as up to three editorial paragraphs, with elimination + tie-breaker as `<button type="button" aria-pressed>`; (b) when `structuredExplanation` is absent but `items.explanation` is present (the 50 NULL-`source_folder` seed items), the card falls back silently to a prose `<p>`; (c) when both are absent, the card renders nothing for that slot. Clicking elimination toggles `line-through` + `text-foreground/60` on the options whose opaque ids are in `referencedOptions`; clicking tie-breaker toggles `bg-foreground/5 ring-1 ring-foreground/15` on the options it considers. Recognition is uniformly non-interactive regardless of `referencedOptions` length per the round plan §3.1 + §11.9. State is per-card local + ephemeral — each `<WrongItemCard>` holds two `useState<ReadonlyArray<string>>` slots (`struck`, `highlighted`) and emits via callback props passed into `<StructuredExplanation>`; navigating away resets. See `docs/plans/phase5-click-to-highlight.md` for the round.
@@ -2730,10 +2706,9 @@ Six phases over a 2-week window. Each phase lists the files to create or modify 
 
 Sub-phases 1 (diagnostic flow), 2 (Mastery Map + post-diagnostic empty-state pane), 3 (drill mode + sign-out), and 4 (heartbeats + cron-runner wiring + ownership-scope security fix) all shipped. The user-facing happy path runs end-to-end against real items. Production-deploy coupling is now unblocked; deploy-and-dogfood is the next move before Phase 5 (full-length tests + spaced-repetition + post-session review with click-to-highlight).
 
-- `src/components/focus-shell/{focus-shell,session-timer-bar,pace-track,question-timer-bar,triage-prompt,inter-question-card,heartbeat,shell-reducer}.{tsx,ts}` (NEW)
+- `src/components/focus-shell/{focus-shell,session-timer-bar,pace-track,question-timer-bar,inter-question-card,heartbeat,shell-reducer}.{tsx,ts}` (NEW)
 - `src/server/sessions/{queries,start,submit,heartbeat,end}.ts` (NEW)
 - `src/server/items/{queries,selection}.ts` (NEW)
-- `src/server/triage/score.ts` (NEW)
 - `src/server/mastery/{compute,recompute,near-goal}.ts` (NEW)
 - `src/workflows/{mastery-recompute,abandon-sweep}.ts` (NEW)
 - `src/app/api/sessions/[sessionId]/heartbeat/route.ts` (NEW)
@@ -2762,7 +2737,6 @@ Sub-phases 1 (diagnostic flow), 2 (Mastery Map + post-diagnostic empty-state pan
 - ~~`src/server/review/{queries,schedule}.ts` (NEW)~~ **Cut from v1 2026-05-04** — SR queue (PRD §4.3); never shipped to tree.
 - ~~`src/workflows/review-queue-refresh.ts` (NEW)~~ **Cut from v1 2026-05-04** — SR queue; never shipped to tree.
 - ~~`src/app/(app)/review/{page,content}.tsx` (NEW)~~ **Cut from v1 2026-05-04** — SR queue route; never shipped to tree.
-- `src/components/focus-shell/triage-prompt.tsx` (MOD: full triage logic, persistent rendering)
 - ~~`src/components/focus-shell/question-timer-bar.tsx` (MOD: toggle + persistence)~~ **Cut from v1 2026-05-04** — timer-toggle UX (PRD §5.1). Question-timer bar shipped during Phase 3; the toggle + persistence MOD was cut. Unused toggle code paths dropped in v1-code-cleanup commit 2 (`a32131a`).
 - ~~`src/components/narrowing-ramp/{narrowing-ramp,obstacle-scan,visual-narrowing,session-brief,launch-countdown}.tsx` (NEW)~~ **Cut from v1 2026-05-04** — NarrowingRamp (PRD §5.3); never shipped to tree.
 - ~~`src/server/narrowing-ramp/obstacle.ts` (NEW)~~ **Cut from v1 2026-05-04** — NarrowingRamp helper; never shipped to tree.
