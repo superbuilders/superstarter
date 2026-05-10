@@ -1834,6 +1834,43 @@ When a commit deletes or renames a type, function, or module-level export, the a
 
 ---
 
+#### 6.14.43 Redirector-spec error caught at executor audit-step boundary
+
+> **Captured 2026-05-10** (diagnostic-timing sidecar re-retraction commit). Five anchor instances accumulated across four prior rounds substantiate the promotion. The fifth and immediate trigger — implicit-resolution-selection by anti-scope writing — is a structurally novel sub-type that survives surface-level redirector self-review and is detectable only at the executor's fresh-session audit-step boundary.
+
+**Pattern.** The redirector's authored prompts (file paths, content references, methodology assumptions, anti-scope/scope-shape writing) contain errors not detectable by the redirector's self-review but ARE detectable by the executor's fresh-session audit step. The audit step is not ceremonial — it is the structural mechanism by which redirector-spec errors get caught. When the executor surfaces such an error, the executor STOPs (for hard errors) or SURFACES EXPLICITLY (for judgment-call errors) rather than silently reconciling.
+
+**Anchor instances** (5):
+
+1. Tooling-reliability-debug round, §1 commit 1 (`bc0fe17`): redirector-prompt cited an incorrect gitignore path; executor surfaced at audit-step; redirector authored revised path.
+2. Tooling-reliability-debug round, §1 commit 1 planning-time: redirector self-review caught a dead-reference path to selection-engine-sidecar plan-doc-stub before prompt issued; counts as a redirector-spec error caught at the redirector's own pre-issue audit (a special case where redirector self-audit substitutes for executor audit).
+3. Tooling-reliability-debug round, §2 commit 0 (`e6ffb51`): redirector-prompt assumed drizzle-kit's no-op reproduction would surface filesystem-driven failure; executor's probe-execution revealed `drizzle-kit migrate` is journal-driven, not filesystem-driven; methodology error surfaced at probe-execution.
+4. Selection-engine sidecar, commit 1 (`d59f86d` final): redirector-prompt's SPEC §9.2:2355 amendment text was authored in plain-text form, stripping markdown formatting that the SPEC document's surrounding context required; executor STOPPED per heads-up; redirector authored revised text with formatting preserved.
+5. Diagnostic-timing sidecar, commit 0 (`ffe47bd`): redirector-authored §0.2 anti-scope ("no FocusShell prop refactor") implicitly selected Round 1 §0.15's Resolution 1 (auto-end at 15:00) over Resolution 2 (render bar+chronometer, no auto-end), without surfacing the resolution choice. The §0.15 forward-reference listed 5 items that should land together; the redirector authored a sidecar grabbing item 3 in isolation, which inadvertently resolved Round 1 §0.15's open question via anti-scope-writing alone. Executor surfaced finding at audit-step; redirector recognized as redirector-spec error and re-retracted the round.
+
+**Sub-types** (4):
+
+- **Path/reference errors** (instances 1, 2): file paths, plan-doc references, line numbers in the redirector-authored prompt that are stale, wrong, or non-existent.
+- **Methodology errors** (instance 3): the redirector's framing of an investigation embeds an empirical assumption that the probe falsifies; the executor's probe-execution surfaces the falsification.
+- **Content-formatting errors** (instance 4): the redirector authors content (SPEC text, plan-doc prose) without preserving formatting/structure required by the destination document; executor catches the formatting strip at audit-step before the content lands.
+- **Implicit-resolution-selection errors** (instance 5): the redirector authors anti-scope or scope shape that inadvertently resolves a previously-deliberated open question without surfacing the resolution choice. The redirector inherits prior plan-doc framing without re-running its open-question reasoning against the current state.
+
+**Discipline.**
+
+- Redirector self-review before issuing a prompt remains insufficient on its own — the executor's fresh-session audit catches errors the redirector cannot self-detect.
+- Executor STOPS for hard errors (broken paths, formatting strips, invariant violations); SURFACES EXPLICITLY for judgment-call errors (implicit-resolution-selection, methodology assumptions). Both modes refuse silent reconciliation.
+- Plan-doc §0 of any round inheriting framing from a prior plan-doc must explicitly re-run any open-question reasoning rather than absorbing prior framing wholesale.
+- Sub-type 4 (implicit-resolution-selection) is the highest-discipline-cost variant — it survives surface-level redirector self-review because the error is in what the prompt DOES NOT SAY rather than what it does say.
+
+**Cross-references.**
+
+- §6.14.18 / §6.14.21 / §6.14.22 — audit-first checkpoint discipline: the structural mechanism by which this pattern is caught.
+- §6.14.20 — wholesale-replacement-with-quote-preservation: the recovery mechanism when an implicit-resolution-selection error is recognized post-commit (this entry's instance 5 used §6.14.20 to recover).
+- §6.14.40 — redirector-vs-empirical-state divergence: sister pattern; §6.14.43 is about prompt-spec errors, §6.14.40 is about HEAD-anchor / state divergence.
+- §6.14.41 — audit-vs-revert blindness: sister pattern; §6.14.41 is about audit-step itself missing prior reverts, §6.14.43 is about redirector-prompt missing other classes of error.
+
+---
+
 ## 7. Server actions, route handlers, and workflows
 
 All server actions live at the closest `actions.ts` file under `src/app/(app)/...`. All follow the patterns demonstrated in `src/app/actions.ts`: file-top `"use server"`; mutations use `errors.try` around DB calls (`rules/no-try.md`); errors are logged then thrown via `errors.wrap` (`rules/error-handling.md`); writes call `revalidatePath` after writes (with the specific exception in §7.8).

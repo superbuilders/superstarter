@@ -37,7 +37,11 @@
 
 **PROMOTION CANDIDATE 1 — *redirector-spec error caught at executor audit-step boundary*. State: 4/5 instances banked.** The four banked instances are recorded in the source plan-doc's §0.4 watch-log + §7. This round's small redirector-prompt surface (a one-line client-prop change with verifiable file path / line number / consumer enumeration up front) is deliberately tight; the candidate is held in DEFER rather than stress-tested. **However**, the implementation-commit audit step is the actual exposure surface — if the audit surfaces a redirector-spec error (wrong file path, misquote of §0.15, an unanticipated `sessionDurationMs` consumer, or a SPEC §9.2 interaction the redirector ruled out that actually fires), the executor STOPS and reports per the candidate's instance-recording shape rather than silently reconciling. See §0.7 for the maybeAutoEndSession interaction worth attention.
 
+**UPDATE (re-retraction commit, 2026-05-10).** Instance #5 banked: this sidecar's §0.2 anti-scope writing implicitly selected Round 1 §0.15's Resolution 1 over Resolution 2 without surfacing the resolution choice. Executor surfaced finding at commit-0 (`ffe47bd`) audit-step; redirector recognized as redirector-spec error (sub-type: implicit-resolution-selection); round re-retracted. Candidate **PROMOTED to SPEC §6.14.43** in this same commit. State retired.
+
 **PROMOTION CANDIDATE 2 — *sidecar-as-default-narrow-scope-envelope*. State: 3/5 instances banked.** This round will be **instance 4** if it ships as a sidecar (the planned shape). Reasoning: narrow scope (one-line client-prop change), single user-visible regression (timer absent on diagnostic), one-line known fix shape from Round 1 §0.5 quote-preservation. Advance to 4/5 happens at this sidecar's round-close commit, not at this opening commit.
+
+**UPDATE (re-retraction commit, 2026-05-10).** Instance count UNCHANGED at 3/5. This round did NOT ship as a sidecar — it shipped as a retraction. Does not advance the candidate.
 
 ### §0.4 Round 1 §0.15 retraction context (verbatim quote)
 
@@ -202,65 +206,102 @@ Per `selection-engine-session-attempted-ids-sidecar.md` §6 residuals carried fo
 - **Q-pattern instances.** 2 instances banked in the source plan-doc's §0.4 watch-log. If this round folds round-close into a final commit cleanly, that is **instance 3**. If a Q-pattern incident (e.g., a redirector-spec error caught at audit step boundary) fires during this round's implementation, **instance 4** lands. Either way, the running count updates at this sidecar's round-close.
 - **`structured-explanation.test.ts:152` stochastic failure suspect.** Forward-pinned per the source plan-doc's §6 residual #5. If full-suite runs during this sidecar's implementation surface this test as flaky, the executor logs the occurrence here and surfaces in stop-and-report. Otherwise the residual stays forward-pinned (untouched by this round's work).
 - **maybeAutoEndSession Resolution-1-vs-Resolution-2 disposition.** New residual surfaced at §0.7. The implementation commit's audit step is the resolution gate. If Resolution 2 is required, the §0.2 anti-scope expands to include a new FocusShell prop and the implementation commit blast radius grows beyond a single line. Tracked here for explicit redirector decision before §1 commit.
+- **Diagnostic-timing-strategy round (forward-pinned residual).** Per the re-retraction reasoning at §0.10 below: the §0.15 forward-reference listed 5 items that should land together (PRD §4.1 amendment, server cutoff re-introduction, client timer, mastery multiplier revert, post-session pacing copy revision). This sidecar attempted to grab item 3 in isolation, which inadvertently resolved §0.15's Resolution-1-vs-Resolution-2 open question. The correct shape is a broader round addressing all 5 items together. Forward-pinned for sequencing alongside (or in place of) the original "diagnostic-timing sidecar" residual from `selection-engine-session-attempted-ids-sidecar.md` §6 residual #2.
+
+### §0.10 Re-retraction (2026-05-10)
+
+Per Leo's redirect on 2026-05-10 following the commit-0 audit-step finding (§A audit-step #11 surfaced disposition + §0.7 maybeAutoEndSession Resolution-1-implicit-selection finding), this round is RE-RETRACTED before §1 implementation lands.
+
+**Trigger.** The commit-0 audit step surfaced that §0.2 anti-scope ("no FocusShell prop refactor") implicitly selected Round 1 §0.15's Resolution 1 (auto-end at 15:00 client-side) over Resolution 2 (render bar+chronometer, no auto-end) without surfacing the resolution choice. The executor flagged this for redirector decision per the candidate's "STOP and surface explicitly" discipline.
+
+**Reasoning.** Three considerations weighed at the redirect:
+
+1. **§0.15's reasoning quality.** Round 1 §0.15 was a careful retraction with sound rejection-of-Resolution-1 reasoning (post-session pacing copy contradiction at `post-session-shell.tsx:106`; PRD §4.1 capacity-measurement framing contradiction). Both rejection reasons remain valid at HEAD `1dc2b75` / `ffe47bd`. Resolution 1 cannot be selected without explicitly overriding §0.15's reasoning, and no new evidence justifies that override.
+2. **The redirector's 4-axis sequencing reasoning was miscalibrated.** Axis 1 ("user-visible product gap") treated "no timer on diagnostic" as a regression. But it is only a regression *under timed-real-CCAT framing*. Under PRD §4.1's capacity-measurement framing — which §0.15 cited and the codebase currently encodes — an untimed diagnostic IS the intended state. The redirector assumed the framing question was settled; it is not.
+3. **The right round shape is broader.** The §0.15 forward-reference listed 5 items as a coherent set: (1) PRD §4.1 amendment, (2) server cutoff re-introduction, (3) client timer, (4) mastery multiplier revert, (5) post-session pacing copy revision. Item 1 is load-bearing — items 2-5 are downstream of how item 1 resolves. A sidecar grabbing item 3 in isolation cannot succeed because item 3 has no canonical answer until item 1 is resolved.
+
+**Disposition.**
+
+- Plan-doc §0 (§0.1 through §0.10 inclusive) STAYS as forensics record; the audit + reasoning is valuable even though the sidecar does not ship.
+- Plan-doc §1 (Implementation) WHOLESALE-REPLACED with retraction notice per §6.14.20; original prose preserved as `>` quote block.
+- Plan-doc §2 (Round close, pending) WHOLESALE-REPLACED with retraction notice per §6.14.20; original prose preserved as `>` quote block.
+- Plan-doc §B (Re-retraction commit audit-ledger) added to record this commit's audit-step outcomes.
+- Plan-doc §3 (Round close) added to record retraction round-close metadata.
+- SPEC.md §6.14.43 PROMOTED (redirector-spec error caught at executor audit-step boundary; instance #5 banked at this round's commit-0 `ffe47bd`).
+- Forward-pinned residual added: "diagnostic-timing-strategy round" addressing §0.15 forward-reference items 1-5 together.
+
+**Empirical state.** No source-code changes ship from this round. No test changes. Test baseline 128/0/644 unchanged from HEAD `1dc2b75` (expect()-count drift vs. session-log-recorded 649 noted in §B step 9; pass/fail/file count match). SPEC.md gains the §6.14.43 entry only.
 
 ---
 
-## §1 — Implementation (pending)
+## §1 — Implementation (RETRACTED 2026-05-10)
 
-### §1.1 Re-add timer to diagnostic flow (one-line fix per §0.5)
+Per §0.10 above. No implementation ships from this round.
 
-**File.** `src/app/(diagnostic-flow)/diagnostic/run/content.tsx`
+Original §1 content preserved below per §6.14.20 wholesale-replacement-with-quote-preservation:
 
-**Change.** Line 61: `sessionDurationMs={null}` → `sessionDurationMs={50 * 18_000}`.
-
-**Header-comment rewrite (lines 9-12).** The current comment block describes `sessionDurationMs: null` rationale. Post-fix the rationale reverses; the comment must reflect the new state. Proposed shape (executor refines at implementation time):
-
-```ts
-// Diagnostic config (sidecar-restored timing per docs/plans/diagnostic-timing-sidecar.md):
-//   - sessionDurationMs: 50 * 18_000  (15 minutes — restores the redline's
-//     "session timer + progress bar render" intent that Round 1 §0.15
-//     retracted; the maybeAutoEndSession effect fires at 15:00 client-side.
-//     No server-side counterpart — see plan-doc §0.7 for the third-state
-//     disposition.)
-//   - paceTrackVisible: false  (the diagnostic is not paced; this sidecar
-//     does not change the per-question pace-track surface)
-```
-
-**No other changes.** No FocusShell internals; no audio-ticker; no post-session.
-
-### §1.2 Verify pacing-math compatibility (audio-ticker; per §0.7)
-
-**Audit-step verify-surface for the implementation commit.** Re-run the §0.7 audit anchors:
-
-- (a) Confirm `audio-ticker.ts` reads no `sessionDurationMs` references (re-grep).
-- (b) Confirm `maybeAutoEndSession` at `focus-shell.tsx:423-450` is the ONLY behavior-changing consumer of the prop transition `null → 900_000`. The §0.6 enumeration is the citation set; the audit re-verifies no consumer was missed.
-- (c) Confirm `post-session-shell.tsx:106` pacing-copy site is untouched (anti-scope verification).
-
-### §1.3 Test surface
-
-**Tests to enumerate at implementation time:**
-
-- Tests that assert diagnostic flow uses `sessionDurationMs={null}` specifically → must update or delete.
-- Tests that assert FocusShell behavior under `sessionDurationMs === null` for the diagnostic case → re-evaluate: if the test asserts the *general* null branch, leave alone; if it asserts the *diagnostic specifically* takes the null branch, update.
-- Tests that assert chronometer/session-bar rendering on diagnostic → these may need to flip from "absent" to "present".
-- Tests that assert `maybeAutoEndSession` does NOT fire on diagnostic → must update.
-- New tests asserting timer behavior on diagnostic → likely none (per §0.2 anti-scope's "no FocusShell behavior change beyond the prop transition", existing focus-shell tests cover the non-null branch generically); the implementation-commit audit decides if a diagnostic-specific timer test adds coverage.
-
-**Final test surface decided at implementation-commit audit step.** Likely net change: **0 to +2 tests** vs. the 128-baseline; tests-deleted = tests-rewritten in spirit.
+> ## §1 — Implementation (pending)
+>
+> ### §1.1 Re-add timer to diagnostic flow (one-line fix per §0.5)
+>
+> **File.** `src/app/(diagnostic-flow)/diagnostic/run/content.tsx`
+>
+> **Change.** Line 61: `sessionDurationMs={null}` → `sessionDurationMs={50 * 18_000}`.
+>
+> **Header-comment rewrite (lines 9-12).** The current comment block describes `sessionDurationMs: null` rationale. Post-fix the rationale reverses; the comment must reflect the new state. Proposed shape (executor refines at implementation time):
+>
+> ```ts
+> // Diagnostic config (sidecar-restored timing per docs/plans/diagnostic-timing-sidecar.md):
+> //   - sessionDurationMs: 50 * 18_000  (15 minutes — restores the redline's
+> //     "session timer + progress bar render" intent that Round 1 §0.15
+> //     retracted; the maybeAutoEndSession effect fires at 15:00 client-side.
+> //     No server-side counterpart — see plan-doc §0.7 for the third-state
+> //     disposition.)
+> //   - paceTrackVisible: false  (the diagnostic is not paced; this sidecar
+> //     does not change the per-question pace-track surface)
+> ```
+>
+> **No other changes.** No FocusShell internals; no audio-ticker; no post-session.
+>
+> ### §1.2 Verify pacing-math compatibility (audio-ticker; per §0.7)
+>
+> **Audit-step verify-surface for the implementation commit.** Re-run the §0.7 audit anchors:
+>
+> - (a) Confirm `audio-ticker.ts` reads no `sessionDurationMs` references (re-grep).
+> - (b) Confirm `maybeAutoEndSession` at `focus-shell.tsx:423-450` is the ONLY behavior-changing consumer of the prop transition `null → 900_000`. The §0.6 enumeration is the citation set; the audit re-verifies no consumer was missed.
+> - (c) Confirm `post-session-shell.tsx:106` pacing-copy site is untouched (anti-scope verification).
+>
+> ### §1.3 Test surface
+>
+> **Tests to enumerate at implementation time:**
+>
+> - Tests that assert diagnostic flow uses `sessionDurationMs={null}` specifically → must update or delete.
+> - Tests that assert FocusShell behavior under `sessionDurationMs === null` for the diagnostic case → re-evaluate: if the test asserts the *general* null branch, leave alone; if it asserts the *diagnostic specifically* takes the null branch, update.
+> - Tests that assert chronometer/session-bar rendering on diagnostic → these may need to flip from "absent" to "present".
+> - Tests that assert `maybeAutoEndSession` does NOT fire on diagnostic → must update.
+> - New tests asserting timer behavior on diagnostic → likely none (per §0.2 anti-scope's "no FocusShell behavior change beyond the prop transition", existing focus-shell tests cover the non-null branch generically); the implementation-commit audit decides if a diagnostic-specific timer test adds coverage.
+>
+> **Final test surface decided at implementation-commit audit step.** Likely net change: **0 to +2 tests** vs. the 128-baseline; tests-deleted = tests-rewritten in spirit.
 
 ---
 
-## §2 — Round close (pending)
+## §2 — Round close (RETRACTED 2026-05-10; superseded by §3)
 
-To be authored at round-close commit. Anchors:
+Per §0.10 above. The original §2 was a stub for round-close; round-close now lives at §3 below per the retraction shape.
 
-- Final test count vs. 128/0/649 baseline at HEAD `1dc2b75`. Target: 128 ± 2.
-- Lefthook clean (lint + typecheck) verification.
-- §6.14 entries authored or reinforced this round (candidate sub-patterns: round-internal audit-vs-revert blindness from Round 1 §0.15's new-sub-pattern observation; §0.7 maybeAutoEndSession Resolution-1-implicit-selection record).
-- PROMOTION CANDIDATE 1 final state (still 4/5 unless an instance surfaces this round; see §0.3 + §0.7).
-- PROMOTION CANDIDATE 2 final state (advances 3/5 → 4/5 if shipped as a sidecar — the planned shape).
-- Q-pattern instance count update (running total carried forward from source plan-doc).
-- Forward-pinned residuals updated (validator round, Round 3, §0.9 maybeAutoEndSession disposition).
+Original §2 content preserved below per §6.14.20:
+
+> ## §2 — Round close (pending)
+>
+> To be authored at round-close commit. Anchors:
+>
+> - Final test count vs. 128/0/649 baseline at HEAD `1dc2b75`. Target: 128 ± 2.
+> - Lefthook clean (lint + typecheck) verification.
+> - §6.14 entries authored or reinforced this round (candidate sub-patterns: round-internal audit-vs-revert blindness from Round 1 §0.15's new-sub-pattern observation; §0.7 maybeAutoEndSession Resolution-1-implicit-selection record).
+> - PROMOTION CANDIDATE 1 final state (still 4/5 unless an instance surfaces this round; see §0.3 + §0.7).
+> - PROMOTION CANDIDATE 2 final state (advances 3/5 → 4/5 if shipped as a sidecar — the planned shape).
+> - Q-pattern instance count update (running total carried forward from source plan-doc).
+> - Forward-pinned residuals updated (validator round, Round 3, §0.9 maybeAutoEndSession disposition).
 
 ---
 
@@ -283,3 +324,52 @@ Audit steps executed before authoring this plan-doc, per redirector's §6.14.18/
 | 11 | SPEC §9.2:2355 non-interaction with diagnostic flow confirmed | PASS — diagnostic is sub-type-mixed 50-question, not full-length curve-driven; selection-engine amendment governs `pickWithFallback` Pass 4 only; no overlap with this sidecar's prop-layer change. Confirmation recorded in §0.8. |
 
 **Audit-surfaced finding worth redirector attention** (NOT a STOP; surfaced for explicit decision before §1 commit): the redirector's stated anti-scope (§0.2) excludes the FocusShell prop refactor that Round 1 §0.15 said Resolution 2 (*"render bar + chronometer, no auto-end"*) requires. This sidecar therefore **implicitly selects Resolution 1** (auto-end client-side at 15:00). The contradiction with `post-session-shell.tsx:106` pacing copy that §0.15 cited as a Resolution-1 rejection reason persists. Disposition options for the redirector: (a) confirm Resolution 1 acceptance and acknowledge the post-session-copy residual as forward-pinned; (b) expand §0.2 anti-scope to admit the FocusShell prop refactor needed for Resolution 2; (c) re-retract the sidecar entirely if neither is acceptable. See §0.7 for the full analysis.
+
+**Resolution: option (c) selected.** Per §0.10 above. Round re-retracted at this commit. The §A finding becomes the §6.14.43 instance #5 anchor.
+
+---
+
+## §B — Audit-step ledger (re-retraction commit)
+
+Audit steps executed before authoring this commit's edits, per redirector's §6.14.18/21/22 fresh-session re-execution discipline:
+
+| # | Check | Outcome |
+|---|---|---|
+| 1 | `git rev-parse HEAD` = `ffe47bd` | PASS — `ffe47bd842ff3c2dd55297cc39634bd283e8d87a` confirmed |
+| 2 | Last 3 commits match `ffe47bd / 1dc2b75 / 6db9ca8` | PASS — order + hashes verified verbatim |
+| 3 | `bun run typecheck` clean | PASS — `bun --bun tsgo --noEmit`, exit 0, no diagnostics |
+| 4 | Lint clean | PASS — pre-edits lefthook-equivalent state; no staged TS files |
+| 5 | `git status` clean working tree | PASS — only untracked file is the prior session-log markdown (carried forward from prior session, expected) |
+| 6 | SPEC.md §6.14.42 verified as last entry; §6.14.43 next | PASS — pre-edit SPEC.md was 2825 lines; §6.14.42 ended at line 1833 with `---` at line 1835 separating from `## 7. Server actions...` at line 1837. §6.14.43 inserted between line 1833 and the existing `---`. Post-edit SPEC.md grows by ~50 lines |
+| 7 | Plan-doc structure §0 / §1 / §2 / §A confirmed | PASS — pre-edit was 285 lines; §0.1-§0.9 spanned lines 9-204; §1 spanned lines 208-249 (42 lines, 3 sub-sections §1.1/§1.2/§1.3); §2 spanned lines 253-263 (11 lines, stub-only); §A spanned lines 267-285 (19 lines including audit table). §1 + §2 line ranges captured for quote-preservation |
+| 8 | Round 1 §0.15 parallel-structure re-confirmed | PASS — Round 1 §0.15 = retract + quote-preserve §5.11 + §0.5 + §1 in-scope bullet + single stale-comment fix. **This commit's parallel:** retract + quote-preserve §1 + §2 + ZERO source-code changes (no analog of §0.15's stale-comment fix; this commit is a stricter pure-doc retraction) |
+| 9 | Test baseline 128/0/644 re-verified | PASS — `bun test` reports `128 pass / 0 fail / 644 expect() calls / 17 files`. **FINDING:** expect()-count drift from session-log-recorded 649 → 644 (−5). Pass/fail/file counts unchanged. Drift attribution: likely conditional-branch expect() variance (some tests have if/else paths with different expect() counts; the structured-explanation.test.ts:152 stochastic suspect already forward-pinned). Not a regression; recorded for transparency |
+
+**Findings worth flagging.** §B step 9's expect()-count drift (649 → 644) is recorded as a finding rather than absorbed silently. The drift is benign (no test failures) but the running plan-doc baseline reference at §0.10 + §3 below uses the actual 644 figure rather than the prior session-log 649. Future round-opens should re-verify expect() count rather than citing prior plan-docs.
+
+---
+
+## §3 — Round close (2026-05-10, re-retraction)
+
+Round closed via retraction at this commit (one commit after open).
+
+**Tests.** No test changes. Baseline 128 pass / 0 fail / 17 files / 644 expect() calls re-verified at this commit's audit-step (§B step 9). Note expect()-count drift from prior session-log reference of 649; investigated and recorded as benign (§B finding).
+
+**Lefthook.** Lint + typecheck clean at commit (§B steps 3-4 plus the actual pre-commit hook execution recorded by `lefthook v2.1.6` invocation).
+
+**§6.14 entries.**
+
+- **§6.14.43 PROMOTED** at this commit. Pattern: redirector-spec error caught at executor audit-step boundary. Five anchor instances banked across four prior rounds (see SPEC §6.14.43 for the full ledger). Sub-types: path/reference, methodology, content-formatting, implicit-resolution-selection (4 sub-types). The fifth anchor instance — implicit-resolution-selection by anti-scope writing — is a structurally novel sub-type that triggered this round's re-retraction.
+
+**PROMOTION CANDIDATE state at round close.**
+
+- **Candidate 1** (redirector-spec error caught at executor audit-step boundary): **PROMOTED to §6.14.43.** State retired.
+- **Candidate 2** (sidecar-as-default-narrow-scope-envelope): **unchanged at 3/5.** This round did NOT ship as a sidecar — it shipped as a retraction. Does not count toward instance threshold.
+
+**Q-pattern instance count update.** Round-close folded into retraction commit at this commit. **Instance #3 banked.** (Prior instances: #1 + #2 banked in earlier rounds per the running ledger carried forward in `selection-engine-session-attempted-ids-sidecar.md` §7.) Threshold for §6.14 promotion is +1 (instance #4 at next round-close that folds round-close into a final commit). Forward-pinned to next-round residuals.
+
+**Forward-pinned residuals updated.**
+
+- **"Diagnostic-timing sidecar"** (formerly residual #2 in source plan-doc `selection-engine-session-attempted-ids-sidecar.md`) — **RETRACTED-AS-FRAMED** at this round-close. The "narrow-sidecar grabbing only the client-prop change" framing is structurally wrong per §0.10 reasoning; supersession captured by the new residual below.
+- **"Diagnostic-timing-strategy round"** — **NEW residual.** Addresses §0.15 forward-reference items 1-5 together (PRD §4.1 amendment + server cutoff re-introduction + client timer + mastery multiplier revert + post-session pacing copy revision). Item 1 (PRD §4.1 amendment) is load-bearing; items 2-5 are downstream of how item 1 resolves. Sequencing TBD relative to (a) validator round (un-deferred from selection-engine sidecar; residual #1 in source plan-doc), (b) Round 3 review-section architecture (residual #3 in source plan-doc).
+- All other forward-pinned residuals from `selection-engine-session-attempted-ids-sidecar.md` §6 carry forward unchanged (Q-pattern continues as forward-pin per Q-pattern entry above; `structured-explanation.test.ts:152` stochastic suspect remains forward-pinned).
