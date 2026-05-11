@@ -7,7 +7,7 @@
 //   2. Interactive butterfly — two fraction inputs + a "Compare" button
 //      that draws the diagonal arrows and surfaces the comparison
 //      products above each numerator.
-//   3. Speed Drill — infinite "which is larger?" problems that reward
+//   3. Practice — infinite "which is larger?" problems that reward
 //      applying the shortcut.
 
 import * as React from "react"
@@ -119,7 +119,7 @@ function Sandbox() {
 			<div className={`px-5 pb-3 text-center font-medium text-[14px] ${resultTone}`}>
 				{resultCopy}
 			</div>
-			<div className="grid grid-cols-2 gap-4 border-border-soft border-t px-5 py-4">
+			<div className="flex flex-wrap items-start justify-between gap-x-12 gap-y-6 border-border-soft border-t px-8 py-5">
 				<FractionEditor
 					label="Left fraction"
 					tone="text-cobalt"
@@ -227,8 +227,8 @@ function NumberStepper({ label, value, onChange, min, max }: NumberStepperProps)
 		onChange(clampNum(parsed, min, max))
 	}
 	return (
-		<div className="flex items-center gap-2">
-			<span className="w-20 text-[11px] text-text-3 uppercase tracking-[0.06em]">{label}</span>
+		<div className="flex items-center gap-4">
+			<span className="w-28 text-[11px] text-text-3 uppercase tracking-[0.06em]">{label}</span>
 			<div className="flex items-center gap-1">
 				<button
 					type="button"
@@ -245,7 +245,7 @@ function NumberStepper({ label, value, onChange, min, max }: NumberStepperProps)
 					value={value}
 					onChange={onInput}
 					aria-label={label}
-					className="h-9 w-14 rounded-md border border-border-strong bg-bg text-center font-mono text-[15px] text-text-1 focus-visible:border-cobalt focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+					className="h-9 w-14 rounded-md border border-border-strong bg-bg text-center font-mono text-[15px] text-text-1 [appearance:textfield] focus-visible:border-cobalt focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none"
 				/>
 				<button
 					type="button"
@@ -271,28 +271,24 @@ interface ButterflySvgProps {
 	revealed: boolean
 }
 interface SideTone {
-	productTone: string
 	arrowTone: string
 	boxFill: string
 	boxStroke: string
 	boxText: string
 }
 const LEFT_WINNING_TONE: SideTone = {
-	productTone: "fill-cobalt",
 	arrowTone: "stroke-cobalt",
 	boxFill: "fill-cobalt",
 	boxStroke: "stroke-cobalt",
 	boxText: "fill-bg"
 }
 const LEFT_LOSING_TONE: SideTone = {
-	productTone: "fill-text-3",
 	arrowTone: "stroke-text-3",
 	boxFill: "fill-bg",
 	boxStroke: "stroke-border-strong",
 	boxText: "fill-text-1"
 }
 const RIGHT_WINNING_TONE: SideTone = {
-	productTone: "fill-alpha-accent",
 	arrowTone: "stroke-alpha-accent",
 	boxFill: "fill-alpha-accent",
 	boxStroke: "stroke-alpha-accent",
@@ -313,6 +309,9 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 	const NUM_Y = 92
 	const DEN_Y = 132
 	const PRODUCT_Y = 32
+	const BOX_W = 104
+	const BOX_H = 24
+	const BOX_HALF = BOX_W / 2
 	const arrowOpacity = revealed ? 1 : 0
 	let winnerSide: "left" | "right" | "tie" = "tie"
 	if (cross1 > cross2) winnerSide = "left"
@@ -322,7 +321,7 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 	const inequalityGlyph = revealed ? INEQUALITY_GLYPH[winnerSide] : "?"
 	return (
 		<svg
-			viewBox="0 0 400 170"
+			viewBox="0 0 400 180"
 			role="img"
 			aria-label="Butterfly comparison of two fractions"
 			className="block h-auto w-full min-w-[320px]"
@@ -332,24 +331,24 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 				<marker
 					id="butterfly-arrow-left"
 					viewBox="0 0 10 10"
-					refX={8}
+					refX={9}
 					refY={5}
-					markerWidth={6}
-					markerHeight={6}
+					markerWidth={7}
+					markerHeight={7}
 					orient="auto-start-reverse"
 				>
-					<path d="M0,0 L10,5 L0,10 z" className={leftTone.arrowTone} fill="currentColor" />
+					<path d="M0,0 L10,5 L0,10 z" className="fill-text-1" />
 				</marker>
 				<marker
 					id="butterfly-arrow-right"
 					viewBox="0 0 10 10"
-					refX={8}
+					refX={9}
 					refY={5}
-					markerWidth={6}
-					markerHeight={6}
+					markerWidth={7}
+					markerHeight={7}
 					orient="auto-start-reverse"
 				>
-					<path d="M0,0 L10,5 L0,10 z" className={rightTone.arrowTone} fill="currentColor" />
+					<path d="M0,0 L10,5 L0,10 z" className="fill-text-1" />
 				</marker>
 			</defs>
 			<g>
@@ -379,14 +378,6 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 					{d1}
 				</text>
 			</g>
-			<text
-				x={200}
-				y={117}
-				textAnchor="middle"
-				className="fill-text-3 font-mono font-semibold text-[28px]"
-			>
-				{inequalityGlyph}
-			</text>
 			<g>
 				<line
 					x1={RIGHT_X - 26}
@@ -416,10 +407,10 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 			</g>
 			<g opacity={arrowOpacity} className="transition-opacity duration-300">
 				<line
-					x1={RIGHT_X - 6}
-					y1={DEN_Y - 6}
-					x2={LEFT_X + 4}
-					y2={NUM_Y - 18}
+					x1={RIGHT_X - 22}
+					y1={DEN_Y - 4}
+					x2={LEFT_X + 22}
+					y2={NUM_Y - 1}
 					className={leftTone.arrowTone}
 					strokeWidth={1.5}
 					strokeLinecap="round"
@@ -427,21 +418,31 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 					markerEnd="url(#butterfly-arrow-left)"
 				/>
 				<line
-					x1={LEFT_X + 6}
-					y1={DEN_Y - 6}
-					x2={RIGHT_X - 4}
-					y2={NUM_Y - 18}
+					x1={LEFT_X + 22}
+					y1={DEN_Y - 4}
+					x2={RIGHT_X - 22}
+					y2={NUM_Y - 1}
 					className={rightTone.arrowTone}
 					strokeWidth={1.5}
 					strokeLinecap="round"
 					strokeDasharray="3 3"
 					markerEnd="url(#butterfly-arrow-right)"
 				/>
+			</g>
+			<text
+				x={200}
+				y={150}
+				textAnchor="middle"
+				className="fill-text-1 font-bold font-mono text-[42px]"
+			>
+				{inequalityGlyph}
+			</text>
+			<g opacity={arrowOpacity} className="transition-opacity duration-300">
 				<rect
-					x={LEFT_X - 26}
-					y={PRODUCT_Y - 14}
-					width={52}
-					height={22}
+					x={LEFT_X - BOX_HALF}
+					y={PRODUCT_Y - 15}
+					width={BOX_W}
+					height={BOX_H}
 					rx={6}
 					className={`${leftTone.boxFill} ${leftTone.boxStroke}`}
 					strokeWidth={1.5}
@@ -450,15 +451,15 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 					x={LEFT_X}
 					y={PRODUCT_Y + 1}
 					textAnchor="middle"
-					className={`font-mono font-semibold text-[13px] ${leftTone.productTone} ${leftTone.boxText}`}
+					className={`font-mono font-semibold text-[13px] ${leftTone.boxText}`}
 				>
 					{n1}·{d2} = {cross1}
 				</text>
 				<rect
-					x={RIGHT_X - 26}
-					y={PRODUCT_Y - 14}
-					width={52}
-					height={22}
+					x={RIGHT_X - BOX_HALF}
+					y={PRODUCT_Y - 15}
+					width={BOX_W}
+					height={BOX_H}
 					rx={6}
 					className={`${rightTone.boxFill} ${rightTone.boxStroke}`}
 					strokeWidth={1.5}
@@ -467,7 +468,7 @@ function ButterflySvg({ n1, d1, n2, d2, cross1, cross2, revealed }: ButterflySvg
 					x={RIGHT_X}
 					y={PRODUCT_Y + 1}
 					textAnchor="middle"
-					className={`font-mono font-semibold text-[13px] ${rightTone.productTone} ${rightTone.boxText}`}
+					className={`font-mono font-semibold text-[13px] ${rightTone.boxText}`}
 				>
 					{n2}·{d1} = {cross2}
 				</text>
@@ -503,39 +504,29 @@ function generateProblem(): DrillProblem {
 
 function SpeedDrill() {
 	const [problem, setProblem] = React.useState<DrillProblem | null>(null)
-	const [streak, setStreak] = React.useState(0)
-	const [best, setBest] = React.useState(0)
+	const [score, setScore] = React.useState(0)
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const [picked, setPicked] = React.useState<"left" | "right" | "equal" | null>(null)
 	const pillRef = React.useRef<HTMLDivElement>(null)
-	const mastered = useMastery({ slug: "butterfly", score: best, originRef: pillRef })
+	const mastered = useMastery({ slug: "butterfly", score, originRef: pillRef })
 
 	React.useEffect(function init() {
 		setProblem(generateProblem())
 	}, [])
 
 	function pick(choice: "left" | "right" | "equal") {
-		if (feedback === "right") return
+		if (feedback !== "idle") return
 		if (problem === null) return
 		setPicked(choice)
 		if (choice === problem.answer) {
 			markLessonDoneToday()
-			const nextStreak = streak + 1
 			setFeedback("right")
-			setStreak(nextStreak)
-			if (nextStreak > best) setBest(nextStreak)
-			window.setTimeout(function nextProblem() {
-				setProblem(generateProblem())
-				setFeedback("idle")
-				setPicked(null)
-			}, 600)
+			setScore(score + 1)
 		} else {
 			setFeedback("wrong")
-			setStreak(0)
 		}
 	}
-	function skip() {
-		setStreak(0)
+	function next() {
 		setProblem(generateProblem())
 		setFeedback("idle")
 		setPicked(null)
@@ -546,20 +537,17 @@ function SpeedDrill() {
 			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
 				<div>
 					<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
-						Speed drill
+						Practice
 					</p>
 					<p className="mt-0.5 text-[13px] text-text-2">Which fraction is larger?</p>
 				</div>
-				<div className="flex gap-2">
-					<StatPill label="Streak" value={String(streak)} tone="text-alpha-accent" />
-					<MasteryPill
-						pillRef={pillRef}
-						label="Best"
-						value={String(best)}
-						tone="text-good"
-						mastered={mastered}
-					/>
-				</div>
+				<MasteryPill
+					pillRef={pillRef}
+					label="Score"
+					value={String(score)}
+					tone="text-good"
+					mastered={mastered}
+				/>
 			</div>
 			{problem === null ? (
 				<p className="px-5 py-8 text-center text-sm text-text-3">Loading…</p>
@@ -569,7 +557,7 @@ function SpeedDrill() {
 					feedback={feedback}
 					picked={picked}
 					onPick={pick}
-					onSkip={skip}
+					onNext={next}
 				/>
 			)}
 		</section>
@@ -581,24 +569,34 @@ interface DrillBodyProps {
 	feedback: "idle" | "right" | "wrong"
 	picked: "left" | "right" | "equal" | null
 	onPick: (choice: "left" | "right" | "equal") => void
-	onSkip: () => void
+	onNext: () => void
 }
-function DrillBody({ problem, feedback, picked, onPick, onSkip }: DrillBodyProps) {
+function feedbackToneFor(feedback: "idle" | "right" | "wrong"): string {
+	if (feedback === "right") return "text-good"
+	if (feedback === "wrong") return "text-pace-over"
+	return "text-text-3"
+}
+
+function DrillBody({ problem, feedback, picked, onPick, onNext }: DrillBodyProps) {
 	const cross1 = problem.n1 * problem.d2
 	const cross2 = problem.n2 * problem.d1
-	const feedbackTone =
-		feedback === "right" ? "text-good" : feedback === "wrong" ? "text-pace-over" : "text-text-3"
-	let feedbackCopy = "Multiply each numerator by the opposite denominator. Bigger product wins."
-	if (feedback === "right") {
-		feedbackCopy = `Right — ${problem.n1}·${problem.d2} = ${cross1}, ${problem.n2}·${problem.d1} = ${cross2}.`
-	} else if (feedback === "wrong") {
-		feedbackCopy = `Not yet — ${problem.n1}·${problem.d2} = ${cross1}, ${problem.n2}·${problem.d1} = ${cross2}. Try again.`
-	}
+	const answered = feedback !== "idle"
+	const feedbackTone = feedbackToneFor(feedback)
+	let feedbackCopy = ""
+	if (feedback === "right") feedbackCopy = "Correct"
+	else if (feedback === "wrong") feedbackCopy = "Wrong"
 	return (
 		<>
-			<div className="grid grid-cols-2 items-center gap-6 px-5 py-6 text-center">
-				<FractionGlyph numerator={problem.n1} denominator={problem.d1} tone="text-cobalt" />
-				<FractionGlyph numerator={problem.n2} denominator={problem.d2} tone="text-alpha-accent" />
+			<div className="px-3 pt-4 pb-2">
+				<ButterflySvg
+					n1={problem.n1}
+					d1={problem.d1}
+					n2={problem.n2}
+					d2={problem.d2}
+					cross1={cross1}
+					cross2={cross2}
+					revealed={answered}
+				/>
 			</div>
 			<div className="grid grid-cols-3 gap-2 px-5 pb-3">
 				<DrillButton
@@ -606,6 +604,7 @@ function DrillBody({ problem, feedback, picked, onPick, onSkip }: DrillBodyProps
 					selected={picked === "left"}
 					correct={feedback === "right" && picked === "left"}
 					wrong={feedback === "wrong" && picked === "left"}
+					disabled={answered}
 					onClick={function onLeft() {
 						onPick("left")
 					}}
@@ -615,6 +614,7 @@ function DrillBody({ problem, feedback, picked, onPick, onSkip }: DrillBodyProps
 					selected={picked === "equal"}
 					correct={feedback === "right" && picked === "equal"}
 					wrong={feedback === "wrong" && picked === "equal"}
+					disabled={answered}
 					onClick={function onEqual() {
 						onPick("equal")
 					}}
@@ -624,37 +624,23 @@ function DrillBody({ problem, feedback, picked, onPick, onSkip }: DrillBodyProps
 					selected={picked === "right"}
 					correct={feedback === "right" && picked === "right"}
 					wrong={feedback === "wrong" && picked === "right"}
+					disabled={answered}
 					onClick={function onRight() {
 						onPick("right")
 					}}
 				/>
 			</div>
 			<div className="flex items-center justify-between gap-2 border-border-soft border-t px-5 py-3">
-				<p className={`text-[13px] ${feedbackTone}`}>{feedbackCopy}</p>
+				<p className={`font-semibold text-[14px] ${feedbackTone}`}>{feedbackCopy}</p>
 				<button
 					type="button"
-					onClick={onSkip}
-					className="shrink-0 rounded-md border border-border-strong bg-surface px-3 py-1.5 font-medium text-[13px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+					onClick={onNext}
+					className="shrink-0 rounded-md border border-text-1 bg-text-1 px-3 py-1.5 font-medium text-[13px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
 				>
-					Skip
+					{answered ? "Next question" : "Skip"}
 				</button>
 			</div>
 		</>
-	)
-}
-
-interface FractionGlyphProps {
-	numerator: number
-	denominator: number
-	tone: string
-}
-function FractionGlyph({ numerator, denominator, tone }: FractionGlyphProps) {
-	return (
-		<div className={`inline-flex flex-col items-center font-mono font-semibold ${tone}`}>
-			<span className="text-[40px] leading-none">{numerator}</span>
-			<span className="my-1 block h-[3px] w-[64px] rounded-full bg-current" />
-			<span className="text-[40px] leading-none">{denominator}</span>
-		</div>
 	)
 }
 
@@ -663,9 +649,10 @@ interface DrillButtonProps {
 	selected: boolean
 	correct: boolean
 	wrong: boolean
+	disabled: boolean
 	onClick: () => void
 }
-function DrillButton({ label, selected, correct, wrong, onClick }: DrillButtonProps) {
+function DrillButton({ label, selected, correct, wrong, disabled, onClick }: DrillButtonProps) {
 	let tone = "border-border-strong bg-surface text-text-1 hover:bg-lavender"
 	if (correct) {
 		tone = "border-good bg-good text-bg"
@@ -678,24 +665,11 @@ function DrillButton({ label, selected, correct, wrong, onClick }: DrillButtonPr
 		<button
 			type="button"
 			onClick={onClick}
-			className={`h-12 rounded-md border font-medium text-[14px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 ${tone}`}
+			disabled={disabled}
+			className={`h-12 rounded-md border font-medium text-[14px] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:cursor-default ${tone}`}
 		>
 			{label}
 		</button>
-	)
-}
-
-interface StatPillProps {
-	label: string
-	value: string
-	tone: string
-}
-function StatPill({ label, value, tone }: StatPillProps) {
-	return (
-		<div className="rounded-md border border-border-soft bg-bg px-3 py-1.5 text-right">
-			<p className="font-semibold text-[9px] text-text-3 uppercase tracking-[0.08em]">{label}</p>
-			<p className={`font-mono font-semibold text-[16px] tabular-nums ${tone}`}>{value}</p>
-		</div>
 	)
 }
 
