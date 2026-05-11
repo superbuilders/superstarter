@@ -156,15 +156,15 @@ function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 
 	return (
 		<div className="space-y-3">
-			<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-foreground/70 text-xs">
-				<span className="inline-flex items-center gap-1.5">
+			<div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-text-1">
+				<span className="inline-flex items-center gap-2">
 					<span
 						aria-hidden="true"
-						className="inline-block h-0 w-3 border-foreground/50 border-t border-dashed"
+						className="inline-block h-0 w-5 border-cobalt/70 border-t-2 border-dashed"
 					/>
 					<span>Budget (18s × question)</span>
 				</span>
-				<span className={cn("ml-auto tabular-nums", totalClass)}>{deltaCopy}</span>
+				<span className={cn("ml-auto font-semibold tabular-nums", totalClass)}>{deltaCopy}</span>
 			</div>
 			<svg
 				aria-label={`Cumulative time across ${n} question${n === 1 ? "" : "s"} vs the 18s-per-question budget.`}

@@ -250,69 +250,14 @@ function PostSessionShell(props: PostSessionShellProps) {
 
 	let panel: React.ReactNode = null
 	if (activeTab === "performance") {
-		const attemptPoints = props.wrongItems.map(function pickPoint(w) {
-			return {
-				attemptId: w.attemptId,
-				latencyMs: w.latencyMs,
-				correct: w.correct,
-				subTypeId: w.subTypeId,
-				difficulty: w.difficulty
-			}
-		})
-		// Shared scale across both radars so Verbal and Numerical are
-		// visually comparable. Computed once, passed to both instances.
-		const radarOuterRing = computeOuterRingValue(props.performance)
 		panel = (
-			<div className="space-y-4" data-testid="post-session-slot-performance-summary">
-				<ChartCard
-					title="Pacing"
-					eyebrow="Per-question time and cumulative trajectory vs the 18s budget"
-					testId="post-session-chart-pacing"
-				>
-					<div className="space-y-5">
-						<TimeSinkChart
-							attempts={attemptPoints}
-							selectedKeys={pacingSelectedKeys}
-							onSelectedKeysChange={setPacingSelectedKeys}
-							onAttemptClick={handleAttemptClick}
-						/>
-						<div className="space-y-2 border-border-soft border-t pt-4">
-							<span className="block text-[11px] text-text-3 uppercase tracking-[0.06em]">
-								Cumulative time vs the budget
-							</span>
-							<CumulativeTimeChart
-								attempts={attemptPoints}
-								selectedKeys={pacingSelectedKeys}
-								onAttemptClick={handleAttemptClick}
-							/>
-						</div>
-					</div>
-				</ChartCard>
-				<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-					<ChartCard
-						title="Verbal proficiency"
-						eyebrow="Target: 80% at 18s/question"
-						testId="post-session-chart-radar-verbal"
-					>
-						<TopicProficiencyRadar
-							rows={props.performance}
-							section="verbal"
-							outerRingValue={radarOuterRing}
-						/>
-					</ChartCard>
-					<ChartCard
-						title="Numerical proficiency"
-						eyebrow="Target: 80% at 18s/question"
-						testId="post-session-chart-radar-numerical"
-					>
-						<TopicProficiencyRadar
-							rows={props.performance}
-							section="numerical"
-							outerRingValue={radarOuterRing}
-						/>
-					</ChartCard>
-				</div>
-			</div>
+			<PerformancePanel
+				wrongItems={props.wrongItems}
+				performance={props.performance}
+				pacingSelectedKeys={pacingSelectedKeys}
+				onPacingSelectedKeysChange={setPacingSelectedKeys}
+				onAttemptClick={handleAttemptClick}
+			/>
 		)
 	} else if (activeTab === "questions") {
 		panel = (
@@ -374,25 +319,134 @@ function PostSessionShell(props: PostSessionShellProps) {
 
 interface ChartCardProps {
 	title: string
-	eyebrow: string
+	eyebrow?: string
 	testId: string
+	/** Optional custom right-side header content; when present, replaces
+	 *  the default uppercase-eyebrow span. Used by the Pacing card to
+	 *  surface the big score in the header. */
+	headerRight?: React.ReactNode
 	children: React.ReactNode
 }
 
 function ChartCard(props: ChartCardProps) {
+	let rightNode: React.ReactNode = null
+	if (props.headerRight !== undefined) {
+		rightNode = props.headerRight
+	} else if (props.eyebrow !== undefined) {
+		rightNode = (
+			<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{props.eyebrow}</span>
+		)
+	}
 	return (
 		<section
 			className="overflow-hidden rounded-lg border border-border-soft bg-surface"
 			data-testid={props.testId}
 		>
-			<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
+			<header className="flex items-baseline justify-between gap-4 border-border-soft border-b px-4 pt-2 pb-1">
 				<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
 					{props.title}
 				</h3>
-				<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{props.eyebrow}</span>
+				{rightNode}
 			</header>
 			<div className="px-4 py-3">{props.children}</div>
 		</section>
+	)
+}
+
+interface PerformancePanelProps {
+	wrongItems: WrongItem[]
+	performance: PerSubTypePerformance[]
+	pacingSelectedKeys: ReadonlySet<string>
+	onPacingSelectedKeysChange: (next: ReadonlySet<string>) => void
+	onAttemptClick: (attemptId: string) => void
+}
+
+function PerformancePanel(props: PerformancePanelProps) {
+	const attemptPoints = props.wrongItems.map(function pickPoint(w) {
+		return {
+			attemptId: w.attemptId,
+			latencyMs: w.latencyMs,
+			correct: w.correct,
+			subTypeId: w.subTypeId,
+			difficulty: w.difficulty
+		}
+	})
+	// Shared scale across both radars so Verbal and Numerical are
+	// visually comparable. Computed once, passed to both instances.
+	const radarOuterRing = computeOuterRingValue(props.performance)
+	let pacingCorrect = 0
+	for (const p of attemptPoints) {
+		if (p.correct) pacingCorrect += 1
+	}
+	const pacingTotal = attemptPoints.length
+	return (
+		<div className="space-y-4" data-testid="post-session-slot-performance-summary">
+			<ChartCard
+				title="Pacing"
+				testId="post-session-chart-pacing"
+				headerRight={<PacingScore correct={pacingCorrect} total={pacingTotal} />}
+			>
+				<div className="space-y-5">
+					<TimeSinkChart
+						attempts={attemptPoints}
+						selectedKeys={props.pacingSelectedKeys}
+						onSelectedKeysChange={props.onPacingSelectedKeysChange}
+						onAttemptClick={props.onAttemptClick}
+					/>
+					<div className="space-y-3 border-border-soft border-t pt-4">
+						<h4 className="text-center font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+							Cumulative time vs the budget
+						</h4>
+						<CumulativeTimeChart
+							attempts={attemptPoints}
+							selectedKeys={props.pacingSelectedKeys}
+							onAttemptClick={props.onAttemptClick}
+						/>
+					</div>
+				</div>
+			</ChartCard>
+			<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+				<ChartCard
+					title="Verbal proficiency"
+					eyebrow="Target: 80% at 18s/question"
+					testId="post-session-chart-radar-verbal"
+				>
+					<TopicProficiencyRadar
+						rows={props.performance}
+						section="verbal"
+						outerRingValue={radarOuterRing}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Numerical proficiency"
+					eyebrow="Target: 80% at 18s/question"
+					testId="post-session-chart-radar-numerical"
+				>
+					<TopicProficiencyRadar
+						rows={props.performance}
+						section="numerical"
+						outerRingValue={radarOuterRing}
+					/>
+				</ChartCard>
+			</div>
+		</div>
+	)
+}
+
+interface PacingScoreProps {
+	correct: number
+	total: number
+}
+
+function PacingScore(props: PacingScoreProps) {
+	return (
+		<div className="text-right leading-none">
+			<div className="font-medium font-serif text-text-1 tabular-nums">
+				<span className="text-[28px]">{props.correct}</span>
+				<span className="text-[16px] text-text-2"> / {props.total}</span>
+			</div>
+			<div className="mt-1 text-[10px] text-text-3 uppercase tracking-[0.08em]">Correct</div>
+		</div>
 	)
 }
 

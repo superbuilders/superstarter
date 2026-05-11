@@ -124,19 +124,25 @@ interface LegendProps {
 
 function Legend(props: LegendProps) {
 	return (
-		<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-foreground/70">
-			<span className="inline-flex items-center gap-1.5">
-				<span aria-hidden="true" className="h-2 w-2 rounded-full bg-good" />
-				<span className="tabular-nums">{props.counts.correct} correct</span>
+		<div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-text-1">
+			<span className="inline-flex items-center gap-2">
+				<span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-good" />
+				<span className="tabular-nums">
+					<span className="font-semibold">{props.counts.correct}</span> correct
+				</span>
 			</span>
-			<span className="inline-flex items-center gap-1.5">
-				<span aria-hidden="true" className="h-2 w-2 rounded-full bg-destructive" />
-				<span className="tabular-nums">{props.counts.incorrect} incorrect</span>
+			<span className="inline-flex items-center gap-2">
+				<span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-destructive" />
+				<span className="tabular-nums">
+					<span className="font-semibold">{props.counts.incorrect}</span> incorrect
+				</span>
 			</span>
 			<span aria-hidden="true" className="text-text-3">
 				·
 			</span>
-			<span className="text-text-2 tabular-nums">{props.counts.overGoal} over 18s</span>
+			<span className="text-text-2 tabular-nums">
+				<span className="font-semibold">{props.counts.overGoal}</span> over 18s
+			</span>
 		</div>
 	)
 }
@@ -357,12 +363,20 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 
 	return (
 		<div className="space-y-4">
-			<Legend counts={counts} />
 			<TimeSinkMatrix
 				attempts={attempts}
 				selectedKeys={props.selectedKeys}
 				onChange={props.onSelectedKeysChange}
 			/>
+			<Legend counts={counts} />
+			<div className="space-y-1 pt-2 text-center">
+				<h4 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+					Time sink
+				</h4>
+				<p className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+					Per-question time vs the 18s goal
+				</p>
+			</div>
 			<TimeSinkSvg
 				attempts={attempts}
 				selectedKeys={props.selectedKeys}
