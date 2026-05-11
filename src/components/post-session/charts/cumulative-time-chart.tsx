@@ -13,15 +13,22 @@
 // switches to the destructive token so the moment the user fell into
 // time debt reads at a glance.
 
+import { DotHitTarget } from "@/components/post-session/charts/dot-hit-target"
+import { makeKey } from "@/components/post-session/charts/time-sink-matrix"
+import type { Difficulty, SubTypeId } from "@/config/sub-types"
 import { cn } from "@/lib/utils"
 
 interface AttemptPoint {
 	attemptId: string
 	latencyMs: number
+	subTypeId: SubTypeId
+	difficulty: Difficulty
 }
 
 interface CumulativeTimeChartProps {
 	attempts: ReadonlyArray<AttemptPoint>
+	selectedKeys: ReadonlySet<string>
+	onAttemptClick?: (attemptId: string) => void
 }
 
 const FULL_TEST_QUESTIONS = 50
@@ -42,6 +49,7 @@ interface QPoint {
 	cumulativeMs: number
 	budgetMs: number
 	over: boolean
+	filterKey: string
 }
 
 interface Segment {
@@ -74,7 +82,8 @@ function buildPoints(attempts: ReadonlyArray<AttemptPoint>): QPoint[] {
 			qIndex: i,
 			cumulativeMs: running,
 			budgetMs: budget,
-			over: running > budget
+			over: running > budget,
+			filterKey: makeKey(a.subTypeId, a.difficulty)
 		})
 	})
 	return points
@@ -164,6 +173,7 @@ function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 	const isOverBudgetEnd = actualTotalMs > budgetTotalMs
 	const totalClass = isOverBudgetEnd ? "text-destructive" : "text-good"
 	const deltaCopy = formatPaceDelta(actualTotalMs - budgetTotalMs)
+	const anyFilter = props.selectedKeys.size > 0
 
 	return (
 		<div className="space-y-3">
@@ -279,17 +289,34 @@ function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 
 				{points.map(function renderPoint(p) {
 					const markerClass = p.over ? "text-destructive" : "text-cobalt"
+					const cx = xOf(p.qIndex, n)
+					const cy = yOf(p.cumulativeMs, yMaxMs)
+					const tooltip = `Q${p.qIndex + 1}: ${formatMinSec(p.cumulativeMs)} elapsed`
+					const dimmed = anyFilter && !props.selectedKeys.has(p.filterKey)
+					const radius = dimmed ? 1.5 : 2.5
+					const opacity = dimmed ? 0.3 : 1
 					return (
-						<circle
+						<DotHitTarget
 							key={p.attemptId}
-							className={markerClass}
-							cx={xOf(p.qIndex, n)}
-							cy={yOf(p.cumulativeMs, yMaxMs)}
-							fill="currentColor"
-							r={2}
+							attemptId={p.attemptId}
+							cx={cx}
+							cy={cy}
+							hitRadius={7}
+							label={tooltip}
+							onAttemptClick={props.onAttemptClick}
 						>
-							<title>{`Q${p.qIndex + 1}: ${formatMinSec(p.cumulativeMs)} elapsed`}</title>
-						</circle>
+							<circle
+								className={markerClass}
+								cx={cx}
+								cy={cy}
+								fill="currentColor"
+								fillOpacity={opacity}
+								r={radius}
+								pointerEvents="none"
+							>
+								<title>{tooltip}</title>
+							</circle>
+						</DotHitTarget>
 					)
 				})}
 			</svg>

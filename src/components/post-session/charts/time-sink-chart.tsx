@@ -14,24 +14,23 @@
 // without two signals fighting for attention (Alpha §3: accents earn
 // placement).
 //
-// Two filter rows let the reader highlight a slice of the session by
-// category (sub-type) and / or difficulty. Selected dots stay full-
+// The sub-type × difficulty <TimeSinkMatrix> below the legend doubles
+// as the chart filter. Selected (subType, difficulty) cells stay full-
 // strength; unselected dots fade so the highlighted group reads first.
 
-import * as React from "react"
+import { DotHitTarget } from "@/components/post-session/charts/dot-hit-target"
+import {
+	type AttemptPoint,
+	makeKey,
+	TimeSinkMatrix
+} from "@/components/post-session/charts/time-sink-matrix"
 import { type Difficulty, type SubTypeId, subTypes } from "@/config/sub-types"
-import { cn } from "@/lib/utils"
-
-interface AttemptPoint {
-	attemptId: string
-	latencyMs: number
-	correct: boolean
-	subTypeId: SubTypeId
-	difficulty: Difficulty
-}
 
 interface TimeSinkChartProps {
 	attempts: ReadonlyArray<AttemptPoint>
+	selectedKeys: ReadonlySet<string>
+	onSelectedKeysChange: (next: ReadonlySet<string>) => void
+	onAttemptClick?: (attemptId: string) => void
 }
 
 const GOAL_MS = 18_000
@@ -44,18 +43,11 @@ const PAD_RIGHT = 20
 const PAD_TOP = 24
 const PAD_BOTTOM = 52
 
-const DIFFICULTY_ORDER: ReadonlyArray<Difficulty> = ["easy", "medium", "hard", "brutal"]
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
 	easy: "Easy",
 	medium: "Medium",
 	hard: "Hard",
 	brutal: "Brutal"
-}
-
-interface FilterOption<V extends string> {
-	value: V
-	label: string
-	active: boolean
 }
 
 interface Counts {
@@ -109,14 +101,9 @@ function lookupSubTypeName(id: SubTypeId): string {
 	return match.displayName
 }
 
-function matchesFilter(
-	p: AttemptPoint,
-	cats: ReadonlySet<SubTypeId>,
-	diffs: ReadonlySet<Difficulty>
-): boolean {
-	if (cats.size > 0 && !cats.has(p.subTypeId)) return false
-	if (diffs.size > 0 && !diffs.has(p.difficulty)) return false
-	return true
+function matchesFilter(p: AttemptPoint, selected: ReadonlySet<string>): boolean {
+	if (selected.size === 0) return true
+	return selected.has(makeKey(p.subTypeId, p.difficulty))
 }
 
 function computeCounts(attempts: ReadonlyArray<AttemptPoint>): Counts {
@@ -129,90 +116,6 @@ function computeCounts(attempts: ReadonlyArray<AttemptPoint>): Counts {
 		if (a.latencyMs > GOAL_MS) overGoal += 1
 	}
 	return { correct, incorrect, overGoal }
-}
-
-function buildCatOptions(
-	attempts: ReadonlyArray<AttemptPoint>,
-	highlighted: ReadonlySet<SubTypeId>
-): ReadonlyArray<FilterOption<SubTypeId>> {
-	const present = new Set<SubTypeId>()
-	for (const a of attempts) present.add(a.subTypeId)
-	const out: Array<FilterOption<SubTypeId>> = []
-	for (const s of subTypes) {
-		if (!present.has(s.id)) continue
-		out.push({ value: s.id, label: s.displayName, active: highlighted.has(s.id) })
-	}
-	return out
-}
-
-function buildDiffOptions(
-	attempts: ReadonlyArray<AttemptPoint>,
-	highlighted: ReadonlySet<Difficulty>
-): ReadonlyArray<FilterOption<Difficulty>> {
-	const present = new Set<Difficulty>()
-	for (const a of attempts) present.add(a.difficulty)
-	const out: Array<FilterOption<Difficulty>> = []
-	for (const d of DIFFICULTY_ORDER) {
-		if (!present.has(d)) continue
-		out.push({ value: d, label: DIFFICULTY_LABEL[d], active: highlighted.has(d) })
-	}
-	return out
-}
-
-interface ChipProps {
-	label: string
-	active: boolean
-	onClick: () => void
-}
-
-function Chip(props: ChipProps) {
-	const stateClass = props.active
-		? "bg-cobalt text-white border-cobalt"
-		: "border-border-soft bg-surface text-text-2 hover:bg-lavender hover:text-text-1"
-	return (
-		<button
-			type="button"
-			aria-pressed={props.active}
-			onClick={props.onClick}
-			className={cn(
-				"inline-flex items-center rounded-full border px-2.5 py-[3px] text-[12px] transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
-				stateClass
-			)}
-		>
-			{props.label}
-		</button>
-	)
-}
-
-interface FilterRowProps<V extends string> {
-	label: string
-	options: ReadonlyArray<FilterOption<V>>
-	onToggle: (value: V) => void
-}
-
-function FilterRow<V extends string>(props: FilterRowProps<V>) {
-	if (props.options.length === 0) return null
-	return (
-		<div className="flex flex-wrap items-center gap-2">
-			<span className="min-w-[64px] text-[11px] text-text-3 uppercase tracking-[0.06em]">
-				{props.label}
-			</span>
-			<div className="flex flex-wrap gap-1.5">
-				{props.options.map(function renderChip(opt) {
-					return (
-						<Chip
-							key={opt.value}
-							label={opt.label}
-							active={opt.active}
-							onClick={function chipClick() {
-								props.onToggle(opt.value)
-							}}
-						/>
-					)
-				})}
-			</div>
-		</div>
-	)
 }
 
 interface LegendProps {
@@ -240,13 +143,13 @@ function Legend(props: LegendProps) {
 
 interface TimeSinkSvgProps {
 	attempts: ReadonlyArray<AttemptPoint>
-	highlightedCats: ReadonlySet<SubTypeId>
-	highlightedDiffs: ReadonlySet<Difficulty>
+	selectedKeys: ReadonlySet<string>
 	ariaLabel: string
+	onAttemptClick?: (attemptId: string) => void
 }
 
 function TimeSinkSvg(props: TimeSinkSvgProps) {
-	const { attempts, highlightedCats, highlightedDiffs, ariaLabel } = props
+	const { attempts, selectedKeys, ariaLabel, onAttemptClick } = props
 	const n = attempts.length
 	const yMaxMs = pickYMax(attempts)
 	const plotW = VIEW_W - PAD_LEFT - PAD_RIGHT
@@ -273,7 +176,7 @@ function TimeSinkSvg(props: TimeSinkSvgProps) {
 	const yTicks = buildYTicks(yMaxMs)
 	const xTickLabels = buildXTickLabels(n)
 	const xTickLabelSet = new Set(xTickLabels)
-	const anyFilter = highlightedCats.size + highlightedDiffs.size > 0
+	const anyFilter = selectedKeys.size > 0
 
 	return (
 		<svg
@@ -397,7 +300,7 @@ function TimeSinkSvg(props: TimeSinkSvgProps) {
 
 			{attempts.map(function renderPoint(a, i) {
 				const correctnessClass = a.correct ? "text-good" : "text-destructive"
-				const isMatch = matchesFilter(a, highlightedCats, highlightedDiffs)
+				const isMatch = matchesFilter(a, selectedKeys)
 				const dimmed = anyFilter && !isMatch
 				const radius = dimmed ? 3 : 4
 				const opacity = dimmed ? 0.25 : 1
@@ -405,22 +308,34 @@ function TimeSinkSvg(props: TimeSinkSvgProps) {
 				const subTypeName = lookupSubTypeName(a.subTypeId)
 				const diffLabel = DIFFICULTY_LABEL[a.difficulty]
 				const resultLabel = a.correct ? "correct" : "incorrect"
-				const tooltip = `Q${i + 1}: ${(a.latencyMs / 1000).toFixed(1)}s — ${resultLabel} · ${subTypeName} · ${diffLabel}`
+				const labelBase = `Q${i + 1}: ${(a.latencyMs / 1000).toFixed(1)}s — ${resultLabel} · ${subTypeName} · ${diffLabel}`
+				const cx = xOf(i)
+				const cy = yOf(a.latencyMs)
 				return (
-					<circle
+					<DotHitTarget
 						key={a.attemptId}
-						className={correctnessClass}
-						cx={xOf(i)}
-						cy={yOf(a.latencyMs)}
-						fill="currentColor"
-						fillOpacity={opacity}
-						stroke="currentColor"
-						strokeOpacity={strokeOpacity}
-						strokeWidth="1"
-						r={radius}
+						attemptId={a.attemptId}
+						cx={cx}
+						cy={cy}
+						hitRadius={9}
+						onAttemptClick={onAttemptClick}
+						label={labelBase}
 					>
-						<title>{tooltip}</title>
-					</circle>
+						<circle
+							className={correctnessClass}
+							cx={cx}
+							cy={cy}
+							fill="currentColor"
+							fillOpacity={opacity}
+							stroke="currentColor"
+							strokeOpacity={strokeOpacity}
+							strokeWidth="1"
+							r={radius}
+							pointerEvents="none"
+						>
+							<title>{labelBase}</title>
+						</circle>
+					</DotHitTarget>
 				)
 			})}
 		</svg>
@@ -429,16 +344,6 @@ function TimeSinkSvg(props: TimeSinkSvgProps) {
 
 function TimeSinkChart(props: TimeSinkChartProps) {
 	const attempts = props.attempts
-	const [highlightedCats, setHighlightedCats] = React.useState<ReadonlySet<SubTypeId>>(
-		function initCats() {
-			return new Set<SubTypeId>()
-		}
-	)
-	const [highlightedDiffs, setHighlightedDiffs] = React.useState<ReadonlySet<Difficulty>>(
-		function initDiffs() {
-			return new Set<Difficulty>()
-		}
-	)
 
 	if (attempts.length === 0) {
 		return <p className="text-foreground/70 text-sm">No question data this session.</p>
@@ -446,67 +351,27 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 
 	const n = attempts.length
 	const counts = computeCounts(attempts)
-	const catOptions = buildCatOptions(attempts, highlightedCats)
-	const diffOptions = buildDiffOptions(attempts, highlightedDiffs)
-	const filterCount = highlightedCats.size + highlightedDiffs.size
-	const anyFilter = filterCount > 0
-
-	function toggleCat(id: SubTypeId) {
-		setHighlightedCats(function next(prev) {
-			const out = new Set(prev)
-			if (out.has(id)) out.delete(id)
-			else out.add(id)
-			return out
-		})
-	}
-	function toggleDiff(d: Difficulty) {
-		setHighlightedDiffs(function next(prev) {
-			const out = new Set(prev)
-			if (out.has(d)) out.delete(d)
-			else out.add(d)
-			return out
-		})
-	}
-	function clearFilters() {
-		setHighlightedCats(new Set<SubTypeId>())
-		setHighlightedDiffs(new Set<Difficulty>())
-	}
 
 	const plural = n === 1 ? "" : "s"
 	const ariaLabel = `Per-question time vs 18 second goal across ${n} question${plural}.`
 
-	let clearControl: React.ReactNode = null
-	if (anyFilter) {
-		clearControl = (
-			<div className="pt-0.5">
-				<button
-					type="button"
-					onClick={clearFilters}
-					className="text-[11px] text-text-3 underline-offset-2 hover:text-text-1 hover:underline"
-				>
-					Clear highlight ({filterCount})
-				</button>
-			</div>
-		)
-	}
-
 	return (
 		<div className="space-y-4">
 			<Legend counts={counts} />
-			<div className="space-y-2">
-				<FilterRow label="Category" options={catOptions} onToggle={toggleCat} />
-				<FilterRow label="Difficulty" options={diffOptions} onToggle={toggleDiff} />
-				{clearControl}
-			</div>
+			<TimeSinkMatrix
+				attempts={attempts}
+				selectedKeys={props.selectedKeys}
+				onChange={props.onSelectedKeysChange}
+			/>
 			<TimeSinkSvg
 				attempts={attempts}
-				highlightedCats={highlightedCats}
-				highlightedDiffs={highlightedDiffs}
+				selectedKeys={props.selectedKeys}
 				ariaLabel={ariaLabel}
+				onAttemptClick={props.onAttemptClick}
 			/>
 		</div>
 	)
 }
 
-export type { TimeSinkChartProps, AttemptPoint }
+export type { AttemptPoint, TimeSinkChartProps }
 export { TimeSinkChart }

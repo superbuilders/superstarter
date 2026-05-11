@@ -25,8 +25,8 @@ import { BeltIndicator } from "@/components/post-session/belt-indicator"
 import { CumulativeTimeChart } from "@/components/post-session/charts/cumulative-time-chart"
 import { TimeSinkChart } from "@/components/post-session/charts/time-sink-chart"
 import {
-	TopicProficiencyRadar,
-	computeOuterRingValue
+	computeOuterRingValue,
+	TopicProficiencyRadar
 } from "@/components/post-session/charts/topic-proficiency-radar"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { PerformanceSummary } from "@/components/post-session/performance-summary"
@@ -75,14 +75,32 @@ function headingFor(sessionType: SessionTypeForShell): string {
 	return "Practice test review"
 }
 
+interface ScrollRequest {
+	readonly nonce: number
+	readonly attemptId: string
+}
+
 function PostSessionShell(props: PostSessionShellProps) {
 	const [activeTab, setActiveTab] = React.useState<ReviewTab>("performance")
 	const [filtersOpen, setFiltersOpen] = React.useState<boolean>(false)
+	const [scrollRequest, setScrollRequest] = React.useState<ScrollRequest | undefined>(undefined)
+	const [pacingSelectedKeys, setPacingSelectedKeys] = React.useState<ReadonlySet<string>>(
+		function initPacingSelection() {
+			return new Set<string>()
+		}
+	)
 	const isDiagnostic = props.sessionType === "diagnostic"
 	const heading = headingFor(props.sessionType)
 	function toggleFilters() {
 		setFiltersOpen(function flip(prev) {
 			return !prev
+		})
+	}
+	function handleAttemptClick(attemptId: string) {
+		setActiveTab("questions")
+		setScrollRequest(function next(prev) {
+			const nonce = prev === undefined ? 1 : prev.nonce + 1
+			return { nonce, attemptId }
 		})
 	}
 
@@ -155,11 +173,28 @@ function PostSessionShell(props: PostSessionShellProps) {
 		panel = (
 			<div className="space-y-4" data-testid="post-session-slot-performance-summary">
 				<ChartCard
-					title="Time sink"
-					eyebrow="Per-question time vs the 18s goal"
-					testId="post-session-chart-time-sink"
+					title="Pacing"
+					eyebrow="Per-question time and cumulative trajectory vs the 18s budget"
+					testId="post-session-chart-pacing"
 				>
-					<TimeSinkChart attempts={attemptPoints} />
+					<div className="space-y-5">
+						<TimeSinkChart
+							attempts={attemptPoints}
+							selectedKeys={pacingSelectedKeys}
+							onSelectedKeysChange={setPacingSelectedKeys}
+							onAttemptClick={handleAttemptClick}
+						/>
+						<div className="space-y-2 border-border-soft border-t pt-4">
+							<span className="block text-[11px] text-text-3 uppercase tracking-[0.06em]">
+								Cumulative time vs the budget
+							</span>
+							<CumulativeTimeChart
+								attempts={attemptPoints}
+								selectedKeys={pacingSelectedKeys}
+								onAttemptClick={handleAttemptClick}
+							/>
+						</div>
+					</div>
 				</ChartCard>
 				<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 					<ChartCard
@@ -185,13 +220,6 @@ function PostSessionShell(props: PostSessionShellProps) {
 						/>
 					</ChartCard>
 				</div>
-				<ChartCard
-					title="Cumulative time vs the budget"
-					eyebrow="Where you fell behind the 15-minute pace"
-					testId="post-session-chart-cumulative"
-				>
-					<CumulativeTimeChart attempts={attemptPoints} />
-				</ChartCard>
 				<section
 					className="overflow-hidden rounded-lg border border-border-soft bg-surface"
 					data-testid="post-session-card-accuracy-latency"
@@ -213,7 +241,14 @@ function PostSessionShell(props: PostSessionShellProps) {
 	} else if (activeTab === "questions") {
 		panel = (
 			<div data-testid="post-session-slot-wrong-items">
-				<WrongItemsBrowser items={props.wrongItems} toolbarOpen={filtersOpen} />
+				<WrongItemsBrowser
+					items={props.wrongItems}
+					toolbarOpen={filtersOpen}
+					scrollRequest={scrollRequest}
+					onScrollHandled={function clearScrollRequest() {
+						setScrollRequest(undefined)
+					}}
+				/>
 			</div>
 		)
 	} else {
@@ -277,9 +312,7 @@ function ChartCard(props: ChartCardProps) {
 				<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
 					{props.title}
 				</h3>
-				<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
-					{props.eyebrow}
-				</span>
+				<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{props.eyebrow}</span>
 			</header>
 			<div className="px-4 py-3">{props.children}</div>
 		</section>

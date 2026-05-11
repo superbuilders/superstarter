@@ -33,12 +33,23 @@ import { cn } from "@/lib/utils"
 import { logger } from "@/logger"
 import { type ItemBody, itemBody } from "@/server/items/body-schema"
 
+interface ScrollRequest {
+	readonly nonce: number
+	readonly attemptId: string
+}
+
 interface WrongItemsBrowserProps {
 	items: ReadonlyArray<WrongItem>
 	/** Whether the filter + sort toolbar is expanded. Toggled by the
 	 *  caller (the post-session shell) via a button in the tab nav.
 	 *  Defaults to false at the parent — collapsed on first paint. */
 	toolbarOpen: boolean
+	/** Set by the shell when the user clicks a dot on the Performance
+	 *  tab's charts. The browser resets filters, scrolls the matching
+	 *  card into view, and flashes it. The `nonce` re-fires the effect
+	 *  if the same attempt is clicked twice. */
+	scrollRequest?: ScrollRequest
+	onScrollHandled?: () => void
 }
 
 type ItemStatus = "correct" | "incorrect" | "skipped"
@@ -221,6 +232,7 @@ function formatLatencySeconds(latencyMs: number): string {
 interface QuestionCardProps {
 	item: WrongItem
 	index: number
+	isFlashed: boolean
 }
 
 function QuestionCard(props: QuestionCardProps) {
@@ -233,10 +245,15 @@ function QuestionCard(props: QuestionCardProps) {
 		subTypeMeta === undefined ? props.item.subTypeId : subTypeMeta.displayName
 	const latencyDisplay = formatLatencySeconds(props.item.latencyMs)
 
+	const flashClass = props.isFlashed ? "ring-2 ring-cobalt ring-offset-2 ring-offset-bg" : ""
 	if (parsed === null) {
 		return (
 			<article
-				className="overflow-hidden rounded-lg border border-border-soft bg-surface"
+				className={cn(
+					"overflow-hidden rounded-lg border border-border-soft bg-surface transition-shadow duration-300",
+					flashClass
+				)}
+				data-attempt-id={props.item.attemptId}
 				data-testid={`post-session-wrong-item-degraded-${props.item.attemptId}`}
 			>
 				<header className="flex flex-wrap items-center justify-between gap-3 border-border-soft border-b px-4 py-2">
@@ -277,7 +294,11 @@ function QuestionCard(props: QuestionCardProps) {
 
 	return (
 		<article
-			className="overflow-hidden rounded-lg border border-border-soft bg-surface"
+			className={cn(
+				"overflow-hidden rounded-lg border border-border-soft bg-surface transition-shadow duration-300",
+				flashClass
+			)}
+			data-attempt-id={props.item.attemptId}
 			data-testid={`post-session-wrong-item-${props.item.attemptId}`}
 			data-item-status={status}
 		>
@@ -719,6 +740,46 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 		[props.items, filters, sortKey, direction]
 	)
 
+	const [flashAttemptId, setFlashAttemptId] = React.useState<string | undefined>(undefined)
+
+	const onScrollHandled = props.onScrollHandled
+	const scrollRequest = props.scrollRequest
+	React.useEffect(
+		function handleScrollRequest() {
+			if (scrollRequest === undefined) return
+			// Reset filters/sort so the requested attempt is visible.
+			setStatusFilter("all")
+			setDifficultyFilter("all")
+			setSubTypeFilter("all")
+			setSortKey("question")
+			setDirection("asc")
+			setTimeRange({ minMs: dataBounds.minMs, maxMs: dataBounds.maxMs })
+			setFlashAttemptId(scrollRequest.attemptId)
+
+			const targetAttemptId = scrollRequest.attemptId
+			const raf = requestAnimationFrame(function scrollNow() {
+				const el = document.querySelector(`[data-attempt-id="${targetAttemptId}"]`)
+				if (el === null) {
+					logger.warn({ attemptId: targetAttemptId }, "WrongItemsBrowser: scroll target not found")
+					return
+				}
+				el.scrollIntoView({ behavior: "smooth", block: "start" })
+			})
+
+			const flashTimer = setTimeout(function clearFlash() {
+				setFlashAttemptId(undefined)
+			}, 1800)
+
+			if (onScrollHandled !== undefined) onScrollHandled()
+
+			return function cleanup() {
+				cancelAnimationFrame(raf)
+				clearTimeout(flashTimer)
+			}
+		},
+		[scrollRequest, dataBounds, onScrollHandled]
+	)
+
 	const sourceIsEmpty = props.items.length === 0
 	const filteredIsEmpty = !sourceIsEmpty && visibleItems.length === 0
 
@@ -779,7 +840,10 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 							)
 							return null
 						}
-						return <QuestionCard key={item.attemptId} item={item} index={index} />
+						const isFlashed = item.attemptId === flashAttemptId
+						return (
+							<QuestionCard key={item.attemptId} item={item} index={index} isFlashed={isFlashed} />
+						)
 					})}
 				</div>
 			)}
