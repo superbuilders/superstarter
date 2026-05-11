@@ -1829,6 +1829,8 @@ When a commit deletes or renames a type, function, or module-level export, the a
 
 > **Captured 2026-05-10** (diagnostic-timing sidecar re-retraction commit). Five anchor instances accumulated across four prior rounds substantiate the promotion. The fifth and immediate trigger — implicit-resolution-selection by anti-scope writing — is a structurally novel sub-type that survives surface-level redirector self-review and is detectable only at the executor's fresh-session audit-step boundary.
 
+> **Amended 2026-05-10** (Phase 4 sub-phase b §3 commit 1). Two structural changes plus instance ledger extension. Sub-type 5 ("propagation-through-restatement-sites") promoted from plan-doc-§0.3 banking with refined definition (split into 5a-5e per scope axis evaluated and rejected — discipline mechanism is identical across scope variants). Sub-type 6 ("redirector-draft-vs-project-state divergence") newly promoted, anchored to instance #10's ~33+ cumulative deviations across §1.2 through §2.6. Instance ledger extended with #6-#17 (12 instances banked across round-prep + §1 + §2 phases of the validator-and-admin-review round; see "Instance ledger — Phase 4 sub-phase b extension" sub-section below).
+
 **Pattern.** The redirector's authored prompts (file paths, content references, methodology assumptions, anti-scope/scope-shape writing) contain errors not detectable by the redirector's self-review but ARE detectable by the executor's fresh-session audit step. The audit step is not ceremonial — it is the structural mechanism by which redirector-spec errors get caught. When the executor surfaces such an error, the executor STOPs (for hard errors) or SURFACES EXPLICITLY (for judgment-call errors) rather than silently reconciling.
 
 **Anchor instances** (5):
@@ -1839,12 +1841,14 @@ When a commit deletes or renames a type, function, or module-level export, the a
 4. Selection-engine sidecar, commit 1 (`d59f86d` final): redirector-prompt's SPEC §9.2:2355 amendment text was authored in plain-text form, stripping markdown formatting that the SPEC document's surrounding context required; executor STOPPED per heads-up; redirector authored revised text with formatting preserved.
 5. Diagnostic-timing sidecar, commit 0 (`ffe47bd`): redirector-authored §0.2 anti-scope ("no FocusShell prop refactor") implicitly selected Round 1 §0.15's Resolution 1 (auto-end at 15:00) over Resolution 2 (render bar+chronometer, no auto-end), without surfacing the resolution choice. The §0.15 forward-reference listed 5 items that should land together; the redirector authored a sidecar grabbing item 3 in isolation, which inadvertently resolved Round 1 §0.15's open question via anti-scope-writing alone. Executor surfaced finding at audit-step; redirector recognized as redirector-spec error and re-retracted the round.
 
-**Sub-types** (4):
+**Sub-types** (6, post-Phase-4-sub-phase-b amendment — original 4 from initial promotion + sub-type 5 promoted at this amendment from plan-doc §0.3 banking + sub-type 6 newly promoted at this amendment):
 
-- **Path/reference errors** (instances 1, 2): file paths, plan-doc references, line numbers in the redirector-authored prompt that are stale, wrong, or non-existent.
+- **Path/reference errors** (instances 1, 2, 7, 13): file paths, plan-doc references, line numbers, commit hashes in the redirector-authored prompt that are stale, wrong, or non-existent. Catch: file-existence + grep verification at audit-step boundary.
 - **Methodology errors** (instance 3): the redirector's framing of an investigation embeds an empirical assumption that the probe falsifies; the executor's probe-execution surfaces the falsification.
 - **Content-formatting errors** (instance 4): the redirector authors content (SPEC text, plan-doc prose) without preserving formatting/structure required by the destination document; executor catches the formatting strip at audit-step before the content lands.
-- **Implicit-resolution-selection errors** (instance 5): the redirector authors anti-scope or scope shape that inadvertently resolves a previously-deliberated open question without surfacing the resolution choice. The redirector inherits prior plan-doc framing without re-running its open-question reasoning against the current state.
+- **Implicit-resolution-selection errors** (instances 5, 6 borderline, 11): the redirector authors anti-scope or scope shape that inadvertently resolves a previously-deliberated open question without surfacing the resolution choice. The redirector inherits prior plan-doc framing without re-running its open-question reasoning against the current state. Includes metric-conflation variants where scope-shape framing pre-selects one of two equally-valid metric definitions without surfacing the choice (instance 11).
+- **Propagation-through-restatement-sites** (instances 8, 9, 12, 14, 15, 16, 17 — promoted Phase 4 sub-phase b §3 commit 1; first banked at plan-doc §0.3 instance #8). Canonical content (SPEC text, audit-log finding, prior prompt, architectural design, plan-doc framing) drifts from authoritative state via downstream restatement. The original source may be correct; the restatement carries the error forward. Multiple restatement sites compound the propagation surface. Scope axes observed: cross-document (audit-log → prompt; instance 8); intra-document (plan-doc § → other plan-doc §; instance 9); cross-prompt (prior round prompt → current round prompt; instances 14, 15); cross-design (validator design → consumer expectation; instance 16); cross-prompt-meta (round-close prompt restating plan-doc anchors that themselves drifted; instances 12, 17). The "where" axis is scope detail, not kind — split into sub-types 5a-5e was evaluated and rejected at this amendment because the discipline mechanism is identical across scope variants. Catch: at each audit-step boundary that touches a restatement-bearing artifact, re-verify the restatement against the canonical source; surface any divergence (no tolerance band — partial drift is meaningful for content propagation).
+- **Redirector-draft-vs-project-state divergence** (instance 10 — NEW; promoted Phase 4 sub-phase b §3 commit 1). Redirector code drafts in prompts contain convention deviations from project state — banned operators (`??`, `||` fallbacks), missing helpers, deprecated patterns, wrong import paths, wrong type-narrowing approaches, wrong module structure, wrong logger argument order, native `try/catch` instead of `errors.try`, `as` casts, inline ternaries, `console.*` calls, missing `require-logger-before-throw`, etc. Caught at executor lint, biome rule, super-lint, or typecheck boundary rather than at conceptual audit. Distinct from sub-type 1 (path/reference single-character drift caught by file-existence) because sub-type 6 is intent-vs-convention error in code semantics. Distinct from sub-type 5 because sub-type 6 originates fresh in each prompt's code draft from the redirector's remembered project conventions, not from propagation through prior restatement. Catch: executor reads existing project files at audit-step boundary before authoring per-prompt code; lint/build/typecheck at post-edit boundary catches deviations the conceptual audit missed; executor corrects by matching established project convention; surfaces correction count cumulatively in stop-and-report. Forward-watch: pattern persists across rounds when the redirector authors against remembered conventions rather than verified ones. Discipline-side guidance for redirector — prompts containing non-trivial code drafts should explicitly disclaim *"draft is intent; verify each block against existing project file before authoring."* Discipline-side guidance for executor — surface deviation count cumulatively in stop-and-report so pattern persistence is tracked.
 
 **Discipline.**
 
@@ -1853,12 +1857,45 @@ When a commit deletes or renames a type, function, or module-level export, the a
 - Plan-doc §0 of any round inheriting framing from a prior plan-doc must explicitly re-run any open-question reasoning rather than absorbing prior framing wholesale.
 - Sub-type 4 (implicit-resolution-selection) is the highest-discipline-cost variant — it survives surface-level redirector self-review because the error is in what the prompt DOES NOT SAY rather than what it does say.
 
+**Instance ledger — Phase 4 sub-phase b extension** (banked across round-prep + §1 round-close + §2 round-close + this commit; appended to the original 5 anchor instances above):
+
+| # | Banked at | Sub-type | Anchor |
+|---|---|---|---|
+| #6 | prior STOP report | 4 (borderline) | three-assumption decomposition at prior commit-0 attempt |
+| #7 | `955ad1d` audit-log §2 | 1 | commit-message-vs-diff inversion on `fa1c081` |
+| #8 | `d3d3b2a` plan-doc §0.3 | 5 | propagation-through-prior-audit-log (audit-log §7.4 → redirector prompt framing) |
+| #9 | `a0a8bb7` | 5 | propagation-within-plan-doc (§0.6.5 → 4 inheriting sections) |
+| #10 | ongoing forward-watch | 6 (NEW) | redirector-draft-vs-project-convention; cumulative ~33+ across §1.2 — §2.6 |
+| #11 | `8c4dff7` production-batch postverify | 4 | implicit-resolution-selection via metric-conflation (`hasAnyFlag` re-baseline) |
+| #12 | `50b91c7` §2.1 commit-0 | 5 | TopNav-not-used-in-admin propagation |
+| #13 | `50b91c7` §2.1 commit-0 | 1 | test-infrastructure assumption (React Testing Library not in codebase) |
+| #14 | `a075d47` §2.3 commit-0 | 5 | embedding-scope `body+options` misstatement (body-text only actual) |
+| #15 | `d67a166` §2.5 commit-0 | 5 | edit before/after full-snapshot-not-projection misstatement |
+| #16 | `ce09e81` §2.6 commit-0 | 5 | validator pressure-cell zero-everywhere skip propagation |
+| #17 | `dd59020` §2 round-close | 5 | round-close prompt cited plan-doc anchors that drifted from actual state |
+
+**Sub-type distribution post-Phase-4-sub-phase-b** (counting only the #6-#17 extension; the original 5 anchor instances #1-#5 are tabulated implicitly by the sub-types list above):
+
+- Sub-type 1: 2 instances (#7, #13)
+- Sub-type 2: 0 instances
+- Sub-type 3: 0 instances
+- Sub-type 4: 2 instances (#6 borderline, #11)
+- Sub-type 5: 7 instances (#8, #9, #12, #14, #15, #16, #17)
+- Sub-type 6: 1 instance (#10 cumulative; promoted at this amendment)
+
+Total tracked extension instances: 12 (#6–#17).
+
+Sub-type 5 dominates the Phase 4 sub-phase b instance distribution (7 of 12). Pattern observation: validator-and-admin-review work involved heavy reference-to-prior-rounds (audit-logs, plan-docs, prior commits, prior prompts), each a propagation surface. Future rounds with similarly heavy reference scaffolding can expect sub-type 5 to dominate.
+
+Plan-doc §0.3 carries the per-instance forensic narrative; this SPEC ledger is the canonical sub-type assignment. Plan-doc §0.3 entries for #12 ("sub-type 4 + 5 propagation") and #17 ("sub-type 1 + 5 propagation") are simplified to single-sub-type-5 here per the Phase 4 sub-phase b §3 commit-1 amendment's "propagation dominates the catch mechanism" reasoning.
+
 **Cross-references.**
 
 - §6.14.18 / §6.14.21 / §6.14.22 — audit-first checkpoint discipline: the structural mechanism by which this pattern is caught.
 - §6.14.20 — wholesale-replacement-with-quote-preservation: the recovery mechanism when an implicit-resolution-selection error is recognized post-commit (this entry's instance 5 used §6.14.20 to recover).
 - §6.14.40 — redirector-vs-empirical-state divergence: sister pattern; §6.14.43 is about prompt-spec errors, §6.14.40 is about HEAD-anchor / state divergence.
 - §6.14.41 — audit-vs-revert blindness: sister pattern; §6.14.41 is about audit-step itself missing prior reverts, §6.14.43 is about redirector-prompt missing other classes of error.
+- §14 (Validator and admin review — Phase 4 sub-phase b production reference; §14.7.8 documents architectural patterns established during the round, several of which crystallized via the discipline catches that produced instances #6-#17). Bidirectional citation: §14.9 cross-references back to this entry for the discipline framework.
 
 ---
 
