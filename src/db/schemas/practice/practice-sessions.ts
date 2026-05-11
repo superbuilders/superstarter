@@ -7,7 +7,8 @@ const sessionType = pgEnum("session_type", [
 	"diagnostic",
 	"drill",
 	"full_length",
-	"simulation"
+	"simulation",
+	"mistakes"
 ])
 
 const timerMode = pgEnum("timer_mode", ["standard"])

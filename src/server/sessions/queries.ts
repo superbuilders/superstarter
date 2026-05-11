@@ -14,7 +14,7 @@ const ErrItemNotFound = errors.new("item not found")
 const ErrSessionNotFound = errors.new("session not found")
 const ErrSessionAlreadyEnded = errors.new("session already ended")
 
-type SessionType = "diagnostic" | "drill" | "full_length" | "simulation"
+type SessionType = "diagnostic" | "drill" | "full_length" | "simulation" | "mistakes"
 
 interface SessionRow {
 	id: string

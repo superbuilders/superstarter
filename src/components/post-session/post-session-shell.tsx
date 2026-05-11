@@ -38,7 +38,7 @@ import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser
 import { type SubTypeId, subTypeIds } from "@/config/sub-types"
 import { cn } from "@/lib/utils"
 
-type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
+type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation" | "mistakes"
 
 type ReviewTab = "performance" | "questions" | "strategies"
 
@@ -71,10 +71,36 @@ function sumCorrectAttempts(sum: number, row: PerSubTypePerformance): number {
 	return sum + row.correct
 }
 
-function headingFor(sessionType: SessionTypeForShell): string {
+function headingFor(sessionType: SessionTypeForShell): string | null {
 	if (sessionType === "diagnostic") return "Diagnostic complete"
 	if (sessionType === "drill") return "Drill review"
+	if (sessionType === "mistakes") return null
 	return "Practice test review"
+}
+
+function renderHeaderBlock(
+	heading: string | null,
+	subhead: React.ReactNode,
+	beltSection: React.ReactNode
+): React.ReactNode {
+	if (heading === null && subhead === null && beltSection === null) {
+		return null
+	}
+	let headingNode: React.ReactNode = null
+	if (heading !== null) {
+		headingNode = (
+			<h2 className="font-medium font-serif text-[22px] text-text-1 leading-[1.15] tracking-[-0.015em]">
+				{heading}
+			</h2>
+		)
+	}
+	return (
+		<header className="mb-3 flex flex-col gap-2 border-border-soft border-b pb-3">
+			{headingNode}
+			{subhead}
+			{beltSection}
+		</header>
+	)
 }
 
 interface ScrollRequest {
@@ -296,16 +322,12 @@ function PostSessionShell(props: PostSessionShellProps) {
 		)
 	}
 
+	const headerBlock = renderHeaderBlock(heading, subhead, beltSection)
+
 	return (
 		<main className="mx-auto max-w-[1100px] px-7 pb-10" data-testid="post-session-heading">
 			{resultSoundFx}
-			<header className="mb-3 flex flex-col gap-2 border-border-soft border-b pb-3">
-				<h2 className="font-medium font-serif text-[22px] text-text-1 leading-[1.15] tracking-[-0.015em]">
-					{heading}
-				</h2>
-				{subhead}
-				{beltSection}
-			</header>
+			{headerBlock}
 
 			<TabNav activeTab={activeTab} onSelect={setActiveTab} filtersToggle={filtersToggleNode} />
 

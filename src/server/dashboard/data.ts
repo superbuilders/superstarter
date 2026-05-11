@@ -127,7 +127,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 		mistakesQueue: {
 			count: mistakesCount,
 			estimatedMinutes: Math.max(1, Math.round(mistakesCount * 0.35)),
-			href: "/review"
+			href: "/mistakes"
 		}
 	}
 }

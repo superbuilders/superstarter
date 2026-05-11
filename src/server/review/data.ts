@@ -96,9 +96,9 @@ async function loadReviewSessions(userId: string): Promise<ReadonlyArray<ReviewS
 		throw errors.wrap(result.error, "loadReviewSessions")
 	}
 	return result.data.flatMap(function normalize(row): ReviewSession[] {
-		// inArray excludes 'diagnostic' at SQL; this guard narrows the TS
-		// union to ReviewSessionType without an `as` cast.
-		if (row.type === "diagnostic") return []
+		// inArray excludes 'diagnostic' and 'mistakes' at SQL; this guard
+		// narrows the TS union to ReviewSessionType without an `as` cast.
+		if (row.type === "diagnostic" || row.type === "mistakes") return []
 		const endedAtMs = row.endedAtMs
 		if (endedAtMs === null) {
 			logger.error(

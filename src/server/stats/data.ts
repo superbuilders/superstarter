@@ -78,7 +78,7 @@ async function loadSessions(userId: string): Promise<StatsSession[]> {
 	}
 	const out: StatsSession[] = []
 	for (const row of result.data) {
-		if (row.type === "drill" || row.type === "diagnostic") continue
+		if (row.type === "drill" || row.type === "diagnostic" || row.type === "mistakes") continue
 		if (row.endedAtMs === null) continue
 		out.push({
 			id: row.id,

@@ -133,6 +133,13 @@ async function loadSessionContext(sessionId: string): Promise<SessionContext> {
 		logger.warn({ sessionId }, "loadSessionContext: session row missing")
 		throw errors.wrap(ErrSessionNotFound, `session id '${sessionId}'`)
 	}
+	if (row.type === "mistakes") {
+		logger.error(
+			{ sessionId, type: row.type },
+			"loadSessionContext: mistakes sessions use the client queue, not getNextItem"
+		)
+		throw errors.new("mistakes session reached getNextItem (invariant violation)")
+	}
 	return {
 		id: row.id,
 		userId: row.userId,
