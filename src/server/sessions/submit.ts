@@ -145,6 +145,13 @@ async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptRe
 		"submitAttempt: attempt inserted"
 	)
 
+	// Mistakes sessions drive their own item queue client-side (see
+	// src/app/(app)/mistakes/content.tsx). The server skips getNextItem
+	// for these — there's no adaptive walker, just the fixed picked list.
+	if (sessionRow.type === "mistakes") {
+		return {}
+	}
+
 	const nextItem = await getNextItem(data.sessionId)
 	if (nextItem === undefined) {
 		return {}
