@@ -43,9 +43,19 @@ interface CellStats {
 	meanLatencyMs: number
 }
 
+type Section = "verbal" | "numerical"
+
 interface ColumnDef {
 	id: SubTypeId
 	displayName: string
+	section: Section
+}
+
+interface SectionDef {
+	id: Section
+	label: string
+	columnIds: ReadonlyArray<SubTypeId>
+	keys: ReadonlyArray<string>
 }
 
 interface MatrixData {
@@ -55,7 +65,14 @@ interface MatrixData {
 	columnAggregate: ReadonlyMap<SubTypeId, CellStats>
 	columnKeys: ReadonlyMap<SubTypeId, ReadonlyArray<string>>
 	rowKeys: ReadonlyMap<Difficulty, ReadonlyArray<string>>
+	sections: ReadonlyArray<SectionDef>
 }
+
+const SECTION_LABEL: Record<Section, string> = {
+	verbal: "Verbal",
+	numerical: "Numerical"
+}
+const SECTION_ORDER: ReadonlyArray<Section> = ["verbal", "numerical"]
 
 const DIFFICULTY_ORDER: ReadonlyArray<Difficulty> = ["easy", "medium", "hard", "brutal"]
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
@@ -103,6 +120,14 @@ function finalizeCells<K>(map: ReadonlyMap<K, CellAccumulator>): Map<K, CellStat
 	return out
 }
 
+const SECTION_RANK: Record<Section, number> = { verbal: 0, numerical: 1 }
+
+function compareColumns(a: ColumnDef, b: ColumnDef): number {
+	const sectionDelta = SECTION_RANK[a.section] - SECTION_RANK[b.section]
+	if (sectionDelta !== 0) return sectionDelta
+	return a.displayName.localeCompare(b.displayName)
+}
+
 function buildAxes(attempts: ReadonlyArray<AttemptPoint>): {
 	columns: ColumnDef[]
 	rows: Difficulty[]
@@ -116,9 +141,10 @@ function buildAxes(attempts: ReadonlyArray<AttemptPoint>): {
 	const columns: ColumnDef[] = []
 	for (const s of subTypes) {
 		if (presentSubTypes.has(s.id)) {
-			columns.push({ id: s.id, displayName: s.displayName })
+			columns.push({ id: s.id, displayName: s.displayName, section: s.section })
 		}
 	}
+	columns.sort(compareColumns)
 	const rows: Difficulty[] = []
 	for (const d of DIFFICULTY_ORDER) {
 		if (presentDifficulties.has(d)) rows.push(d)
@@ -160,6 +186,49 @@ function buildRowKeys(
 	return out
 }
 
+function collectSectionKeys(
+	columnIds: ReadonlyArray<SubTypeId>,
+	rows: ReadonlyArray<Difficulty>,
+	cells: ReadonlyMap<string, CellStats>
+): string[] {
+	const keys: string[] = []
+	for (const subId of columnIds) {
+		for (const d of rows) {
+			const k = makeKey(subId, d)
+			if (cells.has(k)) keys.push(k)
+		}
+	}
+	return keys
+}
+
+function buildSections(
+	columns: ReadonlyArray<ColumnDef>,
+	rows: ReadonlyArray<Difficulty>,
+	cells: ReadonlyMap<string, CellStats>
+): SectionDef[] {
+	const colsBySection = new Map<Section, SubTypeId[]>()
+	for (const c of columns) {
+		const bucket = colsBySection.get(c.section)
+		if (bucket === undefined) {
+			colsBySection.set(c.section, [c.id])
+			continue
+		}
+		bucket.push(c.id)
+	}
+	const out: SectionDef[] = []
+	for (const id of SECTION_ORDER) {
+		const columnIds = colsBySection.get(id)
+		if (columnIds === undefined || columnIds.length === 0) continue
+		out.push({
+			id,
+			label: SECTION_LABEL[id],
+			columnIds,
+			keys: collectSectionKeys(columnIds, rows, cells)
+		})
+	}
+	return out
+}
+
 function buildMatrix(attempts: ReadonlyArray<AttemptPoint>): MatrixData {
 	const { columns, rows } = buildAxes(attempts)
 
@@ -178,7 +247,8 @@ function buildMatrix(attempts: ReadonlyArray<AttemptPoint>): MatrixData {
 		cells,
 		columnAggregate,
 		columnKeys: buildColumnKeys(columns, rows, cells),
-		rowKeys: buildRowKeys(columns, rows, cells)
+		rowKeys: buildRowKeys(columns, rows, cells),
+		sections: buildSections(columns, rows, cells)
 	}
 }
 
@@ -272,7 +342,30 @@ interface ColumnHeaderProps {
 	onClick: (additive: boolean) => void
 }
 
+// Single-word names render on one line; multi-word names wrap to exactly
+// two lines, split at the space nearest the string midpoint so each line
+// stays roughly balanced ("Speed & Distance" → "Speed &" / "Distance",
+// "Critical Reasoning" → "Critical" / "Reasoning").
+function splitDisplayName(name: string): string[] {
+	const trimmed = name.trim()
+	if (!/\s/.test(trimmed)) return [trimmed]
+	const target = trimmed.length / 2
+	let bestIdx = -1
+	let bestDist = Number.POSITIVE_INFINITY
+	for (let i = 0; i < trimmed.length; i += 1) {
+		if (trimmed[i] !== " ") continue
+		const dist = Math.abs(i - target)
+		if (dist < bestDist) {
+			bestDist = dist
+			bestIdx = i
+		}
+	}
+	if (bestIdx < 0) return [trimmed]
+	return [trimmed.slice(0, bestIdx), trimmed.slice(bestIdx + 1)]
+}
+
 function ColumnHeader(props: ColumnHeaderProps) {
+	const lines = splitDisplayName(props.displayName)
 	const stateClass = props.isSelected
 		? "bg-cobalt/[0.08] text-cobalt"
 		: "text-text-2 hover:bg-lavender hover:text-text-1"
@@ -284,13 +377,46 @@ function ColumnHeader(props: ColumnHeaderProps) {
 				props.onClick(isAdditiveEvent(event))
 			}}
 			className={cn(
-				"flex h-full w-full items-end justify-center rounded-[3px] px-[2px] pt-1 pb-1 transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
+				"relative h-full w-full rounded-[3px] transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
 				stateClass
 			)}
 		>
-			<span className="inline-block rotate-180 whitespace-nowrap font-medium text-[10px] tracking-[0.01em] [writing-mode:vertical-rl]">
-				{props.displayName}
+			<span className="absolute bottom-0 left-1/2 origin-bottom-left -rotate-[60deg] text-left font-medium text-[10px] leading-[1.15] tracking-[0.01em]">
+				{lines.map(function renderLine(line, idx) {
+					return (
+						<span key={`${line}-${idx}`} className="block whitespace-nowrap">
+							{line}
+						</span>
+					)
+				})}
 			</span>
+		</button>
+	)
+}
+
+interface SectionHeaderProps {
+	label: string
+	isSelected: boolean
+	onClick: (additive: boolean) => void
+}
+
+function SectionHeader(props: SectionHeaderProps) {
+	const stateClass = props.isSelected
+		? "bg-cobalt/[0.08] text-cobalt"
+		: "text-text-3 hover:bg-lavender hover:text-text-1"
+	return (
+		<button
+			type="button"
+			aria-pressed={props.isSelected}
+			onClick={function onSectionMouseClick(event) {
+				props.onClick(isAdditiveEvent(event))
+			}}
+			className={cn(
+				"flex h-full w-full items-center justify-center rounded-[3px] px-2 py-1 font-medium text-[10px] uppercase tracking-[0.08em] transition-colors duration-150 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1",
+				stateClass
+			)}
+		>
+			{props.label}
 		</button>
 	)
 }
@@ -361,6 +487,10 @@ function TimeSinkMatrix(props: TimeSinkMatrixProps) {
 		onChange(new Set<string>())
 	}
 
+	const sectionSelected = new Map<Section, boolean>()
+	for (const s of matrix.sections) {
+		sectionSelected.set(s.id, allInSet(s.keys, selectedKeys))
+	}
 	const columnSelected = new Map<SubTypeId, boolean>()
 	for (const c of matrix.columns) {
 		const keys = matrix.columnKeys.get(c.id)
@@ -397,16 +527,37 @@ function TimeSinkMatrix(props: TimeSinkMatrixProps) {
 					<colgroup>
 						<col className="w-[80px]" />
 						{matrix.columns.map(function renderCol(col) {
-							return <col key={`col-${col.id}`} className="w-auto min-w-[44px]" />
+							return <col key={`col-${col.id}`} className="w-auto min-w-[56px]" />
 						})}
 					</colgroup>
 					<thead>
 						<tr>
-							<th className="h-[96px] p-0" />
+							<th rowSpan={2} className="p-0" />
+							{matrix.sections.map(function renderSectionHeader(section) {
+								const isSelected = sectionSelected.get(section.id) === true
+								return (
+									<th
+										key={`section-${section.id}`}
+										scope="colgroup"
+										colSpan={section.columnIds.length}
+										className="h-[24px] p-0 align-middle"
+									>
+										<SectionHeader
+											label={section.label}
+											isSelected={isSelected}
+											onClick={function onClick(additive) {
+												applyKeys(section.keys, additive)
+											}}
+										/>
+									</th>
+								)
+							})}
+						</tr>
+						<tr>
 							{matrix.columns.map(function renderColHeader(col) {
 								const isSelected = columnSelected.get(col.id) === true
 								return (
-									<th key={`colhead-${col.id}`} scope="col" className="h-[96px] p-0 align-bottom">
+									<th key={`colhead-${col.id}`} scope="col" className="h-[72px] p-0 align-bottom">
 										<ColumnHeader
 											displayName={col.displayName}
 											isSelected={isSelected}
