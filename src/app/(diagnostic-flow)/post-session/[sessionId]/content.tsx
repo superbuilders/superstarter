@@ -20,6 +20,7 @@ function PostSessionContent(props: PostSessionContentProps) {
 	const info = React.use(props.sessionPromise)
 	return (
 		<PostSessionShell
+			sessionId={info.sessionId}
 			sessionType={info.sessionType}
 			pacingMinutes={info.pacingMinutes}
 			performance={info.performance}

@@ -31,6 +31,7 @@ import {
 	TopicProficiencyRadar
 } from "@/components/post-session/charts/topic-proficiency-radar"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
+import { PracticeScoreConfetti } from "@/components/post-session/practice-score-confetti"
 import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
 import { ScrollToTopButton } from "@/components/post-session/scroll-to-top-button"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
@@ -43,6 +44,7 @@ type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
 type ReviewTab = "performance" | "questions" | "strategies"
 
 interface PostSessionShellProps {
+	sessionId: string
 	sessionType: SessionTypeForShell
 	pacingMinutes?: number
 	performance: PerSubTypePerformance[]
@@ -278,6 +280,8 @@ function PostSessionShell(props: PostSessionShellProps) {
 	if (activeTab === "performance") {
 		panel = (
 			<PerformancePanel
+				sessionId={props.sessionId}
+				sessionType={props.sessionType}
 				wrongItems={props.wrongItems}
 				performance={props.performance}
 				pacingSelectedKeys={pacingSelectedKeys}
@@ -376,6 +380,8 @@ function ChartCard(props: ChartCardProps) {
 }
 
 interface PerformancePanelProps {
+	sessionId: string
+	sessionType: SessionTypeForShell
 	wrongItems: WrongItem[]
 	performance: PerSubTypePerformance[]
 	pacingSelectedKeys: ReadonlySet<string>
@@ -401,12 +407,23 @@ function PerformancePanel(props: PerformancePanelProps) {
 		if (p.correct) pacingCorrect += 1
 	}
 	const pacingTotal = attemptPoints.length
+	const pacingScoreRef = React.useRef<HTMLDivElement | null>(null)
 	return (
 		<div className="space-y-4" data-testid="post-session-slot-performance-summary">
+			<PracticeScoreConfetti
+				sessionId={props.sessionId}
+				sessionType={props.sessionType}
+				score={pacingCorrect}
+				originRef={pacingScoreRef}
+			/>
 			<ChartCard
 				title="Pacing"
 				testId="post-session-chart-pacing"
-				headerRight={<PacingScore correct={pacingCorrect} total={pacingTotal} />}
+				headerRight={
+					<div ref={pacingScoreRef}>
+						<PacingScore correct={pacingCorrect} total={pacingTotal} />
+					</div>
+				}
 			>
 				<div className="space-y-4">
 					<TimeSinkChart

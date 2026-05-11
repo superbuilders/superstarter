@@ -29,6 +29,7 @@ import * as React from "react"
 import { endSession, submitAttempt } from "@/app/(app)/actions"
 import type { RunInit } from "@/app/(app)/full-length/run/page"
 import { FocusShell } from "@/components/focus-shell/focus-shell"
+import { markFreshPracticeTestLanding } from "@/components/post-session/fresh-practice-landing"
 import type { SubmitAttemptInput } from "@/components/focus-shell/types"
 
 const FULL_LENGTH_DURATION_MS = 900_000
@@ -50,6 +51,7 @@ function FullLengthRunContent(props: FullLengthRunContentProps) {
 	const onEndSession = React.useCallback(
 		async function onEndSession() {
 			await endSession(init.sessionId)
+			markFreshPracticeTestLanding(init.sessionId)
 			router.push(`/post-session/${init.sessionId}`)
 		},
 		[init.sessionId, router]
