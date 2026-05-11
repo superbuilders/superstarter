@@ -208,6 +208,7 @@ function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
 		<svg
 			aria-label={`Proficiency across ${axes.length} ${sectionLabel} sub-types; cobalt ring marks 80% accuracy at 18 seconds per question.`}
 			className="h-[280px] w-full overflow-visible"
+			overflow="visible"
 			role="img"
 			viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
 			xmlns="http://www.w3.org/2000/svg"

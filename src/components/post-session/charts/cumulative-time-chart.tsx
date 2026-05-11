@@ -60,7 +60,7 @@ function formatMinSec(ms: number): string {
 
 function pickYMax(actualTotalMs: number, budgetTotalMs: number): number {
 	const peak = Math.max(actualTotalMs, budgetTotalMs)
-	return Math.ceil(peak / 60_000) * 60_000
+	return Math.ceil(peak / 300_000) * 300_000
 }
 
 function buildPoints(attempts: ReadonlyArray<AttemptPoint>): QPoint[] {
@@ -113,7 +113,7 @@ function buildSegments(points: ReadonlyArray<QPoint>, yMaxMs: number): Segment[]
 
 function buildYTicks(yMaxMs: number): number[] {
 	const ticks: number[] = []
-	const step = 60_000
+	const step = 300_000
 	for (let ms = 0; ms <= yMaxMs; ms += step) ticks.push(ms)
 	return ticks
 }
@@ -184,17 +184,31 @@ function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 			<svg
 				aria-label={`Cumulative time across ${n} question${n === 1 ? "" : "s"} vs the 18s-per-question budget.`}
 				className="h-[220px] w-full overflow-visible"
+				overflow="visible"
 				role="img"
 				viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
 				preserveAspectRatio="none"
 				xmlns="http://www.w3.org/2000/svg"
 			>
+				{/* Plot-area boundary — subtle border framing the data region.
+				    Drawn first so gridlines and data render on top. */}
+				<rect
+					className="text-foreground/25"
+					fill="none"
+					height={PLOT_H}
+					stroke="currentColor"
+					strokeWidth="1"
+					width={PLOT_W}
+					x={PAD_LEFT}
+					y={PAD_TOP}
+				/>
+
 				{yTicks.map(function renderYTick(ms) {
 					const y = yOf(ms, yMaxMs)
 					return (
 						<g key={ms}>
 							<line
-								className="text-foreground/10"
+								className="text-foreground/15"
 								stroke="currentColor"
 								strokeWidth="1"
 								x1={PAD_LEFT}

@@ -155,28 +155,30 @@ function PostSessionShell(props: PostSessionShellProps) {
 				>
 					<TimeSinkChart attempts={attemptPoints} />
 				</ChartCard>
-				<ChartCard
-					title="Verbal proficiency"
-					eyebrow="Target: 80% at 18s/question"
-					testId="post-session-chart-radar-verbal"
-				>
-					<TopicProficiencyRadar
-						rows={props.performance}
-						section="verbal"
-						outerRingValue={radarOuterRing}
-					/>
-				</ChartCard>
-				<ChartCard
-					title="Numerical proficiency"
-					eyebrow="Target: 80% at 18s/question"
-					testId="post-session-chart-radar-numerical"
-				>
-					<TopicProficiencyRadar
-						rows={props.performance}
-						section="numerical"
-						outerRingValue={radarOuterRing}
-					/>
-				</ChartCard>
+				<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+					<ChartCard
+						title="Verbal proficiency"
+						eyebrow="Target: 80% at 18s/question"
+						testId="post-session-chart-radar-verbal"
+					>
+						<TopicProficiencyRadar
+							rows={props.performance}
+							section="verbal"
+							outerRingValue={radarOuterRing}
+						/>
+					</ChartCard>
+					<ChartCard
+						title="Numerical proficiency"
+						eyebrow="Target: 80% at 18s/question"
+						testId="post-session-chart-radar-numerical"
+					>
+						<TopicProficiencyRadar
+							rows={props.performance}
+							section="numerical"
+							outerRingValue={radarOuterRing}
+						/>
+					</ChartCard>
+				</div>
 				<ChartCard
 					title="Cumulative time vs the budget"
 					eyebrow="Where you fell behind the 15-minute pace"

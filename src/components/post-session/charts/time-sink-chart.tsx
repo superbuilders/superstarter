@@ -30,11 +30,11 @@ const PAD_TOP = 16
 const PAD_BOTTOM = 28
 
 function pickYMax(attempts: ReadonlyArray<AttemptPoint>): number {
-	let peak = GOAL_MS * 1.5
+	let peak = GOAL_MS * 3
 	for (const a of attempts) {
 		if (a.latencyMs > peak) peak = a.latencyMs
 	}
-	return Math.ceil(peak / 6000) * 6000
+	return Math.ceil(peak / GOAL_MS) * GOAL_MS
 }
 
 function formatSeconds(ms: number): string {
@@ -48,7 +48,7 @@ interface AxisTick {
 
 function buildYTicks(yMaxMs: number): ReadonlyArray<AxisTick> {
 	const ticks: AxisTick[] = []
-	const stepMs = 6000
+	const stepMs = GOAL_MS
 	for (let ms = 0; ms <= yMaxMs; ms += stepMs) {
 		ticks.push({ ms, label: formatSeconds(ms) })
 	}
@@ -124,11 +124,25 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 			<svg
 				aria-label={`Per-question time vs 18 second goal across ${n} question${n === 1 ? "" : "s"}.`}
 				className="h-[220px] w-full overflow-visible"
+				overflow="visible"
 				role="img"
 				viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
 				preserveAspectRatio="none"
 				xmlns="http://www.w3.org/2000/svg"
 			>
+				{/* Plot-area boundary — subtle border framing the data region.
+				    Drawn first so gridlines and data render on top. */}
+				<rect
+					className="text-foreground/25"
+					fill="none"
+					height={plotH}
+					stroke="currentColor"
+					strokeWidth="1"
+					width={plotW}
+					x={PAD_LEFT}
+					y={PAD_TOP}
+				/>
+
 				{/* Y grid + tick labels */}
 				{yTicks.map(function renderYTick(tick) {
 					const y = yOf(tick.ms)
@@ -141,7 +155,7 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 						<g key={tick.ms}>
 							<line
 								className={cn(
-									"text-foreground/10",
+									"text-foreground/15",
 									isGoal && "text-foreground/30"
 								)}
 								stroke="currentColor"
