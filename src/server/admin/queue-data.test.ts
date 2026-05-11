@@ -7,6 +7,7 @@
 import { expect, test } from "bun:test"
 import {
 	aggregateDispositionStats,
+	aggregateStatusCounts,
 	BODY_PREVIEW_MAX_CHARS,
 	isValidatorStale,
 	parseAdminQueueItem,
@@ -240,4 +241,32 @@ test("utcMidnightForToday: collapses any time-of-day to same midnight", function
 	const morning = new Date(Date.UTC(2026, 0, 1, 0, 0, 1, 0))
 	const evening = new Date(Date.UTC(2026, 0, 1, 23, 59, 59, 999))
 	expect(utcMidnightForToday(morning)).toBe(utcMidnightForToday(evening))
+})
+
+test("aggregateStatusCounts: empty input → all zeros", function statusCountsEmpty() {
+	const counts = aggregateStatusCounts([])
+	expect(counts.candidate).toBe(0)
+	expect(counts.live).toBe(0)
+	expect(counts.rejected).toBe(0)
+})
+
+test("aggregateStatusCounts: extracts each status into its own bucket", function statusCountsAll() {
+	const counts = aggregateStatusCounts([
+		{ status: "candidate", count: 1708 },
+		{ status: "live", count: 53 },
+		{ status: "rejected", count: 2 }
+	])
+	expect(counts.candidate).toBe(1708)
+	expect(counts.live).toBe(53)
+	expect(counts.rejected).toBe(2)
+})
+
+test("aggregateStatusCounts: ignores unknown status values (e.g. retired)", function statusCountsIgnoresUnknown() {
+	const counts = aggregateStatusCounts([
+		{ status: "candidate", count: 5 },
+		{ status: "retired", count: 99 }
+	])
+	expect(counts.candidate).toBe(5)
+	expect(counts.live).toBe(0)
+	expect(counts.rejected).toBe(0)
 })

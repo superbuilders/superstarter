@@ -37,6 +37,19 @@ import type { Difficulty } from "@/config/sub-types"
 
 interface QueueListProps {
 	data: AdminQueueData
+	listHeading: string
+	emptyMessage: string
+}
+
+// Per-cohort default filter state. The candidate queue defaults to
+// "flagged" because triage is the dominant workflow there; live and
+// rejected cohorts default to "all" because validator flags are largely
+// inapplicable (live items are already approved; rejected items are
+// terminal). Without this override, switching to Live/Rejected would
+// produce an empty list by default and confuse the admin.
+function defaultFilterStateFor(data: AdminQueueData): FilterState {
+	if (data.statusFilter === "candidate") return DEFAULT_FILTER_STATE
+	return { ...DEFAULT_FILTER_STATE, flag: "all" }
 }
 
 const FLAG_OPTIONS: ReadonlyArray<{ value: FlagFilter; label: string }> = [
@@ -127,8 +140,14 @@ function asStaleFilter(value: string): StaleFilter {
 const SELECT_CLASS =
 	"h-8 rounded-md border border-border-soft bg-surface px-2 text-[12px] text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
 
-function QueueList({ data }: QueueListProps) {
-	const [filterState, setFilterState] = React.useState<FilterState>(DEFAULT_FILTER_STATE)
+function QueueList({ data, listHeading, emptyMessage }: QueueListProps) {
+	// QueueList is intended to be remounted when the status cohort changes
+	// (parent passes `key={data.statusFilter}`), so the per-cohort default
+	// flag filter is picked up cleanly via useState's lazy initializer
+	// instead of a derived-state-during-render pattern.
+	const [filterState, setFilterState] = React.useState<FilterState>(function init() {
+		return defaultFilterStateFor(data)
+	})
 	const [sortKey, setSortKey] = React.useState<SortKey>(DEFAULT_SORT_KEY)
 
 	const visible = React.useMemo(
@@ -183,9 +202,7 @@ function QueueList({ data }: QueueListProps) {
 
 	const listBody =
 		visible.length === 0 ? (
-			<p className="px-4 py-6 text-[13px] text-text-3">
-				No candidates match the current filters.
-			</p>
+			<p className="px-4 py-6 text-[13px] text-text-3">{emptyMessage}</p>
 		) : (
 			<ul className="divide-none">
 				{visible.map(function renderRow(item) {
@@ -327,7 +344,7 @@ function QueueList({ data }: QueueListProps) {
 			<section className="overflow-hidden rounded-lg border border-border-soft bg-surface">
 				<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
 					<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
-						Candidate queue
+						{listHeading}
 					</h3>
 					<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
 						{visible.length} visible

@@ -1,6 +1,8 @@
 // Server-side data loader for /admin/review (Phase 4 sub-phase b §2.1 commit 0).
 //
-// Reads all status='candidate' items, parses each row's metadata_json via
+// Reads items in a single status bucket (candidate by default; live and
+// rejected supported via the statusFilter parameter so the admin portal can
+// present the three cohorts as tabs). Parses each row's metadata_json via
 // Zod (no `as` casts; project convention rules/no-as-type-assertion + Zod
 // safeParse-only per rules/zod-usage), and returns an AdminQueueData payload
 // for the queue UI.
@@ -38,6 +40,9 @@ import {
 const ErrLoadQueueQueryFailed = errors.new("loadAdminQueueData query failed")
 const ErrLoadDispositionStatsQueryFailed = errors.new(
 	"loadAdminQueueData disposition stats query failed"
+)
+const ErrLoadStatusCountsQueryFailed = errors.new(
+	"loadAdminQueueData status counts query failed"
 )
 const ErrUnknownSubTypeId = errors.new("loadAdminQueueData encountered unknown sub_type_id")
 
@@ -88,7 +93,16 @@ interface DispositionStats {
 	readonly totalDisposedToday: number
 }
 
+type QueueStatusFilter = "candidate" | "live" | "rejected"
+
+interface StatusCounts {
+	readonly candidate: number
+	readonly live: number
+	readonly rejected: number
+}
+
 interface AdminQueueData {
+	readonly statusFilter: QueueStatusFilter
 	readonly items: ReadonlyArray<AdminQueueItem>
 	readonly totalCount: number
 	readonly flaggedCount: number
@@ -98,6 +112,7 @@ interface AdminQueueData {
 	readonly subTypeDistribution: ReadonlyMap<SubTypeId, number>
 	readonly cohortDistribution: ReadonlyMap<string, number>
 	readonly dispositionStats: DispositionStats
+	readonly statusCounts: StatusCounts
 }
 
 const BODY_PREVIEW_MAX_CHARS = 140
@@ -237,7 +252,26 @@ function utcMidnightForToday(now: Date): number {
 	return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
 }
 
-async function loadAdminQueueData(): Promise<AdminQueueData> {
+interface StatusCountRow {
+	readonly status: string
+	readonly count: number
+}
+
+function aggregateStatusCounts(rows: ReadonlyArray<StatusCountRow>): StatusCounts {
+	let candidateCount = 0
+	let liveCount = 0
+	let rejectedCount = 0
+	for (const row of rows) {
+		if (row.status === "candidate") candidateCount = row.count
+		else if (row.status === "live") liveCount = row.count
+		else if (row.status === "rejected") rejectedCount = row.count
+	}
+	return { candidate: candidateCount, live: liveCount, rejected: rejectedCount }
+}
+
+async function loadAdminQueueData(
+	statusFilter: QueueStatusFilter = "candidate"
+): Promise<AdminQueueData> {
 	// Mark this loader as request-bound for Next.js 16 Cache Components. The
 	// logger.info below (and every other logger call on the path) reads
 	// Date.now() internally via Pino; without an explicit request-data
@@ -248,7 +282,7 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 	// mutate as admins disposition candidates), so connection() is the
 	// correct semantic, not "use cache".
 	await connection()
-	logger.info("queue-data: loadAdminQueueData starting")
+	logger.info({ statusFilter }, "queue-data: loadAdminQueueData starting")
 	const result = await errors.try(
 		db
 			.select({
@@ -261,12 +295,15 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 				metadataJson: items.metadataJson
 			})
 			.from(items)
-			.where(eq(items.status, "candidate"))
+			.where(eq(items.status, statusFilter))
 			.orderBy(desc(items.id))
 	)
 	if (result.error) {
-		logger.error({ error: result.error }, "queue-data: candidates SELECT failed")
-		throw errors.wrap(ErrLoadQueueQueryFailed, "candidates SELECT")
+		logger.error(
+			{ error: result.error, statusFilter },
+			"queue-data: items SELECT failed"
+		)
+		throw errors.wrap(ErrLoadQueueQueryFailed, "items SELECT")
 	}
 
 	const parsed: AdminQueueItem[] = []
@@ -313,8 +350,28 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 	}
 	const dispositionStats = aggregateDispositionStats(dispositionStatsResult.data)
 
+	const statusCountsResult = await errors.try(
+		db
+			.select({
+				status: items.status,
+				count: sql<number>`COUNT(*)::int`
+			})
+			.from(items)
+			.where(inArray(items.status, ["candidate", "live", "rejected"]))
+			.groupBy(items.status)
+	)
+	if (statusCountsResult.error) {
+		logger.error(
+			{ error: statusCountsResult.error },
+			"queue-data: status counts SELECT failed"
+		)
+		throw errors.wrap(ErrLoadStatusCountsQueryFailed, "status counts SELECT")
+	}
+	const statusCounts = aggregateStatusCounts(statusCountsResult.data)
+
 	logger.info(
 		{
+			statusFilter,
 			totalCount: parsed.length,
 			flaggedCount,
 			pressureCellCount,
@@ -324,11 +381,15 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 			cohortBuckets: cohortDistribution.size,
 			approvedCount: dispositionStats.approvedCount,
 			rejectedCount: dispositionStats.rejectedCount,
-			totalDisposedToday: dispositionStats.totalDisposedToday
+			totalDisposedToday: dispositionStats.totalDisposedToday,
+			candidateBucket: statusCounts.candidate,
+			liveBucket: statusCounts.live,
+			rejectedBucket: statusCounts.rejected
 		},
 		"queue-data: loadAdminQueueData complete"
 	)
 	return {
+		statusFilter,
 		items: parsed,
 		totalCount: parsed.length,
 		flaggedCount,
@@ -337,7 +398,8 @@ async function loadAdminQueueData(): Promise<AdminQueueData> {
 		staleCount,
 		subTypeDistribution,
 		cohortDistribution,
-		dispositionStats
+		dispositionStats,
+		statusCounts
 	}
 }
 
@@ -348,13 +410,18 @@ export type {
 	DispositionStats,
 	DispositionStatsRow,
 	ParsedValidatorResult,
+	QueueStatusFilter,
+	StatusCountRow,
+	StatusCounts,
 	ValidatorVerdict
 }
 export {
 	aggregateDispositionStats,
+	aggregateStatusCounts,
 	BODY_PREVIEW_MAX_CHARS,
 	ErrLoadDispositionStatsQueryFailed,
 	ErrLoadQueueQueryFailed,
+	ErrLoadStatusCountsQueryFailed,
 	ErrUnknownSubTypeId,
 	isValidatorStale,
 	loadAdminQueueData,

@@ -10,13 +10,36 @@
 // requireAdminEmail() call here (matches /admin/ingest/page.tsx
 // convention). The layout's gate-promise is also wrapped in its own
 // <Suspense> so this page only renders inside an allowed gate.
+//
+// Status tab routing: the queue cohort (candidate / live / rejected) is
+// driven by the `?status=` search param. The page parses + validates it
+// (defaulting to "candidate" on missing/invalid input) before chaining
+// the loader call. Search params are themselves a Promise per Next 15+
+// conventions (rules/rsc-data-fetching-patterns.md), so the queue data
+// promise is composed via params.then(...).
 
 import * as React from "react"
 import { AdminReviewContent } from "@/app/(admin)/admin/review/content"
-import { loadAdminQueueData } from "@/server/admin/queue-data"
+import {
+	loadAdminQueueData,
+	type QueueStatusFilter
+} from "@/server/admin/queue-data"
 
-function AdminReviewPage() {
-	const dataPromise = loadAdminQueueData()
+interface AdminReviewPageProps {
+	searchParams: Promise<{ status?: string | string[] }>
+}
+
+function coerceStatusFilter(raw: string | string[] | undefined): QueueStatusFilter {
+	const value = Array.isArray(raw) ? raw[0] : raw
+	if (value === "candidate" || value === "live" || value === "rejected") return value
+	return "candidate"
+}
+
+function AdminReviewPage(props: AdminReviewPageProps) {
+	const dataPromise = props.searchParams.then(function withStatus(params) {
+		const statusFilter = coerceStatusFilter(params.status)
+		return loadAdminQueueData(statusFilter)
+	})
 	return (
 		<React.Suspense fallback={<AdminReviewSkeleton />}>
 			<AdminReviewContent dataPromise={dataPromise} />
