@@ -1,8 +1,11 @@
 "use client"
 
 // <StatsView> — aggregate Pacing matrix + per-section topic-proficiency
-// radars across the user's completed practice tests + drills. Mirrors
-// the Performance-by-sub-type tab from /post-session/<id>, except:
+// radars across the user's completed FULL practice tests (full_length
+// + simulation). Drills are intentionally excluded — Stats reflects
+// sit-the-whole-test performance, not bank-up-a-sub-type performance.
+// Mirrors the Performance-by-sub-type tab from /post-session/<id>,
+// except:
 //   • a test picker at the top filters which sessions feed the
 //     aggregation (default: every completed session selected);
 //   • the matrix's sub-type × difficulty selection still flows through
@@ -17,13 +20,19 @@
 // consume. Per-session median can't be combined into a cross-session
 // median, which is why the server doesn't pre-aggregate.
 
+import { useRouter } from "next/navigation"
 import * as React from "react"
 import { TimeSinkMatrix } from "@/components/post-session/charts/time-sink-matrix"
 import {
 	computeOuterRingValue,
 	TopicProficiencyRadar
 } from "@/components/post-session/charts/topic-proficiency-radar"
-import { type SubTypeId, subTypes } from "@/config/sub-types"
+import { AccuracyAcrossTests, type SplitMode } from "@/components/stats/accuracy-across-tests"
+import {
+	AverageTimeAcrossTests,
+	type CorrectnessFilter
+} from "@/components/stats/average-time-across-tests"
+import type { SubTypeId } from "@/config/sub-types"
 import { cn } from "@/lib/utils"
 import type { StatsAttempt, StatsPageData, StatsSession } from "@/server/stats/data"
 
@@ -37,12 +46,6 @@ interface PerSubTypePerformance {
 	total: number
 	medianLatencyMs: number
 }
-
-const SUB_TYPE_LOOKUP: ReadonlyMap<SubTypeId, string> = new Map(
-	subTypes.map(function entry(s) {
-		return [s.id, s.displayName]
-	})
-)
 
 function computeMedian(sorted: ReadonlyArray<number>): number {
 	const n = sorted.length
@@ -98,11 +101,6 @@ function formatSessionLabel(s: StatsSession): string {
 		month: "short",
 		day: "numeric"
 	})
-	if (s.type === "drill") {
-		const sub = s.subTypeId === undefined ? "Drill" : SUB_TYPE_LOOKUP.get(s.subTypeId)
-		const label = sub === undefined ? "Drill" : `Drill: ${sub}`
-		return `${label} · ${dateStr}`
-	}
 	return `Practice test · ${dateStr}`
 }
 
@@ -185,6 +183,78 @@ function TestPicker(props: TestPickerProps) {
 	)
 }
 
+interface AccuracySplitModePickerProps {
+	mode: SplitMode
+	onChange: (next: SplitMode) => void
+}
+
+interface SplitModeOption {
+	value: SplitMode
+	label: string
+}
+
+const SPLIT_MODE_OPTIONS: ReadonlyArray<SplitModeOption> = [
+	{ value: "none", label: "Single line" },
+	{ value: "sub-type", label: "By sub-type" },
+	{ value: "difficulty", label: "By difficulty" }
+]
+
+function AccuracySplitModePicker(props: AccuracySplitModePickerProps) {
+	return (
+		<div className="flex flex-wrap gap-1.5">
+			{SPLIT_MODE_OPTIONS.map(function renderOption(opt) {
+				const active = props.mode === opt.value
+				return (
+					<Chip
+						key={opt.value}
+						label={opt.label}
+						active={active}
+						onClick={function pick() {
+							props.onChange(opt.value)
+						}}
+					/>
+				)
+			})}
+		</div>
+	)
+}
+
+interface CorrectnessPickerProps {
+	value: CorrectnessFilter
+	onChange: (next: CorrectnessFilter) => void
+}
+
+interface CorrectnessOption {
+	value: CorrectnessFilter
+	label: string
+}
+
+const CORRECTNESS_OPTIONS: ReadonlyArray<CorrectnessOption> = [
+	{ value: "all", label: "All" },
+	{ value: "correct", label: "Correct only" },
+	{ value: "wrong", label: "Wrong only" }
+]
+
+function CorrectnessPicker(props: CorrectnessPickerProps) {
+	return (
+		<div className="flex flex-wrap gap-1.5">
+			{CORRECTNESS_OPTIONS.map(function renderOption(opt) {
+				const active = props.value === opt.value
+				return (
+					<Chip
+						key={opt.value}
+						label={opt.label}
+						active={active}
+						onClick={function pick() {
+							props.onChange(opt.value)
+						}}
+					/>
+				)
+			})}
+		</div>
+	)
+}
+
 interface ChartCardProps {
 	title: string
 	eyebrow: string
@@ -211,6 +281,7 @@ function ChartCard(props: ChartCardProps) {
 
 function StatsView(props: StatsViewProps) {
 	const data = React.use(props.dataPromise)
+	const router = useRouter()
 	const initialSessionIds = React.useMemo(
 		function buildInitial() {
 			const s = new Set<string>()
@@ -224,6 +295,35 @@ function StatsView(props: StatsViewProps) {
 	const [selectedKeys, setSelectedKeys] = React.useState<ReadonlySet<string>>(function initKeys() {
 		return new Set<string>()
 	})
+	const [accuracySplitMode, setAccuracySplitMode] = React.useState<SplitMode>("none")
+	const [avgTimeSplitMode, setAvgTimeSplitMode] = React.useState<SplitMode>("none")
+	const [correctnessFilter, setCorrectnessFilter] = React.useState<CorrectnessFilter>("all")
+
+	function handleAccuracyPointClick(testId: string, seriesId: string) {
+		const params = new URLSearchParams()
+		if (accuracySplitMode === "sub-type") params.set("subType", seriesId)
+		else if (accuracySplitMode === "difficulty") params.set("difficulty", seriesId)
+		const qs = params.toString()
+		if (qs.length === 0) {
+			router.push(`/post-session/${testId}`)
+			return
+		}
+		router.push(`/post-session/${testId}?${qs}`)
+	}
+
+	function handleAvgTimePointClick(testId: string, seriesId: string) {
+		const params = new URLSearchParams()
+		if (avgTimeSplitMode === "sub-type") params.set("subType", seriesId)
+		else if (avgTimeSplitMode === "difficulty") params.set("difficulty", seriesId)
+		if (correctnessFilter === "correct") params.set("status", "correct")
+		else if (correctnessFilter === "wrong") params.set("status", "incorrect")
+		const qs = params.toString()
+		if (qs.length === 0) {
+			router.push(`/post-session/${testId}`)
+			return
+		}
+		router.push(`/post-session/${testId}?${qs}`)
+	}
 
 	const sessionFiltered = React.useMemo(
 		function filterBySession() {
@@ -232,6 +332,15 @@ function StatsView(props: StatsViewProps) {
 			})
 		},
 		[data.attempts, selectedSessionIds]
+	)
+
+	const selectedSessions = React.useMemo(
+		function pickSelected() {
+			return data.sessions.filter(function isSelected(s) {
+				return selectedSessionIds.has(s.id)
+			})
+		},
+		[data.sessions, selectedSessionIds]
 	)
 
 	const radarAttempts = React.useMemo(
@@ -265,7 +374,7 @@ function StatsView(props: StatsViewProps) {
 					<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">Stats</h1>
 				</header>
 				<p className="text-sm text-text-2">
-					No completed practice tests or drills yet. Once you finish a session it'll show up here.
+					No completed practice tests yet. Once you finish a full practice test it'll show up here.
 				</p>
 			</main>
 		)
@@ -276,7 +385,7 @@ function StatsView(props: StatsViewProps) {
 			<header className="mb-4 flex flex-col gap-1 border-border-soft border-b pt-6 pb-3">
 				<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">Stats</h1>
 				<p className="max-w-[60ch] text-sm text-text-2">
-					Aggregate pacing + topic proficiency across your completed practice tests and drills.
+					Aggregate pacing + topic proficiency across your completed practice tests.
 				</p>
 			</header>
 
@@ -292,11 +401,47 @@ function StatsView(props: StatsViewProps) {
 					eyebrow="Sub-type × difficulty across selected tests"
 					testId="stats-chart-pacing"
 				>
-					<TimeSinkMatrix
-						attempts={sessionFiltered}
-						selectedKeys={selectedKeys}
-						onChange={setSelectedKeys}
-					/>
+					<div className="space-y-5">
+						<TimeSinkMatrix
+							attempts={sessionFiltered}
+							selectedKeys={selectedKeys}
+							onChange={setSelectedKeys}
+						/>
+						<div className="space-y-2 border-border-soft border-t pt-4">
+							<div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+								<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+									Accuracy across selected tests
+								</span>
+								<AccuracySplitModePicker mode={accuracySplitMode} onChange={setAccuracySplitMode} />
+							</div>
+							<AccuracyAcrossTests
+								tests={selectedSessions}
+								attempts={sessionFiltered}
+								selectedKeys={selectedKeys}
+								splitMode={accuracySplitMode}
+								onPointClick={handleAccuracyPointClick}
+							/>
+						</div>
+						<div className="space-y-2 border-border-soft border-t pt-4">
+							<div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+								<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+									Average time per question
+								</span>
+								<div className="flex flex-wrap gap-2">
+									<CorrectnessPicker value={correctnessFilter} onChange={setCorrectnessFilter} />
+									<AccuracySplitModePicker mode={avgTimeSplitMode} onChange={setAvgTimeSplitMode} />
+								</div>
+							</div>
+							<AverageTimeAcrossTests
+								tests={selectedSessions}
+								attempts={sessionFiltered}
+								selectedKeys={selectedKeys}
+								splitMode={avgTimeSplitMode}
+								correctnessFilter={correctnessFilter}
+								onPointClick={handleAvgTimePointClick}
+							/>
+						</div>
+					</div>
 				</ChartCard>
 
 				<div className="grid grid-cols-1 gap-4 md:grid-cols-2">

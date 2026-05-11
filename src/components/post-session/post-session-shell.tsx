@@ -14,9 +14,11 @@
 // authenticated <TopNav> is rendered by the page above the shell.
 
 import { ChevronDownIcon, SlidersHorizontalIcon } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 import * as React from "react"
 import type {
 	EndSessionTierForRender,
+	ItemDifficulty,
 	PerSubTypePerformance,
 	SurfacedStrategy,
 	WrongItem
@@ -33,6 +35,7 @@ import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
 import { ScrollToTopButton } from "@/components/post-session/scroll-to-top-button"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
 import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser"
+import { type SubTypeId, subTypeIds } from "@/config/sub-types"
 import { cn } from "@/lib/utils"
 
 type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
@@ -79,13 +82,95 @@ interface ScrollRequest {
 	readonly attemptId: string
 }
 
+const DIFFICULTY_VALUES: ReadonlyArray<ItemDifficulty> = ["easy", "medium", "hard", "brutal"]
+
+function isSubTypeIdValue(value: string): value is SubTypeId {
+	for (const id of subTypeIds) {
+		if (id === value) return true
+	}
+	return false
+}
+
+function isDifficultyValue(value: string): value is ItemDifficulty {
+	for (const d of DIFFICULTY_VALUES) {
+		if (d === value) return true
+	}
+	return false
+}
+
+type InitialStatusFilter = "correct" | "incorrect" | "skipped"
+
+const STATUS_VALUES: ReadonlyArray<InitialStatusFilter> = ["correct", "incorrect", "skipped"]
+
+function isStatusValue(value: string): value is InitialStatusFilter {
+	for (const s of STATUS_VALUES) {
+		if (s === value) return true
+	}
+	return false
+}
+
+interface InitialFilterFromUrl {
+	subTypeId: SubTypeId | undefined
+	difficulty: ItemDifficulty | undefined
+	status: InitialStatusFilter | undefined
+}
+
+function readFilterFromParams(params: URLSearchParams): InitialFilterFromUrl {
+	const subRaw = params.get("subType")
+	const diffRaw = params.get("difficulty")
+	const statusRaw = params.get("status")
+	const subTypeId = subRaw !== null && isSubTypeIdValue(subRaw) ? subRaw : undefined
+	const difficulty = diffRaw !== null && isDifficultyValue(diffRaw) ? diffRaw : undefined
+	const status = statusRaw !== null && isStatusValue(statusRaw) ? statusRaw : undefined
+	return { subTypeId, difficulty, status }
+}
+
+function buildPacingKeysFromFilter(
+	filter: InitialFilterFromUrl,
+	wrongItems: ReadonlyArray<WrongItem>
+): ReadonlySet<string> {
+	if (filter.subTypeId === undefined && filter.difficulty === undefined) {
+		return new Set<string>()
+	}
+	const out = new Set<string>()
+	for (const item of wrongItems) {
+		if (filter.subTypeId !== undefined && item.subTypeId !== filter.subTypeId) continue
+		if (filter.difficulty !== undefined && item.difficulty !== filter.difficulty) continue
+		out.add(`${item.subTypeId}|${item.difficulty}`)
+	}
+	return out
+}
+
+function useUrlFilterDefaults(): {
+	initialFilter: InitialFilterFromUrl
+	initialActiveTab: ReviewTab
+} {
+	const searchParams = useSearchParams()
+	const initialFilter = React.useMemo(
+		function memoInitialFilter() {
+			return readFilterFromParams(new URLSearchParams(searchParams.toString()))
+		},
+		[searchParams]
+	)
+	let initialActiveTab: ReviewTab = "performance"
+	if (
+		initialFilter.subTypeId !== undefined ||
+		initialFilter.difficulty !== undefined ||
+		initialFilter.status !== undefined
+	) {
+		initialActiveTab = "questions"
+	}
+	return { initialFilter, initialActiveTab }
+}
+
 function PostSessionShell(props: PostSessionShellProps) {
-	const [activeTab, setActiveTab] = React.useState<ReviewTab>("performance")
+	const { initialFilter, initialActiveTab } = useUrlFilterDefaults()
+	const [activeTab, setActiveTab] = React.useState<ReviewTab>(initialActiveTab)
 	const [filtersOpen, setFiltersOpen] = React.useState<boolean>(false)
 	const [scrollRequest, setScrollRequest] = React.useState<ScrollRequest | undefined>(undefined)
 	const [pacingSelectedKeys, setPacingSelectedKeys] = React.useState<ReadonlySet<string>>(
 		function initPacingSelection() {
-			return new Set<string>()
+			return buildPacingKeysFromFilter(initialFilter, props.wrongItems)
 		}
 	)
 	const isDiagnostic = props.sessionType === "diagnostic"
@@ -236,6 +321,9 @@ function PostSessionShell(props: PostSessionShellProps) {
 					items={props.wrongItems}
 					toolbarOpen={filtersOpen}
 					scrollRequest={scrollRequest}
+					initialSubTypeFilter={initialFilter.subTypeId}
+					initialDifficultyFilter={initialFilter.difficulty}
+					initialStatusFilter={initialFilter.status}
 					onScrollHandled={function clearScrollRequest() {
 						setScrollRequest(undefined)
 					}}

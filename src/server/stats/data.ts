@@ -1,11 +1,13 @@
 // /stats page data orchestrator.
 //
-// Loads the user's completed practice tests + drills (the same set
-// surfaced by /review) along with the per-attempt rows that back the
-// Pacing matrix + topic-proficiency radars. The Stats surface re-uses
-// the post-session matrix and radar components, but aggregated across
-// any combination of completed sessions instead of a single sessionId
-// like the post-session route.
+// Loads the user's completed FULL practice tests (full_length +
+// simulation only — drills are intentionally excluded so the Stats
+// surface reflects sit-the-whole-test performance) along with the per-
+// attempt rows that back the Pacing matrix + topic-proficiency radars.
+// The Stats surface re-uses the post-session matrix and radar
+// components, but aggregated across any combination of completed
+// practice tests instead of a single sessionId like the post-session
+// route.
 //
 // Aggregation strategy: per-attempt rows are returned to the client so
 // the picker can filter session-by-session without a server round-trip
@@ -27,13 +29,12 @@ import { attempts as attemptsTable } from "@/db/schemas/practice/attempts"
 import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
 
-type StatsSessionType = "drill" | "full_length" | "simulation"
+type StatsSessionType = "full_length" | "simulation"
 type ItemDifficulty = "easy" | "medium" | "hard" | "brutal"
 
 interface StatsSession {
 	id: string
 	type: StatsSessionType
-	subTypeId?: SubTypeId
 	startedAtMs: number
 	endedAtMs: number
 }
@@ -58,7 +59,6 @@ async function loadSessions(userId: string): Promise<StatsSession[]> {
 			.select({
 				id: practiceSessions.id,
 				type: practiceSessions.type,
-				subTypeId: sql<SubTypeId | null>`${practiceSessions.subTypeId}`,
 				startedAtMs: practiceSessions.startedAtMs,
 				endedAtMs: practiceSessions.endedAtMs
 			})
@@ -66,7 +66,7 @@ async function loadSessions(userId: string): Promise<StatsSession[]> {
 			.where(
 				and(
 					eq(practiceSessions.userId, userId),
-					inArray(practiceSessions.type, ["drill", "full_length", "simulation"]),
+					inArray(practiceSessions.type, ["full_length", "simulation"]),
 					isNotNull(practiceSessions.endedAtMs),
 					eq(practiceSessions.completionReason, "completed")
 				)
@@ -78,13 +78,11 @@ async function loadSessions(userId: string): Promise<StatsSession[]> {
 	}
 	const out: StatsSession[] = []
 	for (const row of result.data) {
-		if (row.type === "diagnostic") continue
+		if (row.type === "drill" || row.type === "diagnostic") continue
 		if (row.endedAtMs === null) continue
-		const subTypeId = row.subTypeId === null ? undefined : row.subTypeId
 		out.push({
 			id: row.id,
 			type: row.type,
-			subTypeId,
 			startedAtMs: row.startedAtMs,
 			endedAtMs: row.endedAtMs
 		})

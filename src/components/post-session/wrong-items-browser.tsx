@@ -50,6 +50,15 @@ interface WrongItemsBrowserProps {
 	 *  if the same attempt is clicked twice. */
 	scrollRequest?: ScrollRequest
 	onScrollHandled?: () => void
+	/** Seed values for the sub-type / difficulty filter dropdowns,
+	 *  parsed from /post-session URL search params on first mount
+	 *  (e.g., arriving from a click on the /stats accuracy chart). The
+	 *  user can clear or change them via the toolbar after landing. */
+	initialSubTypeFilter?: SubTypeId
+	initialDifficultyFilter?: ItemDifficulty
+	/** Seed for the status dropdown — Stats' "Wrong only" filter maps
+	 *  to "incorrect" here. The user can clear via the toolbar. */
+	initialStatusFilter?: "correct" | "incorrect" | "skipped"
 }
 
 type ItemStatus = "correct" | "incorrect" | "skipped"
@@ -680,9 +689,23 @@ function WrongItemsBrowser(props: WrongItemsBrowserProps) {
 		[props.items]
 	)
 
-	const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
-	const [difficultyFilter, setDifficultyFilter] = React.useState<DifficultyFilter>("all")
-	const [subTypeFilter, setSubTypeFilter] = React.useState<SubTypeFilter>("all")
+	let initialDifficultyValue: DifficultyFilter = "all"
+	if (props.initialDifficultyFilter !== undefined) {
+		initialDifficultyValue = props.initialDifficultyFilter
+	}
+	let initialSubTypeValue: SubTypeFilter = "all"
+	if (props.initialSubTypeFilter !== undefined) {
+		initialSubTypeValue = props.initialSubTypeFilter
+	}
+	let initialStatusValue: StatusFilter = "all"
+	if (props.initialStatusFilter !== undefined) {
+		initialStatusValue = props.initialStatusFilter
+	}
+
+	const [statusFilter, setStatusFilter] = React.useState<StatusFilter>(initialStatusValue)
+	const [difficultyFilter, setDifficultyFilter] =
+		React.useState<DifficultyFilter>(initialDifficultyValue)
+	const [subTypeFilter, setSubTypeFilter] = React.useState<SubTypeFilter>(initialSubTypeValue)
 	const [sortKey, setSortKey] = React.useState<SortKey>("question")
 	const [direction, setDirection] = React.useState<SortDirection>("asc")
 	const [timeRange, setTimeRange] = React.useState<TimeRange>(function initRange() {
