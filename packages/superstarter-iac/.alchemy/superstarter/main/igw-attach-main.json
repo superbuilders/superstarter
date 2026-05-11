@@ -1,0 +1,31 @@
+{
+  "kind": "AWS::EC2::VPCGatewayAttachment",
+  "id": "igw-attach-main",
+  "fqn": "superstarter/main/igw-attach-main",
+  "seq": 4,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::VPCGatewayAttachment",
+    "Symbol(alchemy::ResourceID)": "igw-attach-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/igw-attach-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 4,
+    "typeName": "AWS::EC2::VPCGatewayAttachment",
+    "desiredState": {
+      "VpcId": "vpc-07516e6518b35766b",
+      "InternetGatewayId": "igw-07c290d531e1b96b3"
+    },
+    "id": "IGW|vpc-07516e6518b35766b",
+    "createdAt": 1778539100721,
+    "InternetGatewayId": "igw-07c290d531e1b96b3",
+    "AttachmentType": "IGW",
+    "VpcId": "vpc-07516e6518b35766b"
+  },
+  "props": {
+    "VpcId": "vpc-07516e6518b35766b",
+    "InternetGatewayId": "igw-07c290d531e1b96b3"
+  }
+}

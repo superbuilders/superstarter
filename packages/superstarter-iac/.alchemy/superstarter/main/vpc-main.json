@@ -1,0 +1,71 @@
+{
+  "kind": "AWS::EC2::VPC",
+  "id": "vpc-main",
+  "fqn": "superstarter/main/vpc-main",
+  "seq": 0,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::VPC",
+    "Symbol(alchemy::ResourceID)": "vpc-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/vpc-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 0,
+    "typeName": "AWS::EC2::VPC",
+    "desiredState": {
+      "CidrBlock": "10.0.0.0/16",
+      "EnableDnsSupport": true,
+      "EnableDnsHostnames": true,
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "vpc-07516e6518b35766b",
+    "createdAt": 1778539073939,
+    "VpcId": "vpc-07516e6518b35766b",
+    "InstanceTenancy": "default",
+    "CidrBlockAssociations": [
+      "vpc-cidr-assoc-0a88a579606c05600"
+    ],
+    "CidrBlock": "10.0.0.0/16",
+    "DefaultNetworkAcl": "acl-0f86fca088c3b89d3",
+    "EnableDnsSupport": true,
+    "Ipv6CidrBlocks": [],
+    "DefaultSecurityGroup": "sg-0b41f5bb886d5bb75",
+    "EnableDnsHostnames": true,
+    "Tags": [
+      {
+        "Value": "main",
+        "Key": "Stage"
+      },
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      }
+    ]
+  },
+  "props": {
+    "CidrBlock": "10.0.0.0/16",
+    "EnableDnsSupport": true,
+    "EnableDnsHostnames": true,
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

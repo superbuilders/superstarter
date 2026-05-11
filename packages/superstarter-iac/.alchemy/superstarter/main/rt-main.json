@@ -1,0 +1,58 @@
+{
+  "kind": "AWS::EC2::RouteTable",
+  "id": "rt-main",
+  "fqn": "superstarter/main/rt-main",
+  "seq": 5,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::RouteTable",
+    "Symbol(alchemy::ResourceID)": "rt-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/rt-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 5,
+    "typeName": "AWS::EC2::RouteTable",
+    "desiredState": {
+      "VpcId": "vpc-07516e6518b35766b",
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "rtb-074d21cfdafdc2b93",
+    "createdAt": 1778539111953,
+    "RouteTableId": "rtb-074d21cfdafdc2b93",
+    "VpcId": "vpc-07516e6518b35766b",
+    "Tags": [
+      {
+        "Value": "main",
+        "Key": "Stage"
+      },
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      }
+    ]
+  },
+  "props": {
+    "VpcId": "vpc-07516e6518b35766b",
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "kind": "AWS::IAM::RolePolicy",
+  "id": "vercel-db-policy-main",
+  "fqn": "superstarter/main/vercel-db-policy-main",
+  "seq": 14,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::IAM::RolePolicy",
+    "Symbol(alchemy::ResourceID)": "vercel-db-policy-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/vercel-db-policy-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 14,
+    "typeName": "AWS::IAM::RolePolicy",
+    "desiredState": {
+      "RoleName": "superstarter-main-vercel",
+      "PolicyName": "db-access",
+      "PolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "rds-db:connect"
+            ],
+            "Resource": "arn:aws:rds-db:us-east-1:496780244141:dbuser:db-DQYBEMSOZ2H7PPKU36QLLU43SY/app"
+          },
+          {
+            "Effect": "Allow",
+            "Action": [
+              "secretsmanager:GetSecretValue"
+            ],
+            "Resource": "arn:aws:secretsmanager:us-east-1:496780244141:secret:rds!db-cdcdd9e3-3f74-43fa-9e11-42292f4fd2ed-HMVNfo"
+          }
+        ]
+      }
+    },
+    "id": "db-access|superstarter-main-vercel",
+    "createdAt": 1778542017736,
+    "RoleName": "superstarter-main-vercel",
+    "PolicyName": "db-access",
+    "PolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Action": [
+            "rds-db:connect"
+          ],
+          "Resource": "arn:aws:rds-db:us-east-1:496780244141:dbuser:db-DQYBEMSOZ2H7PPKU36QLLU43SY/app",
+          "Effect": "Allow"
+        },
+        {
+          "Action": [
+            "secretsmanager:GetSecretValue"
+          ],
+          "Resource": "arn:aws:secretsmanager:us-east-1:496780244141:secret:rds!db-cdcdd9e3-3f74-43fa-9e11-42292f4fd2ed-HMVNfo",
+          "Effect": "Allow"
+        }
+      ]
+    }
+  },
+  "props": {
+    "RoleName": "superstarter-main-vercel",
+    "PolicyName": "db-access",
+    "PolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "rds-db:connect"
+          ],
+          "Resource": "arn:aws:rds-db:us-east-1:496780244141:dbuser:db-DQYBEMSOZ2H7PPKU36QLLU43SY/app"
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "secretsmanager:GetSecretValue"
+          ],
+          "Resource": "arn:aws:secretsmanager:us-east-1:496780244141:secret:rds!db-cdcdd9e3-3f74-43fa-9e11-42292f4fd2ed-HMVNfo"
+        }
+      ]
+    }
+  }
+}

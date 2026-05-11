@@ -1,0 +1,31 @@
+{
+  "kind": "AWS::EC2::SubnetRouteTableAssociation",
+  "id": "rt-assoc-b-main",
+  "fqn": "superstarter/main/rt-assoc-b-main",
+  "seq": 8,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::SubnetRouteTableAssociation",
+    "Symbol(alchemy::ResourceID)": "rt-assoc-b-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/rt-assoc-b-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 8,
+    "typeName": "AWS::EC2::SubnetRouteTableAssociation",
+    "desiredState": {
+      "SubnetId": "subnet-00b5fc0534d209e31",
+      "RouteTableId": "rtb-074d21cfdafdc2b93"
+    },
+    "id": "rtbassoc-064affc1f095d32c9",
+    "createdAt": 1778539117018,
+    "RouteTableId": "rtb-074d21cfdafdc2b93",
+    "Id": "rtbassoc-064affc1f095d32c9",
+    "SubnetId": "subnet-00b5fc0534d209e31"
+  },
+  "props": {
+    "SubnetId": "subnet-00b5fc0534d209e31",
+    "RouteTableId": "rtb-074d21cfdafdc2b93"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "kind": "AWS::RDS::DBParameterGroup",
+  "id": "db-params-main",
+  "fqn": "superstarter/main/db-params-main",
+  "seq": 12,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::RDS::DBParameterGroup",
+    "Symbol(alchemy::ResourceID)": "db-params-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/db-params-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 12,
+    "typeName": "AWS::RDS::DBParameterGroup",
+    "desiredState": {
+      "DBParameterGroupName": "superstarter-main-pg18",
+      "Family": "postgres18",
+      "Description": "superstarter-main postgres 18 parameters; force ssl",
+      "Parameters": {
+        "rds.force_ssl": "1"
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "superstarter-main-pg18",
+    "createdAt": 1778541617255,
+    "DBParameterGroupName": "superstarter-main-pg18",
+    "Description": "superstarter-main postgres 18 parameters; force ssl",
+    "Parameters": {},
+    "Family": "postgres18",
+    "Tags": [
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      },
+      {
+        "Value": "main",
+        "Key": "Stage"
+      }
+    ]
+  },
+  "props": {
+    "DBParameterGroupName": "superstarter-main-pg18",
+    "Family": "postgres18",
+    "Description": "superstarter-main postgres 18 parameters; force ssl",
+    "Parameters": {
+      "rds.force_ssl": "1"
+    },
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

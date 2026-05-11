@@ -1,0 +1,80 @@
+{
+  "kind": "AWS::EC2::Subnet",
+  "id": "subnet-b-main",
+  "fqn": "superstarter/main/subnet-b-main",
+  "seq": 2,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::Subnet",
+    "Symbol(alchemy::ResourceID)": "subnet-b-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/subnet-b-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 2,
+    "typeName": "AWS::EC2::Subnet",
+    "desiredState": {
+      "VpcId": "vpc-07516e6518b35766b",
+      "AvailabilityZone": "us-east-1b",
+      "CidrBlock": "10.0.16.0/20",
+      "MapPublicIpOnLaunch": true,
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "subnet-00b5fc0534d209e31",
+    "createdAt": 1778539082392,
+    "MapPublicIpOnLaunch": true,
+    "EnableDns64": false,
+    "AvailabilityZoneId": "use1-az2",
+    "AvailabilityZone": "us-east-1b",
+    "CidrBlock": "10.0.16.0/20",
+    "SubnetId": "subnet-00b5fc0534d209e31",
+    "BlockPublicAccessStates": {
+      "InternetGatewayBlockMode": "off"
+    },
+    "AssignIpv6AddressOnCreation": false,
+    "VpcId": "vpc-07516e6518b35766b",
+    "NetworkAclAssociationId": "aclassoc-0553e073a6f9016fe",
+    "PrivateDnsNameOptionsOnLaunch": {
+      "EnableResourceNameDnsARecord": false,
+      "HostnameType": "ip-name",
+      "EnableResourceNameDnsAAAARecord": false
+    },
+    "Ipv6Native": false,
+    "Tags": [
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      },
+      {
+        "Value": "main",
+        "Key": "Stage"
+      }
+    ]
+  },
+  "props": {
+    "VpcId": "vpc-07516e6518b35766b",
+    "AvailabilityZone": "us-east-1b",
+    "CidrBlock": "10.0.16.0/20",
+    "MapPublicIpOnLaunch": true,
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

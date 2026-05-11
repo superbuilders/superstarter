@@ -1,0 +1,113 @@
+{
+  "kind": "AWS::EC2::SecurityGroup",
+  "id": "db-sg-main",
+  "fqn": "superstarter/main/db-sg-main",
+  "seq": 10,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::SecurityGroup",
+    "Symbol(alchemy::ResourceID)": "db-sg-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/db-sg-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 10,
+    "typeName": "AWS::EC2::SecurityGroup",
+    "desiredState": {
+      "GroupDescription": "superstarter-main postgres public ingress (iam auth + ssl required)",
+      "VpcId": "vpc-07516e6518b35766b",
+      "SecurityGroupIngress": [
+        {
+          "IpProtocol": "tcp",
+          "FromPort": 5432,
+          "ToPort": 5432,
+          "CidrIp": "0.0.0.0/0",
+          "Description": "postgres 5432 from internet; iam auth + ssl enforced"
+        }
+      ],
+      "SecurityGroupEgress": [
+        {
+          "IpProtocol": "-1",
+          "CidrIp": "0.0.0.0/0",
+          "Description": "allow all outbound"
+        }
+      ],
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "sg-0411b3a0df8e0ed17",
+    "createdAt": 1778541609854,
+    "GroupDescription": "superstarter-main postgres public ingress (iam auth + ssl required)",
+    "GroupName": "js1Wly5bNjy4hrrpntCdWPVAR-YcbmYrzGJPoh",
+    "VpcId": "vpc-07516e6518b35766b",
+    "Id": "sg-0411b3a0df8e0ed17",
+    "SecurityGroupIngress": [
+      {
+        "CidrIp": "0.0.0.0/0",
+        "Description": "postgres 5432 from internet; iam auth + ssl enforced",
+        "FromPort": 5432,
+        "ToPort": 5432,
+        "IpProtocol": "tcp"
+      }
+    ],
+    "SecurityGroupEgress": [
+      {
+        "CidrIp": "0.0.0.0/0",
+        "Description": "allow all outbound",
+        "FromPort": -1,
+        "ToPort": -1,
+        "IpProtocol": "-1"
+      }
+    ],
+    "Tags": [
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      },
+      {
+        "Value": "main",
+        "Key": "Stage"
+      }
+    ],
+    "GroupId": "sg-0411b3a0df8e0ed17"
+  },
+  "props": {
+    "GroupDescription": "superstarter-main postgres public ingress (iam auth + ssl required)",
+    "VpcId": "vpc-07516e6518b35766b",
+    "SecurityGroupIngress": [
+      {
+        "IpProtocol": "tcp",
+        "FromPort": 5432,
+        "ToPort": 5432,
+        "CidrIp": "0.0.0.0/0",
+        "Description": "postgres 5432 from internet; iam auth + ssl enforced"
+      }
+    ],
+    "SecurityGroupEgress": [
+      {
+        "IpProtocol": "-1",
+        "CidrIp": "0.0.0.0/0",
+        "Description": "allow all outbound"
+      }
+    ],
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}
