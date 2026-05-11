@@ -506,9 +506,9 @@ function MissingValuePractice() {
 				<DeviationRow
 					givens={problem.givens}
 					deviations={givenDeviations}
-					target={problem.target}
 					guess={guessIsValid ? parsedGuess : null}
 					guessDeviation={guessDeviation}
+					requiredDeviation={-givenSum}
 				/>
 				<DeviationSum
 					givenSum={givenSum}
@@ -567,11 +567,17 @@ function MissingValuePractice() {
 interface DeviationRowProps {
 	givens: ReadonlyArray<number>
 	deviations: ReadonlyArray<number>
-	target: number
 	guess: number | null
 	guessDeviation: number | null
+	requiredDeviation: number
 }
-function DeviationRow({ givens, deviations, target, guess, guessDeviation }: DeviationRowProps) {
+function DeviationRow({
+	givens,
+	deviations,
+	guess,
+	guessDeviation,
+	requiredDeviation
+}: DeviationRowProps) {
 	return (
 		<div className="mt-3 flex flex-wrap items-stretch gap-2">
 			{givens.map(function renderGiven(value, i) {
@@ -591,23 +597,29 @@ function DeviationRow({ givens, deviations, target, guess, guessDeviation }: Dev
 					</div>
 				)
 			})}
-			<GuessChip target={target} guess={guess} guessDeviation={guessDeviation} />
+			<GuessChip
+				guess={guess}
+				guessDeviation={guessDeviation}
+				requiredDeviation={requiredDeviation}
+			/>
 		</div>
 	)
 }
 
 interface GuessChipProps {
-	target: number
 	guess: number | null
 	guessDeviation: number | null
+	requiredDeviation: number
 }
-function GuessChip({ target: _target, guess, guessDeviation }: GuessChipProps) {
+function GuessChip({ guess, guessDeviation, requiredDeviation }: GuessChipProps) {
 	const valueLabel = guess === null ? "?" : String(guess)
-	const devLabel = guessDeviation === null ? "—" : formatSignedInt(guessDeviation)
+	const shownDeviation = guessDeviation === null ? requiredDeviation : guessDeviation
+	const devLabel = formatSignedInt(shownDeviation)
 	let devTone = "text-text-3"
-	if (guessDeviation !== null && guessDeviation > 0) devTone = "text-pace-on"
-	else if (guessDeviation !== null && guessDeviation < 0) devTone = "text-pace-over"
-	const borderTone = guess === null ? "border-dashed border-border-strong" : "border-cobalt"
+	if (guess === null) devTone = "text-cobalt"
+	else if (shownDeviation > 0) devTone = "text-pace-on"
+	else if (shownDeviation < 0) devTone = "text-pace-over"
+	const borderTone = guess === null ? "border-dashed border-cobalt/60" : "border-cobalt"
 	const valueTone = guess === null ? "text-text-3" : "text-cobalt"
 	return (
 		<div
