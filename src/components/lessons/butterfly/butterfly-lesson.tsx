@@ -12,6 +12,7 @@
 
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 
 const MIN_DENOM = 2
@@ -505,6 +506,8 @@ function SpeedDrill() {
 	const [best, setBest] = React.useState(0)
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const [picked, setPicked] = React.useState<"left" | "right" | "equal" | null>(null)
+	const pillRef = React.useRef<HTMLDivElement>(null)
+	const mastered = useMastery({ score: best, originRef: pillRef })
 
 	function pick(choice: "left" | "right" | "equal") {
 		if (feedback === "right") return
@@ -552,7 +555,13 @@ function SpeedDrill() {
 				</div>
 				<div className="flex gap-2">
 					<StatPill label="Streak" value={String(streak)} tone="text-alpha-accent" />
-					<StatPill label="Best" value={String(best)} tone="text-good" />
+					<MasteryPill
+						pillRef={pillRef}
+						label="Best"
+						value={String(best)}
+						tone="text-good"
+						mastered={mastered}
+					/>
 				</div>
 			</div>
 			<div className="grid grid-cols-2 items-center gap-6 px-5 py-6 text-center">

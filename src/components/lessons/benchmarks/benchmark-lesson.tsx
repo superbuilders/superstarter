@@ -16,6 +16,7 @@
 import * as errors from "@superbuilders/errors"
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 import { logger } from "@/logger"
 
@@ -229,6 +230,9 @@ function SpeedDrill() {
 	const [round, setRound] = React.useState<RoundState>(newRound)
 	const [, forceTick] = React.useState(0)
 	const [best, setBest] = React.useState(0)
+	const pillRef = React.useRef<HTMLDivElement>(null)
+	const masteryScore = round.correct > best ? round.correct : best
+	const mastered = useMastery({ score: masteryScore, originRef: pillRef })
 
 	const current = round.prompts[round.index]
 	const finished = round.index >= round.prompts.length
@@ -351,7 +355,13 @@ function SpeedDrill() {
 					<p className="mt-0.5 text-[13px] text-text-2">{promptCopy}.</p>
 				</div>
 				<div className="flex gap-2">
-					<StatPill label="Correct" value={`${round.correct}/${ROUND_LENGTH}`} tone="text-good" />
+					<MasteryPill
+						pillRef={pillRef}
+						label="Correct"
+						value={`${round.correct}/${ROUND_LENGTH}`}
+						tone="text-good"
+						mastered={mastered}
+					/>
 					<StatPill label="Best" value={`${best}/${ROUND_LENGTH}`} tone="text-cobalt" />
 				</div>
 			</div>

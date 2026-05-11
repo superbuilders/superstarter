@@ -18,6 +18,7 @@
 
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 
 interface NumberChip {
@@ -441,6 +442,8 @@ function MissingValuePractice() {
 	const [solved, setSolved] = React.useState(0)
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const inputRef = React.useRef<HTMLInputElement>(null)
+	const pillRef = React.useRef<HTMLDivElement>(null)
+	const mastered = useMastery({ score: solved, originRef: pillRef })
 
 	function next() {
 		setProblem(generateProblem())
@@ -494,7 +497,13 @@ function MissingValuePractice() {
 						Find the value that makes the deviations sum to zero.
 					</p>
 				</div>
-				<StatPill label="Solved" value={String(solved)} tone="text-good" />
+				<MasteryPill
+					pillRef={pillRef}
+					label="Solved"
+					value={String(solved)}
+					tone="text-good"
+					mastered={mastered}
+				/>
 			</div>
 			<div className="px-5 py-5">
 				<p className="text-sm text-text-2">
@@ -658,20 +667,6 @@ function DeviationSum({ givenSum, guessDeviation, total, balanced, revealed }: D
 				<span className={`font-semibold ${totalTone}`}>{totalLabel}</span>
 			</p>
 			<p className="mt-0.5 text-[11px] text-text-3">{balancedHint}</p>
-		</div>
-	)
-}
-
-interface StatPillProps {
-	label: string
-	value: string
-	tone: string
-}
-function StatPill({ label, value, tone }: StatPillProps) {
-	return (
-		<div className="rounded-md border border-border-soft bg-bg px-3 py-1.5 text-right">
-			<p className="font-semibold text-[9px] text-text-3 uppercase tracking-[0.08em]">{label}</p>
-			<p className={`font-mono font-semibold text-[16px] tabular-nums ${tone}`}>{value}</p>
 		</div>
 	)
 }

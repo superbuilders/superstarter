@@ -14,6 +14,7 @@
 import * as errors from "@superbuilders/errors"
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 import { logger } from "@/logger"
 
@@ -265,6 +266,8 @@ function SpeedDrill() {
 	const [showFlipped, setShowFlipped] = React.useState(false)
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const inputRef = React.useRef<HTMLInputElement>(null)
+	const pillRef = React.useRef<HTMLDivElement>(null)
+	const mastered = useMastery({ score: best, originRef: pillRef })
 
 	function next() {
 		setProblem(generateProblem())
@@ -323,7 +326,13 @@ function SpeedDrill() {
 				</div>
 				<div className="flex gap-2">
 					<StatPill label="Streak" value={String(streak)} tone="text-indigo-deep" />
-					<StatPill label="Best" value={String(best)} tone="text-good" />
+					<MasteryPill
+						pillRef={pillRef}
+						label="Best"
+						value={String(best)}
+						tone="text-good"
+						mastered={mastered}
+					/>
 				</div>
 			</div>
 			<div className="px-5 py-6">
