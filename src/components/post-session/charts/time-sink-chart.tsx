@@ -133,6 +133,10 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 				{yTicks.map(function renderYTick(tick) {
 					const y = yOf(tick.ms)
 					const isGoal = tick.ms === 0
+					const is18s = tick.ms === GOAL_MS
+					const tickEmphasisClass = is18s
+						? "text-cobalt font-medium"
+						: "text-foreground/60"
 					return (
 						<g key={tick.ms}>
 							<line
@@ -148,7 +152,10 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 								y2={y}
 							/>
 							<text
-								className="fill-current font-mono text-[10px] text-foreground/60 tabular-nums"
+								className={cn(
+									"fill-current font-sans text-[10px] tabular-nums",
+									tickEmphasisClass
+								)}
 								textAnchor="end"
 								x={PAD_LEFT - 6}
 								y={y + 3}
@@ -159,9 +166,11 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 					)
 				})}
 
-				{/* 18s goal line — dashed, accent-colored */}
+				{/* 18s goal line — dashed, cobalt brand-target accent.
+				    The 18s reference is communicated by this line + the
+				    emphasized cobalt y-tick label at the 18 mark. */}
 				<line
-					className="text-destructive/70"
+					className="text-cobalt/70"
 					stroke="currentColor"
 					strokeDasharray="4 3"
 					strokeWidth="1.25"
@@ -170,14 +179,6 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 					y1={goalY}
 					y2={goalY}
 				/>
-				<text
-					className="fill-current font-medium font-mono text-[10px] text-destructive tabular-nums"
-					textAnchor="start"
-					x={VIEW_W - PAD_RIGHT - 56}
-					y={goalY - 4}
-				>
-					18s goal
-				</text>
 
 				{/* X tick labels */}
 				{xTicks.map(function renderXTick(q) {
@@ -186,7 +187,7 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 					return (
 						<text
 							key={q}
-							className="fill-current font-mono text-[10px] text-foreground/60 tabular-nums"
+							className="fill-current font-sans text-[10px] text-foreground/60 tabular-nums"
 							textAnchor="middle"
 							x={x}
 							y={VIEW_H - PAD_BOTTOM + 14}

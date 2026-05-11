@@ -203,7 +203,7 @@ function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 								y2={y}
 							/>
 							<text
-								className="fill-current font-mono text-[10px] text-foreground/60 tabular-nums"
+								className="fill-current font-sans text-[10px] text-foreground/60 tabular-nums"
 								textAnchor="end"
 								x={PAD_LEFT - 6}
 								y={y + 3}
@@ -230,7 +230,7 @@ function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 					return (
 						<text
 							key={q}
-							className="fill-current font-mono text-[10px] text-foreground/60 tabular-nums"
+							className="fill-current font-sans text-[10px] text-foreground/60 tabular-nums"
 							textAnchor="middle"
 							x={x}
 							y={VIEW_H - PAD_BOTTOM + 14}
