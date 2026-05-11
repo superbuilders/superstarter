@@ -2844,3 +2844,396 @@ Single-occurrence tokens at or below the `.alpha-style.md` "below-3 systemic-tok
 - **Round 2 plan-doc `docs/plans/post-session-audit-fixes-and-wide-token-retrofit.md` §0.3 + §2.2 + §5.1** — discovery (audit step 3 surfacing the bifurcation), resolution decision (Q5 = γ), and codification commit (this SPEC §13 entry).
 - **Dashboard PRD §8** — Layer-B token-set definition + audit-trail for the additive-not-superseding decision.
 - **`.alpha-style.md` "below-3 systemic-token" threshold** — tokens used by ≥3 consumers must land in a layer; below-3 tokens may stay component-local.
+
+## 14. Validator and admin review (Phase 4 sub-phase b)
+
+> **Authored 2026-05-10** (Phase 4 sub-phase b §3 commit 0 — full-round-close SPEC §14 authoring; per `docs/plans/phase4-validator-and-admin-review.md` §0.8.1 + §0.8.2 phase summaries). Codifies the validator engine + admin review surface shipped across §1 (validator engine + production batch) and §2 (admin queue + item-detail + dispositions + dashboard). The plan-doc remains as the round-by-round forensic record; this section is the production reference a future contributor reads first.
+
+### 14.1 Goal
+
+Two-layer item quality assurance for sub-phase A generated candidates. **Layer 1** is the deterministic per-candidate validator engine (six criteria; see §14.3). **Layer 2** is admin human review (edit / approve / reject / re-validate; see §14.5). Promotion path: candidate → live (admin approve) OR candidate → rejected (admin reject, soft-delete).
+
+Posture B is ratified: validator runs first; admin reviews the flagged subset. Both layers must pass for an item to reach `status='live'`.
+
+### 14.2 Items lifecycle
+
+`items.status` is the four-value enum `'live' | 'candidate' | 'retired' | 'rejected'` (per `src/db/schemas/catalog/items.ts:12`). The Phase-4-sub-phase-b §1.0 migration extended the enum from three values (adding `'rejected'`) and added three rejection-tracking columns:
+
+- `rejected_at_ms` (`bigint`, nullable) — UTC ms timestamp of admin rejection.
+- `rejected_by` (`uuid`, nullable, FK `users.id` `ON DELETE SET NULL`) — admin who rejected.
+- `rejection_reason` (`text`, nullable) — admin's free-text justification (required by app-level for reject; UI enforces non-empty).
+
+**Lifecycle transitions:**
+
+- Sub-phase A generation produces a row with `status='candidate'`.
+- Validator batch runs (§14.4) → `metadata_json.validatorResult` populated with per-criterion verdicts + `hasAnyFlag` aggregate.
+- Admin reviews → `approveCandidateAction` (status → `live`) OR `rejectCandidateAction` (status → `rejected`).
+- Re-validation (§14.5.3) refreshes `validatorResult` in place; does NOT change status; does NOT write an audit row.
+- `submitEditAction` mutates fields + sets `metadata_json.validatorResult.staleAfterMs = Date.now()` so the validator verdict is marked stale until re-validated.
+
+`'retired'` is reserved for empirical-stats-driven retirement (PRD §3.2 step 6 — *"After 20 real-user attempts, compute observed accuracy and median latency. If they're far off, retire to status: retired"*); not exercised by the validator+admin round.
+
+### 14.3 Validator engine
+
+#### 14.3.1 Six criteria
+
+`src/server/validator/engine.ts` exports `validateCandidate(candidate, ctx)` which iterates `allCriteria` from `src/server/validator/criteria/index.ts`. Per-criterion errors do NOT abort the run; the full flag map is returned regardless of individual outcomes.
+
+| # | Name | Type | Tunable | File |
+|---|---|---|---|---|
+| 1 | `schema-shape` | structural | no | `src/server/validator/criteria/schema-shape.ts` |
+| 2 | `tier-distribution` | structural (provenance-roundtrip) | no | `src/server/validator/criteria/tier-distribution.ts` |
+| 3 | `embedding-distance` | similarity-based | yes | `src/server/validator/criteria/embedding-distance.ts` |
+| 4 | `per-sub-type-structural` | structural | no | `src/server/validator/criteria/per-sub-type-structural.ts` |
+| 5 | `sub-phase-a-failure-modes` | heuristic | yes | `src/server/validator/criteria/sub-phase-a-failure-modes.ts` |
+| 6 | `provenance-batch-reject` | cohort-based | yes | `src/server/validator/criteria/provenance-batch-reject.ts` |
+
+**Criterion 2 semantics** (reframed at §1.2 commit-2): provenance-roundtrip verification — verifies the candidate's id appears in the parent's provenance siblings list AND the provenance file's tier label matches the DB row's `difficulty`. Catches ingest-pipeline drift. The original plan-doc framing *"candidate's claimed tier matches generator's claim"* was structurally degenerate at v1 because `items.difficulty` IS the LLM-emitted tier (see plan-doc §0.6.1 line 179 reframe).
+
+#### 14.3.2 Verdict types
+
+`src/server/validator/types.ts` defines the three-state per-criterion verdict:
+
+```typescript
+type ValidatorVerdict =
+  | { readonly kind: "pass" }
+  | { readonly kind: "flag"; readonly reason: string; readonly metadata: Readonly<Record<string, unknown>> }
+  | { readonly kind: "error"; readonly reason: string }
+```
+
+The engine aggregates per-criterion verdicts into `CandidateValidationResult { itemId, flagsByName, hasAnyFlag, isPressureCell, evaluatedAtMs }`. `hasAnyFlag` is `true` if any criterion produced a `flag` or `error` verdict OR if the candidate sits in a pressure cell (Q2 conservative-first flag policy).
+
+#### 14.3.3 Thresholds
+
+Tunable thresholds live in `src/server/validator/thresholds.ts` `defaultThresholds`. Production values ratified at §1.3 commit-1:
+
+- `embeddingDistance.defaultMin` = `0.3`
+- `embeddingDistance.defaultMax` = `0.99`
+- Per-sub-type overrides:
+  - `verbal.antonyms` → `min: 0.5, max: 0.92`
+  - `numerical.lowest_values` → `min: 0.5, max: 0.999`
+- `subPhaseAFailureModes.antonymsConvergenceCosine` = `0.95`
+- `provenanceBatchReject.cohortFailureRateThreshold` = `0.2`
+
+`thresholdsHash` is a sorted-key sha256 over the registry; computed in `src/server/validator/thresholds-hash.ts`. Persisted on every `validatorResult` so future audits identify which threshold set produced which verdict.
+
+#### 14.3.4 Pressure cells
+
+Cells under target live-bank coverage. Per `src/server/validator/context.ts:33-34`:
+
+- `PRESSURE_HARD_TARGET = 3` — hard tier needs 3 live items per sub-type.
+- `PRESSURE_BRUTAL_TARGET = 1` — brutal tier needs 1 live item per sub-type.
+- Easy / medium tiers carry **no pressure semantics** at v1 — they appear in the dashboard for situational awareness only.
+
+**Two metrics surface in admin UI** (per plan-doc §0.7.2):
+
+- `queue.pressureCellCount` (candidate-scoped, batch-time): counts CANDIDATES whose persisted `validatorResult.isPressureCell = true` in the active cohort. Computed by `src/server/admin/queue-data.ts`.
+- `dashboard.totalPressureCells` (cell-scoped, read-time): counts CELLS in the 14 sub-types × hard|brutal grid (28 positions) currently under target. Computed by `src/server/admin/pressure-cell-data.ts`.
+
+Both metrics are correct; they serve different admin workflows. They are NOT expected to agree numerically.
+
+**Two intentional divergences from the validator's `loadPressureCells` documented in `pressure-cell-data.ts`:**
+
+1. The validator iterates sub-types derived from the live-cells query result (`cells.map(c => c.subTypeId)`), so a sub-type with ZERO live items in any tier is silently skipped — and items in that sub-type's hard/brutal tier are NOT marked `isPressureCell` by the validator at batch time. The dashboard iterates the canonical `@/config/sub-types` `subTypeIds`, so every sub-type contributes hard + brutal cells regardless of live state.
+2. `queue.pressureCellCount` and `dashboard.totalPressureCells` are the candidate-scoped vs cell-scoped surfaces named above.
+
+Validator alignment to iterate the canonical subTypeIds is forward-pinned to a future round (plan-doc §0.9 §6.14.43 instance #16).
+
+#### 14.3.5 Two-phase orchestration
+
+Production batch runs criteria 1-5 in pass 1, computes per-cohort failure rates, then re-runs `validateCandidate` in pass 2 with `cohortFailureRates` populated so criterion 6 can flag cohorts above threshold. Single-pass invocations (re-validation) leave `cohortFailureRates` empty; `provenance-batch-reject` returns a pass-deferral verdict in that case (see `src/server/validator/criteria/provenance-batch-reject.ts:45-50`).
+
+#### 14.3.6 Persistence
+
+Verdicts persist to `items.metadata_json.validatorResult`. Schema (Zod, in `src/server/admin/validator-result-schema.ts`):
+
+```typescript
+{
+  evaluatedAtMs: number,
+  hasAnyFlag: boolean,
+  isPressureCell: boolean,
+  flagsByName: Record<string, ValidatorVerdict>,
+  thresholdsHash: string,           // "sha256:<64-hex>"
+  invokedByAdminEmail: string,
+  staleAfterMs?: number              // set on edit; absence = fresh
+}
+```
+
+The `staleAfterMs` field is set by `submitEditAction` to `Date.now()` on every successful edit. `isMetadataValidatorStale` (in `src/server/admin/staleness.ts`) computes staleness via `staleAfterMs > evaluatedAtMs`; absence of `staleAfterMs` (the case after re-validation) means fresh.
+
+### 14.4 Validator batch runner
+
+`validatorBatchWorkflow` in `src/workflows/validator-batch.ts` orchestrates the two-phase batch. Steps live in `src/workflows/validator-batch-steps.ts` (separate file because the `@workflow/next` plugin's node-module guard rejects Pino-via-`@/logger` on workflow files; step files run outside the VM).
+
+**Steps:**
+
+1. `loadCandidatesStep` — `WHERE status='candidate'` SELECT.
+2. `buildContextStep` — preloads parent embeddings + provenance + cohort peers + pressure cells.
+3. `runPass1Step` — iterate × criteria 1-5 (criterion 6 returns pass-1 deferral).
+4. `computeCohortRatesStep` — pure aggregation pass-1 → per-cohort rates.
+5. `runPass2Step` — re-invoke `validateCandidate` with populated `cohortFailureRates`; merge criterion-6 verdict.
+6. `summarizeCalibrationStep` — `summarizeForCalibration` (`src/server/validator/calibration.ts`).
+7. `persistResultsStep` — single `db.transaction` wrapping per-candidate `jsonb_set(metadata_json, '{validatorResult}', payload::jsonb)` UPDATEs.
+
+**Modes:**
+
+- **Dry-run**: full validation but no persist. Calibration tool. Invoked via `bun scripts/dev/validator-dry-run.ts`.
+- **Production**: persists to `items.metadata_json` transactionally. Invoked via `bun scripts/dev/validator-production-batch.ts --yes` (requires explicit `--yes` confirmation per §6.14.31 destructive-operation-gate).
+
+**Calibration cycle**: dry-run → surface per-criterion flag rates → tune thresholds in `defaultThresholds` → re-run → repeat until rates fall in `[2%, 40%]` band per **tunable** criterion. Structural criteria (`schema-shape`, `tier-distribution`, `per-sub-type-structural`) report candidate-quality signal, not threshold-tuning state — their rates are not subject to the 2%-40% band (per plan-doc §0.6.1 line 181 calibration directive scope clarification).
+
+### 14.5 Admin review surface
+
+Routes: `(admin)/admin/review/page.tsx` (queue) and `(admin)/admin/review/[itemId]/page.tsx` (item detail).
+
+**Auth**: `(admin)/layout.tsx` invokes `requireAdminEmail()` against the allowlist in `src/config/admins.ts`. All admin routes inherit the gate. **No nav chrome** — admin convention is chrome-light per `/admin/ingest` precedent (see plan-doc §0.5.2 empirical reframe at `50b91c7`). `<TopNav>` is not rendered on admin routes; the auth gate at the layout level is sufficient context.
+
+#### 14.5.1 Queue (`/admin/review`)
+
+Status tabs (`<QueueStatusTabs>` at `src/components/admin-review/queue-status-tabs.tsx`): **Candidates** / **Live** / **Rejected**. URL query param: `?status=<value>` (default `candidate`). The page coerces unknown values back to `candidate` per `src/app/(admin)/admin/review/page.tsx`.
+
+**Filters** (`<QueueList>` at `src/components/admin-review/queue-list.tsx`):
+
+- `flag` — all / flagged / clean. Default = `flagged` on candidates tab; `all` on live + rejected tabs.
+- `pressure` — all / pressure / non-pressure.
+- `subType` — all / specific sub-type.
+- `difficulty` — all / easy / medium / hard / brutal.
+- `stale` — all / stale / fresh.
+
+**Sort**: most-flags / fewest-flags / newest / oldest.
+
+**URL param seeding**: `?subType=<id>&difficulty=<tier>` seed initial filter state. Precedence: URL params > sessionStorage > per-cohort defaults. SessionStorage persists per-cohort filter+sort state and the last-visited status tab across in-tab navigation.
+
+**Pressure-cell dashboard** (`<PressureCellGrid>` at `src/components/admin-review/pressure-cell-grid.tsx`) renders at the queue head, **candidates tab only**. Live and rejected tabs resolve the dashboard promise to `undefined` and skip the SELECT entirely. The grid is 14 sub-types × 4 difficulties; pressure cells (hard < 3 OR brutal < 1) render as cobalt-accented `N / target Needed` tiles linking to the URL-param-filtered queue.
+
+**Header strip stats**: total / flagged / pressure / stale / unvalidated / visible / approved / rejected / today.
+
+**Bulk re-validate**: `<BulkRevalidateButton>` (`src/components/admin-review/bulk-revalidate-button.tsx`) renders on the candidates tab when `staleCount > 0` and runs `revalidateStaleCandidatesAction`.
+
+#### 14.5.2 Item detail (`/admin/review/[itemId]`)
+
+Tabbed shell (`<ItemDetailTabs>` at `src/components/admin-review/item-detail-tabs.tsx`), four tabs: **Stem & options** / **Explanation** / **Provenance** / **Audit history**.
+
+**Always-mount + CSS-hide pattern**: all four tab bodies render into the DOM on first mount; only the active tab's container is visible. Inactive tabs' `React.useState` containers preserve across switches without prop drilling. Ratified at §2.3 commit-1 over the literal state-lift approach (~10 LOC vs ~150 LOC trade-off favored).
+
+**Edit affordances** on the stem-tab + explanation-tab. Edit mode renders textarea + per-option text input + correct-answer radio + sub-type dropdown + difficulty dropdown + structuredExplanation JSON edit + reason note + Save / Cancel.
+
+**Bucket-change confirmation modal** (`<BucketChangeConfirm>` at `src/components/admin-review/bucket-change-confirm.tsx`) renders when `subTypeId` or `difficulty` is changed and Save is clicked.
+
+**Disposition action bar** renders in stem-tab view mode only (not edit mode), only when `status === "candidate"`:
+
+- **Approve** button — opens `<ApproveStaleConfirm>` modal if `validatorResult` is stale; otherwise submits directly.
+- **Reject** button — opens `<RejectConfirm>` modal requiring non-empty reason.
+
+**Provenance tab** renders generator metadata, validator flags (5 criteria with verdicts + reason + metadata), parent-item block, sibling list, provenance file path. The "Re-run validator" button (`<RevalidateCandidateButton>` at `src/components/admin-review/revalidate-candidate-button.tsx`) renders inside the stale banner when `status === "candidate"` AND `validatorResult` is stale.
+
+**Audit-history tab** renders `item_admin_actions` entries for the item, ordered DESC by `created_at_ms`. Per-action-type dispatch (`src/components/admin-review/audit-history-tab.tsx`):
+
+- `edit` → `<ActionEntryEdit>`: changed-field list via `JSON.stringify` value-comparison + reason.
+- `approve` → `<ActionEntryApprove>`: "Promoted candidate to live" + reason.
+- `reject` → `<ActionEntryReject>`: status change + reason emphasized in destructive-tinted block.
+- `flag` / `unflag` (reserved, not used at v1) → generic fallback.
+
+**Back-to-queue link** reads the last-visited status tab from sessionStorage and computes `href` accordingly, restoring the cohort tab + the per-cohort filter selections from sessionStorage.
+
+#### 14.5.3 Server actions
+
+Located in `src/server/admin/`. All actions follow the same skeleton: `requireAdminEmail()` first; Zod input validation; pre-flight current-state SELECT; transactional atomicity (items UPDATE + audit row INSERT commit together OR roll back together); `revalidatePath` after success; `logger.info` records the disposition.
+
+| Action | File | Status pre | Status post | Required input | Audit row |
+|---|---|---|---|---|---|
+| `submitEditAction` | `edit-actions.ts` | `candidate` | `candidate` | bucket-change-ack if applicable | `edit` |
+| `approveCandidateAction` | `disposition-actions.ts` | `candidate` | `live` | stale-verdict-ack if stale | `approve` |
+| `rejectCandidateAction` | `disposition-actions.ts` | `candidate` | `rejected` | reason note (non-empty) | `reject` |
+| `revalidateCandidateAction` | `revalidate-actions.ts` | `candidate` | `candidate` | — | none |
+| `revalidateStaleCandidatesAction` | `revalidate-actions.ts` | `candidate` (bulk) | `candidate` | — | none |
+
+Re-validation actions do NOT write `item_admin_actions` rows. Re-validation is refresh, not disposition.
+
+`submitEditAction` writes FULL row snapshots in `before_json` and `after_json` (all 7 admin-editable columns: body, optionsJson, correctAnswer, explanation, subTypeId, difficulty, metadataJson) — NOT field-projected diffs. `diffChangedKeys` (in `src/server/admin/action-history-shared.ts`) does `JSON.stringify` value-comparison per key so the audit-history rendering helper works regardless of whether audit rows are projections or snapshots.
+
+`enqueueEmbeddingRegen` (`src/server/admin/embedding-regen.ts`) is the Path A helper for embedding regeneration on body-text edits. The `RegenReason` type is a single variant `{ kind: "body-edit" }` matching the actual call-site scope: embedding is body-text only at both production sites (`embedding-backfill-steps.ts:64`, `sibling-generation-steps.ts:408`). Options edits and explanation edits do NOT trigger regen (per plan-doc §0.6.4 empirical reframe at `a075d47`).
+
+`item_admin_actions` schema (`src/db/schemas/catalog/item-admin-actions.ts`):
+
+```typescript
+{
+  id: uuid (uuidv7) PRIMARY KEY,
+  itemId: uuid NOT NULL REFERENCES items.id ON DELETE CASCADE,
+  adminUserId: uuid NOT NULL REFERENCES users.id ON DELETE RESTRICT,
+  actionType: enum 'edit' | 'approve' | 'reject' | 'flag' | 'unflag',
+  beforeJson: jsonb NOT NULL,
+  afterJson: jsonb NOT NULL,
+  reason: text NULL,
+  createdAtMs: bigint NOT NULL DEFAULT now()-ms
+}
+```
+
+### 14.6 File inventory
+
+Exhaustive inventory of files shipped or modified during Phase 4 sub-phase b. A future contributor looking for "where is X" should find the answer here.
+
+#### 14.6.1 Validator engine
+
+- `src/server/validator/engine.ts` — `validateCandidate` orchestration.
+- `src/server/validator/context.ts` — `buildValidationContext` + `emptyValidationContext` + `withCohortFailureRates`.
+- `src/server/validator/types.ts` — `CandidateForValidation`, `ValidationContext`, `ValidatorVerdict`, `CandidateValidationResult`, `ValidatorCriterion`.
+- `src/server/validator/thresholds.ts` — `defaultThresholds` + interfaces.
+- `src/server/validator/thresholds-hash.ts` — `computeThresholdsHash` (sorted-key sha256).
+- `src/server/validator/calibration.ts` — `summarizeForCalibration`.
+- `src/server/validator/criteria/index.ts` — `allCriteria` array (6 criteria in plan-doc order).
+- `src/server/validator/criteria/{schema-shape,tier-distribution,embedding-distance,per-sub-type-structural,sub-phase-a-failure-modes,provenance-batch-reject}.ts` — per-criterion implementations.
+- `src/server/validator/engine.test.ts` — engine tests.
+
+#### 14.6.2 Workflows
+
+- `src/workflows/validator-batch.ts` — `validatorBatchWorkflow` orchestration (workflow VM context).
+- `src/workflows/validator-batch-steps.ts` — step bodies including `loadCandidatesStep`, `buildContextStep`, `runPass1Step`, `computeCohortRatesStep`, `runPass2Step`, `summarizeCalibrationStep`, `persistResultsStep`. Also exports `serializeValidatorResult` reusable helper.
+- `src/workflows/validator-batch.test.ts` — workflow tests.
+
+#### 14.6.3 Admin server-side data + actions
+
+- `src/server/admin/queue-data.ts` — `loadAdminQueueData(statusFilter)`; per-status SELECT + aggregations; `aggregateDispositionStats` + `aggregateStatusCounts` exported pure helpers.
+- `src/server/admin/item-detail-data.ts` — `loadAdminItemDetail(itemId)`; candidate + parent + siblings + provenance file load.
+- `src/server/admin/action-history-data.ts` — `loadAdminActionHistory(itemId)`; INNER JOIN `item_admin_actions` with `users` for admin email.
+- `src/server/admin/action-history-shared.ts` — client-safe types + `adminActionTypeSchema` + `isPlainObject` + `diffChangedKeys` (pure helpers).
+- `src/server/admin/pressure-cell-data.ts` — `loadPressureCellSnapshot()` (DB loader).
+- `src/server/admin/pressure-cell-shared.ts` — client-safe types + `aggregatePressureCells` + `PRESSURE_TARGETS` + `DIFFICULTIES`.
+- `src/server/admin/edit-actions.ts` — `submitEditAction` (`"use server"`).
+- `src/server/admin/edit-input-schema.ts` — Zod input schema + `SubmitEditOutput` + sentinel errors.
+- `src/server/admin/disposition-actions.ts` — `approveCandidateAction` + `rejectCandidateAction`.
+- `src/server/admin/disposition-input-schema.ts` — Zod input schemas + `DispositionOutput` + sentinel errors.
+- `src/server/admin/revalidate-actions.ts` — `revalidateCandidateAction` + `revalidateStaleCandidatesAction`.
+- `src/server/admin/revalidate-input-schema.ts` — Zod input schema + outputs + sentinel errors.
+- `src/server/admin/embedding-regen.ts` — `enqueueEmbeddingRegen` Path A helper.
+- `src/server/admin/staleness.ts` — `isMetadataValidatorStale` pure type-guard.
+- `src/server/admin/validator-result-schema.ts` — shared `validatorResultSchema` Zod.
+
+#### 14.6.4 Admin UI components + routes
+
+- `src/app/(admin)/admin/review/page.tsx` — queue page (server component, parallel-promise composition).
+- `src/app/(admin)/admin/review/content.tsx` — queue content (`"use client"`).
+- `src/app/(admin)/admin/review/[itemId]/page.tsx` — item-detail page.
+- `src/app/(admin)/admin/review/[itemId]/content.tsx` — item-detail content (`"use client"`, always-mount tab pattern).
+- `src/components/admin-review/queue-status-tabs.tsx` — Candidates / Live / Rejected tab strip.
+- `src/components/admin-review/queue-list.tsx` — filters + sort + queue list shell.
+- `src/components/admin-review/queue-row.tsx` — per-row link.
+- `src/components/admin-review/queue-filters.ts` — pure filter + sort helpers.
+- `src/components/admin-review/pressure-cell-grid.tsx` — dashboard grid.
+- `src/components/admin-review/bulk-revalidate-button.tsx` — bulk re-validate header button.
+- `src/components/admin-review/item-detail-tabs.tsx` — 4-tab strip.
+- `src/components/admin-review/stem-options-tab.tsx` — stem + options view + edit + dispositions.
+- `src/components/admin-review/explanation-tab.tsx` — explanation + structuredExplanation.
+- `src/components/admin-review/provenance-tab.tsx` — generator metadata + validator flags + sibling set.
+- `src/components/admin-review/revalidate-candidate-button.tsx` — single re-validate button (in stale banner).
+- `src/components/admin-review/audit-history-tab.tsx` — audit ledger renderer.
+- `src/components/admin-review/{action-entry-edit,action-entry-approve,action-entry-reject}.tsx` — per-action-type entries.
+- `src/components/admin-review/bucket-change-confirm.tsx` — sub-type / difficulty change confirm modal.
+- `src/components/admin-review/approve-stale-confirm.tsx` — stale-verdict approve confirm modal.
+- `src/components/admin-review/reject-confirm.tsx` — reject reason modal.
+
+#### 14.6.5 Schema
+
+- `src/db/schemas/catalog/items.ts` — items table; `item_status` enum (4 values); `rejected_at_ms` / `rejected_by` / `rejection_reason` columns.
+- `src/db/schemas/catalog/item-admin-actions.ts` — audit ledger; `item_admin_action_type` enum (5 values: edit / approve / reject / flag / unflag).
+
+#### 14.6.6 Configuration
+
+- `src/config/admins.ts` — admin allowlist.
+- `src/config/sub-types.ts` — `subTypeIds` (14 ids) + `subTypes` (configs) + `Difficulty` literal union.
+
+#### 14.6.7 CLI scripts
+
+- `scripts/dev/validator-dry-run.ts` — calibration tool (no DB persist).
+- `scripts/dev/validator-production-batch.ts` — production batch invoker (requires `--yes`).
+- `scripts/dev/backfill-prompt-hash.ts` — §1.2 commit-1 one-off backfill (recorded for posterity).
+
+### 14.7 Design rationale
+
+Architectural-decision-record (ADR) surface. WHY decisions landed as they did. Plan-doc §0 carries the round-by-round forensic narrative; this section is the production summary.
+
+#### 14.7.1 Posture B (validator-then-admin)
+
+Layered adversarial robustness. Convergence = both layers pass. Validator catches systemic generator defects at scale (1,711 candidates × 6 criteria ≈ 10,000 mechanical checks the admin doesn't do); admin catches emergent quality issues + applies judgment the validator can't (stem clarity, trap quality, cultural / accessibility issues).
+
+Alternative considered: admin-only (no validator). Rejected — at 1,711 candidate volume, admin throughput is the bottleneck; validator pre-filtering reduces admin time on systemic-defect candidates. (Plan-doc §0.6.1 reasoning.)
+
+#### 14.7.2 Calibration directive scope
+
+The *">40% loosen / <2% tighten"* directive applies to **tunable** criteria only (embedding-distance, sub-phase-a-failure-modes, provenance-batch-reject). Structural criteria (schema-shape, tier-distribution, per-sub-type-structural) report candidate-quality signal, not threshold state — their low flag rates indicate a clean candidate corpus, not over-tight thresholds. Clarified at plan-doc §0.6.1 (§1.3 commit-1 finding).
+
+#### 14.7.3 Pressure-cell dual metric
+
+Two pressure-cell metrics coexist post-§2.6 (per plan-doc §0.7.2):
+
+- `queue.pressureCellCount` — candidate-scoped, batch-time. Admin workflow: "which of my candidates were in pressure cells when validated?"
+- `dashboard.totalPressureCells` — cell-scoped, read-time. Admin workflow: "where should I focus my approvals?"
+
+Both correct; serve different workflows; not expected to agree numerically. The validator-vs-dashboard divergence on zero-everywhere sub-types is forward-pinned (§14.3.4).
+
+#### 14.7.4 One-way disposition (Q6)
+
+Status transitions are one-way: `candidate → live` OR `candidate → rejected`. No reversal affordances at v1.
+
+Soft-delete via `status='rejected'` preserves rejection history for generator-quality analysis; rejection is reversible if admin was wrong (manual SQL UPDATE `status='candidate'`). Two-axis rejection (admin-judged-bad `'rejected'` vs empirical-stats-out-of-band `'retired'`) preserves debugging signal — many `'rejected'` items in a generator run signals prompt revision; many `'retired'` items signals item-population mechanism mis-calibration.
+
+Retirement (live → retired) and undo-reject (rejected → candidate) are forward-pinned as separate affordances if admin pattern emerges requiring them. Future enum extension + audit-trail action_type values.
+
+#### 14.7.5 Audit ledger semantics (Q7)
+
+`item_admin_actions` row writes happen inside the action's transaction. Atomic guarantee: the action succeeds AND the audit row lands, OR neither does. Re-validation is excluded (refresh, not disposition; see §14.5.3).
+
+Edit `before_json` + `after_json` are FULL row snapshots, not field-projected. The plan-doc §0.6.6 Q7 framing is correct ("full item snapshots"); intermediate session prompts at §2.3 commit-1 + §2.5 commit-0 drifted to a "field-projected" claim but the implementation followed the plan-doc. `diffChangedKeys` reconciles via `JSON.stringify` value-comparison per key so the rendering helper works regardless of audit-row shape.
+
+UX consequence: edit entries always show `metadataJson` as changed because `submitEditAction` always sets `validatorResult.staleAfterMs = Date.now()` on every edit (the staleness marker IS metadata that changed). Filtering or special-casing system-tracking metadata from the field-level diff is a v1.5 forward-pin.
+
+#### 14.7.6 Embedding scope (Q5 reframe)
+
+Embedding regen is triggered on **body-text edits only**. The plan-doc-time framing "body + options text" was inaccurate (caught at §2.3 commit-0; §6.14.43 instance #14). Actual scope verified at both call sites: `src/workflows/embedding-backfill-steps.ts:64` and `src/workflows/sibling-generation-steps.ts:408`. Neither call appends option text or explanation.
+
+`RegenReason` is a single variant `{ kind: "body-edit" }` matching actual scope. Forward-extension: if a future criterion needs option-text or structured-explanation embeddings, `RegenReason` variants extend in lockstep with the call-site scope.
+
+#### 14.7.7 Staleness model (§2.3 commit-1 Option (b))
+
+On admin edit, `submitEditAction` sets `metadata_json.validatorResult.staleAfterMs = Date.now()`. Existing flags remain visible with a stale badge; admin re-validates explicitly when needed. Re-validation produces a new `evaluatedAtMs` that supersedes `staleAfterMs`, restoring freshness without clearing fields.
+
+Alternatives rejected:
+
+- **Sync re-validation at edit time**: cost too high (~500ms-2s per edit) for unclear admin-context preservation benefit.
+- **Clear `validatorResult` on edit**: destroys admin context for why the edit was needed.
+
+#### 14.7.8 Architectural patterns established
+
+- **Shared-module pattern for client/server boundary**. When a client component consumes a type or pure helper from a server-side module that imports `db`, Next.js bundles the entire module (including the `db` import graph) into the client bundle, which fails at build time (`Module not found: Can't resolve 'dns'` via pg). Two instances now establish the canonical idiom: `action-history-shared.ts` (§2.5) + `pressure-cell-shared.ts` (§2.6). Pure helpers + Zod schemas + types live in the `-shared` module; the `-data` module imports from shared and adds the DB loader. Third instance suggests promoting to a generic SPEC convention note.
+- **Always-mount + CSS-hide for tab state preservation**. All tab bodies render into the DOM on first mount; only the active tab is visible. Inactive tabs' `React.useState` containers preserve across switches without prop drilling.
+- **SessionStorage UX persistence**. Per-cohort filter+sort + last-visited status tab. Zod-validated payloads with graceful fallback to defaults on parse/quota errors. Storage keys prefixed `admin-review-queue:`.
+- **URL param seeding precedence**: URL > sessionStorage > defaults. The `<QueueList>` React `key` encodes status + URL overrides so navigating between two filtered URLs that share a status forces a fresh mount and picks up the new override values.
+- **Tab-scope enforcement**: re-validate buttons + dispositions + bulk dashboard all check `status === "candidate"` before rendering.
+
+### 14.8 Working-set state (post-promotion baseline)
+
+At §1.3 commit-2 production batch completion (`8c4dff7`):
+
+- 1,711 candidates with `validatorResult`.
+- Single `thresholdsHash`: `sha256:111f631af4815759bc9b2e5eb9bd2b4c2128851f05d54dbf295dcff4bd7913ab`.
+- 791 candidates with `hasAnyFlag = true` (46.2%) — union of: 435 from criterion-6 cohort-rejection across 3 cohorts (verbal.analogies, numerical.lowest_values, verbal.antonyms — all 100%-flagged) + 398 from pressure-cell membership + individual criteria 1-5 flags in cohorts below criterion-6's 20% threshold; overlap collapsed.
+- 14 cohorts (1:1 with sub-types via `promptHash` backfill at §1.2 commit-1).
+
+**Sub-type-pattern taxonomy** (per plan-doc §0.7.1):
+
+- **Three cohort-rejection-pattern sub-types** (analogies, lowest_values, antonyms = 435 items, ~55% of queue): cohort-level decisions; admin reviews cohort archetype + applies decision en masse.
+- **Eight pressure-cell-pattern sub-types** (word_problems, averages, percentages, ratios, fractions, critical_reasoning, speed_distance_time, workrate; mixed flags ~50% per sub-type): per-item attention.
+- **Three clean sub-types** (sentence_completion, letter_series, number_series): sparse individual flags only (≤25% per cohort).
+
+Subsequent admin disposition (§2 phase) updates the live + rejected counts at read time. SPEC §14.8 captures the post-batch baseline; future re-batches with different threshold sets will produce new baselines tagged by their `thresholdsHash`.
+
+### 14.9 Cross-references
+
+- **Plan-doc** `docs/plans/phase4-validator-and-admin-review.md` — round-by-round forensic record. §0.8.1 + §0.8.2 carry the §1 + §2 phase summaries; §0.3 carries the §6.14.43 instance ledger; §0.6 carries the open-question resolutions; §0.7 + §0.7.1 + §0.7.2 carry pressure-cell semantics + dual-metric note.
+- **SPEC §6.14.43** — redirector-spec error pattern. §1 + §2 phases collectively banked 12 instances (#6 through #17) against this entry; round-close §3 commit-1 amendment evaluates sub-type taxonomy refinement.
+- **SPEC §6.14.31** — destructive-operation-gate. Validator production batch (`scripts/dev/validator-production-batch.ts --yes`) and admin disposition actions all follow this pattern.
+- **SPEC §3.3** — items table schema (the validator+admin round extends; status enum 4 values + rejection columns + `item_admin_actions` table).
+- **SPEC §5.6** — admin gate (`requireAdminEmail()`). The validator+admin round consumes unchanged.
+- **SPEC §6.14.40** — redirector-vs-empirical-state divergence. Sister pattern; informed several §1 + §2 audit-step catches.
+- **PRD §3.1** — admin allowlist canonical pattern.
+- **`scripts/_logs/2026-05-10_phase4-validator-admin-pre-open-reconciliation.md`** — pre-open audit material referenced by plan-doc §0.5.
