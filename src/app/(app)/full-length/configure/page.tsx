@@ -19,11 +19,9 @@
 import { redirect } from "next/navigation"
 import * as React from "react"
 import { auth } from "@/auth"
+import { WoopWizard } from "@/components/full-length/woop-wizard"
 import { PageNav } from "@/components/nav/page-nav"
-import { Button } from "@/components/ui/button"
 import { loadNavChrome } from "@/server/nav/chrome"
-
-const RUN_PATH = "/full-length/run"
 
 async function loadUserId(): Promise<string> {
 	const session = await auth()
@@ -42,8 +40,8 @@ function Page() {
 			<React.Suspense fallback={null}>
 				<PageNav chromePromise={chromePromise} />
 			</React.Suspense>
-			<main className="mx-auto max-w-[1100px] px-7 pb-6">
-				<header className="mb-3 flex flex-col gap-1 border-border-soft border-b pt-6 pb-3">
+			<main className="mx-auto max-w-[1100px] px-7 pb-12">
+				<header className="mb-6 flex flex-col gap-1 border-border-soft border-b pt-6 pb-4">
 					<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">
 						Full-length test
 					</h1>
@@ -52,11 +50,7 @@ function Page() {
 						numerical sub-types. Lands on the post-session review on completion or timeout.
 					</p>
 				</header>
-				<form action={RUN_PATH} method="get" className="flex justify-end">
-					<Button type="submit" size="lg">
-						Start full-length test
-					</Button>
-				</form>
+				<WoopWizard />
 			</main>
 		</div>
 	)
