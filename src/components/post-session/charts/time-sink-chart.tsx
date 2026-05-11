@@ -53,7 +53,6 @@ const DIFFICULTY_LABEL: Record<Difficulty, string> = {
 interface Counts {
 	correct: number
 	incorrect: number
-	overGoal: number
 }
 
 function pickYMax(attempts: ReadonlyArray<AttemptPoint>): number {
@@ -109,13 +108,11 @@ function matchesFilter(p: AttemptPoint, selected: ReadonlySet<string>): boolean 
 function computeCounts(attempts: ReadonlyArray<AttemptPoint>): Counts {
 	let correct = 0
 	let incorrect = 0
-	let overGoal = 0
 	for (const a of attempts) {
 		if (a.correct) correct += 1
 		else incorrect += 1
-		if (a.latencyMs > GOAL_MS) overGoal += 1
 	}
-	return { correct, incorrect, overGoal }
+	return { correct, incorrect }
 }
 
 interface LegendProps {
@@ -124,24 +121,18 @@ interface LegendProps {
 
 function Legend(props: LegendProps) {
 	return (
-		<div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-text-1">
+		<div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[14px] text-text-1">
 			<span className="inline-flex items-center gap-2">
-				<span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-good" />
+				<span aria-hidden="true" className="h-3 w-3 rounded-full bg-good" />
 				<span className="tabular-nums">
 					<span className="font-semibold">{props.counts.correct}</span> correct
 				</span>
 			</span>
 			<span className="inline-flex items-center gap-2">
-				<span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-destructive" />
+				<span aria-hidden="true" className="h-3 w-3 rounded-full bg-destructive" />
 				<span className="tabular-nums">
 					<span className="font-semibold">{props.counts.incorrect}</span> incorrect
 				</span>
-			</span>
-			<span aria-hidden="true" className="text-text-3">
-				·
-			</span>
-			<span className="text-text-2 tabular-nums">
-				<span className="font-semibold">{props.counts.overGoal}</span> over 18s
 			</span>
 		</div>
 	)
@@ -362,27 +353,24 @@ function TimeSinkChart(props: TimeSinkChartProps) {
 	const ariaLabel = `Per-question time vs 18 second goal across ${n} question${plural}.`
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-3">
 			<TimeSinkMatrix
 				attempts={attempts}
 				selectedKeys={props.selectedKeys}
 				onChange={props.onSelectedKeysChange}
 			/>
-			<Legend counts={counts} />
-			<div className="space-y-1 pt-2 text-center">
-				<h4 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
-					Time sink
-				</h4>
-				<p className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+			<div className="space-y-0.5">
+				<Legend counts={counts} />
+				<h4 className="text-center font-medium font-serif text-[18px] text-text-1 tracking-[-0.005em]">
 					Per-question time vs the 18s goal
-				</p>
+				</h4>
+				<TimeSinkSvg
+					attempts={attempts}
+					selectedKeys={props.selectedKeys}
+					ariaLabel={ariaLabel}
+					onAttemptClick={props.onAttemptClick}
+				/>
 			</div>
-			<TimeSinkSvg
-				attempts={attempts}
-				selectedKeys={props.selectedKeys}
-				ariaLabel={ariaLabel}
-				onAttemptClick={props.onAttemptClick}
-			/>
 		</div>
 	)
 }

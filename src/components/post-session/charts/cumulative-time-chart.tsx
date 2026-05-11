@@ -18,7 +18,6 @@
 import { DotHitTarget } from "@/components/post-session/charts/dot-hit-target"
 import { makeKey } from "@/components/post-session/charts/time-sink-matrix"
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
-import { cn } from "@/lib/utils"
 
 interface AttemptPoint {
 	attemptId: string
@@ -112,12 +111,6 @@ function buildXTickLabels(count: number): ReadonlyArray<number> {
 	return out
 }
 
-function formatPaceDelta(deltaMs: number): string {
-	if (deltaMs > 1000) return `${formatMinSec(deltaMs)} over the 18s/question pace`
-	if (deltaMs < -1000) return `${formatMinSec(-deltaMs)} under the 18s/question pace`
-	return "on pace with the 18s/question budget"
-}
-
 function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 	const attempts = props.attempts
 	if (attempts.length === 0) {
@@ -149,23 +142,10 @@ function CumulativeTimeChart(props: CumulativeTimeChartProps) {
 	const budgetEndX = xOf(n - 1, n)
 	const budgetEndY = yOf(budgetTotalMs, yMaxMs)
 
-	const isOverBudgetEnd = actualTotalMs > budgetTotalMs
-	const totalClass = isOverBudgetEnd ? "text-destructive" : "text-good"
-	const deltaCopy = formatPaceDelta(actualTotalMs - budgetTotalMs)
 	const anyFilter = props.selectedKeys.size > 0
 
 	return (
-		<div className="space-y-3">
-			<div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-text-1">
-				<span className="inline-flex items-center gap-2">
-					<span
-						aria-hidden="true"
-						className="inline-block h-0 w-5 border-cobalt/70 border-t-2 border-dashed"
-					/>
-					<span>Budget (18s × question)</span>
-				</span>
-				<span className={cn("ml-auto font-semibold tabular-nums", totalClass)}>{deltaCopy}</span>
-			</div>
+		<div>
 			<svg
 				aria-label={`Cumulative time across ${n} question${n === 1 ? "" : "s"} vs the 18s-per-question budget.`}
 				className="h-[340px] w-full overflow-visible"

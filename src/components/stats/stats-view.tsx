@@ -269,7 +269,7 @@ function ChartCard(props: ChartCardProps) {
 			data-testid={props.testId}
 		>
 			<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
-				<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+				<h3 className="font-medium font-serif text-[18px] text-text-1 tracking-[-0.005em]">
 					{props.title}
 				</h3>
 				<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">{props.eyebrow}</span>

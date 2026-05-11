@@ -282,7 +282,7 @@ function PostSessionShell(props: PostSessionShellProps) {
 				data-testid="post-session-slot-strategy-surface"
 			>
 				<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
-					<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+					<h3 className="font-medium font-serif text-[18px] text-text-1 tracking-[-0.005em]">
 						Strategies to review
 					</h3>
 					<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
@@ -343,7 +343,7 @@ function ChartCard(props: ChartCardProps) {
 			data-testid={props.testId}
 		>
 			<header className="flex items-baseline justify-between gap-4 border-border-soft border-b px-4 pt-2 pb-1">
-				<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+				<h3 className="font-medium font-serif text-[18px] text-text-1 tracking-[-0.005em]">
 					{props.title}
 				</h3>
 				{rightNode}
@@ -386,15 +386,24 @@ function PerformancePanel(props: PerformancePanelProps) {
 				testId="post-session-chart-pacing"
 				headerRight={<PacingScore correct={pacingCorrect} total={pacingTotal} />}
 			>
-				<div className="space-y-5">
+				<div className="space-y-4">
 					<TimeSinkChart
 						attempts={attemptPoints}
 						selectedKeys={props.pacingSelectedKeys}
 						onSelectedKeysChange={props.onPacingSelectedKeysChange}
 						onAttemptClick={props.onAttemptClick}
 					/>
-					<div className="space-y-3 border-border-soft border-t pt-4">
-						<h4 className="text-center font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+					<div className="space-y-0.5 border-border-soft border-t pt-3">
+						<div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[14px] text-text-1">
+							<span className="inline-flex items-center gap-2">
+								<span
+									aria-hidden="true"
+									className="inline-block h-0 w-6 border-cobalt/70 border-t-2 border-dashed"
+								/>
+								<span>Budget (18s × question)</span>
+							</span>
+						</div>
+						<h4 className="text-center font-medium font-serif text-[18px] text-text-1 tracking-[-0.005em]">
 							Cumulative time vs the budget
 						</h4>
 						<CumulativeTimeChart
