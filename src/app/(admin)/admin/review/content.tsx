@@ -51,10 +51,7 @@ interface CohortCopy {
 // would soft-reuse the QueueList instance and skip the lazy initializer
 // that picks up new URL overrides. Including the overrides forces a
 // fresh mount whenever the URL filter intent changes.
-function queueListKey(
-	status: QueueStatusFilter,
-	overrides: InitialFilterOverrides
-): string {
+function queueListKey(status: QueueStatusFilter, overrides: InitialFilterOverrides): string {
 	const subType = overrides.subType === undefined ? "" : overrides.subType
 	const difficulty = overrides.difficulty === undefined ? "" : overrides.difficulty
 	return `${status}|${subType}|${difficulty}`
@@ -71,14 +68,14 @@ const COHORT_COPY: Readonly<Record<QueueStatusFilter, CohortCopy>> = {
 	live: {
 		title: "Live items",
 		description:
-			"Items currently live in the production bank — both seeded items and candidates promoted via admin approval. Use sub-type and difficulty filters to inspect a slice of what learners are actually seeing.",
+			"Items currently live in the production bank — both seeded items and candidates promoted via admin approval. Use sub-type and difficulty filters to inspect a slice of what learners are actually seeing. Reject a row to demote it out of the live bank.",
 		listHeading: "Live items",
 		emptyMessage: "No live items match the current filters."
 	},
 	rejected: {
 		title: "Rejected items",
 		description:
-			"Items an admin marked as bad. Rejection is terminal: these never re-enter the candidate queue and never go live. Open an item to read its rejection reason in the audit history.",
+			"Items an admin marked as bad. Rejected items are excluded from live banks and future candidate queues, but the row stays in the database for the audit trail. Approve a row to restore it to the live bank.",
 		listHeading: "Rejected items",
 		emptyMessage: "No rejected items match the current filters."
 	}

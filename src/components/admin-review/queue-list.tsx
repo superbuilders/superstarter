@@ -22,10 +22,6 @@
 import * as errors from "@superbuilders/errors"
 import * as React from "react"
 import { z } from "zod"
-import { subTypes } from "@/config/sub-types"
-import { logger } from "@/logger"
-import type { AdminQueueData, QueueStatusFilter } from "@/server/admin/queue-data"
-import { QueueRow } from "@/components/admin-review/queue-row"
 import {
 	applyFilters,
 	applySort,
@@ -39,7 +35,11 @@ import {
 	type StaleFilter,
 	type SubTypeFilter
 } from "@/components/admin-review/queue-filters"
+import { QueueRow } from "@/components/admin-review/queue-row"
 import type { Difficulty, SubTypeId } from "@/config/sub-types"
+import { subTypes } from "@/config/sub-types"
+import { logger } from "@/logger"
+import type { AdminQueueData, QueueStatusFilter } from "@/server/admin/queue-data"
 
 interface InitialFilterOverrides {
 	readonly subType: SubTypeId | undefined
@@ -114,12 +114,7 @@ function asPressureFilter(value: string): PressureFilter {
 }
 
 function asSortKey(value: string): SortKey {
-	if (
-		value === "newest" ||
-		value === "oldest" ||
-		value === "flag-count" ||
-		value === "sub-type"
-	) {
+	if (value === "newest" || value === "oldest" || value === "flag-count" || value === "sub-type") {
 		return value
 	}
 	return DEFAULT_SORT_KEY
@@ -264,20 +259,14 @@ function composeInitialFilterState(
 	const baseline = persisted === undefined ? defaultFilterStateFor(data) : persisted.filterState
 	if (overrides === undefined) return baseline
 	const subType = overrides.subType === undefined ? baseline.subType : overrides.subType
-	const difficulty =
-		overrides.difficulty === undefined ? baseline.difficulty : overrides.difficulty
+	const difficulty = overrides.difficulty === undefined ? baseline.difficulty : overrides.difficulty
 	return { ...baseline, subType, difficulty }
 }
 
 const SELECT_CLASS =
 	"h-8 rounded-md border border-border-soft bg-surface px-2 text-[12px] text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
 
-function QueueList({
-	data,
-	listHeading,
-	emptyMessage,
-	initialFilterOverrides
-}: QueueListProps) {
+function QueueList({ data, listHeading, emptyMessage, initialFilterOverrides }: QueueListProps) {
 	// QueueList is intended to be remounted when the status cohort changes
 	// (parent passes `key={data.statusFilter}`), so the per-cohort default
 	// flag filter is picked up cleanly via useState's lazy initializer
@@ -375,7 +364,7 @@ function QueueList({
 				{visible.map(function renderRow(item) {
 					return (
 						<li key={item.id}>
-							<QueueRow item={item} />
+							<QueueRow item={item} statusFilter={data.statusFilter} />
 						</li>
 					)
 				})}

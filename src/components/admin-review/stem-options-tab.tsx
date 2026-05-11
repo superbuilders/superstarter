@@ -43,10 +43,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { type Difficulty, type SubTypeConfig, type SubTypeId, subTypes } from "@/config/sub-types"
 import { logger } from "@/logger"
-import {
-	approveCandidateAction,
-	rejectCandidateAction
-} from "@/server/admin/disposition-actions"
+import { approveItemAction, rejectItemAction } from "@/server/admin/disposition-actions"
 import { submitEditAction } from "@/server/admin/edit-actions"
 import type { AdminCandidateRow } from "@/server/admin/item-detail-data"
 import type { ItemBody } from "@/server/items/body-schema"
@@ -55,12 +52,14 @@ const NUMBER_SERIES_SUB_TYPE_ID = "numerical.number_series"
 const DIFFICULTY_VALUES: ReadonlyArray<Difficulty> = ["easy", "medium", "hard", "brutal"]
 const SUB_TYPE_LIST: ReadonlyArray<SubTypeConfig> = subTypes
 
-const SUB_TYPE_NAMES: ReadonlyMap<string, { displayName: string; section: "verbal" | "numerical" }> =
-	new Map(
-		subTypes.map(function toEntry(s) {
-			return [s.id, { displayName: s.displayName, section: s.section }]
-		})
-	)
+const SUB_TYPE_NAMES: ReadonlyMap<
+	string,
+	{ displayName: string; section: "verbal" | "numerical" }
+> = new Map(
+	subTypes.map(function toEntry(s) {
+		return [s.id, { displayName: s.displayName, section: s.section }]
+	})
+)
 
 function renderBody(body: ItemBody, subTypeId: string): React.ReactNode {
 	switch (body.kind) {
@@ -172,7 +171,7 @@ function StemOptionsView({ candidate, onEdit }: StemOptionsViewProps) {
 		setDispositionFeedback(undefined)
 		startDispositionTransition(async function runApprove() {
 			const result = await errors.try(
-				approveCandidateAction({
+				approveItemAction({
 					itemId: candidate.id,
 					acknowledgeStaleVerdict
 				})
@@ -180,7 +179,7 @@ function StemOptionsView({ candidate, onEdit }: StemOptionsViewProps) {
 			if (result.error) {
 				logger.warn(
 					{ itemId: candidate.id, error: result.error },
-					"StemOptionsView: approveCandidateAction failed"
+					"StemOptionsView: approveItemAction failed"
 				)
 				setDispositionFeedback({
 					kind: "err",
@@ -201,12 +200,12 @@ function StemOptionsView({ candidate, onEdit }: StemOptionsViewProps) {
 		setDispositionFeedback(undefined)
 		startDispositionTransition(async function runReject() {
 			const result = await errors.try(
-				rejectCandidateAction({ itemId: candidate.id, reasonNote: trimmed })
+				rejectItemAction({ itemId: candidate.id, reasonNote: trimmed })
 			)
 			if (result.error) {
 				logger.warn(
 					{ itemId: candidate.id, error: result.error },
-					"StemOptionsView: rejectCandidateAction failed"
+					"StemOptionsView: rejectItemAction failed"
 				)
 				setDispositionFeedback({
 					kind: "err",
@@ -501,12 +500,7 @@ function StemOptionsEdit({ candidate, onCancel }: StemOptionsEditProps) {
 					Edit mode
 				</span>
 				<div className="ml-auto flex items-center gap-2">
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={onCancel}
-						disabled={isSubmitting}
-					>
+					<Button variant="outline" size="sm" onClick={onCancel} disabled={isSubmitting}>
 						Cancel
 					</Button>
 					<Button size="sm" onClick={onSaveClick} disabled={isSubmitting}>

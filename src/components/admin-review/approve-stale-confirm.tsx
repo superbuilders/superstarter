@@ -7,7 +7,7 @@
 // (validatorResult.staleAfterMs > validatorResult.evaluatedAtMs). For
 // fresh verdicts, the approve action submits directly without surfacing
 // this modal. Per Option (b) ratification: the staleness gate is server-
-// side authoritative (approveCandidateAction throws
+// side authoritative (approveItemAction throws
 // ErrStaleVerdictNotAcknowledged unless input.acknowledgeStaleVerdict is
 // true); this modal is the corresponding client-side affordance.
 //

@@ -2,10 +2,12 @@
 // action_type 'approve' inside the audit-history-tab list (Phase 4
 // sub-phase b §2.5 commit 0).
 //
-// Approve transitions an item from candidate → live. The before/after
-// snapshots only carry the status field per approveCandidateAction at
-// §2.4 commit-0; no field-level diff is needed beyond the static
-// "promoted to live" line.
+// Approve transitions an item to live from either candidate or rejected.
+// The before/after snapshots carry the prior status (plus the rejection
+// columns when source was 'rejected') per approveItemAction; this
+// audit-entry display falls back to the static "promoted to live" line
+// regardless of source — the prior status is recoverable from beforeJson
+// for richer rendering later.
 
 import type { AdminActionHistoryEntry } from "@/server/admin/action-history-shared"
 
