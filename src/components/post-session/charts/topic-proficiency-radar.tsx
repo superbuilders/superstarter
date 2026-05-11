@@ -9,16 +9,19 @@
 // render at center with a reduced-opacity label + vertex (the "you have not
 // touched this yet" signal).
 //
-// Metric (per axis): `accuracy / paceSeconds`
-//   accuracy    = correct / total                         (in [0,1])
-//   paceSeconds = medianLatencyMs / 1000                  (seconds)
-//   value       = accuracy / paceSeconds                  (1/sec, unbounded ↑)
+// Metric (per axis): exponential-accuracy-weighted rated score (RS):
+//   accuracy = correct / total                            (in [0,1])
+//   T_actual = medianLatencyMs / 1000                     (seconds)
+//   RS       = (accuracy² × T_target / T_actual) × 100
 //
-// The target value (80% accuracy at the 18-second pace) is the brand-target
-// the cobalt ring marks: `0.8 / 18 ≈ 0.0444 per second`. The outer ring scale
-// is SHARED across both Verbal and Numerical radars (computed once in the
-// shell via `computeOuterRingValue` and passed in as a prop). Sharing the
-// scale is what makes the two radars visually comparable.
+// Squaring accuracy keeps a fast-but-wrong outlier from being "rescued"
+// by speed: a user at 20% / 5s scores 0.04 × 3.6 × 100 = 14.4, while
+// a target user at 80% / 18s scores 0.64 × 1.0 × 100 = 64 (the cobalt
+// ring), and a master at 95% / 12s clears 135.
+//
+// The outer ring scale is SHARED across Verbal and Numerical radars
+// (computed once in the shell via computeOuterRingValue, passed as a
+// prop) so the two radars are visually comparable.
 
 import type { PerSubTypePerformance } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
@@ -47,7 +50,9 @@ const LABEL_RADIUS = RADIUS + 22
 
 const TARGET_ACCURACY = 0.8
 const TARGET_PACE_SECONDS = 18
-const TARGET_PROFICIENCY_PER_SEC = TARGET_ACCURACY / TARGET_PACE_SECONDS
+// Rated score at the brand-target (80% at 18s) — the cobalt ring sits here.
+// (0.8² × 18/18) × 100 = 64.
+const TARGET_RS = TARGET_ACCURACY ** 2 * 100
 
 interface PerSubTypeMetric {
 	value: number
@@ -59,8 +64,9 @@ function metricFor(row: PerSubTypePerformance | undefined): PerSubTypeMetric {
 	if (row.total === 0) return { value: 0, isEmpty: true }
 	if (row.medianLatencyMs === 0) return { value: 0, isEmpty: true }
 	const accuracy = row.correct / row.total
-	const paceSeconds = row.medianLatencyMs / 1000
-	return { value: accuracy / paceSeconds, isEmpty: false }
+	const tActualSeconds = row.medianLatencyMs / 1000
+	const rs = accuracy ** 2 * (TARGET_PACE_SECONDS / tActualSeconds) * 100
+	return { value: rs, isEmpty: false }
 }
 
 function computeOuterRingValue(rows: ReadonlyArray<PerSubTypePerformance>): number {
@@ -71,7 +77,7 @@ function computeOuterRingValue(rows: ReadonlyArray<PerSubTypePerformance>): numb
 		if (m.value > observedMax) observedMax = m.value
 	}
 	const headroomMax = observedMax * 1.1
-	const targetFloor = 2 * TARGET_PROFICIENCY_PER_SEC
+	const targetFloor = 2 * TARGET_RS
 	return Math.max(targetFloor, headroomMax)
 }
 
@@ -184,12 +190,10 @@ function Ring(props: RingProps) {
 function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
 	const axes = buildAxes(props.rows, props.section)
 	if (axes.length === 0) {
-		return (
-			<p className="text-foreground/70 text-sm">No sub-types configured for this section.</p>
-		)
+		return <p className="text-foreground/70 text-sm">No sub-types configured for this section.</p>
 	}
 
-	const targetRadius = radiusFor(TARGET_PROFICIENCY_PER_SEC, props.outerRingValue)
+	const targetRadius = radiusFor(TARGET_RS, props.outerRingValue)
 	const targetPoints = axes.map(function targetPt(axis) {
 		return pointAt(axis.angle, targetRadius)
 	})
@@ -205,101 +209,113 @@ function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
 	const sectionLabel = props.section === "verbal" ? "verbal" : "numerical"
 
 	return (
-		<svg
-			aria-label={`Proficiency across ${axes.length} ${sectionLabel} sub-types; cobalt ring marks 80% accuracy at 18 seconds per question.`}
-			className="h-[280px] w-full overflow-visible"
-			overflow="visible"
-			role="img"
-			viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
-			xmlns="http://www.w3.org/2000/svg"
-		>
-			{ringScales.map(function renderRing(scale) {
-				return <Ring key={scale} axes={axes} scale={scale} />
-			})}
+		<div className="space-y-2">
+			<svg
+				aria-label={`Proficiency across ${axes.length} ${sectionLabel} sub-types; cobalt ring marks 80% accuracy at 18 seconds per question.`}
+				className="h-[280px] w-full overflow-visible"
+				overflow="visible"
+				role="img"
+				viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
+				xmlns="http://www.w3.org/2000/svg"
+			>
+				{ringScales.map(function renderRing(scale) {
+					return <Ring key={scale} axes={axes} scale={scale} />
+				})}
 
-			{axes.map(function renderSpoke(axis) {
-				const end = pointAt(axis.angle, RADIUS)
-				return (
-					<line
-						key={`spoke-${axis.subTypeId}`}
-						className="text-foreground/15"
-						stroke="currentColor"
-						strokeWidth="0.75"
-						x1={CENTER}
-						x2={end.x}
-						y1={CENTER}
-						y2={end.y}
-					/>
-				)
-			})}
+				{axes.map(function renderSpoke(axis) {
+					const end = pointAt(axis.angle, RADIUS)
+					return (
+						<line
+							key={`spoke-${axis.subTypeId}`}
+							className="text-foreground/15"
+							stroke="currentColor"
+							strokeWidth="0.75"
+							x1={CENTER}
+							x2={end.x}
+							y1={CENTER}
+							y2={end.y}
+						/>
+					)
+				})}
 
-			{/* Cobalt target ring — brand-target reference at 80% accuracy /
+				{/* Cobalt target ring — brand-target reference at 80% accuracy /
 			    18s pace. Solid (structural reference, not goal-line dashed). */}
-			<path
-				className="text-cobalt/70"
-				d={targetPath}
-				fill="none"
-				stroke="currentColor"
-				strokeLinejoin="round"
-				strokeWidth="1.25"
-			/>
+				<path
+					className="text-cobalt/70"
+					d={targetPath}
+					fill="none"
+					stroke="currentColor"
+					strokeLinejoin="round"
+					strokeWidth="1.25"
+				/>
 
-			<path
-				className="text-cobalt"
-				d={profilePath}
-				fill="currentColor"
-				fillOpacity={0.14}
-				stroke="currentColor"
-				strokeLinejoin="round"
-				strokeWidth="1.5"
-			/>
+				<path
+					className="text-cobalt"
+					d={profilePath}
+					fill="currentColor"
+					fillOpacity={0.14}
+					stroke="currentColor"
+					strokeLinejoin="round"
+					strokeWidth="1.5"
+				/>
 
-			{axes.map(function renderVertex(axis) {
-				const p = pointAt(axis.angle, radiusFor(axis.value, props.outerRingValue))
-				const vertexClass = axis.isEmpty ? "text-foreground/40" : "text-cobalt"
-				const titleSuffix = axis.isEmpty
-					? "no attempts this session"
-					: `${(axis.value * 60).toFixed(1)} correct/minute`
-				return (
-					<circle
-						key={`v-${axis.subTypeId}`}
-						className={vertexClass}
-						cx={p.x}
-						cy={p.y}
-						fill="currentColor"
-						r={2.5}
-					>
-						<title>{`${axis.displayName}: ${titleSuffix}`}</title>
-					</circle>
-				)
-			})}
+				{axes.map(function renderVertex(axis) {
+					const p = pointAt(axis.angle, radiusFor(axis.value, props.outerRingValue))
+					const vertexClass = axis.isEmpty ? "text-foreground/40" : "text-cobalt"
+					const titleSuffix = axis.isEmpty
+						? "no attempts this session"
+						: `RS ${axis.value.toFixed(1)}`
+					return (
+						<circle
+							key={`v-${axis.subTypeId}`}
+							className={vertexClass}
+							cx={p.x}
+							cy={p.y}
+							fill="currentColor"
+							r={2.5}
+						>
+							<title>{`${axis.displayName}: ${titleSuffix}`}</title>
+						</circle>
+					)
+				})}
 
-			{axes.map(function renderLabel(axis) {
-				const p = pointAt(axis.angle, LABEL_RADIUS)
-				const anchor = pickAnchor(axis.angle)
-				const labelClass = axis.isEmpty ? "text-foreground/40" : "text-foreground/80"
-				return (
-					<text
-						key={`label-${axis.subTypeId}`}
-						className={cn("fill-current font-sans text-[10px]", labelClass)}
-						dominantBaseline="middle"
-						textAnchor={anchor}
-						x={p.x}
-						y={p.y}
-					>
-						{axis.displayName}
-					</text>
-				)
-			})}
-		</svg>
+				{axes.map(function renderLabel(axis) {
+					const p = pointAt(axis.angle, LABEL_RADIUS)
+					const anchor = pickAnchor(axis.angle)
+					const labelClass = axis.isEmpty ? "text-foreground/40" : "text-foreground/80"
+					return (
+						<text
+							key={`label-${axis.subTypeId}`}
+							className={cn("fill-current font-sans text-[10px]", labelClass)}
+							dominantBaseline="middle"
+							textAnchor={anchor}
+							x={p.x}
+							y={p.y}
+						>
+							{axis.displayName}
+						</text>
+					)
+				})}
+			</svg>
+			<p className="text-[11px] text-text-3 leading-snug">
+				<span className="font-medium text-text-2">Radar Score</span>
+				{" = (Accuracy"}
+				<sup className="text-[9px]">2</sup>
+				{" × T"}
+				<sub className="text-[9px]">target</sub>
+				{" / T"}
+				<sub className="text-[9px]">actual</sub>
+				{") × 100"}
+			</p>
+		</div>
 	)
 }
 
-export type { TopicProficiencyRadarProps, SectionId }
+export type { SectionId, TopicProficiencyRadarProps }
 export {
-	TopicProficiencyRadar,
+	computeOuterRingValue,
 	TARGET_ACCURACY,
 	TARGET_PACE_SECONDS,
-	TARGET_PROFICIENCY_PER_SEC,
-	computeOuterRingValue
+	TARGET_RS,
+	TopicProficiencyRadar
 }
