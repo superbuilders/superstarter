@@ -507,7 +507,7 @@ function SpeedDrill() {
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const [picked, setPicked] = React.useState<"left" | "right" | "equal" | null>(null)
 	const pillRef = React.useRef<HTMLDivElement>(null)
-	const mastered = useMastery({ score: best, originRef: pillRef })
+	const mastered = useMastery({ slug: "butterfly", score: best, originRef: pillRef })
 
 	function pick(choice: "left" | "right" | "equal") {
 		if (feedback === "right") return

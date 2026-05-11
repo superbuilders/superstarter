@@ -10,12 +10,14 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import * as React from "react"
 import { auth } from "@/auth"
+import { type LessonCard, LessonsGrid } from "@/components/lessons/shared/lessons-grid"
 import { PageNav } from "@/components/nav/page-nav"
 import { loadNavChrome } from "@/server/nav/chrome"
 
-const LESSONS = [
+const LESSONS: ReadonlyArray<LessonCard> = [
 	{
 		href: "/lessons/balance-point",
+		slug: "balance-point",
 		eyebrow: "Averages",
 		title: "The Balance Point",
 		blurb: "Stop summing-and-dividing. Drag numbers onto a number line and watch the mean tip.",
@@ -24,6 +26,7 @@ const LESSONS = [
 	},
 	{
 		href: "/lessons/butterfly",
+		slug: "butterfly",
 		eyebrow: "Fractions",
 		title: "Butterfly Compare",
 		blurb: "Cross-multiply upward — no common denominators, no division. Just two products.",
@@ -32,6 +35,7 @@ const LESSONS = [
 	},
 	{
 		href: "/lessons/percent-flip",
+		slug: "percent-flip",
 		eyebrow: "Percent",
 		title: "Flip It",
 		blurb: "X% of Y equals Y% of X. Turn 16% of 50 into 50% of 16 and solve it in one breath.",
@@ -40,13 +44,14 @@ const LESSONS = [
 	},
 	{
 		href: "/lessons/benchmarks",
+		slug: "benchmarks",
 		eyebrow: "Memory",
 		title: "Anchor Drill",
 		blurb: "Burn the CCAT fraction–decimal–percent table into recall under a 5-second clock.",
 		shortcut: "1/8 = 0.125, 5/8 = 0.625, 3/16 = …",
 		eyebrowClass: "text-good"
 	}
-] as const
+]
 
 async function loadUserId(): Promise<string> {
 	const session = await auth()
@@ -77,39 +82,7 @@ function Page() {
 						procedures.
 					</p>
 				</header>
-				<ul className="grid gap-3 sm:grid-cols-2">
-					{LESSONS.map(function renderCard(lesson) {
-						return (
-							<li key={lesson.href}>
-								<Link
-									href={lesson.href}
-									className="group relative flex h-full flex-col gap-3 rounded-lg border border-border-soft bg-surface px-5 py-5 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
-								>
-									<div className="flex items-center justify-between">
-										<span
-											className={`font-semibold text-[11px] uppercase tracking-[0.06em] ${lesson.eyebrowClass}`}
-										>
-											{lesson.eyebrow}
-										</span>
-										<span
-											aria-hidden="true"
-											className="font-mono text-text-3 text-xs transition-transform group-hover:translate-x-0.5"
-										>
-											→
-										</span>
-									</div>
-									<h2 className="font-medium font-serif text-[20px] text-text-1 leading-tight tracking-[-0.005em]">
-										{lesson.title}
-									</h2>
-									<p className="text-[13px] text-text-2 leading-snug">{lesson.blurb}</p>
-									<p className="mt-auto font-mono text-[11px] text-text-3 tracking-[0.01em]">
-										{lesson.shortcut}
-									</p>
-								</Link>
-							</li>
-						)
-					})}
-				</ul>
+				<LessonsGrid lessons={LESSONS} />
 				<Link
 					href="/"
 					className="mt-6 inline-block text-cobalt text-sm hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"

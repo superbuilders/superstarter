@@ -443,7 +443,7 @@ function MissingValuePractice() {
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const inputRef = React.useRef<HTMLInputElement>(null)
 	const pillRef = React.useRef<HTMLDivElement>(null)
-	const mastered = useMastery({ score: solved, originRef: pillRef })
+	const mastered = useMastery({ slug: "balance-point", score: solved, originRef: pillRef })
 
 	function next() {
 		setProblem(generateProblem())

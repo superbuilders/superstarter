@@ -232,7 +232,7 @@ function SpeedDrill() {
 	const [best, setBest] = React.useState(0)
 	const pillRef = React.useRef<HTMLDivElement>(null)
 	const masteryScore = round.correct > best ? round.correct : best
-	const mastered = useMastery({ score: masteryScore, originRef: pillRef })
+	const mastered = useMastery({ slug: "benchmarks", score: masteryScore, originRef: pillRef })
 
 	const current = round.prompts[round.index]
 	const finished = round.index >= round.prompts.length

@@ -13,6 +13,7 @@
 import * as errors from "@superbuilders/errors"
 import confetti from "canvas-confetti"
 import * as React from "react"
+import { markMastered } from "@/components/lessons/shared/lesson-mastery-store"
 import { logger } from "@/logger"
 
 const PARTICLE_COUNT = 200
@@ -61,12 +62,14 @@ function originFromRef(el: HTMLElement | null): { x: number; y: number } {
 }
 
 interface UseMasteryOptions {
+	slug: string
 	score: number
 	threshold?: number
 	originRef: React.RefObject<HTMLElement | null>
 }
 
 function useMastery({
+	slug,
 	score,
 	threshold = DEFAULT_MASTERY_THRESHOLD,
 	originRef
@@ -80,9 +83,10 @@ function useMastery({
 			if (typeof window === "undefined") return
 			const origin = originFromRef(originRef.current)
 			fireRealisticBurst(origin.x, origin.y)
+			markMastered(slug)
 			setMastered(true)
 		},
-		[score, threshold, originRef, mastered]
+		[score, threshold, originRef, mastered, slug]
 	)
 
 	return mastered

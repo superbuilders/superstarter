@@ -267,7 +267,7 @@ function SpeedDrill() {
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const inputRef = React.useRef<HTMLInputElement>(null)
 	const pillRef = React.useRef<HTMLDivElement>(null)
-	const mastered = useMastery({ score: best, originRef: pillRef })
+	const mastered = useMastery({ slug: "percent-flip", score: best, originRef: pillRef })
 
 	function next() {
 		setProblem(generateProblem())
