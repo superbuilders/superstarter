@@ -165,8 +165,8 @@ function Sandbox() {
 				<SeesawSvg chips={chips} meanExact={meanExact} />
 			</div>
 			<div className="grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-3">
-				<Readout label="Mean μ" value={meanLabel} tone="text-cobalt" />
 				<Readout label="Left pull" value={leftLabel} tone="text-pace-over" />
+				<Readout label="Mean μ" value={meanLabel} tone="text-cobalt" />
 				<Readout label="Right pull" value={rightLabel} tone="text-pace-on" />
 			</div>
 			<p className={`px-5 pb-3 text-[12px] tracking-[0.01em] ${balanceTone}`}>{balanceCopy}</p>
@@ -382,9 +382,18 @@ function SeesawSvg({ chips, meanExact }: SeesawSvgProps) {
 						>
 							{chip.value}
 						</text>
+						<rect
+							x={x - 14}
+							y={SVG_DEV_LABEL_Y - 8}
+							width={28}
+							height={12}
+							rx={3}
+							className="fill-bg stroke-border-soft"
+							strokeWidth={1}
+						/>
 						<text
 							x={x}
-							y={SVG_DEV_LABEL_Y}
+							y={SVG_DEV_LABEL_Y + 1}
 							textAnchor="middle"
 							className="fill-text-2 font-mono text-[9px]"
 						>
