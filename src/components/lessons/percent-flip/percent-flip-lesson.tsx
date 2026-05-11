@@ -83,13 +83,17 @@ function PercentFlipLesson() {
 }
 
 function FlipCardSandbox() {
-	const [problem, setProblem] = React.useState<FlipProblem>(generateProblem)
+	const [problem, setProblem] = React.useState<FlipProblem | null>(null)
 	const [flipped, setFlipped] = React.useState(false)
 	const [revealAnswer, setRevealAnswer] = React.useState(false)
 	const [elapsedMs, setElapsedMs] = React.useState(0)
 	const [running, setRunning] = React.useState(false)
 	const startRef = React.useRef<number | null>(null)
 	const frameRef = React.useRef<number | null>(null)
+
+	React.useEffect(function init() {
+		setProblem(generateProblem())
+	}, [])
 
 	React.useEffect(
 		function trackElapsed() {
@@ -140,8 +144,12 @@ function FlipCardSandbox() {
 	const elapsedLabel = (elapsedMs / 1000).toFixed(2)
 	const innerTransform = flipped ? "rotate-y-180" : "rotate-y-0"
 	const flipLabel = flipped ? "Unflip" : "Flip it"
-	const answerLabel = revealAnswer ? formatAnswer(problem.answer) : "—"
+	const answerLabel = revealAnswer && problem !== null ? formatAnswer(problem.answer) : "—"
 	const answerTone = revealAnswer ? "text-good" : "text-text-3"
+	const identityValue =
+		problem === null
+			? "—"
+			: `${problem.percent}·${problem.base} = ${problem.base}·${problem.percent}`
 
 	return (
 		<section className="mb-4 overflow-hidden rounded-lg border border-border-soft bg-surface">
@@ -157,32 +165,36 @@ function FlipCardSandbox() {
 				<div
 					className={`relative mx-auto h-44 w-full max-w-md transition-transform duration-500 [transform-style:preserve-3d] ${innerTransform}`}
 				>
-					<FlipFace
-						side="front"
-						eyebrow="Original"
-						percent={problem.percent}
-						base={problem.base}
-						tone="text-indigo-deep"
-						accentClass="bg-indigo-deep/10 text-indigo-deep"
-					/>
-					<FlipFace
-						side="back"
-						eyebrow="Flipped"
-						percent={problem.base}
-						base={problem.percent}
-						tone="text-cobalt"
-						accentClass="bg-cobalt/10 text-cobalt"
-					/>
+					{problem === null ? (
+						<div className="absolute inset-0 flex items-center justify-center rounded-lg border border-border-soft bg-bg text-sm text-text-3">
+							Loading…
+						</div>
+					) : (
+						<>
+							<FlipFace
+								side="front"
+								eyebrow="Original"
+								percent={problem.percent}
+								base={problem.base}
+								tone="text-indigo-deep"
+								accentClass="bg-indigo-deep/10 text-indigo-deep"
+							/>
+							<FlipFace
+								side="back"
+								eyebrow="Flipped"
+								percent={problem.base}
+								base={problem.percent}
+								tone="text-cobalt"
+								accentClass="bg-cobalt/10 text-cobalt"
+							/>
+						</>
+					)}
 				</div>
 			</div>
 			<div className="grid grid-cols-1 gap-3 px-5 pb-4 sm:grid-cols-3">
 				<Readout label="Elapsed" value={`${elapsedLabel}s`} tone="text-text-1" />
 				<Readout label="Answer" value={answerLabel} tone={answerTone} />
-				<Readout
-					label="Identity"
-					value={`${problem.percent}·${problem.base} = ${problem.base}·${problem.percent}`}
-					tone="text-text-2"
-				/>
+				<Readout label="Identity" value={identityValue} tone="text-text-2" />
 			</div>
 			<div className="flex flex-wrap gap-2 border-border-soft border-t px-5 py-3">
 				<button
@@ -259,7 +271,7 @@ function Readout({ label, value, tone }: ReadoutProps) {
 }
 
 function SpeedDrill() {
-	const [problem, setProblem] = React.useState<FlipProblem>(generateProblem)
+	const [problem, setProblem] = React.useState<FlipProblem | null>(null)
 	const [guess, setGuess] = React.useState("")
 	const [streak, setStreak] = React.useState(0)
 	const [best, setBest] = React.useState(0)
@@ -268,6 +280,10 @@ function SpeedDrill() {
 	const inputRef = React.useRef<HTMLInputElement>(null)
 	const pillRef = React.useRef<HTMLDivElement>(null)
 	const mastered = useMastery({ slug: "percent-flip", score: best, originRef: pillRef })
+
+	React.useEffect(function init() {
+		setProblem(generateProblem())
+	}, [])
 
 	function next() {
 		setProblem(generateProblem())
@@ -279,6 +295,7 @@ function SpeedDrill() {
 	}
 	function check(event: React.FormEvent) {
 		event.preventDefault()
+		if (problem === null) return
 		const parsed = Number.parseFloat(guess)
 		if (Number.isNaN(parsed)) return
 		if (Math.abs(parsed - problem.answer) < 0.0001) {
@@ -302,17 +319,17 @@ function SpeedDrill() {
 		next()
 	}
 
-	const shownPercent = showFlipped ? problem.base : problem.percent
-	const shownBase = showFlipped ? problem.percent : problem.base
+	const shownPercent = problem === null ? 0 : showFlipped ? problem.base : problem.percent
+	const shownBase = problem === null ? 0 : showFlipped ? problem.percent : problem.base
 	const flipLabel = showFlipped ? "Unflip" : "Flip"
 	const feedbackTone =
 		feedback === "right" ? "text-good" : feedback === "wrong" ? "text-pace-over" : "text-text-3"
-	const feedbackCopy =
-		feedback === "right"
-			? `Snap. ${problem.percent}% of ${problem.base} = ${formatAnswer(problem.answer)}.`
-			: feedback === "wrong"
-				? `Off — answer is ${formatAnswer(problem.answer)}. Try flipping: ${problem.base}% of ${problem.percent}.`
-				: "Flip first. Solve the friendly side."
+	let feedbackCopy = "Flip first. Solve the friendly side."
+	if (problem !== null && feedback === "right") {
+		feedbackCopy = `Snap. ${problem.percent}% of ${problem.base} = ${formatAnswer(problem.answer)}.`
+	} else if (problem !== null && feedback === "wrong") {
+		feedbackCopy = `Off — answer is ${formatAnswer(problem.answer)}. Try flipping: ${problem.base}% of ${problem.percent}.`
+	}
 	return (
 		<section className="rounded-lg border border-border-soft bg-surface">
 			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
@@ -336,12 +353,18 @@ function SpeedDrill() {
 				</div>
 			</div>
 			<div className="px-5 py-6">
-				<p className="text-center font-mono font-semibold text-[44px] text-text-1 leading-none">
-					{shownPercent}% of {shownBase}
-				</p>
-				<p className="mt-1 text-center text-[12px] text-text-3">
-					= ({shownPercent} × {shownBase}) ÷ 100
-				</p>
+				{problem === null ? (
+					<p className="text-center text-sm text-text-3">Loading…</p>
+				) : (
+					<>
+						<p className="text-center font-mono font-semibold text-[44px] text-text-1 leading-none">
+							{shownPercent}% of {shownBase}
+						</p>
+						<p className="mt-1 text-center text-[12px] text-text-3">
+							= ({shownPercent} × {shownBase}) ÷ 100
+						</p>
+					</>
+				)}
 				<form onSubmit={check} className="mt-5 flex flex-wrap items-center justify-center gap-2">
 					<input
 						ref={inputRef}

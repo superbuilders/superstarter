@@ -437,13 +437,17 @@ function formatSignedInt(v: number): string {
 }
 
 function MissingValuePractice() {
-	const [problem, setProblem] = React.useState<DrillProblem>(generateProblem)
+	const [problem, setProblem] = React.useState<DrillProblem | null>(null)
 	const [guess, setGuess] = React.useState("")
 	const [solved, setSolved] = React.useState(0)
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const inputRef = React.useRef<HTMLInputElement>(null)
 	const pillRef = React.useRef<HTMLDivElement>(null)
 	const mastered = useMastery({ slug: "balance-point", score: solved, originRef: pillRef })
+
+	React.useEffect(function init() {
+		setProblem(generateProblem())
+	}, [])
 
 	function next() {
 		setProblem(generateProblem())
@@ -452,11 +456,10 @@ function MissingValuePractice() {
 		const el = inputRef.current
 		if (el) el.focus()
 	}
-	function check(event: React.FormEvent) {
-		event.preventDefault()
+	function check(answer: number) {
 		const parsed = Number.parseInt(guess, 10)
 		if (Number.isNaN(parsed)) return
-		if (parsed === problem.answer) {
+		if (parsed === answer) {
 			setFeedback("right")
 			setSolved(function inc(prev) {
 				return prev + 1
@@ -465,6 +468,67 @@ function MissingValuePractice() {
 			setFeedback("wrong")
 		}
 	}
+	function onGuessChange(value: string) {
+		setGuess(value)
+		if (feedback !== "idle") setFeedback("idle")
+	}
+
+	return (
+		<section className="rounded-lg border border-border-soft bg-surface">
+			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
+				<div>
+					<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
+						Missing-value practice
+					</p>
+					<p className="mt-0.5 text-[13px] text-text-2">
+						Find the value that makes the deviations sum to zero.
+					</p>
+				</div>
+				<MasteryPill
+					pillRef={pillRef}
+					label="Solved"
+					value={String(solved)}
+					tone="text-good"
+					mastered={mastered}
+				/>
+			</div>
+			<div className="px-5 py-5">
+				{problem === null ? (
+					<p className="text-sm text-text-3">Loading problem…</p>
+				) : (
+					<PracticeBody
+						problem={problem}
+						guess={guess}
+						feedback={feedback}
+						inputRef={inputRef}
+						onGuessChange={onGuessChange}
+						onSubmit={check}
+						onNext={next}
+					/>
+				)}
+			</div>
+		</section>
+	)
+}
+
+interface PracticeBodyProps {
+	problem: DrillProblem
+	guess: string
+	feedback: "idle" | "right" | "wrong"
+	inputRef: React.RefObject<HTMLInputElement | null>
+	onGuessChange: (value: string) => void
+	onSubmit: (answer: number) => void
+	onNext: () => void
+}
+function PracticeBody({
+	problem,
+	guess,
+	feedback,
+	inputRef,
+	onGuessChange,
+	onSubmit,
+	onNext
+}: PracticeBodyProps) {
 	const parsedGuess = Number.parseInt(guess, 10)
 	const guessIsValid = !Number.isNaN(parsedGuess)
 	const givenDeviations = problem.givens.map(function dev(v) {
@@ -486,90 +550,73 @@ function MissingValuePractice() {
 	} else if (feedback === "wrong") {
 		feedbackCopy = `Off by ${formatSignedInt(totalDeviation)}. Adjust your guess so the deviations sum to 0.`
 	}
+	function handleSubmit(event: React.FormEvent) {
+		event.preventDefault()
+		onSubmit(problem.answer)
+	}
 	return (
-		<section className="rounded-lg border border-border-soft bg-surface">
-			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
-				<div>
-					<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
-						Missing-value practice
-					</p>
-					<p className="mt-0.5 text-[13px] text-text-2">
-						Find the value that makes the deviations sum to zero.
-					</p>
-				</div>
-				<MasteryPill
-					pillRef={pillRef}
-					label="Solved"
-					value={String(solved)}
-					tone="text-good"
-					mastered={mastered}
+		<>
+			<p className="text-sm text-text-2">
+				These <span className="font-semibold text-text-1">{problem.givens.length}</span> numbers
+				have a mean of <span className="font-mono font-semibold text-cobalt">{problem.target}</span>
+				. Find the missing value.
+			</p>
+			<DeviationRow
+				givens={problem.givens}
+				deviations={givenDeviations}
+				guess={guessIsValid ? parsedGuess : null}
+				guessDeviation={guessDeviation}
+				requiredDeviation={-givenSum}
+			/>
+			<DeviationSum
+				givenSum={givenSum}
+				guessDeviation={guessDeviation}
+				total={totalDeviation}
+				balanced={balanced}
+				revealed={feedback !== "idle"}
+			/>
+			<form onSubmit={handleSubmit} className="mt-4 flex flex-wrap items-center gap-2">
+				<input
+					ref={inputRef}
+					type="number"
+					inputMode="numeric"
+					value={guess}
+					onChange={function onChange(e) {
+						onGuessChange(e.target.value)
+					}}
+					disabled={correct}
+					aria-label="Your guess"
+					placeholder="?"
+					className="h-11 w-28 rounded-md border border-border-strong bg-bg px-3 font-mono text-[18px] text-text-1 placeholder:text-text-3 focus-visible:border-cobalt focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:opacity-60"
 				/>
-			</div>
-			<div className="px-5 py-5">
-				<p className="text-sm text-text-2">
-					These <span className="font-semibold text-text-1">{problem.givens.length}</span> numbers
-					have a mean of{" "}
-					<span className="font-mono font-semibold text-cobalt">{problem.target}</span>. Find the
-					missing value.
-				</p>
-				<DeviationRow
-					givens={problem.givens}
-					deviations={givenDeviations}
-					guess={guessIsValid ? parsedGuess : null}
-					guessDeviation={guessDeviation}
-					requiredDeviation={-givenSum}
-				/>
-				<DeviationSum
-					givenSum={givenSum}
-					guessDeviation={guessDeviation}
-					total={totalDeviation}
-					balanced={balanced}
-					revealed={feedback !== "idle"}
-				/>
-				<form onSubmit={check} className="mt-4 flex flex-wrap items-center gap-2">
-					<input
-						ref={inputRef}
-						type="number"
-						inputMode="numeric"
-						value={guess}
-						onChange={function onChange(e) {
-							setGuess(e.target.value)
-							if (feedback !== "idle") setFeedback("idle")
-						}}
-						disabled={correct}
-						aria-label="Your guess"
-						placeholder="?"
-						className="h-11 w-28 rounded-md border border-border-strong bg-bg px-3 font-mono text-[18px] text-text-1 placeholder:text-text-3 focus-visible:border-cobalt focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:opacity-60"
-					/>
-					{correct ? null : (
-						<button
-							type="submit"
-							disabled={!guessIsValid}
-							className="h-11 rounded-md border border-text-1 bg-text-1 px-4 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:opacity-40"
-						>
-							Check
-						</button>
-					)}
-					{correct ? (
-						<button
-							type="button"
-							onClick={next}
-							className="h-11 rounded-md border border-text-1 bg-text-1 px-4 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
-						>
-							Next problem
-						</button>
-					) : null}
+				{correct ? null : (
+					<button
+						type="submit"
+						disabled={!guessIsValid}
+						className="h-11 rounded-md border border-text-1 bg-text-1 px-4 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:opacity-40"
+					>
+						Check
+					</button>
+				)}
+				{correct ? (
 					<button
 						type="button"
-						onClick={next}
-						className="h-11 rounded-md border border-border-strong bg-surface px-4 font-medium text-[14px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+						onClick={onNext}
+						className="h-11 rounded-md border border-text-1 bg-text-1 px-4 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
 					>
-						Skip
+						Next problem
 					</button>
-				</form>
-				<p className={`mt-3 text-[13px] ${feedbackTone}`}>{feedbackCopy}</p>
-			</div>
-		</section>
+				) : null}
+				<button
+					type="button"
+					onClick={onNext}
+					className="h-11 rounded-md border border-border-strong bg-surface px-4 font-medium text-[14px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+				>
+					Skip
+				</button>
+			</form>
+			<p className={`mt-3 text-[13px] ${feedbackTone}`}>{feedbackCopy}</p>
+		</>
 	)
 }
 

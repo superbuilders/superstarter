@@ -501,7 +501,7 @@ function generateProblem(): DrillProblem {
 }
 
 function SpeedDrill() {
-	const [problem, setProblem] = React.useState<DrillProblem>(generateProblem)
+	const [problem, setProblem] = React.useState<DrillProblem | null>(null)
 	const [streak, setStreak] = React.useState(0)
 	const [best, setBest] = React.useState(0)
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
@@ -509,8 +509,13 @@ function SpeedDrill() {
 	const pillRef = React.useRef<HTMLDivElement>(null)
 	const mastered = useMastery({ slug: "butterfly", score: best, originRef: pillRef })
 
+	React.useEffect(function init() {
+		setProblem(generateProblem())
+	}, [])
+
 	function pick(choice: "left" | "right" | "equal") {
 		if (feedback === "right") return
+		if (problem === null) return
 		setPicked(choice)
 		if (choice === problem.answer) {
 			const nextStreak = streak + 1
@@ -534,16 +539,6 @@ function SpeedDrill() {
 		setPicked(null)
 	}
 
-	const cross1 = problem.n1 * problem.d2
-	const cross2 = problem.n2 * problem.d1
-	const feedbackTone =
-		feedback === "right" ? "text-good" : feedback === "wrong" ? "text-pace-over" : "text-text-3"
-	const feedbackCopy =
-		feedback === "right"
-			? `Right — ${problem.n1}·${problem.d2} = ${cross1}, ${problem.n2}·${problem.d1} = ${cross2}.`
-			: feedback === "wrong"
-				? `Not yet — ${problem.n1}·${problem.d2} = ${cross1}, ${problem.n2}·${problem.d1} = ${cross2}. Try again.`
-				: "Multiply each numerator by the opposite denominator. Bigger product wins."
 	return (
 		<section className="rounded-lg border border-border-soft bg-surface">
 			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
@@ -564,6 +559,41 @@ function SpeedDrill() {
 					/>
 				</div>
 			</div>
+			{problem === null ? (
+				<p className="px-5 py-8 text-center text-sm text-text-3">Loading…</p>
+			) : (
+				<DrillBody
+					problem={problem}
+					feedback={feedback}
+					picked={picked}
+					onPick={pick}
+					onSkip={skip}
+				/>
+			)}
+		</section>
+	)
+}
+
+interface DrillBodyProps {
+	problem: DrillProblem
+	feedback: "idle" | "right" | "wrong"
+	picked: "left" | "right" | "equal" | null
+	onPick: (choice: "left" | "right" | "equal") => void
+	onSkip: () => void
+}
+function DrillBody({ problem, feedback, picked, onPick, onSkip }: DrillBodyProps) {
+	const cross1 = problem.n1 * problem.d2
+	const cross2 = problem.n2 * problem.d1
+	const feedbackTone =
+		feedback === "right" ? "text-good" : feedback === "wrong" ? "text-pace-over" : "text-text-3"
+	let feedbackCopy = "Multiply each numerator by the opposite denominator. Bigger product wins."
+	if (feedback === "right") {
+		feedbackCopy = `Right — ${problem.n1}·${problem.d2} = ${cross1}, ${problem.n2}·${problem.d1} = ${cross2}.`
+	} else if (feedback === "wrong") {
+		feedbackCopy = `Not yet — ${problem.n1}·${problem.d2} = ${cross1}, ${problem.n2}·${problem.d1} = ${cross2}. Try again.`
+	}
+	return (
+		<>
 			<div className="grid grid-cols-2 items-center gap-6 px-5 py-6 text-center">
 				<FractionGlyph numerator={problem.n1} denominator={problem.d1} tone="text-cobalt" />
 				<FractionGlyph numerator={problem.n2} denominator={problem.d2} tone="text-alpha-accent" />
@@ -575,7 +605,7 @@ function SpeedDrill() {
 					correct={feedback === "right" && picked === "left"}
 					wrong={feedback === "wrong" && picked === "left"}
 					onClick={function onLeft() {
-						pick("left")
+						onPick("left")
 					}}
 				/>
 				<DrillButton
@@ -584,7 +614,7 @@ function SpeedDrill() {
 					correct={feedback === "right" && picked === "equal"}
 					wrong={feedback === "wrong" && picked === "equal"}
 					onClick={function onEqual() {
-						pick("equal")
+						onPick("equal")
 					}}
 				/>
 				<DrillButton
@@ -593,7 +623,7 @@ function SpeedDrill() {
 					correct={feedback === "right" && picked === "right"}
 					wrong={feedback === "wrong" && picked === "right"}
 					onClick={function onRight() {
-						pick("right")
+						onPick("right")
 					}}
 				/>
 			</div>
@@ -601,13 +631,13 @@ function SpeedDrill() {
 				<p className={`text-[13px] ${feedbackTone}`}>{feedbackCopy}</p>
 				<button
 					type="button"
-					onClick={skip}
+					onClick={onSkip}
 					className="shrink-0 rounded-md border border-border-strong bg-surface px-3 py-1.5 font-medium text-[13px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
 				>
 					Skip
 				</button>
 			</div>
-		</section>
+		</>
 	)
 }
 

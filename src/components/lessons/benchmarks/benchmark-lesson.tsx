@@ -227,19 +227,25 @@ function newRound(): RoundState {
 }
 
 function SpeedDrill() {
-	const [round, setRound] = React.useState<RoundState>(newRound)
+	const [round, setRound] = React.useState<RoundState | null>(null)
 	const [, forceTick] = React.useState(0)
 	const [best, setBest] = React.useState(0)
 	const pillRef = React.useRef<HTMLDivElement>(null)
-	const masteryScore = round.correct > best ? round.correct : best
+	const correctSoFar = round === null ? 0 : round.correct
+	const masteryScore = correctSoFar > best ? correctSoFar : best
 	const mastered = useMastery({ slug: "benchmarks", score: masteryScore, originRef: pillRef })
 
-	const current = round.prompts[round.index]
-	const finished = round.index >= round.prompts.length
-	const locked = round.feedback !== "idle"
+	React.useEffect(function init() {
+		setRound(newRound())
+	}, [])
+
+	const current = round === null ? undefined : round.prompts[round.index]
+	const finished = round !== null && round.index >= round.prompts.length
+	const locked = round === null ? true : round.feedback !== "idle"
 
 	React.useEffect(
 		function timer() {
+			if (round === null) return
 			if (locked || finished) return
 			const interval = window.setInterval(function bump() {
 				forceTick(function inc(t) {
@@ -250,31 +256,35 @@ function SpeedDrill() {
 				window.clearInterval(interval)
 			}
 		},
-		[locked, finished]
+		[locked, finished, round]
 	)
 
-	const elapsed = performance.now() - round.startMs
+	const elapsed = round === null ? 0 : performance.now() - round.startMs
 	const remaining = Math.max(0, ROUND_TIME_MS - elapsed)
 	const remainingPct = Math.max(0, Math.min(100, (remaining / ROUND_TIME_MS) * 100))
 
 	React.useEffect(
 		function fireTimeout() {
+			if (round === null) return
 			if (locked || finished) return
 			if (remaining > 0) return
 			setRound(function expire(prev) {
+				if (prev === null) return prev
 				if (prev.feedback !== "idle") return prev
 				return { ...prev, feedback: "timeout", picked: null }
 			})
 		},
-		[remaining, locked, finished]
+		[remaining, locked, finished, round]
 	)
 
 	React.useEffect(
 		function advance() {
+			if (round === null) return
 			if (round.feedback === "idle") return
 			const delay = round.feedback === "right" ? 450 : 950
 			const handle = window.setTimeout(function next() {
 				setRound(function step(prev) {
+					if (prev === null) return prev
 					const nextIndex = prev.index + 1
 					if (nextIndex >= prev.prompts.length) {
 						return {
@@ -298,13 +308,14 @@ function SpeedDrill() {
 				window.clearTimeout(handle)
 			}
 		},
-		[round.feedback]
+		[round]
 	)
 
 	function pick(choice: string) {
 		if (locked || !current) return
 		const isRight = choice === current.answer
 		setRound(function lock(prev) {
+			if (prev === null) return prev
 			const updatedCorrect = isRight ? prev.correct + 1 : prev.correct
 			const fb = isRight ? "right" : "wrong"
 			return { ...prev, picked: choice, feedback: fb, correct: updatedCorrect }
@@ -312,9 +323,18 @@ function SpeedDrill() {
 	}
 
 	function restart() {
+		if (round === null) return
 		const finalScore = round.correct
 		if (finalScore > best) setBest(finalScore)
 		setRound(newRound())
+	}
+
+	if (round === null) {
+		return (
+			<section className="rounded-lg border border-border-soft bg-surface px-5 py-6 text-center text-text-3">
+				Loading…
+			</section>
+		)
 	}
 
 	if (finished) {
