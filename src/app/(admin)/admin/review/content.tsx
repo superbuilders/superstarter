@@ -19,6 +19,7 @@
 // gate has resolved allowed.
 
 import * as React from "react"
+import { BulkRevalidateButton } from "@/components/admin-review/bulk-revalidate-button"
 import { QueueList } from "@/components/admin-review/queue-list"
 import { QueueStatusTabs } from "@/components/admin-review/queue-status-tabs"
 import type { AdminQueueData, QueueStatusFilter } from "@/server/admin/queue-data"
@@ -61,6 +62,7 @@ const COHORT_COPY: Readonly<Record<QueueStatusFilter, CohortCopy>> = {
 function AdminReviewContent({ dataPromise }: AdminReviewContentProps) {
 	const data = React.use(dataPromise)
 	const copy = COHORT_COPY[data.statusFilter]
+	const showBulkRevalidate = data.statusFilter === "candidate" && data.staleCount > 0
 	return (
 		<div className="min-h-screen bg-bg text-text-1">
 			<main className="mx-auto max-w-[1200px] px-7 pt-10 pb-12">
@@ -74,6 +76,11 @@ function AdminReviewContent({ dataPromise }: AdminReviewContentProps) {
 				<div className="mb-4">
 					<QueueStatusTabs active={data.statusFilter} counts={data.statusCounts} />
 				</div>
+				{showBulkRevalidate ? (
+					<div className="mb-4">
+						<BulkRevalidateButton staleCount={data.staleCount} />
+					</div>
+				) : null}
 				<QueueList
 					key={data.statusFilter}
 					data={data}

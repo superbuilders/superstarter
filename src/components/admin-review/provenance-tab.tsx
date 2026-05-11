@@ -19,6 +19,7 @@
 
 import * as React from "react"
 import { subTypes } from "@/config/sub-types"
+import { RevalidateCandidateButton } from "@/components/admin-review/revalidate-candidate-button"
 import type {
 	AdminCandidateRow,
 	AdminItemDetail,
@@ -220,13 +221,17 @@ function StaleBanner({ candidate }: { candidate: AdminCandidateRow }) {
 	if (validator === undefined) return null
 	if (validator.staleAfterMs === undefined) return null
 	const editedAt = new Date(validator.staleAfterMs).toISOString()
+	const showRevalidateButton = candidate.status === "candidate"
 	return (
-		<div className="border-cobalt/30 border-b bg-lavender/40 px-4 py-2 text-[12px] text-cobalt">
-			<span className="font-medium uppercase tracking-[0.06em]">Stale</span>
-			<span className="ml-2 text-text-2">
-				Edited <span className="font-mono">{editedAt}</span> — verdicts below predate the
-				edit. Re-run the validator to refresh.
-			</span>
+		<div className="flex flex-wrap items-center justify-between gap-3 border-cobalt/30 border-b bg-lavender/40 px-4 py-2 text-[12px] text-cobalt">
+			<div className="min-w-0 flex-1">
+				<span className="font-medium uppercase tracking-[0.06em]">Stale</span>
+				<span className="ml-2 text-text-2">
+					Edited <span className="font-mono">{editedAt}</span> — verdicts below predate
+					the edit. Re-run the validator to refresh.
+				</span>
+			</div>
+			{showRevalidateButton ? <RevalidateCandidateButton itemId={candidate.id} /> : null}
 		</div>
 	)
 }
