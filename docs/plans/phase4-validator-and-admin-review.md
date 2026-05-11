@@ -77,6 +77,15 @@ EXPLICITLY excluded from this round:
 
 Round-close §3 SPEC §6.14.43 entry amendment evaluates whether instances #8 + #9 share sub-type 5 (likely YES — both are canonical-source-deviation-multiplied-via-restatement) and whether instances #10 + #11 deserve a sub-type 6 (redirector-draft-vs-project-state divergence; distinct from sub-type 1 path/reference because the deviation surfaces at lint / postverify boundary, not at file-path boundary).
 
+**§2 phase instance updates (recorded for round-close §3 SPEC §6.14.43 entry amendment evaluation):**
+
+- **Instance #12** — TopNav-not-used-in-admin (sub-type 4 + 5 propagation). §0.5.2 framing inherited the audit-log §7 framing of `<PageNav>` consuming `<TopNav>` and "mounted on the new /admin/review route". Verified at §2.1 commit-0 audit step 6: admin routes do NOT render `<TopNav>`. `/admin/ingest` precedent renders chrome-light (no top nav); the auth-gate at the layout level is sufficient context. Banked at `50b91c7`.
+- **Instance #13** — test infrastructure assumption (sub-type 1 path/reference). The §2.1 commit-0 redirector spec proposed JSX-render tests assuming React Testing Library or similar; codebase has no React component test infrastructure. Executor shifted tests to extracted pure-function helpers (`queue-filters.ts` + `parseAdminQueueItem` in `queue-data.ts`) — same coverage outcome via a project-canonical pattern. Banked at `50b91c7`.
+- **Instance #14** — embedding scope misstatement (sub-type 5 propagation-through-prior-design). §0.6.4 Q5's embedding-regen policy lists *"body, optionsJson text"*. Verified at §2.3 commit-0 audit step 12: actual embedding scope is body-text only at both call sites (`embedding-backfill-steps.ts:64`, `sibling-generation-steps.ts:408`); neither call appends option text or explanation. RegenReason type collapsed to single `{ kind: "body-edit" }` variant matching actual scope. Banked at `a075d47`.
+- **Instance #15** — edit-audit-row shape misstatement (sub-type 5 propagation-through-prior-prompt). The §2.3 commit-1 redirector spec said "before_json + after_json for changed fields only" and the §2.5 commit-0 prompt's heads-up restated the projection claim; actual `submitEditAction` implementation at §2.3 commit-1 writes FULL row snapshots (all 7 editable columns), per §0.6.6 Q7's canonical "full item snapshots" framing. Reconciled at §2.5 commit-0 audit step 12; `diffChangedKeys` audit-history-rendering helper does JSON.stringify value-comparison per key so it works regardless of whether audit rows are projections or snapshots. Banked at `d67a166`.
+- **Instance #16** — validator pressure-cell zero-everywhere skip (sub-type 5 propagation-through-prior-design). The §1.2 commit-0 validator design's `loadPressureCells` iterates query-derived sub-types only (cells.map(c => c.subTypeId)), silently skipping sub-types with zero live items in any tier; the §2.6 dashboard at `pressure-cell-data.ts` iterates the canonical `@/config/sub-types` `subTypeIds`, so every sub-type contributes hard + brutal cells regardless of live state. Validator misses candidates in zero-everywhere sub-types for `validatorResult.isPressureCell`. Forward-pin: align validator at a future round so candidate marking matches the dashboard semantics. Banked at `ce09e81`.
+- **Instance #17** — round-close-prompt commit-ledger omission (sub-type 1 path/reference + sub-type 5 propagation). The §2 round-close redirector prompt's "Verify §2 commit hashes are sequential" enumeration listed 16 expected commits but missed `3831c4e (§2.2 commit-0 — admin item-detail route + tabbed shell + provenance/sibling context)` between `50b91c7` and `36df558`. Caught at this commit's audit step 15. The §0.8.2 phase summary table includes the §2.2 row + the corrected substantive/drift commit counts (10 substantive + 2 sessionStorage + 5 drift, not 9 + 2 + 4 as the redirector framed). Banked at this commit.
+
 ### §0.4 §6.14.43 sub-type 4 + 5 discipline application
 
 Explicit declaration of the discipline state and ratifications applied at this commit:
@@ -116,6 +125,8 @@ Per audit step 15, the following Round-3-shipped components are CONSUMED in §2 
 | `<ItemPrompt>` | `src/components/item/item-prompt.tsx` (post-triage-retirement; live) | Reused unchanged for rendering items as they would appear to users — admin-view fidelity. |
 
 **Note on `<PostSessionShell>` slot ordering at HEAD:** post-`81819e0` triage retirement, the shell has 7 slots (slot 2 `<TriageScoreLine>` was deleted; slot numbering preserved as a gap per SPEC §10.7's slot-locking discipline). Admin item-detail surface should account for this when reusing rendering components.
+
+**Empirical reframe at §2.1 commit-0 (`50b91c7`).** The plan-doc-time framing — `<PageNav>` consuming `loadNavChrome(userId)` and rendering the existing `<TopNav>` "mounted on the new `/admin/review` route" — was inherited from audit-log §7 which described `/(app)/` route nav patterns. Verified at §2.1 commit-0 audit step 6: admin routes do NOT render `<TopNav>`. `/admin/ingest/page.tsx` precedent renders chrome-light: a `<main class="mx-auto max-w-3xl px-6 py-10">` with header copy, no nav surface. The auth gate at `(admin)/layout.tsx` is sufficient context — admin pages don't need parent-facing affordances (streak chip / initials menu) because they're operator surfaces, not student-facing pages. The `/admin/review` route + child item-detail route both follow this convention; the §0.5.2 table row for `<PageNav>` is no longer load-bearing for §2 work. §6.14.43 instance #12 banking; corrected at `50b91c7`.
 
 #### §0.5.3 Admin auth reuse (per Decision D ratification)
 
@@ -247,6 +258,8 @@ Sub-phase b does NOT need to clear all candidates; it needs to close pressure-ce
 
 Per `src/server/generation/embeddings.ts`, the embedding model is `text-embedding-3-small` at 1536 dims via OpenAI API (`EMBEDDING_MODEL` constant). Per convention with `ingestRealItem`, the embedded text is the body text (single-pass embed of the question stem). The exact input shape is implementation detail confirmed at §1.3; the regen rule is "any edit to whatever feeds the embedding triggers regen."
 
+**Empirical reframe at §2.3 commit-0 (`a075d47`).** The plan-doc-time framing *"body + options text"* (above) was inaccurate. Verified at §2.3 commit-0 audit step 12: actual embedding scope is **body-text only** at both call sites (`src/workflows/embedding-backfill-steps.ts:64`, `src/workflows/sibling-generation-steps.ts:408`). Neither call appends option text or explanation. `RegenReason` type collapsed to a single `{ kind: "body-edit" }` variant matching actual scope; `enqueueEmbeddingRegen` (Path A helper landed at §2.3 commit-1) takes the new body text as input and emits the regenerated 1536-dim vector. Practical consequence: edits to options text alone do NOT trigger embedding regen at v1; only stem-text edits do. §6.14.43 instance #14 banking. Forward-extension: if a future criterion needs option-text or structured-explanation embeddings, `RegenReason` variants extend in lockstep with the call-site scope.
+
 **Audit weight escalation.** `subTypeId` and `difficulty` changes are recorded with `action_type='edit'` but flagged in the `before_json`/`after_json` snapshot pair as "bucket-change" for audit-trail filtering. Reason field strongly recommended for these edits.
 
 **Reasoning-for:** Full editability lets admin fix small defects (typo in stem; wrong correct-answer marker; minor option-text rephrasing) without a full reject-regenerate cycle, dramatically improving admin throughput on borderline-but-fixable candidates. Embedding regen on content edit keeps semantic search consistent. Audit weight escalation on subType/difficulty changes preserves the bank's curated structure.
@@ -329,6 +342,8 @@ UUIDv7 + bigint ms conventions per project rules.
 **Reasoning-against:** Extra join for displaying audit on item detail (mitigated by the per-item composite index covering the join). Storage cost for snapshot pairs (mitigated by negligible-at-v1-scale calculus above).
 
 **Confidence: HIGH.** Standard audit pattern; aligns with project's UUIDv7 + bigint ms conventions; admin attribution via existing `requireAdminEmail()` return value.
+
+**Empirical reframe at §2.5 commit-0 (`d67a166`).** The plan-doc framing above is correct (full item snapshots), but two intermediate session-prompt restatements drifted in the opposite direction: the §2.3 commit-1 spec said *"before_json + after_json for changed fields only"* and the §2.5 commit-0 prompt's heads-up restated the projection claim. Actual `submitEditAction` implementation at `4d90818` writes FULL row snapshots (all 7 editable columns) per the canonical Q7 framing here. Reconciled at §2.5 commit-0 audit step 12: `diffChangedKeys` audit-history-rendering helper at `action-history-shared.ts` does `JSON.stringify` value-comparison per key, so it works regardless of whether audit rows are projections or snapshots. UX consequence: edit entries always show `metadataJson` as changed because `submitEditAction` sets `validatorResult.staleAfterMs = Date.now()` on every edit (the staleness marker IS metadata that changed). Filtering or special-casing system-tracking metadata from the field-level diff is a v1.5 forward-pin per §0.9. §6.14.43 instance #15 banking.
 
 #### §0.6.7 Q8 — Admin auth shape
 
@@ -421,6 +436,22 @@ Admin time estimate: 6.6–19.8 hours total queue throughput at 30–90 sec/item
 
 **§6.14.43 instance #11 banking**: the original §0.7 framing conflated `provenance-batch-reject` criterion flag rate (25.42%) with engine `hasAnyFlag` aggregate rate (46.2%). Sub-type 4 (implicit-resolution-selection via metric-conflation). The redirector's §1.3 commit-2 prompt expected ~435 `hasAnyFlag`; postverify caught the divergence at 791. Banked at this round-close; round-close §3 records into SPEC §6.14.43 amendment evaluation.
 
+#### §0.7.2 Pressure-cell metric dual-surface (§2.6 commit-0 finding)
+
+Two pressure-cell metrics coexist post-`ce09e81`:
+
+- **`queue.pressureCellCount`** (candidate-scoped, batch-time): counts CANDIDATES whose persisted `validatorResult.isPressureCell = true` from the §1.3 commit-2 production batch. The queue header surfaces this within whichever cohort tab is active. Helps admin prioritize queue work — *"which of my candidates were in pressure cells when the validator last ran?"*
+- **`dashboard.totalPressureCells`** (cell-scoped, read-time): counts CELLS in the 14 sub-types × hard|brutal grid (28 positions) under target. Helps admin target the next live-bank slot to fill — *"which sub-type+difficulty needs more approvals to clear pressure?"*
+
+Both metrics are correct; they serve different admin workflows. Numerical magnitudes differ: a single pressure cell holding 0 of 3 needed = 1 cell + 0 candidates. Per the §2.6 commit-0 working-set state at `ce09e81`: 16 pressure cells (5 hard + 11 brutal), 20 candidates needed to clear — versus the queue header's `pressureCellCount` (a different slice of the same DB).
+
+**Two intentional divergences from the validator's `loadPressureCells` documented in `pressure-cell-data.ts`:**
+
+1. The validator iterates sub-types derived from the live-cells query result (`cells.map(c => c.subTypeId)`), so a sub-type with ZERO live items in any tier is silently skipped — and therefore items in that sub-type's hard/brutal tier are NOT marked `isPressureCell` by the validator at batch time. The dashboard iterates the canonical `@/config/sub-types` `subTypeIds`, so every sub-type contributes hard + brutal cells regardless of live state. Dashboard's `totalPressureCells` can legitimately exceed the validator's `pressureCells.size` for empty sub-types.
+2. `queue-data.pressureCellCount` and `dashboard.totalPressureCells` are the candidate-scoped vs cell-scoped surfaces named above. Same word in two registers.
+
+**§6.14.43 instance #16 forward-pin**: validator alignment to iterate the canonical subTypeIds (so candidate marking matches the dashboard semantics) is deferred to a future round; not blocking — admins read the dashboard for the current cell-scoped state. Recorded in §0.9 forward-watch.
+
 ### §0.8 Phase shape
 
 Provisional sub-section structure; revisable at each phase's commit-0 audit per §6.14.18/21/22.
@@ -467,6 +498,47 @@ Provisional sub-section structure; revisable at each phase's commit-0 audit per 
 
 §2 phase opens against `8c4dff7` with admin queue surfacing 791 flagged candidates ranked by validator-confidence-score with pressure-cell-first sorting.
 
+##### §0.8.2 §2 phase summary (closed at `ce09e81`)
+
+§2 phase shipped across 10 substantive commits + 2 sessionStorage UX-persistence commits + 5 aesthetic/compatibility drift commits between `bd2820f` (§1 round-close ancestor) and `ce09e81` (§2.6 commit-0):
+
+| # | Hash | Subject |
+|---|---|---|
+| 1 | `50b91c7` | §2.1 commit-0 — admin queue route + 56-cell candidate surface |
+| 2 | `3831c4e` | §2.2 commit-0 — admin item-detail route + tabbed shell + provenance / sibling context |
+| 3 | `a075d47` | §2.3 commit-0 — edit-form architecture (stub mutations; no DB writes) |
+| 4 | `4d90818` | §2.3 commit-1 — `submitEditAction` implementation; embedding regen; audit trail; staleness; option reorder |
+| 5 | `8126440` | §2.4 commit-0 — approve + reject server actions; per-item disposition UI |
+| 6 | `dd3ed8a` | §2.4b — status-tab navigation (candidates / live / rejected) |
+| 7 | `3a1e2ce` | §2.4 commit-1 — single + bulk re-validate actions; UI affordances |
+| 8 | `d67a166` | §2.5 commit-0 — audit history rendering in item-detail tab |
+| 9 | `4bdec3a` | sessionStorage filter / sort persistence per cohort |
+| 10 | `18c102d` | sessionStorage status-tab persistence + back-navigation restoration |
+| 11 | `ce09e81` | §2.6 commit-0 — pressure-cell dashboard at queue head |
+
+Drift commits absorbed: `5c5a5dd` (docs/claude_logs session log; pre-§2.1); `36df558` (sign-out button on top nav; pre-§2.3); `920f7c9` (Next.js 16 Cache Components compatibility — `connection()` markers on admin loaders; pre-§2.3); `800a989` (provenance + stem-options aesthetic styling pass; pre-§2.3 commit-0 audit reconciled); `3ac77ae` (sign-out button on diagnostic page; pre-§2.4 commit-0).
+
+**§2 deliverables:**
+
+- **Admin queue at `/admin/review`** with status tabs (Candidates / Live / Rejected); 791 flagged candidates rendered in candidates tab; sortable + filterable (flag / pressure / sub-type / difficulty / freshness / sort key).
+- **Item-detail at `/admin/review/[itemId]`** with 4-tab shell (Stem & options / Explanation / Provenance / Audit history); back-to-queue link restores the cohort tab + filter selections from sessionStorage.
+- **Full edit lifecycle**: stem text, options (with reorder UI), correct-answer, explanation, structuredExplanation, sub-type, difficulty. Bucket-change confirmation modal for sub-type / difficulty edits.
+- **Embedding regen on body-text edits** via `enqueueEmbeddingRegen` (Path A helper); single-variant `RegenReason` matching actual body-only scope per §0.6.4 reframe.
+- **Disposition actions**: approve (with stale-verdict acknowledgement modal when applicable); reject (with required free-text reason). One-way per Q6.
+- **Re-validation**: single (provenance-tab "Re-run validator" button on stale candidates); bulk (queue-head "Re-validate N stale candidates" button on candidates tab when `staleCount > 0`).
+- **Audit history rendering**: per-action-type dispatch (edit / approve / reject); changed-field diff for edits via `diffChangedKeys` (JSON.stringify value-comparison); empty state preserved.
+- **Pressure-cell dashboard**: 14 sub-types × 4 difficulties grid; cobalt-accented under-target hard / brutal cells; click-to-filter via URL params (`?subType=` + `?difficulty=`); precedence URL → sessionStorage → defaults for queue filter seeding.
+- **SessionStorage UX persistence**: filter / sort per cohort + active status tab survive in-tab navigation.
+- **Tests**: 332/0/30/~1015 baseline (+128 tests since §1 round-close 204 baseline).
+
+**Architectural decisions banked:**
+
+- **Form-state preservation across tab switches**: always-mount + CSS-hide ratified at §2.3 commit-1 (~10 LOC) over literal state-lift through props (~150 LOC). Inactive tabs' `React.useState` containers preserve across tab switches without prop drilling.
+- **Shared-module pattern for client / server boundary** (canonical idiom now): `action-history-shared.ts` at §2.5 + `pressure-cell-shared.ts` at §2.6. Pure helpers + Zod schemas + types live in the `-shared` module so client components reach them without dragging the `db` import graph into the bundle. Two instances now establish the pattern; if a third lands, consider extracting a generic doc note.
+- **Pressure-cell dual-metric semantics** per §0.7.2: candidate-scoped (queue header) vs cell-scoped (dashboard).
+- **URL param seeding precedence**: URL > sessionStorage > defaults; the QueueList React `key` encodes status + URL overrides so navigating between two filtered URLs that share a status forces a fresh mount and picks up the new override values.
+- **Tab-scope enforcement**: re-validate buttons + dispositions + bulk dashboard all check `status === "candidate"` before rendering.
+
 #### §2 — Admin review UI
 
 Provisional; revised at §2 commit 0 audit:
@@ -509,6 +581,27 @@ Provisional; revised at §2 commit 0 audit:
 - **NEW (§1 close)**: provisional sub-section numbering (§1.1 / §1.2 / ... per plan-doc §0.8) vs commit-numbering (§1.0 / §1.1 / ... per redirector convention) divergence resolved at §0.8.1 — provisional labels are scope buckets; commit numbering tracks actual commits. Both conventions coexist; no edit needed.
 - **NEW (§1 close)**: sub-type-pattern taxonomy from §0.7.1 (cohort-rejection / pressure-cell / clean) — forward-pinned for §2 admin queue UI design; queue can offer "review cohort archetype + apply en masse" affordance for the 3 cohort-rejection sub-types (analogies, lowest_values, antonyms = 435 items at 100%-cohort-flagged).
 - **NEW (§1 close)**: persistence reproducibility anchor — every candidate's `validatorResult.thresholdsHash` is `sha256:111f631af48157...`. Future re-runs with different thresholds get a different hash; auditing identifies which verdicts came from which threshold set.
+
+**Updated at §2 close (`ce09e81`):**
+
+- **§6.14.43 instances banking**: 16 instances total banked across this round (#1–#5 retired at SPEC §6.14.43 promotion at `a8d83bf`; #6–#11 banked at round-prep + §1 close; #12–#16 banked across §2; #17 banked at this commit for the §2 round-close prompt's commit-ledger omission of `3831c4e (§2.2)`). Round-close §3 SPEC §6.14.43 entry amendment evaluates whether to refine sub-type 5 (#8, #9, #14, #15, #16, partial-#17 share propagation-through-restatement-sites) into 5a / 5b / 5c sub-flavors and whether to promote sub-type 6 for redirector-draft-vs-project-state divergence (#10 cumulative ~33+, #11).
+- **Test baseline**: 204 (§1 close) → 332 (§2 close at `ce09e81`); +128 tests across §2. `structured-explanation.test.ts:152` ZodError stderr remains the known stochastic expect-count contributor; benign per current evidence.
+
+**NEW (§2 close) residuals:**
+
+- **Integration tests deferred**: per §2.7 ratification, integration tests requiring DB harness are deferred to a future test-infra round. All §2 commits manual-verification-tested via the dev server with seeded admin sessions; pure-function helpers (queue-filters, parseAdminQueueItem, aggregateDispositionStats, isValidatorStale, diffChangedKeys, aggregatePressureCells) carry the assertion load.
+- **Validator pressure-cell zero-everywhere alignment** (§6.14.43 instance #16): validator iterates query-derived sub-types; dashboard iterates canonical config. Validator misses candidates in zero-everywhere sub-types for `validatorResult.isPressureCell`. Forward-pin for a future round.
+- **v1.5 UX polish**:
+  - Audit-history edit entries always show `metadataJson` as changed because `submitEditAction` always sets `validatorResult.staleAfterMs = Date.now()` on every edit (per §0.6.6 Q7 reframe). Consider filtering or special-casing system-tracking metadata from the field-level diff renderer.
+  - Two-stage Suspense fallback on admin routes (blank flash → skeleton → UI): minor perceived-latency gap; could be tightened by promoting the queue + item-detail Suspense fallbacks to richer skeletons.
+  - Source-provenance field editing (`sourceFolder` / `sourceFilename`): not currently in `editedFields` schema; admin must surgery via SQL if a source-provenance correction is needed.
+  - Per-cell dashboard click-to-filter currently scopes the candidate queue only; analogous "show me the 1 live brutal item in this cell" affordance for the live tab is not wired.
+- **§2 retirement / undo affordances** (forward-pin from §2.4b ratification):
+  - Retirement (live → retired) needs a separate affordance + a new `action_type` enum value. Out of scope this round.
+  - Undo-reject (rejected → candidate) needs a separate affordance OR remains SQL surgery; acceptable at v1.
+- **§1 round-close docs-hygiene residuals**: stale tier-distribution refs at plan-doc lines 170 + 432 (forward-pinned at §1 round-close §3 docs-hygiene-pass; still pending and NOT cleaned at this docs-only §2 round-close commit).
+- **Two pressure-cell metrics coexisting**: dual-surface semantics documented at §0.7.2; future round may unify or further differentiate.
+- **Shared-module pattern documentation**: now applied at two sites (`action-history-shared.ts`, `pressure-cell-shared.ts`); a third instance suggests extracting a generic note explaining the client/server bundling boundary that motivates the split.
 
 ### §0.10 Cross-project transfer note
 
