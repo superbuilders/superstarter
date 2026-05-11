@@ -6,9 +6,8 @@
 //   1. <RevealPanel> — explains why X% of Y = Y% of X.
 //   2. Flip card — a single problem the user can flip with a tap.
 //      The "hard" side reads e.g. "16% of 50"; the flipped side reads
-//      "50% of 16". A live timer shows how fast they solve the
-//      flipped version.
-//   3. Speed Drill — random "ugly" problems where the flipped form is
+//      "50% of 16".
+//   3. Practice — random "ugly" problems where the flipped form is
 //      trivial. User types the answer; flip is one tap away.
 
 import * as errors from "@superbuilders/errors"
@@ -87,62 +86,26 @@ function FlipCardSandbox() {
 	const [problem, setProblem] = React.useState<FlipProblem | null>(null)
 	const [flipped, setFlipped] = React.useState(false)
 	const [revealAnswer, setRevealAnswer] = React.useState(false)
-	const [elapsedMs, setElapsedMs] = React.useState(0)
-	const [running, setRunning] = React.useState(false)
-	const startRef = React.useRef<number | null>(null)
-	const frameRef = React.useRef<number | null>(null)
 
 	React.useEffect(function init() {
 		setProblem(generateProblem())
 	}, [])
 
-	React.useEffect(
-		function trackElapsed() {
-			if (!running) return
-			function tick() {
-				const start = startRef.current
-				if (start === null) return
-				setElapsedMs(performance.now() - start)
-				frameRef.current = window.requestAnimationFrame(tick)
-			}
-			frameRef.current = window.requestAnimationFrame(tick)
-			return function cleanup() {
-				const f = frameRef.current
-				if (f !== null) window.cancelAnimationFrame(f)
-			}
-		},
-		[running]
-	)
-
 	function flipAndStart() {
 		if (!flipped) {
 			setFlipped(true)
 			setRevealAnswer(false)
-			startRef.current = performance.now()
-			setElapsedMs(0)
-			setRunning(true)
 		} else {
 			setFlipped(false)
-			setRunning(false)
-			startRef.current = null
-			setElapsedMs(0)
 			setRevealAnswer(false)
 		}
-	}
-	function showAnswer() {
-		setRunning(false)
-		setRevealAnswer(true)
 	}
 	function newProblem() {
 		setProblem(generateProblem())
 		setFlipped(false)
 		setRevealAnswer(false)
-		setRunning(false)
-		startRef.current = null
-		setElapsedMs(0)
 	}
 
-	const elapsedLabel = (elapsedMs / 1000).toFixed(2)
 	const innerTransform = flipped ? "rotate-y-180" : "rotate-y-0"
 	const flipLabel = flipped ? "Unflip" : "Flip it"
 	const answerLabel = revealAnswer && problem !== null ? formatAnswer(problem.answer) : "—"
@@ -192,8 +155,7 @@ function FlipCardSandbox() {
 					)}
 				</div>
 			</div>
-			<div className="grid grid-cols-1 gap-3 px-5 pb-4 sm:grid-cols-3">
-				<Readout label="Elapsed" value={`${elapsedLabel}s`} tone="text-text-1" />
+			<div className="grid grid-cols-1 gap-3 px-5 pb-4 sm:grid-cols-2">
 				<Readout label="Answer" value={answerLabel} tone={answerTone} />
 				<Readout label="Identity" value={identityValue} tone="text-text-2" />
 			</div>
@@ -207,7 +169,9 @@ function FlipCardSandbox() {
 				</button>
 				<button
 					type="button"
-					onClick={showAnswer}
+					onClick={function reveal() {
+						setRevealAnswer(true)
+					}}
 					disabled={revealAnswer}
 					className="rounded-md border border-border-strong bg-surface px-4 py-2 font-medium text-[14px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:opacity-40"
 				>
@@ -274,13 +238,12 @@ function Readout({ label, value, tone }: ReadoutProps) {
 function SpeedDrill() {
 	const [problem, setProblem] = React.useState<FlipProblem | null>(null)
 	const [guess, setGuess] = React.useState("")
-	const [streak, setStreak] = React.useState(0)
-	const [best, setBest] = React.useState(0)
+	const [score, setScore] = React.useState(0)
 	const [showFlipped, setShowFlipped] = React.useState(false)
 	const [feedback, setFeedback] = React.useState<"idle" | "right" | "wrong">("idle")
 	const inputRef = React.useRef<HTMLInputElement>(null)
 	const pillRef = React.useRef<HTMLDivElement>(null)
-	const mastered = useMastery({ slug: "percent-flip", score: best, originRef: pillRef })
+	const mastered = useMastery({ slug: "percent-flip", score, originRef: pillRef })
 
 	React.useEffect(function init() {
 		setProblem(generateProblem())
@@ -301,24 +264,17 @@ function SpeedDrill() {
 		if (Number.isNaN(parsed)) return
 		if (Math.abs(parsed - problem.answer) < 0.0001) {
 			markLessonDoneToday()
-			const nextStreak = streak + 1
 			setFeedback("right")
-			setStreak(nextStreak)
-			if (nextStreak > best) setBest(nextStreak)
+			setScore(score + 1)
 			window.setTimeout(next, 650)
 		} else {
 			setFeedback("wrong")
-			setStreak(0)
 		}
 	}
 	function flip() {
 		setShowFlipped(function toggle(prev) {
 			return !prev
 		})
-	}
-	function skip() {
-		setStreak(0)
-		next()
 	}
 
 	const shownPercent = problem === null ? 0 : showFlipped ? problem.base : problem.percent
@@ -337,22 +293,19 @@ function SpeedDrill() {
 			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
 				<div>
 					<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
-						Speed drill
+						Practice
 					</p>
 					<p className="mt-0.5 text-[13px] text-text-2">
 						Solve. Tap Flip if one side looks friendlier.
 					</p>
 				</div>
-				<div className="flex gap-2">
-					<StatPill label="Streak" value={String(streak)} tone="text-indigo-deep" />
-					<MasteryPill
-						pillRef={pillRef}
-						label="Best"
-						value={String(best)}
-						tone="text-good"
-						mastered={mastered}
-					/>
-				</div>
+				<MasteryPill
+					pillRef={pillRef}
+					label="Score"
+					value={String(score)}
+					tone="text-good"
+					mastered={mastered}
+				/>
 			</div>
 			<div className="px-5 py-6">
 				{problem === null ? (
@@ -396,7 +349,7 @@ function SpeedDrill() {
 					</button>
 					<button
 						type="button"
-						onClick={skip}
+						onClick={next}
 						className="h-11 rounded-md border border-border-strong bg-surface px-4 font-medium text-[14px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
 					>
 						Skip
@@ -405,20 +358,6 @@ function SpeedDrill() {
 				<p className={`mt-3 text-center text-[13px] ${feedbackTone}`}>{feedbackCopy}</p>
 			</div>
 		</section>
-	)
-}
-
-interface StatPillProps {
-	label: string
-	value: string
-	tone: string
-}
-function StatPill({ label, value, tone }: StatPillProps) {
-	return (
-		<div className="rounded-md border border-border-soft bg-bg px-3 py-1.5 text-right">
-			<p className="font-semibold text-[9px] text-text-3 uppercase tracking-[0.08em]">{label}</p>
-			<p className={`font-mono font-semibold text-[16px] tabular-nums ${tone}`}>{value}</p>
-		</div>
 	)
 }
 
