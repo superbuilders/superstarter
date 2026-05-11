@@ -57,6 +57,13 @@
       "when": 1778442877338,
       "tag": "0007_flippant_smasher",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778531467596,
+      "tag": "0008_dazzling_menace",
+      "breakpoints": true
     }
   ]
 }

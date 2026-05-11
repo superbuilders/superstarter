@@ -110,15 +110,23 @@ The Reports tab is structurally different from the three item-cohort tabs: it en
 
 Resolving a report from the Reports tab does NOT directly mutate the item. The admin clicks "Open item" on a report row → navigates to `/admin/review/[itemId]` → takes whatever action they want on the item via the existing affordances (edit / approve / reject / dismiss the report only).
 
-**Report row records:**
+**Report row records (resolved at §1.1 commit-0 audit — Option A, same-row):**
 
-1. Which admin **opened** the report (whoever clicked "Open item"; recorded as `opened_by` on the row).
-2. **Timestamp** of opening (via the same UUIDv7-encoded approach used elsewhere: `report_disposition_id` UUIDv7 stamps the disposition).
-3. **Item action that followed**, recorded as one of:
-   - Link to the `item_admin_actions.id` of the edit/approve/reject the admin took on the item after opening the report.
-   - Explicit `dismissed_without_item_action` outcome (admin reviewed and decided the item was fine; no edit/approve/reject).
+The report row carries disposition state inline on the row, not in a sibling `item_user_report_dispositions` table. Per v1 simplicity (§0.4 discipline shift) and per §0.9 re-report semantics (a re-report by the same user against the same item overwrites the row in place via ON CONFLICT DO UPDATE — losing the previous disposition is the explicit trade-off). Option A columns:
 
-The exact row-shape (whether disposition lives on the report row itself or in a sibling `item_user_report_dispositions` table) is part of §1.1's schema authoring — surfaced here for context, decided at the commit-0 audit of §1.1.
+1. **`disposition_admin_user_id`** — the admin who finalized the disposition (resolved or dismissed). NOT a separate "opened by" tracking — opening the item-detail page is a navigation event, not a state change; many admins might view a report without disposing it. Only the disposer's identity is recorded. FK `users.id` ON DELETE RESTRICT (mirrors `item_admin_actions.admin_user_id` — preserve admin attribution).
+2. **`disposition_at_ms`** — UTC ms timestamp of disposition. The report row's UUIDv7 PK encodes the original submission time per the no-timestamp-columns rule; `disposition_at_ms` is the SEPARATE end-of-lifecycle timestamp (analogous to `items.rejected_at_ms`).
+3. **`disposition_item_action_id`** — link to the `item_admin_actions.id` of the edit/approve/reject the admin took on the item AFTER opening the report. Nullable: the admin may dismiss without taking an item action.
+4. **`disposition_kind`** — enum `resolved_via_item_action | dismissed_without_item_action`. Distinguishes the two D4 outcomes:
+   - `resolved_via_item_action`: admin edited/approved/rejected the item; `disposition_item_action_id` points at the new audit row.
+   - `dismissed_without_item_action`: admin reviewed and decided the item was fine; `disposition_item_action_id` stays NULL.
+
+**Why Option A (same-row) over Option B (sibling table):**
+
+- v1 simplicity per §0.4. The disposition is a single closing event per report; not a high-volume history needing its own table.
+- §0.9 re-report semantics already trade away per-row history retention (overwrite via ON CONFLICT DO UPDATE). A sibling history ledger only makes sense if we want to preserve the previous disposition — which v1 explicitly does not.
+- The audit trail of any ITEM action taken in response to a report already lives in `item_admin_actions`. The report row's `disposition_item_action_id` is the join key into that ledger; the full forensic trail is reachable via that join.
+- Report history retention is forward-pinned at §4.2 — if production usage shows re-report-after-dismissal patterns, a follow-up round introduces the sibling ledger.
 
 ### §0.8 Reason taxonomy strawman
 
@@ -182,10 +190,25 @@ The schema uses `UNIQUE (user_id, item_id)`. The server action's INSERT uses `ON
   - `disposition_kind item_user_report_disposition_kind` (nullable enum: `resolved_via_item_action | dismissed_without_item_action`; populated alongside `disposition_at_ms`).
 - Constraints:
   - `UNIQUE (user_id, item_id)` — D9 dedup.
-- Indexes:
-  - `(status, id DESC)` — admin queue scan: open reports, newest first.
-  - `(item_id, status)` — composability with the "User-flagged" badge that asks "does this item have any open reports?"
-  - `(user_id, status)` — composability with the per-user already-reported reflectance state (§2.2).
+- Indexes (final, post-f4d7985 review):
+  - `UNIQUE (user_id, item_id)` — dedup per §0.9; also serves the §2.3 reflectance lookup (`WHERE user_id = ? AND item_id IN (...)` — prefix-scans the unique composite).
+  - `(item_id, status)` — composability with the §3.4 "User-flagged" badge LEFT JOIN aggregation.
+  - **Dropped at audit:** `(status, id DESC)` (defer until query pattern observed; sequential scan beats the index at v1 scale). **Dropped post-f4d7985 per redirector C1:** `(user_id, status)` (redundant with the unique composite prefix for the §2.3 lookup; no other planned query needs it).
+
+**`reported_at_ms` rule audit (Branch B — rule NOT violated):**
+
+`rules/no-timestamp-columns.md` literally bans Drizzle's `timestamp` / `date` / `time` / `interval` column factories; `scripts/dev/lint/rules/no-timestamp-columns.ts` enforces this by checking calls to those factories imported from `drizzle-orm/pg-core`. `bigint("reported_at_ms", { mode: "number" })` is NOT a banned factory.
+
+The rule's "But I really need a different timestamp" section is prescriptive about event-time modeling (one row per event), but project precedent diverges from the strict prescription. State-change event timestamps stored inline as `bigint` are well-established across the schema:
+
+- `items.rejected_at_ms` (Phase 4 sub-phase b §1.0).
+- `item_admin_actions.created_at_ms` (same round; actively used as a range filter at `queue-data.ts:338`).
+- `practice_sessions.{started_at_ms, ended_at_ms, last_heartbeat_ms}`.
+- `mastery_state.updated_at_ms`, `user_sub_type_belts.updated_at_ms`.
+
+The `reported_at_ms` column matches this established precedent. The redundancy concern that motivates the rule (PK already encodes creation time) applies only on FIRST submission; under §0.9's ON CONFLICT DO UPDATE re-report semantics, the PK retains the original-submission time while `reported_at_ms` advances to the re-submission time — capturing information not recoverable from the PK. The storage cost is 8 bytes per row; no companion `(reported_at_ms)` index is added so the "pays for it twice" concern is half-mitigated.
+
+If the redirector prefers the stricter Branch A interpretation (drop `reported_at_ms`; accept that re-submission time is lost and only the original-submission time via `timestampFromUuidv7(id)` is available), the column drops cleanly — no downstream code depends on it yet.
 
 **`db:generate` drift handling:**
 

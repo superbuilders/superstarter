@@ -5,6 +5,7 @@ import * as authSessionsSchema from "@/db/schemas/auth/sessions"
 import * as authUsersSchema from "@/db/schemas/auth/users"
 import * as authVerificationTokensSchema from "@/db/schemas/auth/verification_tokens"
 import * as catalogItemAdminActionsSchema from "@/db/schemas/catalog/item-admin-actions"
+import * as catalogItemUserReportsSchema from "@/db/schemas/catalog/item-user-reports"
 import * as catalogItemsSchema from "@/db/schemas/catalog/items"
 import * as catalogStrategiesSchema from "@/db/schemas/catalog/strategies"
 import * as catalogSubTypesSchema from "@/db/schemas/catalog/sub-types"
@@ -23,6 +24,7 @@ const dbSchema = {
 	...catalogStrategiesSchema,
 	...catalogItemsSchema,
 	...catalogItemAdminActionsSchema,
+	...catalogItemUserReportsSchema,
 	...practicePracticeSessionsSchema,
 	...practiceAttemptsSchema,
 	...practiceMasteryStateSchema,
