@@ -104,7 +104,7 @@ function Sandbox() {
 	const total = sum(values)
 	const count = values.length
 	const meanExact = count > 0 ? total / count : 0
-	const meanLabel = count > 0 ? meanExact.toFixed(2).replace(/\.00$/, "") : "—"
+	const meanLabel = count > 0 ? meanExact.toFixed(2) : "—"
 
 	let leftPull = 0
 	let rightPull = 0
@@ -113,9 +113,8 @@ function Sandbox() {
 		if (dev < 0) leftPull += -dev
 		if (dev > 0) rightPull += dev
 	}
-	const leftLabel = leftPull.toFixed(2).replace(/\.00$/, "")
-	const rightLabel = rightPull.toFixed(2).replace(/\.00$/, "")
-	const balanced = Math.abs(leftPull - rightPull) < 0.0001
+	const leftLabel = leftPull.toFixed(2)
+	const rightLabel = rightPull.toFixed(2)
 
 	function add() {
 		if (chips.length >= 7) return
@@ -148,11 +147,6 @@ function Sandbox() {
 		setChips(defaults)
 	}
 
-	const balanceCopy = balanced
-		? "Balanced — this is the mean."
-		: "Tugs don't match. The mean is wherever they would cancel."
-	const balanceTone = balanced ? "text-good" : "text-text-3"
-
 	return (
 		<section className="mb-4 overflow-hidden rounded-lg border border-border-soft bg-surface">
 			<div className="border-border-soft border-b px-5 py-3">
@@ -166,18 +160,18 @@ function Sandbox() {
 			<div className="overflow-x-auto px-3 pt-4">
 				<SeesawSvg chips={chips} meanExact={meanExact} />
 			</div>
-			<div className="grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-3">
+			<DeviationEquation chips={chips} meanExact={meanExact} />
+			<div className="grid grid-cols-1 gap-3 px-5 pt-1 pb-4 sm:grid-cols-3">
 				<Readout label="Left pull" value={leftLabel} tone="text-pace-over" />
 				<Readout label="Mean μ" value={meanLabel} tone="text-cobalt" />
 				<Readout label="Right pull" value={rightLabel} tone="text-pace-on" />
 			</div>
-			<p className={`px-5 pb-3 text-[12px] tracking-[0.01em] ${balanceTone}`}>{balanceCopy}</p>
 			<div className="border-border-soft border-t px-3 py-3">
 				<ul className="flex flex-wrap gap-2">
 					{chips.map(function renderChip(chip) {
 						const dev = chip.value - meanExact
 						const devSign = dev >= 0 ? "+" : "−"
-						const devLabel = `${devSign}${Math.abs(dev).toFixed(2).replace(/\.00$/, "")}`
+						const devLabel = `${devSign}${Math.abs(dev).toFixed(2)}`
 						const devTone =
 							Math.abs(dev) < 0.0001 ? "text-text-3" : dev > 0 ? "text-pace-on" : "text-pace-over"
 						return (
@@ -280,6 +274,41 @@ function Readout({ label, value, tone }: ReadoutProps) {
 	)
 }
 
+interface DeviationEquationProps {
+	chips: ReadonlyArray<NumberChip>
+	meanExact: number
+}
+function DeviationEquation({ chips, meanExact }: DeviationEquationProps) {
+	if (chips.length === 0) return null
+	return (
+		<div className="overflow-x-auto px-5 pt-2 pb-1 text-center font-mono font-semibold text-[20px] tabular-nums">
+			{chips.map(function renderTerm(chip, i) {
+				const dev = chip.value - meanExact
+				const magnitude = Math.abs(dev).toFixed(2)
+				const isNegative = dev < 0
+				const isPositive = dev > 0
+				let tone = "text-text-3"
+				if (isPositive) tone = "text-pace-on"
+				else if (isNegative) tone = "text-pace-over"
+				let operator = ""
+				if (i === 0) {
+					if (isNegative) operator = "−"
+				} else {
+					operator = isNegative ? " − " : " + "
+				}
+				return (
+					<React.Fragment key={chip.id}>
+						<span className="text-text-3">{operator}</span>
+						<span className={tone}>{magnitude}</span>
+					</React.Fragment>
+				)
+			})}
+			<span className="text-text-3"> = </span>
+			<span className="font-bold text-good">0</span>
+		</div>
+	)
+}
+
 interface SeesawSvgProps {
 	chips: ReadonlyArray<NumberChip>
 	meanExact: number
@@ -337,9 +366,9 @@ function SeesawSvg({ chips, meanExact }: SeesawSvgProps) {
 					strokeDasharray="4 3"
 				/>
 				<rect
-					x={meanX - 22}
+					x={meanX - 26}
 					y={SVG_LABEL_Y - 28}
-					width={44}
+					width={52}
 					height={16}
 					rx={8}
 					className="fill-cobalt"
@@ -350,7 +379,7 @@ function SeesawSvg({ chips, meanExact }: SeesawSvgProps) {
 					textAnchor="middle"
 					className="fill-bg font-mono font-semibold text-[10px]"
 				>
-					μ {meanExact.toFixed(1).replace(/\.0$/, "")}
+					μ {meanExact.toFixed(2)}
 				</text>
 			</g>
 			{chips.map(function renderDot(chip) {
@@ -361,7 +390,7 @@ function SeesawSvg({ chips, meanExact }: SeesawSvgProps) {
 				const dotTone =
 					Math.abs(dev) < 0.0001 ? "fill-text-3" : dev > 0 ? "fill-pace-on" : "fill-pace-over"
 				const sign = dev >= 0 ? "+" : "−"
-				const devMagnitude = Math.abs(dev).toFixed(1).replace(/\.0$/, "")
+				const devMagnitude = Math.abs(dev).toFixed(2)
 				const devLabel = `${sign}${devMagnitude}`
 				return (
 					<g key={chip.id}>
@@ -385,9 +414,9 @@ function SeesawSvg({ chips, meanExact }: SeesawSvgProps) {
 							{chip.value}
 						</text>
 						<rect
-							x={x - 14}
+							x={x - 18}
 							y={SVG_DEV_LABEL_Y - 8}
-							width={28}
+							width={36}
 							height={12}
 							rx={3}
 							className="fill-bg stroke-border-soft"
@@ -562,6 +591,9 @@ function PracticeBody({
 				These <span className="font-semibold text-text-1">{problem.givens.length}</span> numbers
 				have a mean of <span className="font-mono font-semibold text-cobalt">{problem.target}</span>
 				. Find the missing value.
+			</p>
+			<p className="text-[13px] text-text-3">
+				Hint: get the missing relative value and add it to the mean to get the missing value.
 			</p>
 			<DeviationRow
 				givens={problem.givens}
