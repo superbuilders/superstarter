@@ -1,4 +1,5 @@
 import AWS from "alchemy/aws/control"
+import { logger } from "@/logger"
 import type { ModuleContext } from "@/modules/types"
 
 interface IdentityInput {
@@ -7,6 +8,11 @@ interface IdentityInput {
 	readonly oidcThumbprint: string
 	readonly teamSlug: string
 	readonly projectName: string
+	// When provided, skips alchemy CloudControl-based OIDC provider creation
+	// and uses this pre-existing ARN. Created out-of-band via `aws iam
+	// create-open-id-connect-provider` to bypass the InternalFailure that
+	// AWS::IAM::OIDCProvider currently returns through CloudControl.
+	readonly existingOidcProviderArn?: string
 }
 
 interface IdentityOutput {
@@ -16,16 +22,25 @@ interface IdentityOutput {
 }
 
 async function provisionIdentity(input: IdentityInput): Promise<IdentityOutput> {
-	const { context, oidcHost, oidcThumbprint, teamSlug, projectName } = input
+	const { context, oidcHost, oidcThumbprint, teamSlug, projectName, existingOidcProviderArn } = input
 	const { stage, resourcePrefix, tags } = context
 
-	const oidcProvider = await AWS.IAM.OIDCProvider(`vercel-oidc-${stage}`, {
-		Url: `https://${oidcHost}/${teamSlug}`,
-		ClientIdList: [`https://vercel.com/${teamSlug}`],
-		ThumbprintList: [oidcThumbprint],
-		Tags: tags
-	})
-	const oidcProviderArn = oidcProvider.Arn
+	let oidcProviderArn: string
+	if (existingOidcProviderArn !== undefined) {
+		logger.info(
+			{ stage, existingOidcProviderArn },
+			"identity: using pre-existing OIDC provider ARN (CloudControl bypass)"
+		)
+		oidcProviderArn = existingOidcProviderArn
+	} else {
+		const oidcProvider = await AWS.IAM.OIDCProvider(`vercel-oidc-${stage}`, {
+			Url: `https://${oidcHost}/${teamSlug}`,
+			ClientIdList: [`https://vercel.com/${teamSlug}`],
+			ThumbprintList: [oidcThumbprint],
+			Tags: tags
+		})
+		oidcProviderArn = oidcProvider.Arn
+	}
 
 	const conditionAudKey = `${oidcHost}/${teamSlug}:aud`
 	const conditionSubKey = `${oidcHost}/${teamSlug}:sub`
@@ -37,7 +52,6 @@ async function provisionIdentity(input: IdentityInput): Promise<IdentityOutput> 
 	)
 
 	const roleName = `${resourcePrefix}-vercel`
-
 	const role = await AWS.IAM.Role(`vercel-role-${stage}`, {
 		RoleName: roleName,
 		Path: "/",
