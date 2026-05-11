@@ -36,6 +36,7 @@
 
 import { GoalEditor } from "@/components/dashboard/goal-editor"
 import { DaysToTestEditor } from "@/components/dashboard/days-to-test-editor"
+import { Greeting } from "@/components/dashboard/greeting"
 import { ScoreStripPopover } from "@/components/dashboard/score-strip-popover"
 import { Sparkline } from "@/components/dashboard/sparkline"
 import { StatTile } from "@/components/dashboard/stat-tile"
@@ -75,10 +76,7 @@ function ScoreStrip({ firstName, greeting, score, pace, mistakesQueue }: ScoreSt
 				<p className="mb-[2px] text-[11px] text-text-3 uppercase tracking-[0.06em]">
 					{formatToday(greeting.today)}
 				</p>
-				<h2 className="font-medium font-serif text-[22px] text-text-1 leading-[1.15] tracking-[-0.015em]">
-					Good morning, {firstName}.{" "}
-					<em className="font-normal text-cobalt italic">{greeting.headline}</em>
-				</h2>
+				<Greeting firstName={firstName} headline={greeting.headline} />
 			</div>
 			<div className="flex flex-wrap items-end gap-6">
 				<a

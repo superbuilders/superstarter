@@ -1,210 +1,126 @@
-// Dashboard "today's mission" picker. Real implementation against
-// practice_sessions + mastery_state. Practice round commit 7
-// (`docs/plans/practice-round.md` §5 commit 7 + ask 6).
+// Dashboard "today's mission" builder. Pure functions only — all DB
+// reads happen in @/server/dashboard/data.ts. This module's job is
+// to (a) pick the recommended alternate drill from already-loaded
+// belt rows and (b) assemble the final DashboardData["mission"]
+// payload from the picked row + today's completion counts.
 //
-// **Alternate CTA semantics:**
-//   - Targets the lowest-mastery sub-type, alternating verbal/numerical
-//     based on the user's most-recent drill session's section.
-//   - Last drilled verbal → next mission is numerical (and vice versa).
-//   - No prior drill → defaults to verbal (decision 7 from the plan).
-//   - Lowest-mastery within a section: order by mastery rank ASC
-//     (learning < decayed < fluent < mastered), tie-break by
-//     updatedAtMs ASC (stalest first; longest time since drill).
+// **Today's mission shape:**
+//   - Title: "Show up + 1 practice test + 3 drills."
+//   - Progress: 5 segments — segment 1 is "show up" (always filled
+//     by virtue of viewing the dashboard), segment 2 is the practice
+//     test, segments 3–5 are the three drills.
+//   - Primary CTA: take a full-length practice test (always).
+//   - Alternate CTA: drill the sub-type with the lowest visible
+//     belt the user last drilled the longest time ago. "Never
+//     drilled" beats any drilled timestamp; global across verbal
+//     and numerical (no section alternation).
+//   - Mission complete = practiceTestsToday >= 1 AND
+//     drillsToday >= 3. Eyebrow + title flip on completion; both
+//     CTAs stay visible because more practice is always
+//     recommended.
 //
-// **Empty-state fallbacks:**
-//   - User has 0 mastery_state rows for the target section (hasn't
-//     completed diagnostic for those sub-types) → falls back to the
-//     first sub-type of the section by config order
-//     (verbal.antonyms or numerical.number_series). This is
-//     theoretically reachable for users mid-diagnostic; in practice
-//     the (app)/layout.tsx gate requires diagnostic completion before
-//     the dashboard renders, so all 14 mastery_state rows should
-//     exist by the time pickTodaysMission runs.
-//   - User has 0 drill sessions → tie-break to verbal per decision 7.
-//
-// **Primary CTA unchanged:** still "Take your baseline simulation"
-// → /full-length/configure. Only the alternate CTA's runtime values
-// change vs the dashboard-round stub. The interim
-// alternateHref="/full-length/configure" placeholder from practice
-// round commit 1 (decision 4 transitional fallback) is replaced
-// here with the real per-user picker.
+// **Picker ordering for the alternate CTA's sub-type:**
+//   - Sort by belt rank ASC (white < blue < brown < black). The
+//     belt is derived from the user's most-recent drill attempt's
+//     tier (`loadAllBelts` in @/server/dashboard/belts.ts) so it
+//     matches what the user sees on the <DojoCard> rows; sub-types
+//     the user has never drilled default to "white".
+//   - Tie-break by `lastAttemptedAtMs` ASC, with `undefined`
+//     (never drilled) treated as the smallest possible value —
+//     "Never drilled" wins over any concrete timestamp at the same
+//     belt.
+//   - Final tie-break preserves input order via `Array.prototype
+//     .sort` stability (V8 + Bun). Callers pass rows in
+//     config-order (verbal then numerical, each filtered by
+//     section), so ties resolve deterministically.
 
 import * as errors from "@superbuilders/errors"
-import { and, desc, eq } from "drizzle-orm"
-import { type SubTypeConfig, type SubTypeId, subTypes } from "@/config/sub-types"
-import { db } from "@/db"
-import { masteryState } from "@/db/schemas/practice/mastery-state"
-import { practiceSessions } from "@/db/schemas/practice/practice-sessions"
 import { logger } from "@/logger"
-import type { DashboardData } from "@/server/dashboard/types"
+import type { BeltLevel, DashboardData, SubtypeRow } from "@/server/dashboard/types"
 
-type MasteryLevel = "learning" | "fluent" | "mastered" | "decayed"
-type Section = "verbal" | "numerical"
-
-const MASTERY_RANK: Record<MasteryLevel, number> = {
-	learning: 0,
-	decayed: 1,
-	fluent: 2,
-	mastered: 3
+const BELT_RANK: Record<BeltLevel, number> = {
+	white: 0,
+	blue: 1,
+	brown: 2,
+	black: 3
 }
 
-interface MasteryRow {
-	subTypeId: string
-	currentState: MasteryLevel
-	updatedAtMs: number
+const DRILLS_TARGET = 3
+const PRACTICE_TESTS_TARGET = 1
+
+function compareForPicker(a: SubtypeRow, b: SubtypeRow): number {
+	const rankDiff = BELT_RANK[a.belt] - BELT_RANK[b.belt]
+	if (rankDiff !== 0) return rankDiff
+	const aMs = a.lastAttemptedAtMs
+	const bMs = b.lastAttemptedAtMs
+	if (aMs === undefined && bMs === undefined) return 0
+	if (aMs === undefined) return -1
+	if (bMs === undefined) return 1
+	return aMs - bMs
 }
 
-function sectionForSubTypeId(id: string): Section | undefined {
-	const config = subTypes.find(function bySubTypeId(s) {
-		return s.id === id
-	})
-	return config?.section
+function pickLowestBeltSubType(rows: ReadonlyArray<SubtypeRow>): SubtypeRow {
+	if (rows.length === 0) {
+		logger.error({}, "pickLowestBeltSubType: empty rows (impossible — config has 14 sub-types)")
+		throw errors.new("pickLowestBeltSubType: empty rows")
+	}
+	const sorted = [...rows].sort(compareForPicker)
+	const chosen = sorted[0]
+	if (chosen === undefined) {
+		logger.error({}, "pickLowestBeltSubType: sorted[0] undefined (impossible)")
+		throw errors.new("pickLowestBeltSubType: sorted[0] undefined")
+	}
+	return chosen
 }
 
-function alternateSection(priorSubTypeId: string | undefined): Section {
-	if (priorSubTypeId === undefined) return "verbal"
-	const priorSection = sectionForSubTypeId(priorSubTypeId)
-	if (priorSection === undefined) {
-		logger.warn(
-			{ priorSubTypeId },
-			"alternateSection: prior drill subTypeId not in config (defaulting to verbal)"
-		)
-		return "verbal"
-	}
-	return priorSection === "verbal" ? "numerical" : "verbal"
+interface BuildTodaysMissionInput {
+	beltRows: ReadonlyArray<SubtypeRow>
+	drillsToday: number
+	practiceTestsToday: number
 }
 
-async function loadLastDrillSubTypeId(userId: string): Promise<string | undefined> {
-	const result = await errors.try(
-		db
-			.select({ subTypeId: practiceSessions.subTypeId })
-			.from(practiceSessions)
-			.where(and(eq(practiceSessions.userId, userId), eq(practiceSessions.type, "drill")))
-			.orderBy(desc(practiceSessions.endedAtMs))
-			.limit(1)
-	)
-	if (result.error) {
-		logger.error(
-			{ error: result.error, userId },
-			"loadLastDrillSubTypeId: query failed"
-		)
-		throw errors.wrap(result.error, "loadLastDrillSubTypeId")
-	}
-	const row = result.data[0]
-	if (row === undefined) return undefined
-	if (row.subTypeId === null) {
-		// Defensive — drill sessions always carry a subTypeId per
-		// practice_sessions schema constraints upstream of this query;
-		// this branch shouldn't fire.
-		logger.warn(
-			{ userId },
-			"loadLastDrillSubTypeId: drill session has null subTypeId (defensive)"
-		)
-		return undefined
-	}
-	return row.subTypeId
-}
-
-async function loadAllMasteryRows(userId: string): Promise<ReadonlyArray<MasteryRow>> {
-	const result = await errors.try(
-		db
-			.select({
-				subTypeId: masteryState.subTypeId,
-				currentState: masteryState.currentState,
-				updatedAtMs: masteryState.updatedAtMs
-			})
-			.from(masteryState)
-			.where(eq(masteryState.userId, userId))
-	)
-	if (result.error) {
-		logger.error({ error: result.error, userId }, "loadAllMasteryRows: query failed")
-		throw errors.wrap(result.error, "loadAllMasteryRows")
-	}
-	return result.data
-}
-
-function pickLowestMasterySubType(
-	rows: ReadonlyArray<MasteryRow>,
-	section: Section
-): SubTypeConfig {
-	const sectionRows = rows.filter(function inSection(r) {
-		return sectionForSubTypeId(r.subTypeId) === section
-	})
-	if (sectionRows.length === 0) {
-		// No mastery_state rows for this section. Fall back to the
-		// first sub-type of the section by config order. Reachable
-		// pre-diagnostic-completion (theoretical only — the (app)
-		// layout gate prevents pre-diagnostic dashboard renders).
-		const firstInSection = subTypes.find(function inTargetSection(s) {
-			return s.section === section
-		})
-		if (firstInSection === undefined) {
-			logger.error(
-				{ section },
-				"pickLowestMasterySubType: no sub-types in section (impossible — config has 5 verbal + 9 numerical)"
-			)
-			throw errors.new("pickLowestMasterySubType: empty section")
-		}
-		return firstInSection
-	}
-	let best: MasteryRow | undefined
-	for (const row of sectionRows) {
-		if (best === undefined) {
-			best = row
-			continue
-		}
-		const rankDiff = MASTERY_RANK[row.currentState] - MASTERY_RANK[best.currentState]
-		if (rankDiff < 0) {
-			best = row
-			continue
-		}
-		if (rankDiff === 0 && row.updatedAtMs < best.updatedAtMs) {
-			best = row
-		}
-	}
-	if (best === undefined) {
-		// Impossible — sectionRows.length > 0 guaranteed best assigned.
-		logger.error({ section }, "pickLowestMasterySubType: best undefined after loop (impossible)")
-		throw errors.new("pickLowestMasterySubType: best undefined")
-	}
-	const config = subTypes.find(function byId(s) {
-		return s.id === best.subTypeId
-	})
-	if (config === undefined) {
-		logger.error(
-			{ subTypeId: best.subTypeId },
-			"pickLowestMasterySubType: mastery_state row's sub_type_id not in config (defensive)"
-		)
-		throw errors.new("pickLowestMasterySubType: unknown sub-type id")
-	}
-	return config
-}
-
-async function pickTodaysMission(userId: string): Promise<DashboardData["mission"]> {
-	const [priorSubTypeId, masteryRows] = await Promise.all([
-		loadLastDrillSubTypeId(userId),
-		loadAllMasteryRows(userId)
-	])
-	const targetSection = alternateSection(priorSubTypeId)
-	const chosen = pickLowestMasterySubType(masteryRows, targetSection)
+function buildTodaysMission(input: BuildTodaysMissionInput): DashboardData["mission"] {
+	const { beltRows, drillsToday, practiceTestsToday } = input
+	const chosen = pickLowestBeltSubType(beltRows)
+	const isComplete =
+		drillsToday >= DRILLS_TARGET && practiceTestsToday >= PRACTICE_TESTS_TARGET
+	const eyebrow = isComplete ? "Mission complete" : "Today's mission"
+	const title = isComplete
+		? "Nice work — keep stacking reps."
+		: "Show up + 1 practice test + 3 drills."
 	logger.info(
 		{
-			userId,
-			priorSubTypeId,
-			targetSection,
 			chosenSubTypeId: chosen.id,
-			masteryRowCount: masteryRows.length
+			chosenBelt: chosen.belt,
+			chosenLastAttemptedAtMs: chosen.lastAttemptedAtMs,
+			drillsToday,
+			drillsTarget: DRILLS_TARGET,
+			practiceTestsToday,
+			practiceTestsTarget: PRACTICE_TESTS_TARGET,
+			isComplete
 		},
-		"pickTodaysMission: alternate CTA resolved"
+		"buildTodaysMission: resolved"
 	)
 	return {
-		eyebrow: "Today's mission",
-		title: "Take your baseline simulation",
+		eyebrow,
+		title,
 		primaryHref: "/full-length/configure",
 		primaryLabel: "Start full sim",
-		alternateHref: `/drill/${encodeURIComponent(chosen.id satisfies SubTypeId)}/run`,
-		alternateLabel: chosen.displayName
+		alternateHref: `/drill/${encodeURIComponent(chosen.id)}/run`,
+		alternateLabel: chosen.name,
+		drillsToday,
+		drillsTarget: DRILLS_TARGET,
+		practiceTestsToday,
+		practiceTestsTarget: PRACTICE_TESTS_TARGET
 	}
 }
 
-export { pickTodaysMission }
+export type { BuildTodaysMissionInput }
+export {
+	BELT_RANK,
+	buildTodaysMission,
+	compareForPicker,
+	DRILLS_TARGET,
+	pickLowestBeltSubType,
+	PRACTICE_TESTS_TARGET
+}

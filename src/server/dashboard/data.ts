@@ -35,8 +35,12 @@ import { db } from "@/db"
 import { users } from "@/db/schemas/auth/users"
 import { logger } from "@/logger"
 import { loadAllBelts } from "@/server/dashboard/belts"
+import {
+	countDrillsCompletedToday,
+	countPracticeTestsCompletedToday
+} from "@/server/dashboard/drill-count"
 import { deriveHeadline } from "@/server/dashboard/helpers"
-import { pickTodaysMission } from "@/server/dashboard/mission"
+import { buildTodaysMission } from "@/server/dashboard/mission"
 import { countMistakes } from "@/server/dashboard/mistakes"
 import { computePaceWeek } from "@/server/dashboard/pace"
 import { computeScoreEstimate, getLast5SimScores } from "@/server/dashboard/score"
@@ -80,17 +84,33 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 	}
 	const profile = profileResult.data
 
-	const [verbal, numerical, mission, score, streakDays, pace, mistakesCount, last5SimScores] =
-		await Promise.all([
-			loadAllBelts(userId, "verbal"),
-			loadAllBelts(userId, "numerical"),
-			pickTodaysMission(userId),
-			computeScoreEstimate(userId),
-			computeStreak(userId),
-			computePaceWeek(userId),
-			countMistakes(userId),
-			getLast5SimScores(userId)
-		])
+	const nowMs = Date.now()
+	const [
+		verbal,
+		numerical,
+		drillsToday,
+		practiceTestsToday,
+		score,
+		streakDays,
+		pace,
+		mistakesCount,
+		last5SimScores
+	] = await Promise.all([
+		loadAllBelts(userId, "verbal"),
+		loadAllBelts(userId, "numerical"),
+		countDrillsCompletedToday(userId, nowMs),
+		countPracticeTestsCompletedToday(userId, nowMs),
+		computeScoreEstimate(userId),
+		computeStreak(userId),
+		computePaceWeek(userId),
+		countMistakes(userId),
+		getLast5SimScores(userId)
+	])
+	const mission = buildTodaysMission({
+		beltRows: [...verbal, ...numerical],
+		drillsToday,
+		practiceTestsToday
+	})
 
 	const previousMedianSeconds =
 		pace.previousMedianMs === undefined ? undefined : pace.previousMedianMs / 1000

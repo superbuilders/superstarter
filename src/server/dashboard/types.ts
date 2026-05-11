@@ -85,6 +85,18 @@ interface DashboardData {
 		primaryLabel: string
 		alternateHref: string
 		alternateLabel: string
+		/** Number of completed drill sessions the user has finished
+		 * today (UTC). Capped semantically at drillsTarget for display
+		 * but the raw count is preserved here so consumers can show
+		 * over-target progress ("4/3 — keep going") if desired. */
+		drillsToday: number
+		/** Daily drill target — 3. Hitting drillsToday >= drillsTarget
+		 * fills the drill segments of the mission progress bar. */
+		drillsTarget: number
+		/** Number of completed full-length practice tests today (UTC). */
+		practiceTestsToday: number
+		/** Daily practice-test target — 1. */
+		practiceTestsTarget: number
 	}
 	verbal: ReadonlyArray<SubtypeRow>
 	numerical: ReadonlyArray<SubtypeRow>
