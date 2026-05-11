@@ -24,7 +24,10 @@ import type {
 import { BeltIndicator } from "@/components/post-session/belt-indicator"
 import { CumulativeTimeChart } from "@/components/post-session/charts/cumulative-time-chart"
 import { TimeSinkChart } from "@/components/post-session/charts/time-sink-chart"
-import { TopicProficiencyRadar } from "@/components/post-session/charts/topic-proficiency-radar"
+import {
+	TopicProficiencyRadar,
+	computeOuterRingValue
+} from "@/components/post-session/charts/topic-proficiency-radar"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { PerformanceSummary } from "@/components/post-session/performance-summary"
 import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
@@ -140,6 +143,9 @@ function PostSessionShell(props: PostSessionShellProps) {
 		const attemptPoints = props.wrongItems.map(function pickPoint(w) {
 			return { attemptId: w.attemptId, latencyMs: w.latencyMs }
 		})
+		// Shared scale across both radars so Verbal and Numerical are
+		// visually comparable. Computed once, passed to both instances.
+		const radarOuterRing = computeOuterRingValue(props.performance)
 		panel = (
 			<div className="space-y-4" data-testid="post-session-slot-performance-summary">
 				<ChartCard
@@ -150,11 +156,26 @@ function PostSessionShell(props: PostSessionShellProps) {
 					<TimeSinkChart attempts={attemptPoints} />
 				</ChartCard>
 				<ChartCard
-					title="Topic proficiency"
-					eyebrow="Accuracy × speed by sub-type"
-					testId="post-session-chart-topic-radar"
+					title="Verbal proficiency"
+					eyebrow="Target: 80% at 18s/question"
+					testId="post-session-chart-radar-verbal"
 				>
-					<TopicProficiencyRadar rows={props.performance} />
+					<TopicProficiencyRadar
+						rows={props.performance}
+						section="verbal"
+						outerRingValue={radarOuterRing}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Numerical proficiency"
+					eyebrow="Target: 80% at 18s/question"
+					testId="post-session-chart-radar-numerical"
+				>
+					<TopicProficiencyRadar
+						rows={props.performance}
+						section="numerical"
+						outerRingValue={radarOuterRing}
+					/>
 				</ChartCard>
 				<ChartCard
 					title="Cumulative time vs the budget"

@@ -1,33 +1,42 @@
 "use client"
 
-// <TopicProficiencyRadar> — spider chart of per-sub-type proficiency.
+// <TopicProficiencyRadar> — per-section spider chart of sub-type proficiency.
 //
-// Each axis is a sub-type touched in the session. The axis value is a
-// weighted score of accuracy × speed, both in [0,1]:
-//   accuracy = correct / total
-//   speed    = min(1, threshold / median)
-//   score    = accuracy * speed
+// One radar per CCAT section (verbal or numerical), driven by the canonical
+// sub-types in `@/config/sub-types`. Iterating the canonical list — not just
+// the rows the session produced — guarantees every sub-type in the section
+// appears as an axis; sub-types the user did not attempt in this session
+// render at center with a reduced-opacity label + vertex (the "you have not
+// touched this yet" signal).
 //
-// Concentric reference rings sit at 0.25 / 0.5 / 0.75 / 1.0 so the
-// polygon's distance from the center reads at a glance. The filled
-// polygon is the user's profile; vertices that pull toward the center
-// are the weakest sub-types.
+// Metric (per axis): `accuracy / paceSeconds`
+//   accuracy    = correct / total                         (in [0,1])
+//   paceSeconds = medianLatencyMs / 1000                  (seconds)
+//   value       = accuracy / paceSeconds                  (1/sec, unbounded ↑)
 //
-// Requires ≥3 sub-types to form a polygon; below that, we surface a
-// compact fallback message.
+// The target value (80% accuracy at the 18-second pace) is the brand-target
+// the cobalt ring marks: `0.8 / 18 ≈ 0.0444 per second`. The outer ring scale
+// is SHARED across both Verbal and Numerical radars (computed once in the
+// shell via `computeOuterRingValue` and passed in as a prop). Sharing the
+// scale is what makes the two radars visually comparable.
 
 import type { PerSubTypePerformance } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
-import { SUB_TYPE_BY_ID } from "@/components/post-session/_lib/sub-type-display"
-import type { SubTypeId } from "@/config/sub-types"
+import { type SubTypeId, subTypes } from "@/config/sub-types"
+import { cn } from "@/lib/utils"
+
+type SectionId = "verbal" | "numerical"
 
 interface TopicProficiencyRadarProps {
 	rows: ReadonlyArray<PerSubTypePerformance>
+	section: SectionId
+	outerRingValue: number
 }
 
 interface AxisDatum {
 	subTypeId: SubTypeId
 	displayName: string
-	score: number
+	value: number
+	isEmpty: boolean
 	angle: number
 }
 
@@ -36,29 +45,64 @@ const CENTER = VIEW_SIZE / 2
 const RADIUS = 96
 const LABEL_RADIUS = RADIUS + 22
 
-function clamp01(n: number): number {
-	if (n < 0) return 0
-	if (n > 1) return 1
-	return n
+const TARGET_ACCURACY = 0.8
+const TARGET_PACE_SECONDS = 18
+const TARGET_PROFICIENCY_PER_SEC = TARGET_ACCURACY / TARGET_PACE_SECONDS
+
+interface PerSubTypeMetric {
+	value: number
+	isEmpty: boolean
 }
 
-function buildAxes(rows: ReadonlyArray<PerSubTypePerformance>): ReadonlyArray<AxisDatum> {
+function metricFor(row: PerSubTypePerformance | undefined): PerSubTypeMetric {
+	if (row === undefined) return { value: 0, isEmpty: true }
+	if (row.total === 0) return { value: 0, isEmpty: true }
+	if (row.medianLatencyMs === 0) return { value: 0, isEmpty: true }
+	const accuracy = row.correct / row.total
+	const paceSeconds = row.medianLatencyMs / 1000
+	return { value: accuracy / paceSeconds, isEmpty: false }
+}
+
+function computeOuterRingValue(rows: ReadonlyArray<PerSubTypePerformance>): number {
+	let observedMax = 0
+	for (const r of rows) {
+		const m = metricFor(r)
+		if (m.isEmpty) continue
+		if (m.value > observedMax) observedMax = m.value
+	}
+	const headroomMax = observedMax * 1.1
+	const targetFloor = 2 * TARGET_PROFICIENCY_PER_SEC
+	return Math.max(targetFloor, headroomMax)
+}
+
+function buildAxes(
+	rows: ReadonlyArray<PerSubTypePerformance>,
+	section: SectionId
+): ReadonlyArray<AxisDatum> {
+	const rowsBySubTypeId: ReadonlyMap<SubTypeId, PerSubTypePerformance> = new Map(
+		rows.map(function entry(r) {
+			return [r.subTypeId, r]
+		})
+	)
+	const canonical = subTypes.filter(function bySection(t) {
+		return t.section === section
+	})
 	interface Raw {
 		subTypeId: SubTypeId
 		displayName: string
-		score: number
+		value: number
+		isEmpty: boolean
 	}
-	const raw: Raw[] = []
-	for (const r of rows) {
-		const meta = SUB_TYPE_BY_ID.get(r.subTypeId)
-		if (meta === undefined) continue
-		if (r.total <= 0) continue
-		const accuracy = r.correct / r.total
-		const speed = r.medianLatencyMs > 0 ? meta.latencyThresholdMs / r.medianLatencyMs : 1
-		const score = clamp01(accuracy) * clamp01(speed)
-		raw.push({ subTypeId: r.subTypeId, displayName: meta.displayName, score })
-	}
-	raw.sort(function byName(a, b) {
+	const raw: Raw[] = canonical.map(function compose(t) {
+		const m = metricFor(rowsBySubTypeId.get(t.id))
+		return {
+			subTypeId: t.id,
+			displayName: t.displayName,
+			value: m.value,
+			isEmpty: m.isEmpty
+		}
+	})
+	raw.sort(function byDisplayName(a, b) {
 		return a.displayName.localeCompare(b.displayName)
 	})
 	const n = raw.length
@@ -69,7 +113,8 @@ function buildAxes(rows: ReadonlyArray<PerSubTypePerformance>): ReadonlyArray<Ax
 		return {
 			subTypeId: r.subTypeId,
 			displayName: r.displayName,
-			score: r.score,
+			value: r.value,
+			isEmpty: r.isEmpty,
 			angle: startAngle + i * angleStep
 		}
 	})
@@ -105,6 +150,14 @@ function pickAnchor(angle: number): "start" | "middle" | "end" {
 	return "middle"
 }
 
+function radiusFor(value: number, outerRingValue: number): number {
+	if (outerRingValue <= 0) return 0
+	const ratio = value / outerRingValue
+	const clamped = ratio > 1 ? 1 : ratio
+	if (clamped < 0) return 0
+	return clamped * RADIUS
+}
+
 interface RingProps {
 	scale: number
 	axes: ReadonlyArray<AxisDatum>
@@ -129,25 +182,31 @@ function Ring(props: RingProps) {
 }
 
 function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
-	const axes = buildAxes(props.rows)
-
-	if (axes.length < 3) {
+	const axes = buildAxes(props.rows, props.section)
+	if (axes.length === 0) {
 		return (
-			<p className="text-foreground/70 text-sm">
-				Practice at least three sub-types in a session to see your topic profile.
-			</p>
+			<p className="text-foreground/70 text-sm">No sub-types configured for this section.</p>
 		)
 	}
 
+	const targetRadius = radiusFor(TARGET_PROFICIENCY_PER_SEC, props.outerRingValue)
+	const targetPoints = axes.map(function targetPt(axis) {
+		return pointAt(axis.angle, targetRadius)
+	})
+	const targetPath = polygonPath(targetPoints)
+
 	const profilePoints = axes.map(function pointFor(axis) {
-		return pointAt(axis.angle, axis.score * RADIUS)
+		return pointAt(axis.angle, radiusFor(axis.value, props.outerRingValue))
 	})
 	const profilePath = polygonPath(profilePoints)
+
 	const ringScales = [0.25, 0.5, 0.75, 1] as const
+
+	const sectionLabel = props.section === "verbal" ? "verbal" : "numerical"
 
 	return (
 		<svg
-			aria-label={`Proficiency by sub-type across ${axes.length} axes.`}
+			aria-label={`Proficiency across ${axes.length} ${sectionLabel} sub-types; cobalt ring marks 80% accuracy at 18 seconds per question.`}
 			className="h-[280px] w-full overflow-visible"
 			role="img"
 			viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
@@ -173,6 +232,17 @@ function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
 				)
 			})}
 
+			{/* Cobalt target ring — brand-target reference at 80% accuracy /
+			    18s pace. Solid (structural reference, not goal-line dashed). */}
+			<path
+				className="text-cobalt/70"
+				d={targetPath}
+				fill="none"
+				stroke="currentColor"
+				strokeLinejoin="round"
+				strokeWidth="1.25"
+			/>
+
 			<path
 				className="text-cobalt"
 				d={profilePath}
@@ -184,17 +254,21 @@ function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
 			/>
 
 			{axes.map(function renderVertex(axis) {
-				const p = pointAt(axis.angle, axis.score * RADIUS)
+				const p = pointAt(axis.angle, radiusFor(axis.value, props.outerRingValue))
+				const vertexClass = axis.isEmpty ? "text-foreground/40" : "text-cobalt"
+				const titleSuffix = axis.isEmpty
+					? "no attempts this session"
+					: `${(axis.value * 60).toFixed(1)} correct/minute`
 				return (
 					<circle
 						key={`v-${axis.subTypeId}`}
-						className="text-cobalt"
+						className={vertexClass}
 						cx={p.x}
 						cy={p.y}
 						fill="currentColor"
 						r={2.5}
 					>
-						<title>{`${axis.displayName}: ${(axis.score * 100).toFixed(0)} / 100`}</title>
+						<title>{`${axis.displayName}: ${titleSuffix}`}</title>
 					</circle>
 				)
 			})}
@@ -202,10 +276,11 @@ function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
 			{axes.map(function renderLabel(axis) {
 				const p = pointAt(axis.angle, LABEL_RADIUS)
 				const anchor = pickAnchor(axis.angle)
+				const labelClass = axis.isEmpty ? "text-foreground/40" : "text-foreground/80"
 				return (
 					<text
 						key={`label-${axis.subTypeId}`}
-						className="fill-current text-[10px] text-foreground/80"
+						className={cn("fill-current font-sans text-[10px]", labelClass)}
 						dominantBaseline="middle"
 						textAnchor={anchor}
 						x={p.x}
@@ -219,5 +294,11 @@ function TopicProficiencyRadar(props: TopicProficiencyRadarProps) {
 	)
 }
 
-export type { TopicProficiencyRadarProps }
-export { TopicProficiencyRadar }
+export type { TopicProficiencyRadarProps, SectionId }
+export {
+	TopicProficiencyRadar,
+	TARGET_ACCURACY,
+	TARGET_PACE_SECONDS,
+	TARGET_PROFICIENCY_PER_SEC,
+	computeOuterRingValue
+}
