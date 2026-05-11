@@ -407,11 +407,8 @@ function StatsView(props: StatsViewProps) {
 							selectedKeys={selectedKeys}
 							onChange={setSelectedKeys}
 						/>
-						<div className="space-y-2 border-border-soft border-t pt-4">
-							<div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-								<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
-									Accuracy across selected tests
-								</span>
+						<div className="space-y-0.5 border-border-soft border-t pt-3">
+							<div className="flex flex-wrap justify-end gap-2">
 								<AccuracySplitModePicker mode={accuracySplitMode} onChange={setAccuracySplitMode} />
 							</div>
 							<AccuracyAcrossTests
@@ -419,18 +416,14 @@ function StatsView(props: StatsViewProps) {
 								attempts={sessionFiltered}
 								selectedKeys={selectedKeys}
 								splitMode={accuracySplitMode}
+								title="Accuracy across selected tests"
 								onPointClick={handleAccuracyPointClick}
 							/>
 						</div>
-						<div className="space-y-2 border-border-soft border-t pt-4">
-							<div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-								<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
-									Average time per question
-								</span>
-								<div className="flex flex-wrap gap-2">
-									<CorrectnessPicker value={correctnessFilter} onChange={setCorrectnessFilter} />
-									<AccuracySplitModePicker mode={avgTimeSplitMode} onChange={setAvgTimeSplitMode} />
-								</div>
+						<div className="space-y-0.5 border-border-soft border-t pt-3">
+							<div className="flex flex-col items-end gap-1.5">
+								<CorrectnessPicker value={correctnessFilter} onChange={setCorrectnessFilter} />
+								<AccuracySplitModePicker mode={avgTimeSplitMode} onChange={setAvgTimeSplitMode} />
 							</div>
 							<AverageTimeAcrossTests
 								tests={selectedSessions}
@@ -438,6 +431,7 @@ function StatsView(props: StatsViewProps) {
 								selectedKeys={selectedKeys}
 								splitMode={avgTimeSplitMode}
 								correctnessFilter={correctnessFilter}
+								title="Average time per question"
 								onPointClick={handleAvgTimePointClick}
 							/>
 						</div>

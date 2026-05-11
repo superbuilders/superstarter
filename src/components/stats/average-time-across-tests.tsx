@@ -37,6 +37,7 @@ interface AverageTimeAcrossTestsProps {
 	selectedKeys: ReadonlySet<string>
 	splitMode: SplitMode
 	correctnessFilter: CorrectnessFilter
+	title?: string
 	onPointClick?: (testId: string, seriesId: string) => void
 }
 
@@ -95,6 +96,16 @@ const DIFFICULTY_COLOR: Record<Difficulty, string> = {
 }
 
 const DIFFICULTY_ORDER: ReadonlyArray<Difficulty> = ["easy", "medium", "hard", "brutal"]
+
+// Sub-types sorted Verbal-first then Numerical, alphabetical within each
+// section. Matches the matrix above and the sibling accuracy chart so
+// the legend reads as one consistent rhythm.
+const SECTION_RANK: Record<"verbal" | "numerical", number> = { verbal: 0, numerical: 1 }
+const SUB_TYPES_SORTED = [...subTypes].sort(function compareSubTypes(a, b) {
+	const sectionDelta = SECTION_RANK[a.section] - SECTION_RANK[b.section]
+	if (sectionDelta !== 0) return sectionDelta
+	return a.displayName.localeCompare(b.displayName)
+})
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
 	easy: "Easy",
@@ -238,7 +249,7 @@ function buildSeriesBySubType(
 		bucket.push(a)
 	}
 	const out: Series[] = []
-	for (const cfg of subTypes) {
+	for (const cfg of SUB_TYPES_SORTED) {
 		const bucket = grouped.get(cfg.id)
 		if (bucket === undefined) continue
 		out.push({
@@ -376,7 +387,7 @@ function AverageTimeAcrossTests(props: AverageTimeAcrossTestsProps) {
 	const goalY = yOf(GOAL_MS)
 
 	return (
-		<div className="space-y-2">
+		<div className="space-y-0.5">
 			{showLegend && (
 				<div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-2">
 					{series.map(function renderLegend(s) {
@@ -391,6 +402,11 @@ function AverageTimeAcrossTests(props: AverageTimeAcrossTestsProps) {
 						)
 					})}
 				</div>
+			)}
+			{props.title !== undefined && (
+				<h4 className="text-center font-medium font-serif text-[18px] text-text-1 tracking-[-0.005em]">
+					{props.title}
+				</h4>
 			)}
 			<svg
 				aria-label={ariaLabel}
