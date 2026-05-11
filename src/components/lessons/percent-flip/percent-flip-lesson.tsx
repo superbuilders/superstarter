@@ -14,6 +14,7 @@
 import * as errors from "@superbuilders/errors"
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { markLessonDoneToday } from "@/components/lessons/shared/lesson-mastery-store"
 import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 import { logger } from "@/logger"
@@ -299,6 +300,7 @@ function SpeedDrill() {
 		const parsed = Number.parseFloat(guess)
 		if (Number.isNaN(parsed)) return
 		if (Math.abs(parsed - problem.answer) < 0.0001) {
+			markLessonDoneToday()
 			const nextStreak = streak + 1
 			setFeedback("right")
 			setStreak(nextStreak)

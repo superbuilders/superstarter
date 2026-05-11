@@ -16,6 +16,7 @@
 import * as errors from "@superbuilders/errors"
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { markLessonDoneToday } from "@/components/lessons/shared/lesson-mastery-store"
 import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 import { logger } from "@/logger"
@@ -314,6 +315,7 @@ function SpeedDrill() {
 	function pick(choice: string) {
 		if (locked || !current) return
 		const isRight = choice === current.answer
+		if (isRight) markLessonDoneToday()
 		setRound(function lock(prev) {
 			if (prev === null) return prev
 			const updatedCorrect = isRight ? prev.correct + 1 : prev.correct

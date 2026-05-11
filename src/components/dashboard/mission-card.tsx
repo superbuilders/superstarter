@@ -1,44 +1,113 @@
+"use client"
+
 // <MissionCard> — "today's mission" card.
 //
-// Two-row layout: top row mirrors the previous design (eyebrow + serif
-// title on the left, two CTAs on the right). Below that, a 5-segment
-// progress strip:
+// Single-row header (eyebrow + serif title) over a 5-segment progress
+// strip. Each segment carries a label beneath it naming what it
+// represents (e.g. "Show up", "Practice test", "1 lesson", "Letter
+// Series", "Word Problems"); the segment + label are wrapped in a
+// single anchor that navigates to the matching assignment, with a
+// hover/focus color shift signaling the affordance.
 //
-//   [show up] [1 practice test] [drill 1] [drill 2] [drill 3]
+// Per-segment destinations:
+//   • Show up      — no link (the user already showed up by viewing
+//                    the dashboard; static segment)
+//   • Practice test — /full-length/configure
+//   • 1 lesson     — /lessons
+//   • Drill 1..N   — /drill/<sub-type-id>/run (from mission.recommendedDrills)
 //
-// Segment 1 ("show up") is always filled — the user has already
-// shown up by viewing the dashboard. Segment 2 fills when the user
-// has finished at least one full-length practice test today (UTC).
-// Segments 3–5 each fill per completed drill today, up to three.
+// Segment composition:
 //
-// Mission complete = all 5 segments filled (practice test ≥ 1 AND
-// drills ≥ 3). On completion the eyebrow flips to "Mission complete"
-// with a checkmark, the title swaps to a celebratory phrase, and
-// the segments turn green. Both CTAs stay visible because more
-// practice is encouraged.
+//   • Default — "Show up + 1 practice test + 1 lesson + 2 drills"
+//     when there is at least one lesson the user has NOT yet
+//     mastered. Lesson localStorage is the source of truth (per
+//     `lesson-mastery-store.ts`).
 //
-// CTAs: primary is a filled dark pill (bg-text-1 + text-bg, with a
-// matching border so the geometry matches the bordered alternate
-// CTA). Alternate is a quiet outlined button. Both are <a> tags with
-// cobalt focus rings; we use plain <a> rather than <Link> because the
-// hrefs are dynamic strings (DashboardData["mission"] types them as
-// string) and Next.js's typedRoutes config requires <Link> hrefs to
-// be Route literals or typed Routes.
+//   • All-mastered — "Show up + 1 practice test + 3 drills" (the
+//     original composition) once every lesson slug appears in the
+//     mastery store. The user no longer needs the daily lesson
+//     reminder, so the bar reverts to three drill segments.
+//
+// In both cases the bar carries five segments so the visual length
+// stays stable. The mission is "complete" when:
+//   - practiceTestsToday >= 1 AND drillsToday >= drillTarget AND
+//   - (allLessonsMastered OR lessonDoneToday).
+//
+// `mastered` and `lessonDoneToday` live in localStorage; we mount in
+// "default" mode (not all mastered, lesson not done) so SSR + first
+// client render match exactly, then a useEffect hydrates the real
+// values from localStorage. Layout shift is limited to the per-
+// segment labels — the bar geometry stays a 5-segment row.
 
+import * as React from "react"
+import {
+	areAllLessonsMastered,
+	isLessonDoneToday
+} from "@/components/lessons/shared/lesson-mastery-store"
 import type { DashboardData } from "@/server/dashboard/types"
 
 interface MissionCardProps {
 	mission: DashboardData["mission"]
 }
 
-const SHOW_UP_SEGMENTS = 1
+const DRILL_TARGET_WITH_LESSON = 2
+const PRACTICE_TEST_HREF = "/full-length/configure"
+const LESSONS_INDEX_HREF = "/lessons"
+
+interface SegmentSpec {
+	label: string
+	filled: boolean
+	href?: string
+}
+
+function buildSegments(input: {
+	mission: DashboardData["mission"]
+	includeLesson: boolean
+	lessonDoneToday: boolean
+}): ReadonlyArray<SegmentSpec> {
+	const { mission, includeLesson, lessonDoneToday } = input
+	const drillsTarget = includeLesson ? DRILL_TARGET_WITH_LESSON : mission.drillsTarget
+	const segments: SegmentSpec[] = [{ label: "Show up", filled: true }]
+	const practiceFilled = mission.practiceTestsToday >= mission.practiceTestsTarget
+	segments.push({ label: "Practice test", filled: practiceFilled, href: PRACTICE_TEST_HREF })
+	if (includeLesson) {
+		segments.push({ label: "1 lesson", filled: lessonDoneToday, href: LESSONS_INDEX_HREF })
+	}
+	const drillsFilledCount = Math.min(mission.drillsToday, drillsTarget)
+	for (let i = 0; i < drillsTarget; i++) {
+		const rec = mission.recommendedDrills[i]
+		const label = rec === undefined ? `Drill ${i + 1}` : rec.name
+		const href = rec === undefined ? undefined : rec.href
+		segments.push({
+			label,
+			filled: i < drillsFilledCount,
+			href
+		})
+	}
+	return segments
+}
 
 function MissionCard({ mission }: MissionCardProps) {
-	const drillsCapped = Math.min(mission.drillsToday, mission.drillsTarget)
-	const practiceCapped = Math.min(mission.practiceTestsToday, mission.practiceTestsTarget)
-	const totalSegments = SHOW_UP_SEGMENTS + mission.practiceTestsTarget + mission.drillsTarget
-	const filledSegments = SHOW_UP_SEGMENTS + practiceCapped + drillsCapped
+	const [allMastered, setAllMastered] = React.useState(false)
+	const [lessonDoneToday, setLessonDoneToday] = React.useState(false)
+
+	React.useEffect(function hydrate() {
+		setAllMastered(areAllLessonsMastered())
+		setLessonDoneToday(isLessonDoneToday())
+	}, [])
+
+	const includeLesson = !allMastered
+	const segments = buildSegments({ mission, includeLesson, lessonDoneToday })
+	const totalSegments = segments.length
+	const filledSegments = segments.filter(function isFilled(s) {
+		return s.filled
+	}).length
 	const isComplete = filledSegments >= totalSegments
+	const dynamicTitle = includeLesson
+		? "Show up + 1 practice test + 1 lesson + 2 drills."
+		: "Show up + 1 practice test + 3 drills."
+	const titleToShow = isComplete ? "Nice work — keep stacking reps." : dynamicTitle
+	const dynamicEyebrow = isComplete ? "Mission complete" : "Today's mission"
 	const progressLabel = isComplete
 		? `${filledSegments}/${totalSegments} · more is always good`
 		: `${filledSegments}/${totalSegments} today`
@@ -46,77 +115,115 @@ function MissionCard({ mission }: MissionCardProps) {
 	const eyebrowIcon = isComplete ? <CheckIcon /> : null
 	return (
 		<section className="mb-2 rounded-lg border border-border-soft bg-surface px-5 py-[10px]">
-			<div className="grid grid-cols-[1fr_auto] items-center gap-4">
-				<div>
-					<p
-						className={`mb-[2px] flex items-center gap-1 font-semibold text-[11px] uppercase tracking-[0.06em] ${eyebrowColor}`}
-					>
-						{eyebrowIcon}
-						<span>{mission.eyebrow}</span>
-					</p>
-					<h3 className="font-medium font-serif text-[16px] text-text-1 tracking-[-0.005em]">
-						{mission.title}
-					</h3>
-				</div>
-				<div className="flex gap-2">
-					<a
-						href={mission.alternateHref}
-						className="rounded-md border border-border-strong bg-surface px-3 py-[7px] font-medium text-[13px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
-					>
-						{mission.alternateLabel}
-					</a>
-					<a
-						href={mission.primaryHref}
-						className="rounded-md border border-text-1 bg-text-1 px-3 py-[7px] font-medium text-[13px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
-					>
-						{mission.primaryLabel}
-					</a>
-				</div>
+			<div>
+				<p
+					className={`mb-[2px] flex items-center gap-1 font-semibold text-[11px] uppercase tracking-[0.06em] ${eyebrowColor}`}
+				>
+					{eyebrowIcon}
+					<span>{dynamicEyebrow}</span>
+				</p>
+				<h3 className="font-medium font-serif text-[16px] text-text-1 tracking-[-0.005em]">
+					{titleToShow}
+				</h3>
 			</div>
-			<div className="mt-2 flex items-center gap-2">
-				<MissionProgressBar
-					filled={filledSegments}
-					total={totalSegments}
-					complete={isComplete}
-				/>
-				<p className="tabular text-[11px] text-text-3 tracking-[0.02em]">{progressLabel}</p>
-			</div>
+			<MissionProgressBar
+				segments={segments}
+				complete={isComplete}
+				progressLabel={progressLabel}
+			/>
 		</section>
 	)
 }
 
 interface MissionProgressBarProps {
-	filled: number
-	total: number
+	segments: ReadonlyArray<SegmentSpec>
 	complete: boolean
+	progressLabel: string
 }
 
-function MissionProgressBar({ filled, total, complete }: MissionProgressBarProps) {
-	const segments: ReadonlyArray<number> = Array.from({ length: total }, function index(_, i) {
-		return i
-	})
+function MissionProgressBar({ segments, complete, progressLabel }: MissionProgressBarProps) {
+	const filled = segments.filter(function isFilled(s) {
+		return s.filled
+	}).length
 	return (
 		<div
-			className="flex h-1.5 flex-1 gap-1"
+			className="mt-2"
 			role="progressbar"
 			aria-valuemin={0}
-			aria-valuemax={total}
+			aria-valuemax={segments.length}
 			aria-valuenow={filled}
 			aria-label="Today's mission progress"
 		>
-			{segments.map(function renderSegment(i) {
-				const isFilled = i < filled
-				const segmentColor = complete ? "bg-good" : "bg-cobalt"
-				const fillClass = isFilled ? segmentColor : "bg-border-soft"
-				return (
-					<span
-						key={i}
-						className={`block flex-1 rounded-full ${fillClass}`}
-						aria-hidden="true"
-					/>
-				)
-			})}
+			<div className="flex items-stretch gap-1">
+				{segments.map(function renderSegment(segment, i) {
+					const key = `seg-${i}-${segment.label}`
+					return (
+						<MissionSegment
+							key={key}
+							segment={segment}
+							complete={complete}
+						/>
+					)
+				})}
+			</div>
+			<p className="tabular mt-1 text-[11px] text-text-3 tracking-[0.02em]">
+				{progressLabel}
+			</p>
 		</div>
+	)
+}
+
+interface MissionSegmentProps {
+	segment: SegmentSpec
+	complete: boolean
+}
+
+function MissionSegment({ segment, complete }: MissionSegmentProps) {
+	const filledBarColor = complete ? "bg-good" : "bg-cobalt"
+	const barFillClass = segment.filled ? filledBarColor : "bg-border-soft"
+	const baseLabelTone = segment.filled
+		? complete
+			? "text-good"
+			: "text-text-2"
+		: "text-text-3"
+	const isInteractive = segment.href !== undefined
+	const barHoverClass = isInteractive && !segment.filled
+		? "group-hover:bg-cobalt group-focus-visible:bg-cobalt"
+		: ""
+	const labelHoverClass = isInteractive
+		? "group-hover:text-cobalt group-focus-visible:text-cobalt"
+		: ""
+	const bar = (
+		<span
+			className={`block h-1.5 w-full rounded-full transition-colors ${barFillClass} ${barHoverClass}`}
+			aria-hidden="true"
+		/>
+	)
+	const label = (
+		<span
+			className={`mt-1 block w-full truncate text-center font-medium text-[10px] tracking-[0.01em] transition-colors ${baseLabelTone} ${labelHoverClass}`}
+			title={segment.label}
+		>
+			{segment.label}
+		</span>
+	)
+	if (segment.href === undefined) {
+		return (
+			<div className="flex flex-1 flex-col">
+				{bar}
+				{label}
+			</div>
+		)
+	}
+	return (
+		<a
+			href={segment.href}
+			aria-label={`Go to ${segment.label}`}
+			className="group flex flex-1 flex-col rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+		>
+			{bar}
+			{label}
+		</a>
 	)
 }
 

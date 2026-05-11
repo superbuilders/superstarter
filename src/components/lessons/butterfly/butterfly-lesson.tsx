@@ -12,6 +12,7 @@
 
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { markLessonDoneToday } from "@/components/lessons/shared/lesson-mastery-store"
 import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 
@@ -518,6 +519,7 @@ function SpeedDrill() {
 		if (problem === null) return
 		setPicked(choice)
 		if (choice === problem.answer) {
+			markLessonDoneToday()
 			const nextStreak = streak + 1
 			setFeedback("right")
 			setStreak(nextStreak)

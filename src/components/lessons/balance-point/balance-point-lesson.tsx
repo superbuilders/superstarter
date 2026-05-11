@@ -18,6 +18,7 @@
 
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
+import { markLessonDoneToday } from "@/components/lessons/shared/lesson-mastery-store"
 import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
 
@@ -460,6 +461,7 @@ function MissingValuePractice() {
 		const parsed = Number.parseInt(guess, 10)
 		if (Number.isNaN(parsed)) return
 		if (parsed === answer) {
+			markLessonDoneToday()
 			setFeedback("right")
 			setSolved(function inc(prev) {
 				return prev + 1

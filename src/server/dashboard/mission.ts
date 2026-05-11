@@ -73,6 +73,15 @@ function pickLowestBeltSubType(rows: ReadonlyArray<SubtypeRow>): SubtypeRow {
 	return chosen
 }
 
+function pickTopSubTypes(rows: ReadonlyArray<SubtypeRow>, count: number): ReadonlyArray<SubtypeRow> {
+	if (rows.length === 0) {
+		logger.error({ count }, "pickTopSubTypes: empty rows (impossible — config has 14 sub-types)")
+		throw errors.new("pickTopSubTypes: empty rows")
+	}
+	const sorted = [...rows].sort(compareForPicker)
+	return sorted.slice(0, count)
+}
+
 interface BuildTodaysMissionInput {
 	beltRows: ReadonlyArray<SubtypeRow>
 	drillsToday: number
@@ -81,7 +90,19 @@ interface BuildTodaysMissionInput {
 
 function buildTodaysMission(input: BuildTodaysMissionInput): DashboardData["mission"] {
 	const { beltRows, drillsToday, practiceTestsToday } = input
-	const chosen = pickLowestBeltSubType(beltRows)
+	const topPicks = pickTopSubTypes(beltRows, DRILLS_TARGET)
+	const chosen = topPicks[0]
+	if (chosen === undefined) {
+		logger.error({}, "buildTodaysMission: topPicks empty (impossible)")
+		throw errors.new("buildTodaysMission: topPicks empty")
+	}
+	const recommendedDrills = topPicks.map(function toRecommendation(row) {
+		return {
+			id: row.id,
+			name: row.name,
+			href: `/drill/${encodeURIComponent(row.id)}/run`
+		}
+	})
 	const isComplete =
 		drillsToday >= DRILLS_TARGET && practiceTestsToday >= PRACTICE_TESTS_TARGET
 	const eyebrow = isComplete ? "Mission complete" : "Today's mission"
@@ -97,7 +118,10 @@ function buildTodaysMission(input: BuildTodaysMissionInput): DashboardData["miss
 			drillsTarget: DRILLS_TARGET,
 			practiceTestsToday,
 			practiceTestsTarget: PRACTICE_TESTS_TARGET,
-			isComplete
+			isComplete,
+			recommendedDrillIds: recommendedDrills.map(function getId(d) {
+				return d.id
+			})
 		},
 		"buildTodaysMission: resolved"
 	)
@@ -111,7 +135,8 @@ function buildTodaysMission(input: BuildTodaysMissionInput): DashboardData["miss
 		drillsToday,
 		drillsTarget: DRILLS_TARGET,
 		practiceTestsToday,
-		practiceTestsTarget: PRACTICE_TESTS_TARGET
+		practiceTestsTarget: PRACTICE_TESTS_TARGET,
+		recommendedDrills
 	}
 }
 
@@ -122,5 +147,6 @@ export {
 	compareForPicker,
 	DRILLS_TARGET,
 	pickLowestBeltSubType,
+	pickTopSubTypes,
 	PRACTICE_TESTS_TARGET
 }

@@ -97,6 +97,18 @@ interface DashboardData {
 		practiceTestsToday: number
 		/** Daily practice-test target — 1. */
 		practiceTestsTarget: number
+		/** Top-N sub-type recommendations for today's drill segments,
+		 * sorted by the same picker logic that drives `alternateLabel`
+		 * (lowest belt, then oldest `lastAttemptedAtMs`, with "never
+		 * drilled" winning ties). The mission card uses these to label
+		 * each drill segment with a specific sub-type the user is
+		 * encouraged to work on. The first item is always identical to
+		 * the alternate CTA's sub-type. */
+		recommendedDrills: ReadonlyArray<{
+			id: string
+			name: string
+			href: string
+		}>
 	}
 	verbal: ReadonlyArray<SubtypeRow>
 	numerical: ReadonlyArray<SubtypeRow>
