@@ -39,12 +39,23 @@ import {
 	type StaleFilter,
 	type SubTypeFilter
 } from "@/components/admin-review/queue-filters"
-import type { Difficulty } from "@/config/sub-types"
+import type { Difficulty, SubTypeId } from "@/config/sub-types"
+
+interface InitialFilterOverrides {
+	readonly subType: SubTypeId | undefined
+	readonly difficulty: Difficulty | undefined
+}
 
 interface QueueListProps {
 	data: AdminQueueData
 	listHeading: string
 	emptyMessage: string
+	// URL-driven overrides (?subType= and ?difficulty=) seeded by the
+	// page from search params. Applied at mount only; once the queue is
+	// rendered, the admin's manual filter changes take precedence and
+	// flow through the existing sessionStorage persistence path.
+	// undefined fields mean "no URL override for this filter".
+	initialFilterOverrides?: InitialFilterOverrides
 }
 
 // Per-cohort default filter state. The candidate queue defaults to
@@ -239,23 +250,47 @@ function writePersistedQueueState(
 	}
 }
 
+// Compose initial filter state from the three precedence layers: URL
+// overrides (highest, click-to-filter from pressure-cell dashboard),
+// sessionStorage (in-tab navigation memory), then per-cohort defaults.
+// URL overrides apply field-by-field so they layer on top of the
+// persisted state cleanly — e.g., a URL with ?difficulty=hard and no
+// subType keeps the persisted subType but overrides difficulty.
+function composeInitialFilterState(
+	data: AdminQueueData,
+	overrides: InitialFilterOverrides | undefined
+): FilterState {
+	const persisted = readPersistedQueueState(data.statusFilter)
+	const baseline = persisted === undefined ? defaultFilterStateFor(data) : persisted.filterState
+	if (overrides === undefined) return baseline
+	const subType = overrides.subType === undefined ? baseline.subType : overrides.subType
+	const difficulty =
+		overrides.difficulty === undefined ? baseline.difficulty : overrides.difficulty
+	return { ...baseline, subType, difficulty }
+}
+
 const SELECT_CLASS =
 	"h-8 rounded-md border border-border-soft bg-surface px-2 text-[12px] text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
 
-function QueueList({ data, listHeading, emptyMessage }: QueueListProps) {
+function QueueList({
+	data,
+	listHeading,
+	emptyMessage,
+	initialFilterOverrides
+}: QueueListProps) {
 	// QueueList is intended to be remounted when the status cohort changes
 	// (parent passes `key={data.statusFilter}`), so the per-cohort default
 	// flag filter is picked up cleanly via useState's lazy initializer
 	// instead of a derived-state-during-render pattern.
 	//
-	// Lazy initializers also restore from sessionStorage when the admin
-	// returns to a previously-visited cohort tab in the same browser tab
-	// (e.g., "Back to queue" from /admin/review/[itemId]). Falling back
-	// to per-cohort defaults when nothing was persisted yet.
+	// Initial-state precedence (highest priority first):
+	//   1. URL query params (?subType=, ?difficulty=) when present and
+	//      coerced upstream by the page — these are the click-to-filter
+	//      affordance from the pressure-cell dashboard.
+	//   2. sessionStorage-persisted state from a prior in-tab visit.
+	//   3. per-cohort defaults from defaultFilterStateFor.
 	const [filterState, setFilterState] = React.useState<FilterState>(function init() {
-		const persisted = readPersistedQueueState(data.statusFilter)
-		if (persisted !== undefined) return persisted.filterState
-		return defaultFilterStateFor(data)
+		return composeInitialFilterState(data, initialFilterOverrides)
 	})
 	const [sortKey, setSortKey] = React.useState<SortKey>(function init() {
 		const persisted = readPersistedQueueState(data.statusFilter)

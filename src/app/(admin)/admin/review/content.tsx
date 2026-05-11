@@ -20,12 +20,22 @@
 
 import * as React from "react"
 import { BulkRevalidateButton } from "@/components/admin-review/bulk-revalidate-button"
+import { PressureCellGrid } from "@/components/admin-review/pressure-cell-grid"
 import { QueueList } from "@/components/admin-review/queue-list"
 import { QueueStatusTabs } from "@/components/admin-review/queue-status-tabs"
+import type { Difficulty, SubTypeId } from "@/config/sub-types"
+import type { PressureCellSnapshot } from "@/server/admin/pressure-cell-shared"
 import type { AdminQueueData, QueueStatusFilter } from "@/server/admin/queue-data"
+
+interface InitialFilterOverrides {
+	readonly subType: SubTypeId | undefined
+	readonly difficulty: Difficulty | undefined
+}
 
 interface AdminReviewContentProps {
 	dataPromise: Promise<AdminQueueData>
+	pressureCellPromise: Promise<PressureCellSnapshot | undefined>
+	initialFilterOverridesPromise: Promise<InitialFilterOverrides>
 }
 
 interface CohortCopy {
@@ -33,6 +43,21 @@ interface CohortCopy {
 	readonly description: string
 	readonly listHeading: string
 	readonly emptyMessage: string
+}
+
+// Encode the cohort tab + URL-override values into the QueueList's React
+// key. Without the override fragment, navigating between filter URLs that
+// share the same status (e.g. clicking different pressure-cell tiles)
+// would soft-reuse the QueueList instance and skip the lazy initializer
+// that picks up new URL overrides. Including the overrides forces a
+// fresh mount whenever the URL filter intent changes.
+function queueListKey(
+	status: QueueStatusFilter,
+	overrides: InitialFilterOverrides
+): string {
+	const subType = overrides.subType === undefined ? "" : overrides.subType
+	const difficulty = overrides.difficulty === undefined ? "" : overrides.difficulty
+	return `${status}|${subType}|${difficulty}`
 }
 
 const COHORT_COPY: Readonly<Record<QueueStatusFilter, CohortCopy>> = {
@@ -59,8 +84,14 @@ const COHORT_COPY: Readonly<Record<QueueStatusFilter, CohortCopy>> = {
 	}
 }
 
-function AdminReviewContent({ dataPromise }: AdminReviewContentProps) {
+function AdminReviewContent({
+	dataPromise,
+	pressureCellPromise,
+	initialFilterOverridesPromise
+}: AdminReviewContentProps) {
 	const data = React.use(dataPromise)
+	const pressureCellSnapshot = React.use(pressureCellPromise)
+	const initialFilterOverrides = React.use(initialFilterOverridesPromise)
 	const copy = COHORT_COPY[data.statusFilter]
 	const showBulkRevalidate = data.statusFilter === "candidate" && data.staleCount > 0
 	return (
@@ -76,16 +107,22 @@ function AdminReviewContent({ dataPromise }: AdminReviewContentProps) {
 				<div className="mb-4">
 					<QueueStatusTabs active={data.statusFilter} counts={data.statusCounts} />
 				</div>
+				{data.statusFilter === "candidate" && pressureCellSnapshot !== undefined ? (
+					<div className="mb-4">
+						<PressureCellGrid snapshot={pressureCellSnapshot} />
+					</div>
+				) : null}
 				{showBulkRevalidate ? (
 					<div className="mb-4">
 						<BulkRevalidateButton staleCount={data.staleCount} />
 					</div>
 				) : null}
 				<QueueList
-					key={data.statusFilter}
+					key={queueListKey(data.statusFilter, initialFilterOverrides)}
 					data={data}
 					listHeading={copy.listHeading}
 					emptyMessage={copy.emptyMessage}
+					initialFilterOverrides={initialFilterOverrides}
 				/>
 			</main>
 		</div>
