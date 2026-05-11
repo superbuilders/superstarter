@@ -22,6 +22,9 @@ import type {
 	WrongItem
 } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
 import { BeltIndicator } from "@/components/post-session/belt-indicator"
+import { CumulativeTimeChart } from "@/components/post-session/charts/cumulative-time-chart"
+import { TimeSinkChart } from "@/components/post-session/charts/time-sink-chart"
+import { TopicProficiencyRadar } from "@/components/post-session/charts/topic-proficiency-radar"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
 import { PerformanceSummary } from "@/components/post-session/performance-summary"
 import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
@@ -134,23 +137,49 @@ function PostSessionShell(props: PostSessionShellProps) {
 
 	let panel: React.ReactNode = null
 	if (activeTab === "performance") {
+		const attemptPoints = props.wrongItems.map(function pickPoint(w) {
+			return { attemptId: w.attemptId, latencyMs: w.latencyMs }
+		})
 		panel = (
-			<section
-				className="overflow-hidden rounded-lg border border-border-soft bg-surface"
-				data-testid="post-session-slot-performance-summary"
-			>
-				<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
-					<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
-						Performance by sub-type
-					</h3>
-					<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
-						Accuracy and median latency
-					</span>
-				</header>
-				<div className="px-4 py-3">
-					<PerformanceSummary rows={props.performance} />
-				</div>
-			</section>
+			<div className="space-y-4" data-testid="post-session-slot-performance-summary">
+				<ChartCard
+					title="Time sink"
+					eyebrow="Per-question time vs the 18s goal"
+					testId="post-session-chart-time-sink"
+				>
+					<TimeSinkChart attempts={attemptPoints} />
+				</ChartCard>
+				<ChartCard
+					title="Topic proficiency"
+					eyebrow="Accuracy × speed by sub-type"
+					testId="post-session-chart-topic-radar"
+				>
+					<TopicProficiencyRadar rows={props.performance} />
+				</ChartCard>
+				<ChartCard
+					title="Cumulative time vs the budget"
+					eyebrow="Where you fell behind the 15-minute pace"
+					testId="post-session-chart-cumulative"
+				>
+					<CumulativeTimeChart attempts={attemptPoints} />
+				</ChartCard>
+				<section
+					className="overflow-hidden rounded-lg border border-border-soft bg-surface"
+					data-testid="post-session-card-accuracy-latency"
+				>
+					<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
+						<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+							Accuracy and median latency
+						</h3>
+						<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+							Per sub-type
+						</span>
+					</header>
+					<div className="px-4 py-3">
+						<PerformanceSummary rows={props.performance} />
+					</div>
+				</section>
+			</div>
 		)
 	} else if (activeTab === "questions") {
 		panel = (
@@ -199,6 +228,32 @@ function PostSessionShell(props: PostSessionShellProps) {
 				{pacingLine}
 			</div>
 		</main>
+	)
+}
+
+interface ChartCardProps {
+	title: string
+	eyebrow: string
+	testId: string
+	children: React.ReactNode
+}
+
+function ChartCard(props: ChartCardProps) {
+	return (
+		<section
+			className="overflow-hidden rounded-lg border border-border-soft bg-surface"
+			data-testid={props.testId}
+		>
+			<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
+				<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
+					{props.title}
+				</h3>
+				<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
+					{props.eyebrow}
+				</span>
+			</header>
+			<div className="px-4 py-3">{props.children}</div>
+		</section>
 	)
 }
 
