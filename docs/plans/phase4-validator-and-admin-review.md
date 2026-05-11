@@ -86,6 +86,29 @@ Round-close §3 SPEC §6.14.43 entry amendment evaluates whether instances #8 + 
 - **Instance #16** — validator pressure-cell zero-everywhere skip (sub-type 5 propagation-through-prior-design). The §1.2 commit-0 validator design's `loadPressureCells` iterates query-derived sub-types only (cells.map(c => c.subTypeId)), silently skipping sub-types with zero live items in any tier; the §2.6 dashboard at `pressure-cell-data.ts` iterates the canonical `@/config/sub-types` `subTypeIds`, so every sub-type contributes hard + brutal cells regardless of live state. Validator misses candidates in zero-everywhere sub-types for `validatorResult.isPressureCell`. Forward-pin: align validator at a future round so candidate marking matches the dashboard semantics. Banked at `ce09e81`.
 - **Instance #17** — round-close-prompt commit-ledger omission (sub-type 1 path/reference + sub-type 5 propagation). The §2 round-close redirector prompt's "Verify §2 commit hashes are sequential" enumeration listed 16 expected commits but missed `3831c4e (§2.2 commit-0 — admin item-detail route + tabbed shell + provenance/sibling context)` between `50b91c7` and `36df558`. Caught at this commit's audit step 15. The §0.8.2 phase summary table includes the §2.2 row + the corrected substantive/drift commit counts (10 substantive + 2 sessionStorage + 5 drift, not 9 + 2 + 4 as the redirector framed). Banked at this commit.
 
+**Note on canonical sub-type assignments post-§3 commit-1 SPEC amendment (`d6d1502`).** The plan-doc instance entries above record sub-type assignments AT TIME OF BANKING (forensic record). SPEC §6.14.43's instance-ledger table is the canonical post-amendment classification; differences:
+- Instance #10: plan-doc says "sub-type 4 pattern"; SPEC reclassifies to **sub-type 6** (NEW; promoted at `d6d1502` per cumulative deviation count).
+- Instance #12: plan-doc says "sub-type 4 + 5 propagation"; SPEC simplifies to **sub-type 5** (propagation dominates the catch mechanism).
+- Instance #17: plan-doc says "sub-type 1 + 5 propagation"; SPEC simplifies to **sub-type 5** (same reasoning).
+
+Future sub-type lookups consume SPEC §6.14.43; plan-doc entries are preserved for the forensic narrative of how each instance was understood at the time of banking.
+
+**§6.14.40 reconciliation summary (Phase 4 sub-phase b):**
+
+Five drift commits absorbed across §2 work via §6.14.40 reconciliation pattern. Each classified at the relevant per-commit HEAD-pin audit step 1 STOP, allowing execution to proceed against the new HEAD:
+
+| # | Hash | Subject | Classification | Absorbed at |
+|---|---|---|---|---|
+| 1 | `5c5a5dd` | docs/claude_logs session log | (a) docs-only | pre-§2.1 commit-0 audit |
+| 2 | `36df558` | sign-out button on top-nav | (a) aesthetic, non-admin | pre-§2.3 commit-0 audit |
+| 3 | `920f7c9` | Next.js 16 Cache Components compat | (b) source-touching compatible | pre-§2.3 commit-0 audit |
+| 4 | `800a989` | provenance + stem-options styling | (b) source-touching compatible | pre-§2.3 commit-0 audit |
+| 5 | `3ac77ae` | sign-out button on diagnostic page | (a) aesthetic, non-admin | pre-§2.4 commit-0 audit |
+
+Pattern observation: §6.14.40 discipline (HEAD-pin STOP + classification + reconciliation) prevented all 5 drifts from contaminating in-flight commit scope. Executor's audit step 1 STOP semantics caught each drift before authoring; the redirector ratified classification before proceeding.
+
+The two source-touching drifts (#3 + #4) deserved explicit ratification because they intersected the §2 admin-review surface: `920f7c9` added `await connection()` to admin loaders for Next.js 16 Cache Components compatibility (consistent with §2.5+ patterns and adopted by all subsequent admin-side loaders); `800a989` reshaped `stem-options-tab.tsx` and `provenance-tab.tsx` CSS (purely visual, no semantic change). Both preserved verbatim in §2.3 commit-0+ work.
+
 ### §0.4 §6.14.43 sub-type 4 + 5 discipline application
 
 Explicit declaration of the discipline state and ratifications applied at this commit:
@@ -166,7 +189,7 @@ For each: question + proposed resolution + reasoning-for + reasoning-against + c
 
 **Auto-detectable criteria (validator):**
 1. **Schema-shape conformance.** Correct-answer is one of the `optionsJson` ids; option count matches sub-type convention; required fields (stem, options, correctAnswer, explanation when applicable) present and well-typed.
-2. **Tier-distribution sanity.** Candidate's claimed tier matches sub-phase a generator's claim per provenance file at `scripts/_siblings/<parentItemId>.json`. Mismatch → flag.
+2. **Tier-distribution provenance-roundtrip.** (Reframed at §1.2 commit-2 — see line-190 empirical-reframe note below; original framing *"candidate's claimed tier matches generator's claim per provenance"* preserved here only for forensic continuity. Production semantics: verifies the candidate's id appears in the parent's provenance siblings list AND the provenance file's tier label matches the DB row's `difficulty`. Catches ingest-pipeline drift.)
 3. **Embedding distance from seed item.** Cosine distance to the parent source item must be in a per-sub-type-tuned range: too-close (similarity > 0.97 or 0.95 depending on sub-type's templating tolerance per convergence-audit.md) → near-duplicate flag; too-far (similarity < some threshold to be empirically calibrated) → off-topic flag. Per sub-phase-a forward-pin, siblings are EXEMPT from source↔sibling similarity comparison; the validator runs sibling↔non-source-non-sibling comparison normally (per `nearestNeighborInBank(subTypeId, embedding, { excludeParentItemId, excludeSiblingItemIds })` API shape forward-pinned at sub-phase a §4.13).
 4. **Per-sub-type structural rules.** E.g., letter_series has the expected letter-pattern shape; numerical sub-types have numeric correctAnswer values; verbal antonyms options should not duplicate the stem word. Implementation: per-sub-type validator function selected via dispatch.
 5. **Heuristic detectors for known sub-phase a failure modes.** Per convergence-audit.md (audit step 13):
@@ -178,7 +201,7 @@ For each: question + proposed resolution + reasoning-for + reasoning-against + c
 **Human-judgment criteria (admin):**
 1. **Stem clarity / ambiguity.** Mechanical schema-conformance doesn't catch a stem that's grammatically valid but semantically ambiguous; admin reads and judges.
 2. **Trap quality for trap-avoidance items.** A trap-avoidance item's correctness depends on the trap being subtle enough to be tempting but not so subtle the test-taker has no chance; this is judgment.
-3. **Difficulty-tier judgment.** Does the candidate actually feel like its claimed tier? Validator's tier-distribution sanity catches generator-claim drift; admin catches the emergent feel.
+3. **Difficulty-tier judgment.** Does the candidate actually feel like its claimed tier? Validator's tier-distribution criterion verifies ingest-pipeline provenance-roundtrip (per §0.6.1 #2 reframe at §1 round-close); admin catches the emergent feel.
 4. **Cultural / accessibility issues.** Idioms that don't translate; references that assume specific cultural background; disability-relevant rendering issues.
 
 **Reasoning-for:** Layered detection separates concerns. Auto-detectable criteria dispose of mechanical defects at scale (the 1,748 candidates × ~6 auto-criteria = ~10,500 mechanical checks the admin doesn't do). Human-judgment criteria reserved for genuine judgment, capping admin workload at the flagged-subset size. The convergence-audit.md empirical findings (templating-artifact whitelist; antonyms convergence flagging) ground the heuristics in observed-not-imagined behavior.
@@ -460,7 +483,7 @@ Provisional sub-section structure; revisable at each phase's commit-0 audit per 
 
 - **§1.1** Schema migration: items.status enum extension (add `'rejected'`); items new columns (`rejected_at_ms`, `rejected_by`, `rejection_reason`); new `item_admin_actions` table per Q7.
 - **§1.2** Admin allowlist population: add admin email(s) to `src/config/admins.ts`. **REPLACES the prior commit-0 attempt's "Auth.js role gating + session-callback enrichment" sub-section** — Q8 reuse means no role / session-callback work.
-- **§1.3** Validator engine: implementations of Q1's auto-detectable criteria (schema-shape conformance; tier-distribution sanity; embedding-distance per `nearestNeighborInBank` with sibling exemption; per-sub-type structural rules; sub-phase-a-failure-mode heuristics including templating-artifact whitelist and antonyms convergence flagging; provenance-based batch-reject heuristic).
+- **§1.3** Validator engine: implementations of Q1's auto-detectable criteria (schema-shape conformance; tier-distribution provenance-roundtrip per §0.6.1 #2 reframe; embedding-distance per `nearestNeighborInBank` with sibling exemption; per-sub-type structural rules; sub-phase-a-failure-mode heuristics including templating-artifact whitelist and antonyms convergence flagging; provenance-based batch-reject heuristic).
 - **§1.4** Validator runner: `validator-batch.ts` Vercel Workflow over candidates; emits flag+pass dispositions; persists results (validator output landing as `metadata_json.validatorReport` keys per architecture_plan §2395 reservation, or as a new sibling table — decided at §1.3/§1.4 commit 0 audit).
 - **§1.5** Promotion workflow: admin approve → status='live' + cascade (`metadata_json.promotedAt`, `metadata_json.promotedBy`); embedding regen-on-edit if Q5 edit landed during admin review.
 - **§1.6** Validator tests + fixtures: unit tests for each Q1 criterion; fixtures sampled from sub-phase a candidates (with provenance preserved); integration tests at `validator-batch.ts` workflow level.
@@ -599,7 +622,7 @@ Provisional; revised at §2 commit 0 audit:
 - **§2 retirement / undo affordances** (forward-pin from §2.4b ratification):
   - Retirement (live → retired) needs a separate affordance + a new `action_type` enum value. Out of scope this round.
   - Undo-reject (rejected → candidate) needs a separate affordance OR remains SQL surgery; acceptable at v1.
-- **§1 round-close docs-hygiene residuals**: stale tier-distribution refs at plan-doc lines 170 + 432 (forward-pinned at §1 round-close §3 docs-hygiene-pass; still pending and NOT cleaned at this docs-only §2 round-close commit).
+- ~~**§1 round-close docs-hygiene residuals**: stale tier-distribution refs at plan-doc lines 170 + 432~~ **CLEANED at §3 commit-2** (this round-close): the §0.6.1 #2 criterion heading + the human-judgment #3 reference + the §0.8 §1.3 sub-section description all updated to reflect the §1.2 commit-2 provenance-roundtrip reframe.
 - **Two pressure-cell metrics coexisting**: dual-surface semantics documented at §0.7.2; future round may unify or further differentiate.
 - **Shared-module pattern documentation**: now applied at two sites (`action-history-shared.ts`, `pressure-cell-shared.ts`); a third instance suggests extracting a generic note explaining the client/server bundling boundary that motivates the split.
 
@@ -608,6 +631,57 @@ Provisional; revised at §2 commit 0 audit:
 The validator + admin review architecture proposed in this round — including the admin-gate-reuse pattern (`requireAdminEmail()` + email allowlist + `(admin)/layout.tsx` route-group gating) — is a transferable shape for sibling projects (Superstarter, Alphastyle) that need item-bank curation surfaces. Not a deliverable; flagged for cross-project handoff documentation when sibling projects open similar surfaces.
 
 The `item_admin_actions` audit-trail pattern (UUIDv7 id + bigint ms + before/after JSONB + admin_user_id + action_type enum) is a generic audit-of-change shape that any project with admin-curated content can reuse.
+
+### §0.11 Phase 4 sub-phase b — closed
+
+> **Note on numbering.** This section is §0.11, not §0.10, because §0.10 was already authored at round-open as the Cross-project transfer note (above). Renumbering §0.10 to make room for the phase-close marker would have introduced cross-reference propagation surface; appending as §0.11 preserves all existing cites.
+
+**Round closed at `d6d1502` (§3 commit-1)** → finalized at this commit (`§3 commit-2`).
+
+**Commit lineage summary** (validator engine through admin review through SPEC documentation):
+
+| Phase | Range | Substantive commits |
+|---|---|---|
+| §1 (validator engine + production batch) | `a09b087` → `8c4dff7` (closed at `bd2820f` round-close docs) | 8 substantive + 1 round-close docs commit = 9 total |
+| §2 (admin review surface) | `50b91c7` → `ce09e81` (closed at `dd59020` round-close docs) | 10 substantive + 2 sessionStorage + 5 drift = 17 total |
+| §3 (full-round-close docs) | `de46277` → `d6d1502` → this commit | 3 commits (§14 authoring + §6.14.43 amendment + this final close) |
+
+Total: 24 substantive commits across the round (counting per-phase round-close docs commits but excluding pure drift commits absorbed via §6.14.40 reconciliation); 29 total commits including drift.
+
+**Round metrics:**
+
+- **Tests**: 204 (post-§1 round-close) → 332 (post-§2 round-close) → 333 (post-close at this commit). +129 net tests across the round.
+- **Working set at production-batch baseline (`8c4dff7`)**: 1,711 candidates with `validatorResult`; 791 candidates with `hasAnyFlag = true` (46.2%); 14 cohorts (1:1 with sub-types via `promptHash` backfill); single `thresholdsHash` `sha256:111f631af48157…` anchored across all rows.
+- **56-cell pressure-cell grid at `ce09e81` baseline**: 16 pressure cells (5 hard + 11 brutal); 20 candidates needed to clear.
+- **Admin disposition lifecycle**: read / edit / approve (with stale-verdict ack) / reject (with required reason) / re-validate single / re-validate bulk. All actions atomic; all wrapped in `requireAdminEmail()` + Zod input validation + transactional commits.
+- **SPEC additions**: §14 (validator + admin review reference, +393 lines at `de46277`); §6.14.43 amendment (+40 / -3 lines at `d6d1502`).
+- **Discipline instances banked**: 12 §6.14.43 entries (#6–#17). Sub-type 5 refined definition; sub-type 6 newly promoted.
+
+**Forward-pin index** (residuals carried out of this round; future rounds open against this list):
+
+- **Integration tests deferred**: full server-action → DB → revalidate → re-render path. Manual-verification-tested at each §2 commit; pure-function helpers carry the assertion load. Future test-infra round addresses.
+- **Validator pressure-cell zero-everywhere alignment** (§6.14.43 instance #16): validator's `loadPressureCells` iterates query-derived sub-types only, silently skipping zero-everywhere sub-types. Dashboard iterates canonical config. Validator misses candidates in zero-everywhere sub-types for `validatorResult.isPressureCell`. Forward-pin: align validator iteration in a future round so candidate marking matches dashboard semantics.
+- **v1.5 UX polish residuals**:
+  - Audit-history edit entries always show `metadataJson` as changed because `submitEditAction` always sets `validatorResult.staleAfterMs = Date.now()` on every edit (per §0.6.6 Q7 reframe). Consider filtering or special-casing system-tracking metadata from the field-level diff renderer.
+  - Two-stage Suspense fallback on admin routes (blank flash → skeleton → UI); minor perceived-latency gap.
+  - Source-provenance field editing (`sourceFolder` / `sourceFilename`); not in `editedFields` schema.
+  - Per-cell dashboard click-to-filter scopes the candidate queue only; analogous "show me the 1 live brutal item in this cell" affordance for the live tab is not wired.
+- **Retirement / undo affordances** (forward-pin from §2.4b ratification):
+  - Retirement (live → retired) needs a separate affordance + a new `action_type` enum value. Out of scope this round.
+  - Undo-reject (rejected → candidate) needs a separate affordance OR remains SQL surgery; acceptable at v1.
+- **Shared-module pattern formalization trigger**: `action-history-shared.ts` (§2.5) + `pressure-cell-shared.ts` (§2.6) = 2 instances established. Third instance triggers extraction of a generic SPEC convention note explaining the client/server bundling boundary that motivates the split.
+- **Two-repayment-trail forensic note**: SPEC-B (`d592107`) + SPEC-B-followup (`e9f1254`) = 2 §6.14.41 audit-vs-revert blindness repayments of `81819e0`. No third repayment yet; if a future retirement commit triggers a third repayment cycle, candidate for new §6.14 entry on retirement-commit-under-cleaning patterns.
+- **Sub-type 6 forward-watch** (§6.14.43 instance #10 active record): cumulative ~33+ deviations across §1.2 — §2.6. Pattern persists across future rounds when redirector authors against remembered conventions rather than verified ones. Discipline-side guidance carries forward per SPEC §6.14.43 sub-type 6 entry.
+- **Two pressure-cell metrics coexisting** (per §0.7.2): dual-surface semantics documented; future round may unify or further differentiate.
+
+**Cross-references:**
+
+- **SPEC §14** — production reference for everything shipped in this round.
+- **SPEC §6.14.43** — discipline framework + canonical post-amendment instance ledger.
+- **This plan-doc** — forensic discovery record + commit-by-commit narrative.
+- **Audit-log** `scripts/_logs/2026-05-10_phase4-validator-admin-pre-open-reconciliation.md` — pre-open audit material.
+
+**Phase 4 sub-phase b is closed.** Future work on the validator engine or admin review surface opens a new round.
 
 ## §1 Validator engine + promotion workflow + admin allowlist
 
