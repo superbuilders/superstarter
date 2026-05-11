@@ -71,24 +71,29 @@ function StrategySurface(props: StrategySurfaceProps) {
 			</h2>
 			{display.length === 0 ? (
 				<p
-					className="text-foreground/80 text-sm"
+					className="rounded-lg border border-border-soft bg-surface px-4 py-4 text-[13px] text-text-3 italic"
 					data-testid="post-session-strategy-empty"
 				>
 					No sub-types flagged this session — keep going.
 				</p>
 			) : (
-				<ul className="space-y-3">
+				<ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 					{display.map(function renderRow(row) {
 						return (
 							<li
 								key={row.subTypeId}
-								className="border-foreground/15 border-l pl-4"
+								className="rounded-lg border border-border-soft bg-surface px-4 py-4"
 								data-testid={`post-session-strategy-row-${row.subTypeId}`}
 							>
-								<p className="text-foreground/80 text-sm leading-relaxed">
-									<span className="font-medium text-foreground">
-										{row.displayName}.
-									</span>{" "}
+								<header className="flex items-center justify-between gap-2">
+									<p className="font-semibold text-[13px] text-text-1 tracking-tight">
+										{row.displayName}
+									</p>
+									<span className="rounded-full border border-border-soft bg-bg px-2 py-0.5 font-semibold text-[9px] text-text-3 uppercase tracking-[0.08em]">
+										{row.section}
+									</span>
+								</header>
+								<p className="mt-2 text-[13px] text-text-2 leading-relaxed">
 									{row.strategy.text}
 								</p>
 							</li>
