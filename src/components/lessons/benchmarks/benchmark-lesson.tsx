@@ -13,13 +13,11 @@
 //      clock. Correct streak + accuracy stats persist for the
 //      session.
 
-import * as errors from "@superbuilders/errors"
 import * as React from "react"
 import { LessonShell } from "@/components/lessons/shared/lesson-shell"
 import { markLessonDoneToday } from "@/components/lessons/shared/lesson-mastery-store"
 import { MasteryPill, useMastery } from "@/components/lessons/shared/mastery"
 import { RevealPanel } from "@/components/lessons/shared/reveal-panel"
-import { logger } from "@/logger"
 
 interface BenchmarkRow {
 	num: number
@@ -52,8 +50,6 @@ const BENCHMARKS: ReadonlyArray<BenchmarkRow> = [
 
 const ROUND_LENGTH = 10
 const ROUND_TIME_MS = 5000
-
-const ErrEmptyDeck = errors.new("benchmark drill deck index out of range")
 
 function BenchmarkLesson() {
 	return (
@@ -119,14 +115,8 @@ function rowFraction(row: BenchmarkRow): string {
 	return `${row.num}/${row.den}`
 }
 
-function pickRow(): BenchmarkRow {
-	const idx = Math.floor(Math.random() * BENCHMARKS.length)
-	const row = BENCHMARKS[idx]
-	if (row === undefined) {
-		logger.error({ idx, len: BENCHMARKS.length }, "benchmark drill: row index out of range")
-		throw errors.wrap(ErrEmptyDeck, `idx=${idx}`)
-	}
-	return row
+function rowKey(row: BenchmarkRow): string {
+	return `${row.num}-${row.den}`
 }
 
 function pickMode(): Prompt["mode"] {
@@ -163,8 +153,7 @@ function uniqueChoices(answer: string, candidates: ReadonlyArray<string>): Reado
 	return items
 }
 
-function generatePrompt(): Prompt {
-	const row = pickRow()
+function generatePromptForRow(row: BenchmarkRow): Prompt {
 	const mode = pickMode()
 	if (mode === "fraction-to-percent") {
 		const candidates = BENCHMARKS.filter(function notSame(r) {
@@ -214,9 +203,21 @@ interface RoundState {
 	startMs: number
 }
 
-function newRound(): RoundState {
-	const prompts: Prompt[] = []
-	for (let i = 0; i < ROUND_LENGTH; i++) prompts.push(generatePrompt())
+function newRound(masteredRows: ReadonlySet<string>): RoundState {
+	const unmastered = BENCHMARKS.filter(function notMastered(r) {
+		return !masteredRows.has(rowKey(r))
+	})
+	const pool = [...unmastered]
+	for (let i = pool.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1))
+		const tmp = pool[i]
+		const other = pool[j]
+		if (tmp === undefined || other === undefined) continue
+		pool[i] = other
+		pool[j] = tmp
+	}
+	const selected = pool.slice(0, ROUND_LENGTH)
+	const prompts = selected.map(generatePromptForRow)
 	return {
 		prompts,
 		index: 0,
@@ -227,27 +228,31 @@ function newRound(): RoundState {
 	}
 }
 
+const TOTAL_ROWS = BENCHMARKS.length
+
 function SpeedDrill() {
+	const [masteredRows, setMasteredRows] = React.useState<ReadonlySet<string>>(function init() {
+		return new Set()
+	})
 	const [round, setRound] = React.useState<RoundState | null>(null)
 	const [, forceTick] = React.useState(0)
-	const [best, setBest] = React.useState(0)
 	const pillRef = React.useRef<HTMLDivElement>(null)
-	const correctSoFar = round === null ? 0 : round.correct
-	const masteryScore = correctSoFar > best ? correctSoFar : best
-	const mastered = useMastery({ slug: "benchmarks", score: masteryScore, originRef: pillRef })
-
-	React.useEffect(function init() {
-		setRound(newRound())
-	}, [])
+	const masteredCount = masteredRows.size
+	const allMastered = masteredCount >= TOTAL_ROWS
+	const mastered = useMastery({
+		slug: "benchmarks",
+		score: masteredCount,
+		threshold: TOTAL_ROWS,
+		originRef: pillRef
+	})
 
 	const current = round === null ? undefined : round.prompts[round.index]
-	const finished = round !== null && round.index >= round.prompts.length
 	const locked = round === null ? true : round.feedback !== "idle"
 
 	React.useEffect(
 		function timer() {
 			if (round === null) return
-			if (locked || finished) return
+			if (locked) return
 			const interval = window.setInterval(function bump() {
 				forceTick(function inc(t) {
 					return t + 1
@@ -257,7 +262,7 @@ function SpeedDrill() {
 				window.clearInterval(interval)
 			}
 		},
-		[locked, finished, round]
+		[locked, round]
 	)
 
 	const elapsed = round === null ? 0 : performance.now() - round.startMs
@@ -267,7 +272,7 @@ function SpeedDrill() {
 	React.useEffect(
 		function fireTimeout() {
 			if (round === null) return
-			if (locked || finished) return
+			if (locked) return
 			if (remaining > 0) return
 			setRound(function expire(prev) {
 				if (prev === null) return prev
@@ -275,7 +280,7 @@ function SpeedDrill() {
 				return { ...prev, feedback: "timeout", picked: null }
 			})
 		},
-		[remaining, locked, finished, round]
+		[remaining, locked, round]
 	)
 
 	React.useEffect(
@@ -288,12 +293,7 @@ function SpeedDrill() {
 					if (prev === null) return prev
 					const nextIndex = prev.index + 1
 					if (nextIndex >= prev.prompts.length) {
-						return {
-							...prev,
-							index: nextIndex,
-							picked: null,
-							feedback: "idle"
-						}
+						return null
 					}
 					return {
 						prompts: prev.prompts,
@@ -314,8 +314,16 @@ function SpeedDrill() {
 
 	function pick(choice: string) {
 		if (locked || !current) return
-		const isRight = choice === current.answer
-		if (isRight) markLessonDoneToday()
+		const target = current
+		const isRight = choice === target.answer
+		if (isRight) {
+			markLessonDoneToday()
+			setMasteredRows(function add(prev) {
+				const next = new Set(prev)
+				next.add(rowKey(target.row))
+				return next
+			})
+		}
 		setRound(function lock(prev) {
 			if (prev === null) return prev
 			const updatedCorrect = isRight ? prev.correct + 1 : prev.correct
@@ -324,24 +332,38 @@ function SpeedDrill() {
 		})
 	}
 
-	function restart() {
-		if (round === null) return
-		const finalScore = round.correct
-		if (finalScore > best) setBest(finalScore)
-		setRound(newRound())
+	function reset() {
+		setMasteredRows(new Set())
+		setRound(null)
 	}
 
 	if (round === null) {
+		if (allMastered) {
+			return <AllMasteredCard total={TOTAL_ROWS} onReset={reset} mastered={mastered} pillRef={pillRef} />
+		}
+		if (masteredCount === 0) {
+			return (
+				<StartCard
+					total={TOTAL_ROWS}
+					onStart={function start() {
+						setRound(newRound(masteredRows))
+					}}
+					mastered={mastered}
+					pillRef={pillRef}
+				/>
+			)
+		}
 		return (
-			<section className="rounded-lg border border-border-soft bg-surface px-5 py-6 text-center text-text-3">
-				Loading…
-			</section>
-		)
-	}
-
-	if (finished) {
-		return (
-			<FinishedCard correct={round.correct} total={ROUND_LENGTH} best={best} onRestart={restart} />
+			<BetweenRoundsCard
+				masteredCount={masteredCount}
+				total={TOTAL_ROWS}
+				onContinue={function start() {
+					setRound(newRound(masteredRows))
+				}}
+				onReset={reset}
+				mastered={mastered}
+				pillRef={pillRef}
+			/>
 		)
 	}
 
@@ -372,20 +394,17 @@ function SpeedDrill() {
 			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
 				<div>
 					<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
-						Match-the-pair · {round.index + 1}/{ROUND_LENGTH}
+						Match-the-pair · {round.index + 1}/{round.prompts.length}
 					</p>
 					<p className="mt-0.5 text-[13px] text-text-2">{promptCopy}.</p>
 				</div>
-				<div className="flex gap-2">
-					<MasteryPill
-						pillRef={pillRef}
-						label="Correct"
-						value={`${round.correct}/${ROUND_LENGTH}`}
-						tone="text-good"
-						mastered={mastered}
-					/>
-					<StatPill label="Best" value={`${best}/${ROUND_LENGTH}`} tone="text-cobalt" />
-				</div>
+				<MasteryPill
+					pillRef={pillRef}
+					label="Rows"
+					value={`${masteredCount}/${TOTAL_ROWS}`}
+					tone="text-good"
+					mastered={mastered}
+				/>
 			</div>
 			<TimerBar remainingPct={remainingPct} />
 			<div className="px-5 pt-5 pb-3 text-center">
@@ -470,55 +489,165 @@ function ChoiceGrid({ choices, answer, picked, feedback, onPick }: ChoiceGridPro
 	)
 }
 
-interface FinishedCardProps {
-	correct: number
+interface ProgressPillProps {
+	masteredCount: number
 	total: number
-	best: number
-	onRestart: () => void
+	mastered: boolean
+	pillRef: React.RefObject<HTMLDivElement | null>
 }
-function FinishedCard({ correct, total, best, onRestart }: FinishedCardProps) {
-	const pct = Math.round((correct / total) * 100)
-	const tone =
-		correct === total ? "text-good" : correct >= total / 2 ? "text-cobalt" : "text-pace-over"
+function ProgressPill({ masteredCount, total, mastered, pillRef }: ProgressPillProps) {
+	return (
+		<MasteryPill
+			pillRef={pillRef}
+			label="Rows"
+			value={`${masteredCount}/${total}`}
+			tone="text-good"
+			mastered={mastered}
+		/>
+	)
+}
+
+interface StartCardProps {
+	total: number
+	onStart: () => void
+	mastered: boolean
+	pillRef: React.RefObject<HTMLDivElement | null>
+}
+function StartCard({ total, onStart, mastered, pillRef }: StartCardProps) {
 	return (
 		<section className="rounded-lg border border-border-soft bg-surface">
-			<div className="border-border-soft border-b px-5 py-3">
-				<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
-					Round complete
-				</p>
-				<p className="mt-0.5 text-[13px] text-text-2">Anchors hold faster the more you drill.</p>
+			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
+				<div>
+					<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
+						Match-the-pair
+					</p>
+					<p className="mt-0.5 text-[13px] text-text-2">
+						Recognize each anchor under a 5-second clock.
+					</p>
+				</div>
+				<ProgressPill masteredCount={0} total={total} mastered={mastered} pillRef={pillRef} />
 			</div>
-			<div className="px-5 py-6 text-center">
+			<div className="px-5 py-8 text-center">
 				<p className="font-semibold text-[10px] text-text-3 uppercase tracking-[0.08em]">
-					Accuracy
+					Anchors to master
 				</p>
-				<p className={`font-mono font-semibold text-[56px] leading-none ${tone}`}>{pct}%</p>
-				<p className="mt-1 text-sm text-text-2">
-					{correct} / {total} correct · best round: {best} / {total}
+				<p className="font-mono font-semibold text-[56px] text-text-1 leading-none">{total}</p>
+				<p className="mx-auto mt-2 max-w-[28rem] text-sm text-text-2">
+					Get any one form (fraction, decimal, or percent) right per row. Mastered rows are skipped
+					on later rounds. 10 prompts at a time.
 				</p>
 				<button
 					type="button"
-					onClick={onRestart}
+					onClick={onStart}
 					className="mt-5 rounded-md border border-text-1 bg-text-1 px-5 py-2 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
 				>
-					Run it back
+					Start the drill
 				</button>
 			</div>
 		</section>
 	)
 }
 
-interface StatPillProps {
-	label: string
-	value: string
-	tone: string
+interface BetweenRoundsCardProps {
+	masteredCount: number
+	total: number
+	onContinue: () => void
+	onReset: () => void
+	mastered: boolean
+	pillRef: React.RefObject<HTMLDivElement | null>
 }
-function StatPill({ label, value, tone }: StatPillProps) {
+function BetweenRoundsCard({
+	masteredCount,
+	total,
+	onContinue,
+	onReset,
+	mastered,
+	pillRef
+}: BetweenRoundsCardProps) {
+	const remaining = total - masteredCount
+	const remainingCopy = `${remaining} row${remaining === 1 ? "" : "s"} left to master.`
 	return (
-		<div className="rounded-md border border-border-soft bg-bg px-3 py-1.5 text-right">
-			<p className="font-semibold text-[9px] text-text-3 uppercase tracking-[0.08em]">{label}</p>
-			<p className={`font-mono font-semibold text-[14px] tabular-nums ${tone}`}>{value}</p>
-		</div>
+		<section className="rounded-lg border border-border-soft bg-surface">
+			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
+				<div>
+					<p className="font-semibold text-[11px] text-text-3 uppercase tracking-[0.06em]">
+						Round complete
+					</p>
+					<p className="mt-0.5 text-[13px] text-text-2">{remainingCopy}</p>
+				</div>
+				<ProgressPill
+					masteredCount={masteredCount}
+					total={total}
+					mastered={mastered}
+					pillRef={pillRef}
+				/>
+			</div>
+			<div className="px-5 py-6 text-center">
+				<p className="font-semibold text-[10px] text-text-3 uppercase tracking-[0.08em]">
+					Mastered
+				</p>
+				<p className="font-mono font-semibold text-[56px] text-good leading-none">
+					{masteredCount}/{total}
+				</p>
+			</div>
+			<div className="flex flex-wrap justify-center gap-2 border-border-soft border-t px-5 py-4">
+				<button
+					type="button"
+					onClick={onContinue}
+					className="rounded-md border border-text-1 bg-text-1 px-5 py-2 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+				>
+					Continue
+				</button>
+				<button
+					type="button"
+					onClick={onReset}
+					className="rounded-md border border-border-strong bg-surface px-5 py-2 font-medium text-[14px] text-text-1 transition-colors hover:bg-lavender focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+				>
+					Reset
+				</button>
+			</div>
+		</section>
+	)
+}
+
+interface AllMasteredCardProps {
+	total: number
+	onReset: () => void
+	mastered: boolean
+	pillRef: React.RefObject<HTMLDivElement | null>
+}
+function AllMasteredCard({ total, onReset, mastered, pillRef }: AllMasteredCardProps) {
+	return (
+		<section className="rounded-lg border border-border-soft bg-surface">
+			<div className="flex items-center justify-between border-border-soft border-b px-5 py-3">
+				<div>
+					<p className="font-semibold text-[11px] text-good uppercase tracking-[0.06em]">
+						All mastered
+					</p>
+					<p className="mt-0.5 text-[13px] text-text-2">
+						Every anchor is locked in. Reset to drill again.
+					</p>
+				</div>
+				<ProgressPill masteredCount={total} total={total} mastered={mastered} pillRef={pillRef} />
+			</div>
+			<div className="px-5 py-8 text-center">
+				<p className="font-semibold text-[10px] text-text-3 uppercase tracking-[0.08em]">
+					Anchors mastered
+				</p>
+				<p className="font-mono font-semibold text-[64px] text-good leading-none">
+					{total}/{total}
+				</p>
+			</div>
+			<div className="flex justify-center border-border-soft border-t px-5 py-4">
+				<button
+					type="button"
+					onClick={onReset}
+					className="rounded-md border border-text-1 bg-text-1 px-5 py-2 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+				>
+					Reset
+				</button>
+			</div>
+		</section>
 	)
 }
 
