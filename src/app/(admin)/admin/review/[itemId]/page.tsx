@@ -26,6 +26,7 @@ import {
 	AdminItemDetailContent,
 	AdminItemDetailSkeleton
 } from "@/app/(admin)/admin/review/[itemId]/content"
+import { loadAdminActionHistory } from "@/server/admin/action-history-data"
 import { loadAdminItemDetail } from "@/server/admin/item-detail-data"
 
 interface PageProps {
@@ -33,12 +34,22 @@ interface PageProps {
 }
 
 function AdminItemDetailPage(props: PageProps) {
-	const detailPromise = props.params.then(function loadFromParams(p) {
+	// Two parallel loads: the item detail (parent + siblings + provenance)
+	// and the audit history (item_admin_actions ledger). Composing each as
+	// its own promise lets <Suspense> resolve them concurrently inside the
+	// client content component, instead of sequentially awaiting each.
+	const detailPromise = props.params.then(function loadDetail(p) {
 		return loadAdminItemDetail(p.itemId)
+	})
+	const actionHistoryPromise = props.params.then(function loadHistory(p) {
+		return loadAdminActionHistory(p.itemId)
 	})
 	return (
 		<React.Suspense fallback={<AdminItemDetailSkeleton />}>
-			<AdminItemDetailContent detailPromise={detailPromise} />
+			<AdminItemDetailContent
+				detailPromise={detailPromise}
+				actionHistoryPromise={actionHistoryPromise}
+			/>
 		</React.Suspense>
 	)
 }

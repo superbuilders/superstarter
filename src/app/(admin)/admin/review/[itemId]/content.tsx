@@ -38,18 +38,24 @@ import { ExplanationTab } from "@/components/admin-review/explanation-tab"
 import { ProvenanceTab } from "@/components/admin-review/provenance-tab"
 import { StemOptionsTab } from "@/components/admin-review/stem-options-tab"
 import { cn } from "@/lib/utils"
+import type { AdminActionHistoryEntry } from "@/server/admin/action-history-shared"
 import type { AdminItemDetail } from "@/server/admin/item-detail-data"
 
 interface AdminItemDetailContentProps {
 	readonly detailPromise: Promise<AdminItemDetail>
+	readonly actionHistoryPromise: Promise<ReadonlyArray<AdminActionHistoryEntry>>
 }
 
 function paneClass(isActive: boolean): string {
 	return cn("mt-4", isActive ? "" : "hidden")
 }
 
-function AdminItemDetailContent({ detailPromise }: AdminItemDetailContentProps) {
+function AdminItemDetailContent({
+	detailPromise,
+	actionHistoryPromise
+}: AdminItemDetailContentProps) {
 	const detail = React.use(detailPromise)
+	const actionHistory = React.use(actionHistoryPromise)
 	const [activeTab, setActiveTab] = React.useState<ItemDetailTab>("stem")
 
 	return (
@@ -83,7 +89,7 @@ function AdminItemDetailContent({ detailPromise }: AdminItemDetailContentProps) 
 					<ProvenanceTab detail={detail} />
 				</div>
 				<div className={paneClass(activeTab === "audit")}>
-					<AuditHistoryTab />
+					<AuditHistoryTab history={actionHistory} />
 				</div>
 			</main>
 		</div>
