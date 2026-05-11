@@ -148,9 +148,23 @@ function asStaleFilter(value: string): StaleFilter {
 // version added a field — degrades cleanly to the per-cohort defaults
 // rather than crashing the queue.
 const PERSIST_KEY_PREFIX = "admin-review-queue:"
+const LAST_STATUS_KEY = `${PERSIST_KEY_PREFIX}last-status`
 
 function persistKeyFor(status: QueueStatusFilter): string {
 	return `${PERSIST_KEY_PREFIX}${status}`
+}
+
+function writeLastVisitedStatus(status: QueueStatusFilter): void {
+	if (typeof window === "undefined") return
+	const writeResult = errors.trySync(function persist() {
+		window.sessionStorage.setItem(LAST_STATUS_KEY, status)
+	})
+	if (writeResult.error) {
+		logger.warn(
+			{ status, error: writeResult.error },
+			"queue-list: last-status sessionStorage write failed"
+		)
+	}
 }
 
 const persistedShapeSchema = z.object({
@@ -254,6 +268,18 @@ function QueueList({ data, listHeading, emptyMessage }: QueueListProps) {
 			writePersistedQueueState(data.statusFilter, filterState, sortKey)
 		},
 		[data.statusFilter, filterState, sortKey]
+	)
+
+	// Record which cohort tab is currently visible so the item-detail
+	// page's "Back to queue" link can restore it after navigation. Stored
+	// as a separate sessionStorage key (not folded into the per-cohort
+	// payload) because consumers want the pointer without having to know
+	// which cohort it is.
+	React.useEffect(
+		function recordLastStatus() {
+			writeLastVisitedStatus(data.statusFilter)
+		},
+		[data.statusFilter]
 	)
 
 	const visible = React.useMemo(

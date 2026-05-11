@@ -50,6 +50,23 @@ function paneClass(isActive: boolean): string {
 	return cn("mt-4", isActive ? "" : "hidden")
 }
 
+// sessionStorage key — kept in sync with queue-list.tsx's
+// LAST_STATUS_KEY. The queue page writes the active cohort tab on every
+// status change; reading it here lets the back link return the admin to
+// whichever tab they came from. Defaulting to /admin/review (candidate)
+// when the key is absent or unrecognized — that's the same default the
+// queue page picks when no ?status= is in the URL.
+const LAST_STATUS_KEY = "admin-review-queue:last-status"
+
+function readBackHref(): string {
+	if (typeof window === "undefined") return "/admin/review"
+	const stored = window.sessionStorage.getItem(LAST_STATUS_KEY)
+	if (stored === "live") return "/admin/review?status=live"
+	if (stored === "rejected") return "/admin/review?status=rejected"
+	if (stored === "candidate") return "/admin/review?status=candidate"
+	return "/admin/review"
+}
+
 function AdminItemDetailContent({
 	detailPromise,
 	actionHistoryPromise
@@ -57,6 +74,14 @@ function AdminItemDetailContent({
 	const detail = React.use(detailPromise)
 	const actionHistory = React.use(actionHistoryPromise)
 	const [activeTab, setActiveTab] = React.useState<ItemDetailTab>("stem")
+	// Render with the safe SSR default first, then upgrade to the
+	// sessionStorage-backed href on client mount. Avoids hydration
+	// mismatch (server has no sessionStorage; client may have a
+	// different value than the SSR default).
+	const [backHref, setBackHref] = React.useState<string>("/admin/review")
+	React.useEffect(function loadBackHref() {
+		setBackHref(readBackHref())
+	}, [])
 
 	return (
 		<div className="min-h-screen bg-bg text-text-1">
@@ -72,7 +97,7 @@ function AdminItemDetailContent({
 				</header>
 				<div className="mb-4">
 					<a
-						href="/admin/review"
+						href={backHref}
 						className="text-[12px] text-cobalt hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
 					>
 						← Back to queue
