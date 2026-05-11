@@ -3,7 +3,8 @@
 // <PostSessionShell> — tabbed review surface for practice tests + drills.
 //
 // Three tabs at the top of the page:
-//   1. Performance by sub-type   → <PerformanceSummary>
+//   1. Performance by sub-type   → Pacing card (Time sink + Cumulative)
+//                                  + per-section topic-proficiency radars
 //   2. Question review           → <WrongItemsBrowser> (practice-style
 //                                  question + option formatting)
 //   3. Strategies to review      → <StrategySurface>
@@ -13,7 +14,6 @@
 // authenticated <TopNav> is rendered by the page above the shell.
 
 import { ChevronDownIcon, SlidersHorizontalIcon } from "lucide-react"
-import { useRouter } from "next/navigation"
 import * as React from "react"
 import type {
 	EndSessionTierForRender,
@@ -29,11 +29,10 @@ import {
 	TopicProficiencyRadar
 } from "@/components/post-session/charts/topic-proficiency-radar"
 import { OnboardingTargets } from "@/components/post-session/onboarding-targets"
-import { PerformanceSummary } from "@/components/post-session/performance-summary"
 import { ResultSoundFx } from "@/components/post-session/result-sound-fx"
+import { ScrollToTopButton } from "@/components/post-session/scroll-to-top-button"
 import { StrategySurface } from "@/components/post-session/strategy-surface"
 import { WrongItemsBrowser } from "@/components/post-session/wrong-items-browser"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 type SessionTypeForShell = "diagnostic" | "drill" | "full_length" | "simulation"
@@ -123,15 +122,13 @@ function PostSessionShell(props: PostSessionShellProps) {
 		)
 	}
 
-	let trailingSection: React.ReactNode
+	let trailingSection: React.ReactNode = null
 	if (isDiagnostic) {
 		trailingSection = (
 			<div className="mx-auto w-full max-w-md">
 				<OnboardingTargets />
 			</div>
 		)
-	} else {
-		trailingSection = <ContinueButton />
 	}
 
 	let beltSection: React.ReactNode = null
@@ -154,6 +151,16 @@ function PostSessionShell(props: PostSessionShellProps) {
 	let filtersToggleNode: React.ReactNode = null
 	if (activeTab === "questions") {
 		filtersToggleNode = <FilterToggle open={filtersOpen} onToggle={toggleFilters} />
+	}
+
+	let bottomBlock: React.ReactNode = null
+	if (trailingSection !== null || pacingLine !== null) {
+		bottomBlock = (
+			<div className="mt-8 flex flex-col gap-4">
+				{trailingSection}
+				{pacingLine}
+			</div>
+		)
 	}
 
 	let panel: React.ReactNode = null
@@ -220,22 +227,6 @@ function PostSessionShell(props: PostSessionShellProps) {
 						/>
 					</ChartCard>
 				</div>
-				<section
-					className="overflow-hidden rounded-lg border border-border-soft bg-surface"
-					data-testid="post-session-card-accuracy-latency"
-				>
-					<header className="flex items-baseline justify-between border-border-soft border-b px-4 pt-2 pb-1">
-						<h3 className="font-medium font-serif text-[15px] text-text-1 tracking-[-0.005em]">
-							Accuracy and median latency
-						</h3>
-						<span className="text-[11px] text-text-3 uppercase tracking-[0.06em]">
-							Per sub-type
-						</span>
-					</header>
-					<div className="px-4 py-3">
-						<PerformanceSummary rows={props.performance} />
-					</div>
-				</section>
 			</div>
 		)
 	} else if (activeTab === "questions") {
@@ -287,10 +278,8 @@ function PostSessionShell(props: PostSessionShellProps) {
 
 			<div className="mt-4">{panel}</div>
 
-			<div className="mt-8 flex flex-col gap-4">
-				{trailingSection}
-				{pacingLine}
-			</div>
+			{bottomBlock}
+			<ScrollToTopButton />
 		</main>
 	)
 }
@@ -388,22 +377,6 @@ function FilterToggle(props: FilterToggleProps) {
 				className={cn("h-[14px] w-[14px] transition-transform duration-150 ease-out", chevronClass)}
 			/>
 		</button>
-	)
-}
-
-function ContinueButton() {
-	const router = useRouter()
-	return (
-		<div className="flex justify-end">
-			<Button
-				onClick={function onContinue() {
-					router.push("/")
-				}}
-				data-testid="post-session-continue"
-			>
-				Continue to dashboard
-			</Button>
-		</div>
 	)
 }
 
