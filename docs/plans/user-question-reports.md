@@ -44,6 +44,12 @@ Recorded as a **candidate sub-pattern of §6.14.40 (redirector-vs-empirical-stat
 
 **Mitigation precedent landed in `6abb24f`'s plan-doc §0.1:** deployment-runbook recorded an analogous gap (`d21b52d` named, `65d37a1` empirical) and verified that the deployment surface was unchanged across the interval. This round's mitigation is structurally identical — verify that no in-scope file changed across `d21b52d..3f0571e`. Spot-check: `git log --oneline d21b52d..3f0571e -- src/db/schemas/catalog/items.ts src/server/admin/queue-data.ts src/components/post-session/wrong-items-browser.tsx src/components/admin-review/queue-status-tabs.tsx src/app/\(admin\)/admin/review/page.tsx` returns commits affecting `wrong-items-browser.tsx` (post-session tab/chart work) and `queue-data.ts` + `queue-status-tabs.tsx` + `queue-row-disposition.tsx` (`3f0571e` itself: pressure-cell dashboard + row disposition). **Surface IS shifted from the handoff baseline** — most notably, the admin queue already has reversible row-level disposition (live → rejected, rejected → live) added in `3f0571e`. The plan-doc proceeds against the EMPIRICAL surface at `3f0571e`, not the remembered surface at `d21b52d`.
 
+#### §0.3.1 Supplementary — new §6.14.40 sub-pattern candidate at the dev-server runtime boundary
+
+A second axis of redirector-vs-empirical divergence surfaced during §1.2 close-out, structurally distinct from the cross-conversation-handoff gap captured in the body of §0.3.
+
+**Sub-pattern: empirical-state divergence at the dev-server runtime boundary.** Tests + lint + typecheck pass cleanly, but `localhost:3000` exhibits hydration errors invisible to those checks. This is a third axis of state visibility (alongside git state and DB state) that the redirector pattern hasn't previously surfaced. Concretely: `/admin/review?status=candidate` on localhost shows React's recoverable-error overlay on first paint (server-rendered stat differs from client-hydrated stat — see `R-pre-existing-1` at §0.10). The user-reports §1.2 commit is unaffected because the action is server-side; the bug lives in unrelated post-handoff sessionStorage work in `queue-list.tsx`. Recorded as a candidate sub-pattern, single observed instance, no promotion threshold met. Promotion threshold is established at 3+ instances; the redirector pattern's existing typecheck/lint/test gates do NOT exercise the browser runtime, and dev-server-only divergences are invisible to the current verification stack.
+
 ### §0.4 Discipline shift — lightweight plan-doc bar
 
 The builder has confirmed that **37 post-handoff commits without per-round plan-docs is intentional.** Discipline relaxed: per-round plan-docs are reserved for non-trivial feature rounds with multi-commit scope, not for every UI tweak or drill polish commit.
@@ -161,7 +167,11 @@ The schema uses `UNIQUE (user_id, item_id)`. The server action's INSERT uses `ON
 
 ### §0.10 Forward-pin index
 
-(Empty at commit-0. Populated at round-close.)
+Populated incrementally as out-of-scope concerns surface during round work. Each entry names a follow-up surface and the round/owner that should pick it up.
+
+**R-pre-existing-1: queue-list.tsx:383 hydration mismatch.** Server SSR renders `flaggedCount` (e.g., 786); client hydrates to `totalCount - flaggedCount` (e.g., 909). Likely caused by sessionStorage-driven client state from `4bdec3a` / `18c102d` post-handoff commits initializing a `useState`/`useMemo` differently than the server-rendered value. Out of scope for user-reports round; round work does not touch queue-list.tsx's stat-renderer. Forward-pin to a future tooling/audit round. Empirical reproduction: `/admin/review?status=candidate` on localhost shows React's recoverable-error overlay on first paint with the diff `+909 / -786`.
+
+**R-tooling-1: db:migrate hash-mismatch against backfilled ledger.** The 9-row __drizzle_migrations ledger created at the local-DB recovery cycle uses raw sha256 of migration SQL files. drizzle-kit's internal hash format differs, so subsequent `bun run db:migrate` invocations still see the migrations as pending. Non-blocking for round work (DB schema is correct). Future migrations on this local DB will require the manual-psql workaround documented at README's `f458672` procedure. Forward-pin to the deployment-runbook round or a tooling-side cleanup.
 
 ---
 
