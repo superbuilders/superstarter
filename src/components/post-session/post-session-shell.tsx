@@ -141,7 +141,13 @@ function PostSessionShell(props: PostSessionShellProps) {
 	let panel: React.ReactNode = null
 	if (activeTab === "performance") {
 		const attemptPoints = props.wrongItems.map(function pickPoint(w) {
-			return { attemptId: w.attemptId, latencyMs: w.latencyMs }
+			return {
+				attemptId: w.attemptId,
+				latencyMs: w.latencyMs,
+				correct: w.correct,
+				subTypeId: w.subTypeId,
+				difficulty: w.difficulty
+			}
 		})
 		// Shared scale across both radars so Verbal and Numerical are
 		// visually comparable. Computed once, passed to both instances.
