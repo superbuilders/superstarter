@@ -13,12 +13,18 @@
 // Pure filter + sort logic lives in queue-filters.ts (tested separately).
 // This file is JSX-only state plumbing + presentation.
 //
-// No URL state at v1 — filter/sort lives in React.useState. Shareable URLs
-// are a v1.5 affordance.
+// Filter + sort state is persisted in sessionStorage, keyed by status
+// cohort, so a "Back to queue" navigation from the item-detail page (or
+// any other in-tab navigation) restores the admin's prior selections.
+// New tabs / new sessions start from the per-cohort defaults. URL-state
+// for shareable filter URLs is still a future affordance.
 
+import * as errors from "@superbuilders/errors"
 import * as React from "react"
+import { z } from "zod"
 import { subTypes } from "@/config/sub-types"
-import type { AdminQueueData } from "@/server/admin/queue-data"
+import { logger } from "@/logger"
+import type { AdminQueueData, QueueStatusFilter } from "@/server/admin/queue-data"
 import { QueueRow } from "@/components/admin-review/queue-row"
 import {
 	applyFilters,
@@ -137,6 +143,88 @@ function asStaleFilter(value: string): StaleFilter {
 	return DEFAULT_FILTER_STATE.stale
 }
 
+// sessionStorage-backed persistence (per status cohort). The shape is
+// shallow so a malformed payload from a prior session — e.g. a future
+// version added a field — degrades cleanly to the per-cohort defaults
+// rather than crashing the queue.
+const PERSIST_KEY_PREFIX = "admin-review-queue:"
+
+function persistKeyFor(status: QueueStatusFilter): string {
+	return `${PERSIST_KEY_PREFIX}${status}`
+}
+
+const persistedShapeSchema = z.object({
+	filterState: z.object({
+		flag: z.string(),
+		pressure: z.string(),
+		subType: z.string(),
+		difficulty: z.string(),
+		stale: z.string()
+	}),
+	sortKey: z.string()
+})
+
+interface PersistedQueueState {
+	readonly filterState: FilterState
+	readonly sortKey: SortKey
+}
+
+function readPersistedQueueState(status: QueueStatusFilter): PersistedQueueState | undefined {
+	if (typeof window === "undefined") return undefined
+	const raw = window.sessionStorage.getItem(persistKeyFor(status))
+	if (raw === null) return undefined
+	const parsed = errors.trySync(function parseRaw() {
+		return JSON.parse(raw)
+	})
+	if (parsed.error) {
+		logger.warn(
+			{ status, error: parsed.error },
+			"queue-list: persisted state JSON.parse failed; falling back to defaults"
+		)
+		return undefined
+	}
+	const validated = persistedShapeSchema.safeParse(parsed.data)
+	if (!validated.success) {
+		logger.warn(
+			{ status, error: validated.error },
+			"queue-list: persisted state shape mismatch; falling back to defaults"
+		)
+		return undefined
+	}
+	const fs = validated.data.filterState
+	const filterState: FilterState = {
+		flag: asFlagFilter(fs.flag),
+		pressure: asPressureFilter(fs.pressure),
+		subType: asSubTypeFilter(fs.subType),
+		difficulty: asDifficultyFilter(fs.difficulty),
+		stale: asStaleFilter(fs.stale)
+	}
+	const sortKey = asSortKey(validated.data.sortKey)
+	return { filterState, sortKey }
+}
+
+function writePersistedQueueState(
+	status: QueueStatusFilter,
+	filterState: FilterState,
+	sortKey: SortKey
+): void {
+	if (typeof window === "undefined") return
+	const payload = JSON.stringify({ filterState, sortKey })
+	const writeResult = errors.trySync(function persist() {
+		window.sessionStorage.setItem(persistKeyFor(status), payload)
+	})
+	if (writeResult.error) {
+		// sessionStorage can throw QuotaExceededError or be disabled by
+		// the browser (private mode in some configurations). Falling back
+		// to no-op is acceptable — the admin loses cross-navigation
+		// state restoration but the queue itself keeps working.
+		logger.warn(
+			{ status, error: writeResult.error },
+			"queue-list: sessionStorage write failed; cross-navigation state will not persist"
+		)
+	}
+}
+
 const SELECT_CLASS =
 	"h-8 rounded-md border border-border-soft bg-surface px-2 text-[12px] text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
 
@@ -145,10 +233,28 @@ function QueueList({ data, listHeading, emptyMessage }: QueueListProps) {
 	// (parent passes `key={data.statusFilter}`), so the per-cohort default
 	// flag filter is picked up cleanly via useState's lazy initializer
 	// instead of a derived-state-during-render pattern.
+	//
+	// Lazy initializers also restore from sessionStorage when the admin
+	// returns to a previously-visited cohort tab in the same browser tab
+	// (e.g., "Back to queue" from /admin/review/[itemId]). Falling back
+	// to per-cohort defaults when nothing was persisted yet.
 	const [filterState, setFilterState] = React.useState<FilterState>(function init() {
+		const persisted = readPersistedQueueState(data.statusFilter)
+		if (persisted !== undefined) return persisted.filterState
 		return defaultFilterStateFor(data)
 	})
-	const [sortKey, setSortKey] = React.useState<SortKey>(DEFAULT_SORT_KEY)
+	const [sortKey, setSortKey] = React.useState<SortKey>(function init() {
+		const persisted = readPersistedQueueState(data.statusFilter)
+		if (persisted !== undefined) return persisted.sortKey
+		return DEFAULT_SORT_KEY
+	})
+
+	React.useEffect(
+		function persistOnChange() {
+			writePersistedQueueState(data.statusFilter, filterState, sortKey)
+		},
+		[data.statusFilter, filterState, sortKey]
+	)
 
 	const visible = React.useMemo(
 		function recomputeVisible() {
