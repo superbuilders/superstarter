@@ -4,10 +4,12 @@ Round: Testbank Ingest Prod.
 Round-open hash: `74e6549` (HEAD at this commit-0; verified clean working tree, `origin/main...HEAD = 0 0`).
 Target close hash: TBD.
 
-> Narrow operational round (7 commits). Plan-doc shape is the lightweight
-> scaffold established by `docs/plans/user-question-reports.md` — full §0
-> metadata, condensed per-commit ledger, retained per-commit stop-and-report
-> gates.
+> Narrow operational round (9 ledger commits per the schema-divergence
+> sub-round expansion — C1, C2, C2.5b, C3, C4, C5, C5.5b, C6, C7; plus
+> three doc-patch commits C0/C0.5/C2.5a not counted in the ledger).
+> Plan-doc shape is the lightweight scaffold established by
+> `docs/plans/user-question-reports.md` — full §0 metadata, condensed
+> per-commit ledger, retained per-commit stop-and-report gates.
 
 > **Strategy β confirmed at commit-0 follow-up:** dump preserves embeddings
 > (mechanical simplicity at C1/C2/C3), then C4 deliberately wipes prod
@@ -16,6 +18,18 @@ Target close hash: TBD.
 > gate, in exchange for operational confidence in the backfill path. See
 > §0.7 for the second §6.14.31 gate this introduces and §1.4 for the C4
 > commit shape.
+
+> **Schema-divergence sub-round triggered at C3 (2026-05-12):** C3
+> `pg_restore` failed on `items.rejected_by → users.id` FK violation —
+> 7 local rows with `rejected_by = 726e433e-...` (local-Leo UUID) had no
+> FK target in prod's `users` table (which holds only prod-Leo at
+> `cb54eeab-...`; same human, different OAuth provisionings). Strategy B
+> adopted: NULL out `rejected_by` on local at C2.5b, re-dump, restore
+> prod, then restore local `rejected_by` at C5.5b from a captured backup
+> CSV. C2.5a is this plan-doc patch. The pre-authorized
+> `schema-divergence-sub-round` (§0.10) has been REALIZED; see §1.2.5a /
+> §1.2.5b / §1.3.A / §1.5.5b for ledger details and §3.4 for the
+> candidate pattern this surfaced.
 
 ---
 
@@ -126,14 +140,21 @@ If a future round upgrades to pgvector 0.9.x or 1.0.x, that would change the on-
 
 ### §0.7 Destructive-operation surface
 
-**Two destructive operations:** `pg_restore` against production `items` at C3, and `UPDATE items SET embedding = NULL` against production at C4 (strategy β).
+**Three destructive operations** (expanded by the schema-divergence sub-round at C2.5):
+
+1. `pg_restore` against production `items` at C3 [§6.14.31 gate 1]
+2. `UPDATE items SET embedding = NULL` against production at C4 [§6.14.31 gate 2 — strategy β]
+3. `UPDATE items SET rejected_by = NULL WHERE rejected_by IS NOT NULL` against **local** at C2.5b (NEW — schema-divergence sub-round; **NO §6.14.31 gate** — local-only, captured backup CSV at `/tmp/rejected_by_backup.csv` makes it trivially reversible at C5.5b)
 
 - **C3 pre-state:** prod `items` table is empty (`COUNT = 0` confirmed at §0.5). INSERTs only; no UPDATE/DELETE/TRUNCATE.
 - **C3 §6.14.31 confirmation gate (gate 1):** REQUIRED before C3. The plan-doc records this gate. Executor must STOP at C3 and obtain Leo's explicit "yes go" before running `pg_restore` against the prod RDS endpoint.
-- **C4 destructive op (NEW per strategy β):** `UPDATE items SET embedding = NULL` against prod. Fully reversible — the dump file at `/tmp/items.dump` is retained through round-close as the rollback source. The embeddings will be re-populated at C5 by `scripts/backfill-missing-embeddings.ts`.
+- **C4 destructive op (per strategy β):** `UPDATE items SET embedding = NULL` against prod. Fully reversible — the dump file at `/tmp/items.dump` (post-C2.5b regeneration) is retained through round-close as the rollback source. The embeddings will be re-populated at C5 by `scripts/backfill-missing-embeddings.ts`.
 - **C4 §6.14.31 confirmation gate (gate 2):** REQUIRED before C4. Executor must STOP and obtain Leo's explicit "yes go" before running the UPDATE statement against prod.
-- **Rollback (any failure point):** If C4 fails partway, no recovery needed (NULL is the intended state for any row touched). If C5 backfill fails partway, re-running it picks up remaining NULL rows. If full round must roll back: `TRUNCATE items` then re-restore from `/tmp/items.dump` (which still carries the original embeddings) — no users have generated dependent data (no `attempts`, no `item_admin_actions`, no `item_user_reports`; the only prod user is Leo's first-sign-in row in `users`, which has no FK pointing into `items`).
+- **C2.5b destructive op (per schema-divergence sub-round):** `UPDATE items SET rejected_by = NULL` against **local** Docker postgres. Reversible at C5.5b from `/tmp/rejected_by_backup.csv` (captured immediately before the wipe). Local-only mutation — no prod surface area, no §6.14.31 gate required (local DB is the executor's dev sandbox and the backup CSV is a deterministic restore source).
+- **C5.5b restoration op (per schema-divergence sub-round close):** `UPDATE items SET rejected_by = <backup-uuid>` against **local** from the backup CSV. Returns local DB to its pre-C2.5b state for ongoing dev work.
+- **Rollback (any failure point):** If C4 fails partway, no recovery needed (NULL is the intended state for any row touched). If C5 backfill fails partway, re-running it picks up remaining NULL rows. If full round must roll back: `TRUNCATE items` on prod, then re-restore from `/tmp/items.dump` (post-C2.5b — still carries the original embeddings) — no users have generated dependent data (no `attempts`, no `item_admin_actions`, no `item_user_reports`; the only prod user is Leo's first-sign-in row in `users`, which has no FK pointing into `items`). Local rollback is independent: `\copy` from `/tmp/rejected_by_backup.csv` (see §1.5.5b) recovers the 7 `rejected_by` UUIDs regardless of prod outcome.
 - **C5 (`backfill-missing-embeddings.ts`)**: writes UPDATE `embedding = <vec>` for every row where `embedding IS NULL` (i.e., all 2,150 rows after C4 wipe). Recovery from the C4 wipe. Not itself destructive — populates a previously-NULLed column.
+- **Round-spanning artifacts:** `/tmp/items.dump` (rollback source for prod) and `/tmp/rejected_by_backup.csv` (rollback source for local). Both retained through round-close.
 - **No other destructive ops anticipated** in this round.
 
 ### §0.8 §6.14.31 gate placement summary
@@ -171,9 +192,9 @@ If a future round upgrades to pgvector 0.9.x or 1.0.x, that would change the on-
 
 ### §0.10 Forward-watch entries
 
-- **Sub-type 6 promotion candidate 2** (per `docs/plans/deployment-runbook.md` §0.10): held at 3/5 entering this round. Track deviations during this round; round-close updates the count.
+- **Sub-type 6 promotion candidate 2** (per `docs/plans/deployment-runbook.md` §0.10): held at 3/5 entering this round. The C3 FK miss is **NOT** a sub-type-6 deviation (sub-type 6 = redirector authoring against remembered-rather-than-verified conventions); it's a C2-audit-completeness gap, banked separately as §3.4 candidate. **No change to the 3/5 count.**
 - **Pre-authorized §6.14.34 sub-rounds:**
-  - `schema-divergence-sub-round` — triggers if local rows have non-default `source_folder` or `metadata_json` shapes that the prod schema rejects.
+  - `schema-divergence-sub-round` — **TRIGGERED at C3 (2026-05-12)** on `items.rejected_by → users.id` FK violation. Realized commits: §1.2.5a (this plan-doc patch — strategy B adoption), §1.2.5b (data-side: NULL out local `rejected_by`, capture backup CSV, re-dump), §1.5.5b (data-side: restore local `rejected_by` from CSV after prod restore success). Original trigger condition in commit-0 ("local rows have non-default `source_folder` or `metadata_json` shapes that the prod schema rejects") was incomplete — the actual FK-target-mismatch trigger generalizes the original.
   - `script-env-routing-sub-round` — triggers if `scripts/backfill-missing-embeddings.ts` fails at C5 because of an env-var routing issue (R-iac-env-local-contamination is a precedent). C-number reference shifted from C4 to C5 per strategy β ledger renumber.
   - `vector-extension-skew-sub-round` — triggers ONLY if pg_restore fails to load embedding values due to the 0.8.2-vs-0.8.1 patch-version difference (judgment: should not happen — see §0.5.D — but pre-authorize the sub-round so we can act immediately).
 - **R-purveyor-companion-resources-still-up** — banked, not promoted. Future round may decide whether to chase the platform team for a teardown.
@@ -218,9 +239,103 @@ Seven commits planned (per strategy β adopted at commit-0 follow-up — see top
 
 **Commit message shape:** `docs(plans): testbank-ingest-prod C2 — verify items dump integrity (2150 rows, embeddings preserved)`.
 
+### §1.2.5a — Schema-divergence sub-round plan-doc patch [this commit]
+
+**Trigger:** C3's first attempt failed on `items.rejected_by` FK violation (see §1.3.A). Strategy B adopted: NULL out local `rejected_by` pre-dump, restore post-prod-success.
+
+**Operations (this commit):**
+1. Patch top-of-doc with the schema-divergence sub-round blockquote.
+2. Patch §0.7 to enumerate three destructive operations (added: local `UPDATE rejected_by = NULL` at C2.5b).
+3. Patch §0.10 forward-watch: `schema-divergence-sub-round` flipped from "pre-authorized" to "TRIGGERED at C3 (2026-05-12)" with realized-commit cross-references.
+4. Insert §1.2.5a (this section) and §1.2.5b (data-side wipe) into the ledger.
+5. Insert §1.3.A failure-history into §1.3.
+6. Insert §1.5.5b (restore local) into the ledger.
+7. Bank §3.4 candidate pattern for the C2-audit-completeness gap.
+
+**Verification (in C2.5a's commit message + stop-and-report):**
+- Plan-doc diff shows localized changes only.
+- `git diff` shows no unrelated file modifications.
+- New ledger structure visible via `grep -nE "^### §1\." docs/plans/testbank-ingest-prod.md`.
+
+**Commit message shape:** `docs(plans): testbank-ingest-prod schema-divergence sub-round — adopt strategy B (NULL rejected_by, restore local post-success)`.
+
+### §1.2.5b — Wipe local rejected_by + re-dump + exhaustive FK re-audit [no git commit]
+
+**§6.14.31 confirmation:** NOT REQUIRED (local-only mutation; backup CSV makes it trivially reversible).
+
+**Operations:**
+```bash
+# 1. Capture pre-wipe state to a durable file (round-spanning rollback artifact)
+psql postgres://postgres:postgres@localhost:54320/postgres -c "
+  COPY (SELECT id, rejected_by FROM items WHERE rejected_by IS NOT NULL)
+  TO STDOUT WITH CSV HEADER
+" > /tmp/rejected_by_backup.csv
+
+# 2. Verify backup captured all 7 rows (8 lines including header)
+wc -l /tmp/rejected_by_backup.csv
+
+# 3. Apply the wipe
+psql postgres://postgres:postgres@localhost:54320/postgres -c "
+  UPDATE items SET rejected_by = NULL WHERE rejected_by IS NOT NULL;
+"
+
+# 4. Confirm wipe complete
+psql postgres://postgres:postgres@localhost:54320/postgres -c "
+  SELECT COUNT(*) FROM items WHERE rejected_by IS NOT NULL;
+"
+# Expect: 0
+
+# 5. Re-dump (overwrites prior /tmp/items.dump from C1)
+pg_dump --format=custom --data-only --table=items --no-owner --no-privileges \
+  -f /tmp/items.dump postgres://postgres:postgres@localhost:54320/postgres
+```
+
+**Exhaustive FK re-audit** (the C2 gap that produced this sub-round):
+
+```bash
+psql postgres://postgres:postgres@localhost:54320/postgres -c "
+  SELECT
+    tc.constraint_name,
+    kcu.column_name AS source_column,
+    ccu.table_name AS target_table,
+    ccu.column_name AS target_column
+  FROM information_schema.table_constraints tc
+  JOIN information_schema.key_column_usage kcu
+    ON tc.constraint_name = kcu.constraint_name
+  JOIN information_schema.constraint_column_usage ccu
+    ON tc.constraint_name = ccu.constraint_name
+  WHERE tc.table_name = 'items' AND tc.constraint_type = 'FOREIGN KEY'
+  ORDER BY tc.constraint_name;
+"
+```
+
+For each FK row returned, verify `SELECT DISTINCT <source_column> FROM items WHERE <source_column> IS NOT NULL` ⊆ `SELECT id FROM <target_table>` against **prod**. Document the full FK list in C2.5b's stop-and-report (no hand-listed subset this time).
+
+**Verification (in C2.5b's stop-and-report):**
+- `/tmp/rejected_by_backup.csv` exists, 8 lines (1 header + 7 data rows).
+- `SELECT COUNT(*) FROM items WHERE rejected_by IS NOT NULL` returns 0 on local.
+- `pg_restore --list /tmp/items.dump | grep "TABLE DATA"` returns exactly one line for `public.items`.
+- New `/tmp/items.dump` file size (will differ from 15,206,136 — 7 NULL fields take less space than 7 UUIDs; expect a few hundred bytes smaller).
+- Exhaustive FK audit table: every FK on `items` listed, every per-FK source⊆prod check passes.
+
+**No git commit:** the artifact is the regenerated `/tmp/items.dump` and the new `/tmp/rejected_by_backup.csv`. Both live in `/tmp` and are not checked in (per the dump-file convention from §1.1).
+
 ### §1.3 C3 — Restore dump to prod RDS [§6.14.31 gate 1]
 
 **§6.14.31 confirmation REQUIRED before execution.** See §0.8 (gate 1).
+
+#### §1.3.A First-attempt failure (2026-05-12)
+
+The first C3 attempt **failed inside `--single-transaction`** with the FK violation:
+
+```
+pg_restore: error: COPY failed for table "items": ERROR:  insert or update on table "items" violates foreign key constraint "items_rejected_by_users_id_fk"
+DETAIL:  Key (rejected_by)=(726e433e-6f44-4f9f-b661-6875f1d888e8) is not present in table "users".
+```
+
+The transaction rolled back cleanly; **prod items count remained 0** (no partial state). Wall clock: ~21s (network roundtrip + server-side rollback). Root cause and remediation are documented at the top-of-doc schema-divergence sub-round blockquote and §1.2.5a / §1.2.5b. After C2.5b regenerates `/tmp/items.dump` with `rejected_by = NULL` on the affected 7 rows, the C3 retry should succeed — the rejected-by FK constraint is now satisfied (NULL is permitted on that column).
+
+The `--single-transaction` choice was load-bearing: without it, partial COPY rows would have been committed before the FK error fired, leaving prod in an indeterminate partial state requiring a manual `TRUNCATE items` to recover. Recommendation: keep `--single-transaction` on the retry as well.
 
 **Operation:**
 ```bash
@@ -287,6 +402,33 @@ PGPASSWORD="$DB_PASS" psql \
 - Script's log output (count of items processed; expect 2150)
 
 **Commit message shape:** `docs(plans): testbank-ingest-prod C5 — backfill embeddings on prod (2150 items)`.
+
+### §1.5.5b — Restore local rejected_by from backup CSV [no git commit]
+
+**Trigger:** schema-divergence sub-round close. C2.5b mutated local for prod-compat reasons; this returns local DB to its pre-C2.5b state for ongoing dev work.
+
+**§6.14.31 confirmation:** NOT REQUIRED (local-only mutation, restoring from a deterministic backup file).
+
+**Operations:**
+```bash
+# Apply the restore from backup CSV via a temp staging table
+psql postgres://postgres:postgres@localhost:54320/postgres <<'SQL'
+CREATE TEMP TABLE rejected_by_restore (id uuid, rejected_by uuid);
+\copy rejected_by_restore FROM '/tmp/rejected_by_backup.csv' WITH CSV HEADER;
+UPDATE items i
+  SET rejected_by = r.rejected_by
+  FROM rejected_by_restore r
+  WHERE i.id = r.id;
+SELECT COUNT(*) AS restored_count FROM rejected_by_restore;
+SQL
+```
+
+**Verification (in C5.5b's stop-and-report):**
+- `psql -c "SELECT COUNT(*) FROM items WHERE rejected_by IS NOT NULL;"` returns **7** (matches pre-C2.5b count).
+- Spot-check: `SELECT id, rejected_by FROM items WHERE rejected_by IS NOT NULL ORDER BY id` matches `/tmp/rejected_by_backup.csv` row-for-row (or use a checksum: `md5sum` over both data sets).
+- The 7 restored rows still carry `status = 'rejected'`, `rejection_reason IS NOT NULL`, `rejected_at_ms IS NOT NULL` — only `rejected_by` was wiped, so the rest of the rejection record stays intact through the round.
+
+**No git commit:** the artifact is the restored local DB state. `/tmp/rejected_by_backup.csv` may be left in place or deleted at executor discretion after this step (it's no longer load-bearing).
 
 ### §1.6 C6 — Verification (functional smoke against prod)
 
@@ -364,6 +506,31 @@ These are CANDIDATES, not promoted. Promotion to a numbered §6.14 entry happens
 **Generalization:** when shipping data that depends on an extension's binary format, audit both ends's extension version and document the skew. For PostgreSQL extensions following semver discipline (which pgvector 0.8.x does), patch-version skews should be portable. Major-version skews require coordinated upgrade.
 
 **Status:** documented at §0.5.D; banked. May or may not promote.
+
+### §3.4 Candidate: "FK audits must be exhaustive over the source table's full FK set, derived from information_schema, not hand-listed by the redirector"
+
+**Surface:** C2's prompt hand-listed `sub_type_id` and `strategy_id` as the FK columns to verify (per the prompt's step 6/7). C3 then failed on `items.rejected_by → users.id` — a FK that exists in the schema but was missing from C2's audit checklist. Recovery required the schema-divergence sub-round (§1.2.5a / §1.2.5b / §1.5.5b), expanding the round from 7 → 9 ledger commits.
+
+**Generalization:** hand-listing FKs is brittle in two failure modes:
+1. **Redirector-omission**: any FK not enumerated in the audit prompt is invisible to the audit, regardless of whether it would FK-violate at restore time.
+2. **Silent drift on schema evolution**: when a new FK is added to the source table later, audits written against the old FK set are silently incomplete — typecheck/lint don't catch it because the audit lives in shell prompts, not code.
+
+**The fix:** derive the FK list from `information_schema.referential_constraints` JOINed with `key_column_usage` and `constraint_column_usage`, then verify each FK programmatically. The query is small enough to embed in the prompt body:
+
+```sql
+SELECT tc.constraint_name, kcu.column_name AS source_column,
+       ccu.table_name AS target_table, ccu.column_name AS target_column
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu USING (constraint_name)
+JOIN information_schema.constraint_column_usage ccu USING (constraint_name)
+WHERE tc.table_name = '<table>' AND tc.constraint_type = 'FOREIGN KEY';
+```
+
+This produces a stronger invariant — "all FKs verified" rather than "the FKs the redirector remembered."
+
+**Distinct from existing §6.14:** §6.14.43 sub-type 6 covers redirector-vs-remembered-conventions. §3.4 covers redirector-vs-derivable-truth (the FK list is derivable from the schema; remembering it is the wrong tool). Different surface, different mitigation.
+
+**Status:** instance #1 (the C3 FK miss in this round). **Banked at 1/5.** Promotion threshold to a numbered §6.14 entry is 3 instances or a round-close decision to pre-emptively promote based on the depth of the round-disrupting consequence (this round added 2 ledger commits + 1 doc patch + ~30 minutes of executor time, which is on the high-cost end of "audit gap" outcomes).
 
 ---
 
