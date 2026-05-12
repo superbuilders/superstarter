@@ -59,6 +59,32 @@ function snapshotOidcSources(): OidcSourceSnapshot {
 	return { hasContextHolder, hasContextValue, hasContextToken, hasEnvToken }
 }
 
+// auth-oidc-restore C4-W(a) fix — poll the OIDC source until a token
+// becomes available, with a hard cap. Bridges the Vercel cold-start
+// injection race where the runtime's request-context is active but the
+// x-vercel-oidc-token header has not yet been populated. The cap (2000ms)
+// is well below the function's 300s timeout but well above the empirical
+// race window observed at C3 (<10ms in 2 datapoints), giving wide margin
+// while still failing fast on a genuine "OIDC permanently missing"
+// scenario. Returns the actual elapsed time on success; on cap-reached,
+// returns the cap exactly so partition reports cluster cleanly.
+async function waitForOidcToken(
+	maxWaitMs: number,
+	intervalMs: number
+): Promise<{ pollMs: number; success: boolean }> {
+	const start = Date.now()
+	while (Date.now() - start < maxWaitMs) {
+		await new Promise<void>(function scheduleNextPoll(resolve) {
+			setTimeout(resolve, intervalMs)
+		})
+		const snap = snapshotOidcSources()
+		if (snap.hasContextToken || snap.hasEnvToken) {
+			return { pollMs: Date.now() - start, success: true }
+		}
+	}
+	return { pollMs: maxWaitMs, success: false }
+}
+
 function createLocalPool(connectionString: string): Pool {
 	logger.info("creating local docker pg pool")
 	return new Pool({
@@ -89,12 +115,23 @@ function createRdsPool(): Pool {
 
 	async function getDbPassword(): Promise<string> {
 		// auth-oidc-restore C1 probe — diagnostic snapshot of OIDC token
-		// source presence. Recorded inside the same async frame as the
-		// failing call so the snapshot reflects exactly what
+		// source presence at entry. Recorded inside the same async frame
+		// as the failing call so the snapshot reflects exactly what
 		// getVercelOidcTokenSync() will see. Remove at auth-oidc-restore
 		// C5 after the fix is verified.
-		const snapshot = snapshotOidcSources()
-		logger.info(snapshot, "getDbPassword: oidc source snapshot")
+		const initialSnapshot = snapshotOidcSources()
+		logger.info(initialSnapshot, "getDbPassword: oidc source snapshot")
+
+		// auth-oidc-restore C4-W(a) fix — when no OIDC source is present
+		// at entry, poll for one before invoking signer. Targets the
+		// Vercel cold-start injection race confirmed at C3. The poll log
+		// line carries the wait duration so we can validate the race
+		// window empirically post-deploy (expected pollMs values cluster
+		// well under 1000ms based on the C3 data).
+		if (!initialSnapshot.hasContextToken && !initialSnapshot.hasEnvToken) {
+			const pollResult = await waitForOidcToken(2000, 50)
+			logger.info(pollResult, "getDbPassword: oidc poll result")
+		}
 
 		const result = await errors.try(signer.getAuthToken())
 		if (result.error) {

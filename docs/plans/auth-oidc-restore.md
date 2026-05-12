@@ -144,6 +144,54 @@ New pin from this round's commit-0:
 
 - **R-300s-request-hang-on-credential-failure** — NEW. When `getDbPassword` throws (OIDC-source missing), the calling pg.Pool.connect rejects, but the upstream Auth.js queryWithCache wrapper does not unwind cleanly — the request hangs to the 300s function max. Independent of the OIDC fix, the failure-handling path should propagate the rejection so the request terminates immediately with a 500. Pinned for a follow-up commit after this round closes (or for §5.5 of the prior round's recommendations to be realized).
 
+### §0.12 Controlled cold-start trigger (testing aid for C4-W validation)
+
+**Purpose.** Unauthenticated curls do not trigger `getDbPassword` — Auth.js short-circuits when no session cookie is present, so the DB path is never entered. To exercise the cold-start OIDC injection race deliberately (rather than waiting on chance organic traffic), use an authenticated session cookie.
+
+**Setup (one-time, manual, browser-side).**
+
+1. Sign in to `https://18seconds.vercel.app` via Google.
+2. Open browser DevTools → **Application** → **Storage** → **Cookies** → `https://18seconds.vercel.app`.
+3. Locate the cookie named **`__Secure-authjs.session-token`** (Auth.js v5 default; the `__Secure-` prefix is added automatically on HTTPS — confirmed empirically by reading `node_modules/.bun/@auth+core@0.41.2/node_modules/@auth/core/lib/utils/cookie.js` line `name: \`${cookiePrefix}authjs.session-token\``).
+4. Copy the cookie's **value** (a long opaque string starting with the session UUID).
+5. **Do not** paste this value into any script, log line, commit, or chat transcript. Treat it like a password. When invoking the curl below, paste it directly into the terminal at the point marked `<paste-cookie-value-here>` and clear shell history if desired (`history -d $(history 1)` after invocation).
+
+**Forcing a cold-start.** Vercel spins idle lambdas down after ~5 min. To guarantee a cold-start hit:
+
+- **Option A — passive:** wait ≥5 min since any prior traffic to the production deployment.
+- **Option B — active:** redeploy via `vercel --prod`. Every fresh deployment creates fresh lambdas; the first DB-touching request after deploy is the canonical cold-start.
+
+**Trigger curl (one-line, paste cookie at runtime).**
+
+```
+curl -sS -o /dev/null \
+  -w 'status=%{http_code} time=%{time_total}s\n' \
+  'https://18seconds.vercel.app/' \
+  -H 'Cookie: __Secure-authjs.session-token=<paste-cookie-value-here>'
+```
+
+`GET /` triggers the app layout's `auth()` call, which queries the sessions table by token → enters `getDbPassword` → exercises the cold-start race path if it's open.
+
+**Observation.**
+
+```
+vercel logs https://18seconds.vercel.app \
+  --no-follow --environment production --no-branch \
+  --since 2m --limit 50 \
+  --query "oidc poll result" --expand
+```
+
+Expected outcomes:
+
+| Result | Interpretation |
+|---|---|
+| 0 entries returned | Cold-start race did NOT trigger on this lambda (token was present at entry, no poll needed). Re-try after Option A/B. |
+| 1+ entries with `success=true` and small `pollMs` | C4-W fix worked. The recorded `pollMs` value is the empirical race-window duration on this lambda. Add to the data set. |
+| 1+ entries with `success=false`, `pollMs=2000` | C4-W cap was reached without the token appearing. Either the race window exceeds 2s (extend cap and revisit) or a different mechanism is in play (open a sub-round and re-audit). |
+| `getDbPassword: oidc source snapshot` followed by an `error` log with `rds iam auth token fetch failed` (no `oidc poll result` between them) | The fix path failed to engage — the snapshot reported `hasContextToken=true` but signer still threw. Indicates a different bug; open a sub-round. |
+
+**Tear-down.** Nothing to clean up server-side. The cookie remains valid until Leo's session expires or is invalidated; revoking client-side is `Application` → `Cookies` → right-click → Delete.
+
 ---
 
 ## §1 Commit ledger skeleton
