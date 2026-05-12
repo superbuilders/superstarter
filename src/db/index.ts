@@ -16,6 +16,49 @@ declare global {
 	var __18seconds_pg_pool: Pool | undefined
 }
 
+// auth-oidc-restore C1 probe — see docs/plans/auth-oidc-restore.md §0.3 + §1.0.
+// Reads the @vercel/request-context globalThis symbol via getOwnPropertyDescriptor
+// + progressive type-narrowing through `unknown` (no `as`, no `any`, no added
+// dependency). Returns a flat boolean shape for one-line Pino emission.
+interface OidcSourceSnapshot {
+	hasContextHolder: boolean
+	hasContextValue: boolean
+	hasContextToken: boolean
+	hasEnvToken: boolean
+}
+
+function readVercelContextValue(): unknown {
+	const symbol = Symbol.for("@vercel/request-context")
+	const desc = Object.getOwnPropertyDescriptor(globalThis, symbol)
+	if (!desc) return undefined
+	const holder: unknown = desc.value
+	if (holder === null || typeof holder !== "object" || !("get" in holder)) return undefined
+	const getMaybe: unknown = holder.get
+	if (typeof getMaybe !== "function") return undefined
+	return getMaybe.call(holder)
+}
+
+function extractOidcTokenFromContext(ctx: unknown): boolean {
+	if (ctx === null || typeof ctx !== "object" || !("headers" in ctx)) return false
+	const headers: unknown = ctx.headers
+	if (headers === null || typeof headers !== "object" || !("x-vercel-oidc-token" in headers)) {
+		return false
+	}
+	const tokenMaybe: unknown = headers["x-vercel-oidc-token"]
+	return typeof tokenMaybe === "string" && tokenMaybe.length > 0
+}
+
+function snapshotOidcSources(): OidcSourceSnapshot {
+	const symbol = Symbol.for("@vercel/request-context")
+	const hasContextHolder = Object.getOwnPropertyDescriptor(globalThis, symbol) !== undefined
+	const ctx = readVercelContextValue()
+	const hasContextValue = ctx !== undefined
+	const hasContextToken = extractOidcTokenFromContext(ctx)
+	const envToken = env.VERCEL_OIDC_TOKEN
+	const hasEnvToken = typeof envToken === "string" && envToken.length > 0
+	return { hasContextHolder, hasContextValue, hasContextToken, hasEnvToken }
+}
+
 function createLocalPool(connectionString: string): Pool {
 	logger.info("creating local docker pg pool")
 	return new Pool({
@@ -45,6 +88,14 @@ function createRdsPool(): Pool {
 	})
 
 	async function getDbPassword(): Promise<string> {
+		// auth-oidc-restore C1 probe — diagnostic snapshot of OIDC token
+		// source presence. Recorded inside the same async frame as the
+		// failing call so the snapshot reflects exactly what
+		// getVercelOidcTokenSync() will see. Remove at auth-oidc-restore
+		// C5 after the fix is verified.
+		const snapshot = snapshotOidcSources()
+		logger.info(snapshot, "getDbPassword: oidc source snapshot")
+
 		const result = await errors.try(signer.getAuthToken())
 		if (result.error) {
 			logger.error(
