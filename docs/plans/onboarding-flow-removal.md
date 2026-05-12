@@ -2,10 +2,12 @@
 
 Round: Onboarding Flow Removal.
 Round-open hash: `16ae176` (HEAD at C0 audit; verified clean working tree; `git rev-list --left-right --count origin/main...HEAD = 0 1` — `16ae176` is the prior round's session-log commit, locally committed but unpushed).
-Round-close hash: TBD.
-**Round status: OPEN (commit-0 audit).**
+Round-close hash: this commit (round-close C6).
+**Round status: CLOSED.**
 
-> **Round-shape decision.** Audit-first. C0 (this commit) documents what we propose to do without doing any of it. A user-reviewed plan is the precondition for any code change. C1 onward executes the removal commit-by-commit with §6.14.31 gates wrapping every production deploy.
+> **Round status (CLOSED).** Forced diagnostic onboarding removed (commits `c65a8d2`, `682a752`, `f0a97e4` deployed as `dpl_5jnhDDraqEqNov5AUuHVDk9YwbSk`). Sign-in lands at dashboard; `/diagnostic` 404s. C5.5 unplanned defensive fix (commit `9ece713` deployed as `dpl_2oT9L3jixcX7ni5tQE4ac25kFpA6`): `submit_failed` reducer action clears stuck `submitPending` on server-action failure, preserving `selectedOptionId` for user retry. Empirically validated by Leo completing a full practice test on production: hangs occurred, recovery engaged, session completed end-to-end. The underlying `cacheComponents`+Bun interaction (`R-cacheComponents-bun-settimeout-incompat`) is NOT fixed; it's now degraded-UX-but-survivable rather than user-stranding. Next round (`cacheComponents-investigation`) attacks the underlying bug.
+
+> **Round-shape decision (closed-plan-immutable from C0).** Audit-first. C0 documented what we proposed to do without doing any of it. A user-reviewed plan was the precondition for code change. C1 onward executed the removal commit-by-commit with §6.14.31 gates wrapping every production deploy.
 
 ---
 
@@ -236,30 +238,40 @@ One gate total. May expand to two if a hotfix sub-round is needed post-deploy (w
 
 ### §0.11 Forward-pin index (updated at round-close)
 
-Pins carried forward from `auth-oidc-restore` §0.11 (unchanged at this round's commit-0):
+Pins **carried forward** from `auth-oidc-restore` §0.11 (unchanged at this round's close):
 
 - **R-purveyor-companion-resources-still-up** — unchanged.
 - **R-strategy-linkage-unused** — unchanged.
 - **R-local-prod-rejected_by-divergence** — unchanged.
 - **R-script-log-verbosity** — unchanged.
 - **R-script-no-concurrency** — unchanged.
-- **R-300s-request-hang-on-credential-failure** — unchanged.
-- **R-oidc-fix-empirical-validation-gap** — unchanged (the 24-48h monitoring window remains in progress).
-- **R-probe-removal-pending** — unchanged (oidc probe code in `src/db/index.ts` still present; scheduled for removal in a follow-up round after the monitoring window).
+- **R-300s-request-hang-on-credential-failure** — unchanged status, lower priority now (overshadowed by the cacheComponents+Bun severity downgrade below; both pins point at the same underlying Bun runtime story).
+- **R-probe-removal-pending** — unchanged (OIDC probe code in `src/db/index.ts` still present; scheduled for removal in a follow-up round, now that the empirical-validation gap has closed — see "Pins retired" below).
 - **R-poll-loop-50ms-minimum-overhead** — unchanged.
-- **R-cacheComponents-bun-settimeout-incompat** — **carried forward**. This round operationally sidesteps the known reproduction route (`/diagnostic/run`) but does not address the underlying defect. The defect remains active on every Bun-runtime / `cacheComponents` / Server-Action surface. Update at this round's close: if any new occurrence is observed on a non-diagnostic route during C5 verification, log it inline in §6.
 
-Pins **retired** at this round's commit-0:
+Pins **carried forward** from this round's commit-0:
 
-- ~~**R-diagnostic-onboarding-removal-requested**~~ — **REMOVED**. Realized-by-execution: this round is the realization. The pin retires the moment C0 lands; the leadership ask transitions from "banked future work" to "active in-progress round."
+- **R-vestigial-diagnostic-overtime-column** — unchanged. `practice_sessions.diagnostic_overtime_note_shown_at_ms` is a NULLable bigint column that no code writes or reads. Documented as "vestigial-and-unread" in the schema comments. Banked for a future column-cleanup round (column drops are destructive and need their own §6.14.31 gate). Low priority.
+- **R-onboarding-targets-form-on-historical-views** — unchanged. `<OnboardingTargets>` renders on any `sessionType === "diagnostic"` post-session view, including historical ones. Bank for the same future cleanup round that retires the diagnostic-flow's dead branches.
+- **R-startSession-zod-still-accepts-diagnostic** — unchanged. `src/app/(app)/actions.ts:startSessionInputSchema` still includes `"diagnostic"` in its `z.enum([...])`. After C3 there is no caller invoking the action with that type. Bank for future cleanup.
 
-New pins opened at this round's commit-0:
+Pin **severity-updated** at this round's close:
 
-- **R-vestigial-diagnostic-overtime-column** — `practice_sessions.diagnostic_overtime_note_shown_at_ms` is a NULLable bigint column that no code writes or reads. Documented as "vestigial-and-unread" in the schema comments. Banked for a future column-cleanup round (column drops are destructive and need their own §6.14.31 gate). Low priority.
+- **R-cacheComponents-bun-settimeout-incompat** — **status changes from "blocking" to "degraded UX, survivable."** Underlying bug remains: the Bun-runtime / `cacheComponents` / Server-Action interaction reproduces on `/full-length/run` submits AND was observed on `/full-length/configure` page-load RSC streaming during Leo's C5 verification (so the round-open hypothesis "reproduction surface disappears with `/diagnostic/run`" was wrong — the bug is **route-incidental, not route-specific**). The user-stranding behavior is, however, resolved by C5.5's `submit_failed` reducer action (commit `9ece713`): when a server-action invocation fails on the client, the shell now clears `submitPending` and the user can retry. Empirically validated end-to-end by Leo (see §6.8). Next round (`cacheComponents-investigation`) attacks the underlying interaction, with a likely intervention being the Bun → Node.js runtime swap.
 
-- **R-onboarding-targets-form-on-historical-views** — `<OnboardingTargets>` renders on any `sessionType === "diagnostic"` post-session view, including historical ones. A user viewing their long-ago-completed diagnostic post-session would still see (and could re-submit through) the goal-capture form. Harmless (the action writes to the same `users.target_score` / `users.target_date_ms` columns that `<GoalEditor>` and `<TargetDateEditor>` on the dashboard write), but visually it implies "set your goal" on a page that is no longer a goal-setting surface. Bank for the same future cleanup round that retires the diagnostic-flow's dead branches.
+Pins **retired** at this round's commit-0 (recorded at open, unchanged at close):
 
-- **R-startSession-zod-still-accepts-diagnostic** — `src/app/(app)/actions.ts:startSessionInputSchema` still includes `"diagnostic"` in its `z.enum([...])`. After C3 there is no caller invoking the action with that type, so the enum entry is effectively dead. Bank for future cleanup; tightening the enum is mechanical, but removing it now would block any latent test or admin tool from creating a diagnostic session (and we may yet discover such a caller).
+- ~~**R-diagnostic-onboarding-removal-requested**~~ — **REMOVED**. Realized-by-execution: this round is the realization. Pin retired at the C0 landing; leadership ask transitioned from "banked future work" to "active in-progress round" and is now "shipped."
+
+Pins **retired** at this round's close:
+
+- ~~**R-oidc-fix-empirical-validation-gap**~~ — **REMOVED (validated)**. The 24-48h monitoring window is dispositive after this round's C5.6 5-minute baseline: 4 `hasContextToken=false` snapshots fired, the poll loop engaged (commit `820fad7`), and all 14 requests returned 200. This is the first organic evidence in production traffic that (a) the cold-start race against the OIDC source IS reproducible under normal load and (b) the C4-W poll-before-`getAuthToken` fix handles it correctly. No special bake required; the fix has now been observed in action.
+
+Pins **newly opened** at this round's close:
+
+- **R-stale-comments-after-route-removal** — Three documentary comments in the live tree reference the deleted `/diagnostic` route or the now-deleted source files: `src/server/dashboard/pace.ts:26` (already repointed during C2), `src/server/review/data.ts:3` ("its surface lives in /diagnostic"), and `src/components/focus-shell/focus-shell.tsx:175,:179,:200` (the three-layer audio-unlock-defense block, whose Layer 1 prose specifically motivates the mount-effect via `/diagnostic`'s SPA `<Link>` entry path). All compile-clean; the failures are purely documentary. Cosmetic. Bank for a future code-cleanup round (or fold into the same round that drops the schema's vestigial diagnostic column).
+
+- **R-phantom-vercel-deployment** — During C5.6's `vercel ls` snapshot, an adjacent deployment `https://18seconds-7z66w5vyl-ryo-iwatas-projects.vercel.app` appeared with age 5m, attributed to `leonardiwata-2680`, status Ready/Production — 1 minute "before" my C5.6 deployment `q6kk6g5ua`. I did not create it. Plausible explanations: (a) a previous failed `vercel --prod` attempt by Leo that completed Ready out-of-band, (b) Vercel CLI's two-phase upload-then-promote producing two records, (c) an automated job. It's **inert** (alias resolves to the C5.6 deployment, not this one). Low priority. Worth a 30-second `vercel inspect 18seconds-7z66w5vyl-ryo-iwatas-projects.vercel.app` by Leo at his convenience to identify origin.
 
 ### §0.12 Sub-round triggers (pre-authorized)
 
@@ -273,13 +285,16 @@ New pins opened at this round's commit-0:
 
 | Step | Type | Status | Hash | Detail |
 |---|---|---|---|---|
-| **C0** | git commit | **pending (this commit)** | TBD | Plan-doc open + commit-0 audit |
-| **C1** | code edit | pending | TBD | Remove diagnostic-completion gate from `src/app/(app)/layout.tsx` |
-| **C2** | code edit | pending | TBD | Relocate `/post-session/[sessionId]` from `(diagnostic-flow)/` to `(app)/`, update `<PostSessionShell>` import path |
-| **C3** | code edit | pending | TBD | Delete `src/app/(diagnostic-flow)/` (4 files + the group dir) |
-| **C4** | deploy (gate 1) | pending | n/a | `vercel --prod` — production deploy gated by §6.14.31 |
-| **C5** | functional verify | pending | n/a | Sign-in lands at dashboard; `/diagnostic` 404s; practice tests work; historical post-session URLs render at the new path |
-| **C6** | git commit | pending | TBD | Round close — populate §6 |
+| **C0** | git commit | **completed** | `ecf03bb` | Plan-doc open + commit-0 audit |
+| **C1** | code edit | **completed** | `c65a8d2` | Removed diagnostic-completion gate from `src/app/(app)/layout.tsx` (15 ins / 42 del) |
+| **C2** | code edit | **completed** | `682a752` | Relocated `/post-session/[sessionId]` from `(diagnostic-flow)/` to `(app)/`; updated 9 import sites + 1 comment (audit said 1; redirector audit-miscount banked as §3.10) |
+| **C3** | code edit | **completed** | `f0a97e4` | Deleted `src/app/(diagnostic-flow)/` (4 files, 290 deletions). `/diagnostic` and `/diagnostic/run` now 404. |
+| **C4** | deploy (gate 1) | **completed** | n/a | `vercel --prod` deployed C1+C2+C3 as `dpl_5jnhDDraqEqNov5AUuHVDk9YwbSk` at `2026-05-12T11:11:46-05:00`. Build duration ~3m. Cache restored from prior deployment. |
+| **C5** | functional verify | **completed (with findings)** | n/a | Core acceptance checks PASSED: sign-in → dashboard, `/diagnostic` 404, `/diagnostic/run` 404 (screenshot evidence), `/full-length/configure` + `/full-length/run` load. **Surfaced two bugs:** (i) transient RSC streaming failure on `/full-length/configure` (one occurrence, recovered on reload — pre-existing cacheComponents+Bun manifestation, not C1-C3-introduced), (ii) silent `submitPending` strand on `/full-length/run` after a few questions — pre-existing in `focus-shell.tsx`, never previously surfaced because it requires sustained submit volume to hit the failure race. |
+| **C5.5** | code edit (UNPLANNED, user-authorized) | **completed** | `9ece713` | `submit_failed` reducer action in `src/components/focus-shell/shell-reducer.ts` + 3 dispatch sites in `src/components/focus-shell/focus-shell.tsx` + 8 unit tests in `src/components/focus-shell/shell-reducer.test.ts`. Clears `submitPending` on server-action failure; preserves `questionStartedAtMs` (retry latency anchored to original paint) and `selectedOptionId` (user's choice persists). Retroactively framed as a mid-round defensive-fix sub-round. |
+| **C5.6** | deploy (gate 2) | **completed** | n/a | `vercel --prod` deployed C5.5 as `dpl_2oT9L3jixcX7ni5tQE4ac25kFpA6` at `2026-05-12T11:48:44-05:00`. Build duration ~2m21s. Build cache restored from `dpl_5jnhDDraqEqNov5AUuHVDk9YwbSk`. Bundle 26.9KB (3-file diff). |
+| **C5.7** | empirical validation | **completed** | n/a | Leo manually exercised the fix path on production: ran a full 50-question practice test end-to-end. Multiple `submitPending` hangs occurred (the underlying `cacheComponents`+Bun bug is unaddressed); recovery engaged on each (button re-enabled, click handler accepted retry); session reached the post-session review screen. Strongest possible empirical evidence: defensive fix engaged repeatedly in real conditions and produced the intended outcome. |
+| **C6** | git commit | **this commit** | (round-close) | Populate §6, mark all prior steps complete, update §0.11 forward-pin index, push origin/main. |
 
 ---
 
@@ -289,27 +304,115 @@ New pins opened at this round's commit-0:
 
 - §3.1 through §3.7 — see `auth-oidc-restore.md` §3 and `prod-runtime-credentials-audit.md` §3 for definitions. All carry forward unchanged.
 
-**NEW from this round:** none yet at C0. Round-close commit will populate any patterns surfaced during C1-C5 execution.
+**Recurrences this round** (incremented counts; canonical definitions in prior plan-docs):
+
+- §3.8 — audit-named consumer-reference counts unreliable; always re-grep at commit boundary. **Now 1/5** (incremented this round at C2; details in §6.9).
+- §3.9 — stale `.next/dev/types/validator.ts` breaks `tsgo --noEmit` after Next.js route moves. **Now 2/5** (incremented this round at C2 and C3; details in §6.9).
+
+**NEW from this round** (canonical definitions; recurrence counts in §6.9):
+
+- **§3.10 — User-direct executor prompts during an in-progress round can override the redirector-planned next step.** Treatment: attribute commit-shape deviations to user authorization, NOT to executor deviation. Surfaced this round via C5.5 (Leo's "Fix this issue" prompt during C5 verification inserted an unplanned defensive-fix sub-round between the planned C5 and C6). **Count: 1/5.**
+
+- **§3.11 — Defensive recovery shipped without a root-cause fix transforms a critical bug into a survivable inconvenience.** Distinguished from the banned "silently swallow errors with a fallback" anti-pattern by three properties: (a) the recovery surfaces to the user via a retry-able UI; (b) the original error still logs; (c) the underlying fix is still owed and tracked as a pin. Surfaced this round via C5.5's `submit_failed` reducer action (commit `9ece713`), which makes the `cacheComponents`+Bun server-action-flake survivable while the underlying interaction remains open as `R-cacheComponents-bun-settimeout-incompat`. **Count: 1/5.**
 
 ---
 
 ## §6 ROUND-CLOSE STATUS
 
-**Populated at C6.** Skeleton structure mirrors `auth-oidc-restore.md` §6:
+### §6.1 Outcome
 
-- §6.1 Outcome
-- §6.2 Commit ledger (actuals)
-- §6.3 §6.14.31 gates fired
-- §6.4 Sub-rounds
-- §6.5 Cost ledger
-- §6.6 §6.14.43 sub-type 6 count update (entering: 4/5, target exit: 4/5)
-- §6.7 Wall-clock
-- §6.8 Empirical validation summary (sign-in → dashboard; /diagnostic 404; practice tests intact)
-- §6.9 Candidate patterns surfaced
-- §6.10 Critical findings (if any)
-- §6.11 Forward-pin index updates (recap of §0.11 changes)
-- §6.12 Successor round trigger (if any)
+All scoped goals (§0.3 C1-C6) achieved. UX flow change shipped: forced diagnostic onboarding is gone; sign-in lands at dashboard; `/diagnostic` and `/diagnostic/run` return 404. Practice tests remain available as opt-in. Historical post-session URLs render at the new `(app)/post-session/[sessionId]/` path.
 
-The skeleton is intentionally empty at C0; values populate as the round executes.
+**Bonus:** an unplanned defensive fix (C5.5) shipped during the same round, validated end-to-end on production traffic (C5.7). The fix is independent of the round's UX-flow goal but came directly out of C5 verification surfacing the `submitPending` strand, which is itself a manifestation of the (unresolved) `cacheComponents`+Bun interaction the round had operationally hoped to sidestep by deleting `/diagnostic/run`.
+
+### §6.2 Commit ledger (actuals)
+
+| Step | Hash | Detail |
+|---|---|---|
+| C0 | `ecf03bb` | Plan-doc open + commit-0 audit |
+| C1 | `c65a8d2` | Removed diagnostic-completion gate from `(app)/layout.tsx` |
+| C2 | `682a752` | Relocated `/post-session/[sessionId]` from `(diagnostic-flow)/` to `(app)/`; 9 import sites updated (audit said 1 — see §3.10) |
+| C3 | `f0a97e4` | Deleted `src/app/(diagnostic-flow)/` (4 files, 290 deletions) |
+| C4 | deploy `dpl_5jnhDDraqEqNov5AUuHVDk9YwbSk` | `vercel --prod` at `2026-05-12T11:11:46-05:00` (~3m build, alias on `18seconds.vercel.app`) |
+| C5 | verification | Core checks PASSED; surfaced (i) transient RSC streaming failure on `/full-length/configure` and (ii) `submitPending` strand on `/full-length/run` after a few questions |
+| C5.5 (UNPLANNED, user-authorized) | `9ece713` | `submit_failed` reducer action + 3 dispatch sites in `focus-shell.tsx` + 8 unit tests in `shell-reducer.test.ts` |
+| C5.6 | deploy `dpl_2oT9L3jixcX7ni5tQE4ac25kFpA6` | `vercel --prod` at `2026-05-12T11:48:44-05:00` (~2m21s build, cache restored from C4) |
+| C5.7 | empirical validation | Leo completed a full 50-question practice test on production. Multiple hangs occurred; recovery engaged on each; session reached review screen. |
+| C6 | (this commit) | Round close |
+
+Round-open hash: `16ae176`. Round-close hash: this commit.
+
+### §6.3 §6.14.31 gates fired
+
+**2 gates** — both for production deploys:
+
+1. **C4** — `dpl_5jnhDDraqEqNov5AUuHVDk9YwbSk` (C1+C2+C3 to prod).
+2. **C5.6** — `dpl_2oT9L3jixcX7ni5tQE4ac25kFpA6` (C5.5 defensive fix to prod).
+
+Both gates: pre-deploy timestamp captured, deploy run, post-deploy timestamp captured, 30s settle, 5m log baseline pulled and reported. Both deploys: zero 5xx, zero new error patterns, expected pre-existing patterns only (Cache Components build-time warning at C5.6; OIDC source-snapshot mixed token state at C5.6 — see §6.10 finding 3).
+
+### §6.4 Sub-rounds fired
+
+**1 sub-round** — `C5.5` (the `submit_failed` defensive fix), retroactively framed as a user-authorized mid-round defensive-fix sub-round. Pre-authorized at C0 only as the generic `hotfix-deploy-sub-round` placeholder (§0.12); the concrete scope (`submitPending` recovery) was authorized by Leo directly during C5 verification when the bug surfaced. Standard `hotfix-deploy-sub-round` scope guardrails applied: identify bug, minimal fix, deploy under a second §6.14.31 gate, no scope creep.
+
+### §6.5 Cost ledger
+
+- **2 deploys** — C4 + C5.6. Each `vercel --prod` execution at this project's build scale costs ~$0.01 (build minutes + bandwidth on the small upload). **Total: ~$0.02.**
+- **No DB ops**, no third-party API calls in this round.
+- **No off-Vercel resources** consumed.
+
+### §6.6 §6.14.43 sub-type 6 count update
+
+- **Entering this round:** 4/5
+- **Deviations during this round (executor-attributable):** 0. C5.5 was user-authorized; the audit-miscount at C2 was redirector-attributable, not executor; the C2/C3 stale-validator footgun was harness-attributable (Next.js generated artifact, not a process step).
+- **Exiting this round:** **4/5** (no change).
+
+### §6.7 Wall-clock
+
+Round opened in this session at the `ecf03bb` commit; closed at this commit. Approximate wall-clock from C0 to C6 ≈ **~2.5 hours of session time**, with most of the elapsed time in: build durations for the two prod deploys (~5 min combined), Leo's C5 manual verification of the dashboard / diagnostic 404 / practice-test load, the C5 → C5.5 diagnostic work (logs analysis + code reading + patch + tests), and Leo's C5.7 full-test run.
+
+### §6.8 Empirical validation summary
+
+- **Sign-in lands at dashboard:** PASS (Leo confirmed manually after C4 deploy).
+- **`/diagnostic` returns 404:** PASS (10× confirmed in C4-window logs; route-resolver hit on the new build).
+- **`/diagnostic/run` returns 404:** PASS (screenshot evidence from Leo + 10× confirmed in C4-window logs).
+- **Practice test loads:** PASS (`/full-length/configure` + `/full-length/run` both 200, `getNextFixedCurve: served` server-pino lines emit as expected).
+- **Practice test submits — pre-fix:** intermittent hangs (cacheComponents+Bun bug surfaces after a few questions; user stranded with `submitPending=true`). All 5 of Leo's POSTs in the C5 session returned 200 server-side with `submitAttempt: attempt inserted` confirmations — the failure is purely client-side, hence invisible in Vercel logs (pino → `console.log` in browser).
+- **Practice test submits — post-C5.6:** intermittent hangs **persist** (root cause unaddressed) BUT recovery engages every time. Button re-enables, click handler accepts retry, retry succeeds (or hangs and recovers again). Leo's C5.7 full-test session: multiple hangs, every one recovered, session **reached the post-session review screen**.
+- **Practice test `endSession`:** PASS at C5.7 (took a bit, but completed; same `endSession` server action, same revalidatePath flow — no regression from C5.5).
+- **Retroactive validation of OIDC C4-W fix (commit `820fad7`, from the prior round):** the C5.6 5m baseline showed **4 `hasContextToken=false`** OIDC source snapshots fired in normal traffic, the poll loop engaged correctly, and **all 14 in-window requests returned 200**. First organic evidence in production that the cold-start race occurs in real traffic AND that the fix handles it. Closes `R-oidc-fix-empirical-validation-gap` (see §0.11 retirements).
+
+### §6.9 Candidate patterns surfaced
+
+- **§3.8** (banked from earlier rounds; recurrence this round): audit-named consumer-reference counts are unreliable; always re-grep at commit boundary. **Count: 1/5.** Triggered at C2 when the C0 audit named 1 consumer site for the `(diagnostic-flow)/post-session/[sessionId]/page` import path but the actual repo had 9 (8 type-import sites plus 1 documentary comment). C2 caught this with a pre-commit `grep` and updated all 9; had the executor trusted the audit count, 5 downstream files would have continued referencing a deleted module after commit.
+
+- **§3.9** (banked from earlier round): stale `.next/dev/types/validator.ts` breaks `tsgo --noEmit` after Next.js route moves; clear before quality gates. **Count: 2/5** (incremented from 1/5 — recurred at C3). At C2 the stale validator referenced the old `(diagnostic-flow)/post-session/[sessionId]/page.js` and tripped the pre-commit typecheck hook; at C3 the same artifact recurred against the deleted `/diagnostic` and `/diagnostic/run` routes. In both cases, `rm .next/dev/types/validator.ts` restored a clean typecheck. The artifact is gitignored and regenerates on next `next dev` run — the failure mode is purely on cold-pre-commit hooks. Worth folding into a lefthook pre-commit step that proactively clears `.next/dev/types/` whenever staged paths touch `src/app/**`.
+
+- **§3.10** (NEW this round, 1/5): user-direct executor prompts during an in-progress round can override the redirector-planned next step. C5.5 was scoped on the fly by Leo when he saw a screenshot of a stuck Submit button and wrote "Fix this issue. Make no assumptions and test everything." The redirector's plan called for `C5 → C6 round close`; the executor instead got `C5 → C5.5 unplanned fix → C5.6 unplanned deploy → C5.7 unplanned validation → C6`. Deviation-tracking treatment: attribute commit shape to user authorization, NOT to executor deviation. Pattern is worth naming so future rounds expect to absorb 1-2 user-injected mid-round commits without confusion about §6.14.43 attribution.
+
+- **§3.11** (NEW this round, 1/5): defensive recovery shipped without a root-cause fix renders a critical bug merely annoying. The `submit_failed` fix is the case study: it does not fix the underlying `cacheComponents`+Bun server-action-flake; it only ensures the user can retry rather than reload-with-progress-loss. The transformation is from "session-destroying" to "minor inconvenience that resolves itself within a click." This is often the correct first-strike when the root-cause investigation will take a separate round. Worth naming so it doesn't get confused with the (banned) anti-pattern of "silently swallowing errors with a fallback" — the key distinguisher is **the recovery surfaces to the user via the retry-able UI, the original error still logs, and the underlying fix is still owed**.
+
+### §6.10 CRITICAL FINDINGS
+
+1. **`cacheComponents`+Bun bug is route-incidental, not `/diagnostic`-specific.** The round-open §0.4 anti-scope explicitly noted that this round "operationally sidesteps the known reproduction surface" by deleting `/diagnostic/run`. **That hypothesis was wrong.** During C5 verification on the new deployment (with `/diagnostic` already 404), the same defect reproduced (a) on `/full-length/run` submit (stuck `submitPending`) and (b) transiently on `/full-length/configure` page-load RSC streaming (raw RSC payload rendered as text instead of hydrated UI). The reproduction surface is **any Bun-runtime / `cacheComponents` / Server-Action interaction**, not the specific route. Underlying root cause remains unaddressed; the next round (`cacheComponents-investigation`) attacks the underlying interaction, with a likely intervention being a Bun → Node.js runtime swap.
+
+2. **`submitPending` defensive fix (commit `9ece713`) empirically validated.** During Leo's C5.7 full 50-question practice test on production, multiple hangs occurred; the C5.5 `submit_failed` recovery engaged on each; session reached the post-session review screen. This is the strongest available empirical evidence: the fix transforms the bug from "user stranded mid-session with a disabled button and only a session-destroying reload as recovery" to "user clicks again, success" — survivable. The fix is independent of the underlying cause and continues to be load-bearing until the cause is addressed.
+
+3. **OIDC C4-W fix (commit `820fad7` from `auth-oidc-restore`) empirically validated by retroactive observation in this round's C5.6 5-minute log baseline.** 4 `hasContextToken=false` snapshots fired in 5 minutes of normal traffic — meaning the cold-start race against the OIDC source IS reproducible in real production load — and the poll loop engaged correctly, allowing all 14 in-window requests to return 200 with no user-visible impact. Closes `R-oidc-fix-empirical-validation-gap` from the prior round's pin list. This was a no-additional-work validation: the C5.6 baseline pull happened to land in a window where the cold-start race occurred organically.
+
+### §6.11 Forward-pin index updates (recap of §0.11 changes)
+
+See §0.11 for the full updated index. Summary of deltas this round:
+
+- **Removed (validated/realized):** `R-oidc-fix-empirical-validation-gap` (closed by §6.10 finding 3); `R-diagnostic-onboarding-removal-requested` (already removed at C0 — round IS the realization).
+- **Severity-downgraded:** `R-cacheComponents-bun-settimeout-incompat` from "blocking" to "degraded UX, survivable" (per §6.10 findings 1 + 2).
+- **Newly opened:** `R-stale-comments-after-route-removal` (cosmetic; 3 doc-comment sites), `R-phantom-vercel-deployment` (inert phantom `7z66w5vyl` adjacent to C5.6 deploy; low priority).
+- **Carried forward unchanged:** every other pin (R-purveyor-companion-resources-still-up, R-strategy-linkage-unused, R-local-prod-rejected_by-divergence, R-script-log-verbosity, R-script-no-concurrency, R-300s-request-hang-on-credential-failure, R-probe-removal-pending, R-poll-loop-50ms-minimum-overhead, R-vestigial-diagnostic-overtime-column, R-onboarding-targets-form-on-historical-views, R-startSession-zod-still-accepts-diagnostic).
+
+### §6.12 Successor round trigger
+
+**`cacheComponents-investigation`** — opens at the user's discretion to attack the underlying Bun-runtime / `cacheComponents` / Server-Action interaction (per §6.10 finding 1). Pre-authorized intervention space: Bun → Node.js runtime swap; experimentation on a preview deployment first to isolate which of `cacheComponents`, the Bun runtime, or Server Actions' RSC payload encoding is the load-bearing factor. Out-of-scope for that round: any UX-flow change; any other dead-code cleanup banked here.
+
+Secondary candidate: **`diagnostic-dead-code-cleanup`** — drops the schema's vestigial `diagnostic_overtime_note_shown_at_ms` column, removes `<OnboardingTargets>` + `saveOnboardingTargets`, tightens the `startSession` Zod enum, retires the diagnostic branches in mastery/selection/post-session-shell, and updates the three stale documentary comments (`R-stale-comments-after-route-removal`). Lower priority; not blocking.
 
 ---
