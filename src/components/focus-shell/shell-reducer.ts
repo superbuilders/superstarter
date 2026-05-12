@@ -65,6 +65,7 @@ type ShellAction =
 	| { kind: "select"; optionId: string }
 	| { kind: "submit"; nowMs: number }
 	| { kind: "submit_started" }
+	| { kind: "submit_failed" }
 	| { kind: "advance"; next: ItemForRender; nowMs: number }
 	| { kind: "set_question_started"; nowMs: number }
 	| { kind: "urgency_loop_started" }
@@ -181,6 +182,14 @@ function dispatchPrimary(state: ShellState, action: ShellAction): ShellState | u
 		return { ...state, submitPending: true }
 	}
 	if (action.kind === "submit_started") return reduceSubmitStarted(state)
+	if (action.kind === "submit_failed") {
+		// Clears submitPending without remounting the item: on error the
+		// next-item mount-effect never fires, so set_question_started
+		// can't be the clear path here. Preserves questionStartedAtMs
+		// so the retry's latencyMs measures from the original paint.
+		if (!state.submitPending) return state
+		return { ...state, submitPending: false }
+	}
 	if (action.kind === "advance") return reduceAdvance(state, action.next, action.nowMs)
 	if (action.kind === "set_question_started") {
 		return {

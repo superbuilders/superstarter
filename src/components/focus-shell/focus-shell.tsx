@@ -131,6 +131,7 @@ function FocusShell(props: FocusShellProps) {
 					{ error: submitResult.error, sessionId, itemId: input.itemId },
 					"focus-shell: onSubmitAttempt threw"
 				)
+				dispatch({ kind: "submit_failed" })
 				return
 			}
 			const result = submitResult.data
@@ -138,6 +139,7 @@ function FocusShell(props: FocusShellProps) {
 				const endResult = await errors.try(onEndSession())
 				if (endResult.error) {
 					logger.error({ error: endResult.error, sessionId }, "focus-shell: onEndSession threw")
+					dispatch({ kind: "submit_failed" })
 				}
 				return
 			}
@@ -160,6 +162,7 @@ function FocusShell(props: FocusShellProps) {
 				const result = await errors.try(performSubmit())
 				if (result.error) {
 					logger.error({ error: result.error, sessionId }, "focus-shell: performSubmit threw")
+					dispatch({ kind: "submit_failed" })
 				}
 			}
 			void run()
