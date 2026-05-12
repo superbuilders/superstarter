@@ -40,7 +40,7 @@ If preview behaves identically to prod (defect persists on Node.js) → **H1 ref
 ### §0.4 Anti-scope (explicit)
 
 - **NOT** deploying to production this round until the preview experiment confirms the fix. Production deploys go through a §6.14.31 gate after preview validation.
-- **NOT** disabling `cacheComponents: true` in `next.config.ts` as a first-line intervention. That is H3's falsification test, gated on H1 being refuted first. Disabling cacheComponents loses Next.js 16's intended rendering optimizations — it's a fallback intervention, not a default.
+- **REFRAMED at C0.5 (2026-05-12).** The original C0 anti-scope said *"NOT disabling `cacheComponents: true` as a first-line intervention; that is H3's falsification test."* C0.5's H2 search (see §0.5 Finding 7) refuted the wait-for-upstream option: both Bun and Vercel/Next.js have stalled at the issue. Combined with §0.5 Finding 3 (our app uses zero `'use cache'` / `cacheLife` / `cacheTag` directives), **disabling `cacheComponents` is now a first-line intervention**, not a fallback. The change is one line in `next.config.ts` and directly removes the broken `runInSequentialTasks` code path without touching the runtime. Side effect: loses the future ability to add `'use cache'` features until upstream resolves; `await connection()` in `src/server/admin/queue-data.ts:284` becomes a no-op (default render is dynamic, which is what `connection()` was already forcing). The original "fallback intervention, not a default" framing is **superseded**. See §5 for the restructured C1 plan.
 - **NOT** patching Next.js source in `node_modules/`. The defect is in Next.js's interaction with Bun, not in Next.js itself.
 - **NOT** filing a Bun bug report or a Next.js GitHub issue this round. We may do that as a follow-up after the root cause is empirically validated — premature reporting risks miscaracterization. The Next.js source file (`app-render-scheduling.js` line 99) already invites a GitHub issue, but we don't have a minimal repro to attach yet.
 - **NOT** changing the local `dev` script (`bun next dev`). Local dev is unaffected by the production runtime swap; the dev script is a different invocation path.
@@ -159,6 +159,27 @@ Other Bun-tied surfaces:
 
 **Implication:** removing `bunVersion` from `vercel.json` and removing `--bun` flags from `build` and `start` in `package.json` is the complete runtime-swap intervention. Total change: ~4 lines.
 
+#### Finding 7 — Upstream-fix status (H2 search, 2026-05-12)
+
+C0's §5 pre-step authorized a 10-minute upstream-issue search before committing to C1. The redirector executed that search at C0.5. Result:
+
+| Reference | Project | Date | Status (as of 2026-05-12) |
+|---|---|---|---|
+| `vercel/next.js#87630` | Next.js issue (original) | 2025-12-22 | Open |
+| `oven-sh/bun#25639` | Bun issue (original) | 2025-12-22 | Closed by PR #26021 |
+| `oven-sh/bun#26021` | Bun PR — added `_idleStart` getter/setter | merged 2026-01-13 | Merged (shipped in Bun ≥1.3.6) |
+| `oven-sh/bun#26508` | Bun issue (deeper — fix was incomplete) | 2026-01-27 | Open |
+| `oven-sh/bun#27060` | Bun PR — cache scheduling time | 2026-02-16 | Open, 11+ CI failures, rejected by Bun maintainer `190n` |
+| `vercel/next.js#88514` | Next.js PR — postMessage-based scheduling (alternative) | early 2026 | Draft |
+
+Key citation from `oven-sh/bun#27060` (Bun maintainer `190n` comment, Feb 16, 2026):
+
+> "This doesn't fix the linked issue. The issue is not to do with the orders timers run in on their own. The issue is that Next.js expects to be able to control when timers run by modifying `_idleStart`, which Bun does not do."
+
+Net status: neither Bun nor Vercel/Next.js has shipped a fix; both upstream paths are stalled. PR #26021 (merged in Bun 1.3.6+) added the `_idleStart` property surface but Bun **ignores mutations to it** — meaning newer Bun versions may stop emitting the warning while the symptom persists silently (a worse failure mode than the current one, because we lose the warning as a diagnostic signal). Our local Bun is `1.3.10` which contains #26021 but not the deeper fix (which hasn't merged anywhere). The Bun maintainer's stated position is that Bun does NOT intend to honor `_idleStart` mutations, so the Bun-side fix path is operationally dead.
+
+**Implication:** there is no targeted upstream fix to wait for. The intervention must be on our side. **Empirically refutes H2 (§4).** The two viable interventions are now Option A (runtime swap, original C0 default) and Option B (disable `cacheComponents`). §5 is restructured at C0.5 to present Option B as the new default first-line intervention.
+
 ### §0.6 Doc-vs-empirical reconciliation
 
 The prior round's `onboarding-flow-removal.md` §0.11 pin (`R-cacheComponents-bun-settimeout-incompat`) described the defect as a Bun + Next.js 16 cacheComponents + Server Actions **three-way interaction**. The C0 audit refines this:
@@ -168,6 +189,8 @@ The prior round's `onboarding-flow-removal.md` §0.11 pin (`R-cacheComponents-bu
 - **Confirmed:** the `onboarding-flow-removal` round's late-stage finding ("the bug is route-incidental, not route-specific") is exactly correct. Every route is affected; the bug only *becomes user-visible* when a render or response stream happens to lose its atomic-timer-group guarantee, which is a probabilistic event tied to event-loop scheduling jitter under Bun.
 
 The prior round's hypothesis register (long-term resolution paths: (a) swap to Node.js, (b) disable cacheComponents, (c) wait for Bun upgrade) **stands unchanged** in its options enumeration. This round adds confidence ranking and chooses (a) as the highest-confidence falsification test.
+
+**2026-05-12 H2 pre-step refinement.** The C0 plan-doc proposed a 10-minute upstream-issue search as a §5 pre-step. The redirector executed that search. Result: both Bun and Vercel/Next.js have open issues tracking the defect; the Bun-side fix attempt (PR #26021, merged Jan 13) was incomplete; the deeper-fix PR (#27060) was rejected by a Bun maintainer who said Bun does not intend to honor `_idleStart` mutations; Vercel's runtime-agnostic alternative (PR #88514) is still Draft. H2 is empirically refuted. The original §5 framing of Option A (runtime swap) as the highest-confidence falsification test still holds for H1, but the H2-search outcome also unlocks Option B (disable cacheComponents) as a smaller, runtime-preserving first-line intervention. §0.4 anti-scope updated accordingly; §5 restructured to put Option B first.
 
 ### §0.7 Destructive-operation surface
 
@@ -186,7 +209,7 @@ C1+ (provisional, pending authorization):
 
 - **W-svelte-and-other-frameworks** — The Next.js source comment "doesn't exist e.g. in Bun" suggests this is a known Bun limitation that affects *any* Next.js 16 app on Bun, not something specific to our codebase. Worth a quick GitHub-issues search at C1 boundary to see if this is already a tracked issue (which would shorten the fix timeline). Out of C0 scope.
 
-- **W-bun-1.4+-fix** — Bun may have already patched this. Current production version is `bun --version` → `1.3.10` (local install). Bun's release notes for 1.4+ may include timer compatibility fixes. If a Bun upgrade alone resolves the issue (without runtime swap), that's option (c) from the prior round's enumeration. Worth a 5-minute check at C1 boundary before committing to the swap.
+- ~~**W-bun-1.4+-fix**~~ — **RETIRED 2026-05-12 by H2 search (§0.5 Finding 7).** Empirically falsified: Bun PR #26021 (merged Jan 13, shipped in 1.3.6+) added the `_idleStart` getter/setter surface but Bun ignores mutations to it. The deeper-fix PR #27060 was rejected by Bun maintainer `190n` on Feb 16 with the explicit statement that Bun does not intend to honor `_idleStart` mutations. No Bun release in any timeline addresses this. The `bun-upgrade-experiment-sub-round` trigger in §0.12 is correspondingly stale (Bun-upgrade-alone will not resolve the issue) but stays in the doc as a closed-plan-immutable record of what we tried.
 
 ### §0.11 Forward-pin index (updated at round-close)
 
@@ -224,7 +247,8 @@ Pins **newly opened** at this round's commit-0:
 
 ## §1 Commit Ledger
 
-- **C0 — Plan-doc + commit-0 audit.** This commit. No code changes. Plan-doc lands at `docs/plans/cacheComponents-investigation.md`. Round-open hash `bcb77c3`; this commit is C0.
+- **C0 — Plan-doc + commit-0 audit.** Commit `d3196b4`. No code changes. Plan-doc lands at `docs/plans/cacheComponents-investigation.md`. Round-open hash `bcb77c3`; this commit is C0.
+- **C0.5 — Plan-doc amendment: integrate H2 search findings; reframe Option B as first-line intervention.** This commit. No code changes. Documents upstream stall (Bun and Vercel both have open issues, no shipping fix), refutes H2 (§0.5 Finding 7 added; §4 H2 confidence → REFUTED), restructures §5 to present Option B (disable `cacheComponents`) as the new default first-line intervention and Option A (runtime swap) as the alternative. §0.4 anti-scope updated; §0.6 reconciled; §0.10 retires `W-bun-1.4+-fix`; §4 H1 gets an Option-B falsification angle note; §4 H3 deprioritized.
 - **C1+ — TBD pending user authorization on the recommended experiment in §5.**
 
 ---
@@ -256,47 +280,79 @@ Three hypotheses, ranked by C0-audit confidence. Each has a concrete falsificati
 - If the warning disappears AND submit-hangs disappear AND RSC-as-text disappears → **H1 confirmed**. Proceed to production swap.
 - If any of the symptoms persist on Node.js → **H1 refuted**. Redirect to H2/H3.
 
+**Note added at C0.5 (2026-05-12):** Option B (disable `cacheComponents` on Bun) is an *alternative* falsification angle for H1 — both interventions test the same two-way root cause (Bun + cacheComponents). Removing either side of the interaction predicts symptom-disappearance under H1. Option B is the new §5 default because it's a smaller, runtime-preserving change; Option A remains the fallback if Option B's preview test fails. Both falsifications point at the same root-cause statement; only the experimental knob differs.
+
 ### H2 — cacheComponents has a documented Bun-incompatibility tracked upstream that we haven't seen yet, with a different fix path than the runtime swap.
 
-**Confidence: LOW-MEDIUM.**
+**Confidence: REFUTED (2026-05-12 by C0.5 H2 search).** Originally LOW-MEDIUM at C0.
 
 - The Next.js source's invitation to "report a github issue here" implies the issue is *not yet* widely tracked, but a search of vercel/next.js issues is warranted before the runtime swap (cheap, 10 minutes).
 - A Bun upgrade in the 1.4+ line may already include the fix (W-bun-1.4+-fix). Current production Bun is `1.x` (per `vercel.json`'s `bunVersion: "1.x"` — Vercel resolves this to the latest stable, which may already be 1.4+).
+
+**Refutation evidence (2026-05-12).** Full table + maintainer quote in §0.5 Finding 7. Summary: the issue *is* tracked upstream — `vercel/next.js#87630` (Open since 2025-12-22) and `oven-sh/bun#25639` (Closed by `oven-sh/bun#26021` which shipped in Bun 1.3.6+ as an `_idleStart` getter/setter surface only). The follow-up Bun issue `oven-sh/bun#26508` (Open) and PR `oven-sh/bun#27060` (Open, 11+ CI failures) attempted the deeper fix. Bun maintainer `190n` rejected `#27060` on 2026-02-16 with: *"This doesn't fix the linked issue. The issue is not to do with the orders timers run in on their own. The issue is that Next.js expects to be able to control when timers run by modifying `_idleStart`, which Bun does not do."* Vercel's alternative is `vercel/next.js#88514` (postMessage-based scheduling) — still Draft, no merge date. **There is no targeted upstream fix to adopt.** The falsification-test text below is preserved as a historical record of the C0 plan.
 
 **Falsification test (pre-swap):** before C1's preview deploy, do a 10-minute search of:
 1. `github.com/vercel/next.js/issues` for `"cannot guarantee" cacheComponents`.
 2. `github.com/oven-sh/bun/issues` for `_idleStart Next.js`.
 3. Bun's latest release notes for setTimeout / timer compatibility fixes.
 
-If a known issue with a targeted fix exists → adopt the targeted fix instead of the runtime swap. If nothing is found → H2 is operationally refuted, proceed with H1's falsification test.
+If a known issue with a targeted fix exists → adopt the targeted fix instead of the runtime swap. If nothing is found → H2 is operationally refuted, proceed with H1's falsification test. **Executed at C0.5; outcome: refuted, see above.**
 
 ### H3 — The defect is not cacheComponents-specific but a broader Bun + Next.js 16 server-action or RSC-streaming incompatibility.
 
-**Confidence: LOW.**
+**Confidence: LOW (deprioritized at C0.5).**
 
 - The Next.js source unambiguously names cacheComponents as the affected feature and `runInSequentialTasks` as the affected primitive. The 16 call sites of `runInSequentialTasks` are all within `app-render.js` (the RSC render path), not in the server-action router or the action-result encoding path.
 - However, the staged-rendering machinery *does* emit server-action result streams via the same RSC infrastructure. So while cacheComponents is the proximate cause, the symptom surfaces in server-action paths because those paths consume the broken primitive.
 - If H1's runtime swap fixes the symptom, H3 collapses into H1 (the fix is the same). If H1's runtime swap does NOT fix the symptom, H3 becomes relevant.
 
-**Falsification test (only if H1 is refuted):** on the Node.js preview, disable `cacheComponents: true` in `next.config.ts`. Redeploy. Reproduce.
+**Reframing note (2026-05-12 at C0.5).** With Option B (disable `cacheComponents` on Bun) now the §5 default, the new C1 experiment *is* — operationally — "disable cacheComponents while keeping Bun." Under H1, that should resolve the symptom. Under H3, it should ALSO resolve the symptom (cacheComponents was the proximate carrier of the broader incompatibility). So Option B's success does NOT cleanly discriminate H1 from H3 — both predict symptom-disappearance. The pure H3 discriminator remains "disable cacheComponents on Node.js" (which would say: "the issue persists with cacheComponents off AND Bun off"), but executing that requires Option A first and is no longer the first-line experiment. H3 is not falsified; it is deprioritized in favor of practical symptom resolution via Option B.
+
+**Falsification test (only if Option B is refuted, OR if we later want to cleanly discriminate H1 from H3):** on the Node.js preview, disable `cacheComponents: true` in `next.config.ts`. Redeploy. Reproduce.
 - If the symptom persists with cacheComponents disabled on Node.js → H3 confirmed, the issue is broader than cacheComponents. Escalate scope.
-- If the symptom disappears with cacheComponents disabled → the cacheComponents-specific story holds (whether on Bun or Node.js). This would suggest H1's swap doesn't fix the underlying mechanism on Bun and we need to disable cacheComponents as a workaround.
+- If the symptom disappears with cacheComponents disabled → the cacheComponents-specific story holds (whether on Bun or Node.js).
 
 ---
 
 ## §5 Recommended next actions (C1+, pending user authorization)
 
-### Default recommendation: Vercel preview deploy with Node.js runtime
+> **Restructured at C0.5 (2026-05-12).** The original C0 default (Option A — Node.js runtime swap) is now the *alternative* path. The new default is Option B (disable `cacheComponents`, keep Bun) for the reasons in the rationale below. The C0 text for Option A is preserved verbatim as the alternative-path section.
+
+### Default recommendation: Vercel preview deploy with `cacheComponents` disabled (keep Bun)
 
 **Rationale:**
+- **Smaller change than the runtime swap.** One line in `next.config.ts` (`cacheComponents: true` → removed or set to `false`) vs. ~4 lines across `vercel.json` + `package.json` for the runtime swap.
+- **Zero functional impact.** Our app uses zero `'use cache'` / `cacheLife` / `cacheTag` directives (§0.5 Finding 3). Disabling cacheComponents loses a feature we are not using.
+- **Directly removes the broken code path.** `runInSequentialTasks` only runs under cacheComponents staged rendering; disabling cacheComponents short-circuits the `_idleStart` patching attempt entirely, regardless of runtime.
+- **Preserves Bun runtime.** All other Bun-tied surfaces (build speed, package install, script execution) are unchanged.
+- **Trivially reversible.** Single-line revert restores cacheComponents whenever upstream resolves (`oven-sh/bun#26508` or `vercel/next.js#88514`).
+- **Side effect:** `await connection()` in `src/server/admin/queue-data.ts:284` becomes a no-op (default render is dynamic without cacheComponents, which is the same behavior `connection()` was already forcing). Harmless.
+
+**C1 commit shape (provisional):**
+1. C1a — Edit `next.config.ts`: remove the `cacheComponents: true` line (or set to `false`).
+2. C1b — Commit. Do NOT push to main.
+3. C1c — `vercel deploy` (no `--prod` flag) → preview deployment.
+4. C1d — Manual reproduction test on the preview URL: multi-question full-length practice session. Watch for the warning in deployment logs (it should be absent). Watch for submit-hangs / RSC-as-text (they should be absent).
+
+**Decision boundary at C1d:**
+- All three indicators clean → H1 confirmed (via Option B's symptom-disappearance angle). Open C2 (production deploy under §6.14.31 gate).
+- Any indicator persists → H1 refuted in an unexpected way (or H3 active). Pause and assess. Most likely next step: try Option A (runtime swap) on a separate preview to cleanly discriminate.
+
+**Anti-scope reminder:** C1 does NOT touch production. C1 does NOT remove the defensive fix in `<FocusShell>`. C1 is the experiment, not the resolution.
+
+### Alternative path: Vercel preview deploy with Node.js runtime (preserved verbatim from C0)
+
+**Use this path if** Option B's preview deploy does NOT resolve the symptoms (which would refute H1's Option-B angle), **or if** we later want to restore the ability to use `cacheComponents` features and the upstream postMessage-based scheduling (`vercel/next.js#88514`) lands.
+
+**Rationale (original C0):**
 - H1 is the highest-confidence hypothesis. Its falsification test (runtime swap on preview) is the highest-information experiment available.
 - Preview deploys are isolated. Production alias is not touched. Risk to live users is zero.
 - The change surface is tiny (~4 lines: `vercel.json` `bunVersion` removal + `package.json` build/start `--bun` flag removal). Trivially reversible.
 - If H1 is confirmed, we have a clear path to production swap under a §6.14.31 gate.
 - If H1 is refuted, we have crisp falsification data and redirect to H2/H3 with zero production exposure.
 
-**C1 commit shape (provisional):**
-1. Pre-step (zero-commit): 10-minute H2 search of GitHub issues + Bun release notes. If a targeted fix surfaces, adopt it instead.
+**C1 commit shape (original C0, preserved):**
+1. Pre-step (zero-commit): 10-minute H2 search of GitHub issues + Bun release notes. If a targeted fix surfaces, adopt it instead. **Executed at C0.5; refuted (§0.5 Finding 7).**
 2. C1a — Edit `vercel.json`: remove `"bunVersion": "1.x"` line.
 3. C1b — Edit `package.json`: change `"build": "bun --bun next build"` → `"build": "next build"` and `"start": "bun --bun next start"` → `"start": "next start"`.
 4. C1c — Commit. Do NOT push to main.
@@ -306,12 +362,6 @@ If a known issue with a targeted fix exists → adopt the targeted fix instead o
 **Decision boundary at C1e:**
 - All three indicators clean → H1 confirmed. Open C2 (production swap under §6.14.31 gate).
 - Any indicator dirty → H1 refuted. Pause to assess. Open H2/H3 follow-up under a sub-round.
-
-**Anti-scope reminder:** C1 does NOT touch production. C1 does NOT remove the defensive fix in `<FocusShell>`. C1 is the experiment, not the resolution.
-
-### Alternative path if H2's pre-swap search finds a Bun-upgrade fix
-
-Trigger the `bun-upgrade-experiment-sub-round`. Try the upgrade on preview first; if it cleanly resolves the warning AND symptoms, that's the lower-friction intervention. This is the preferred path *if and only if* there's prior evidence the upgrade addresses the specific `_idleStart` issue.
 
 ### Alternative path if H1 is refuted
 
