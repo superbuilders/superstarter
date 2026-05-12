@@ -1,5 +1,4 @@
 {
-	"bunVersion": "1.x",
 	"regions": ["iad1"],
 	"crons": [{ "path": "/api/cron/abandon-sweep", "schedule": "0 4 * * *" }]
 }
