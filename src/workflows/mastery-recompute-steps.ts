@@ -52,6 +52,8 @@ function asSubTypeId(s: string): SubTypeId {
 
 async function loadSessionMetadataStep(sessionId: string): Promise<SessionMetadata> {
 	"use step"
+	const tStepStart = Date.now()
+	logger.info({ stepName: "loadSessionMetadata", sessionId }, "step:start")
 	const result = await errors.try(
 		db
 			.select({ userId: practiceSessions.userId, type: practiceSessions.type })
@@ -73,11 +75,21 @@ async function loadSessionMetadataStep(sessionId: string): Promise<SessionMetada
 	}
 	let source: MasterySource = "ongoing"
 	if (row.type === "diagnostic") source = "diagnostic"
+	logger.info(
+		{
+			stepName: "loadSessionMetadata",
+			sessionId,
+			durationMs: Date.now() - tStepStart
+		},
+		"step:complete"
+	)
 	return { userId: row.userId, source }
 }
 
 async function listDistinctSubTypesStep(sessionId: string): Promise<SubTypeId[]> {
 	"use step"
+	const tStepStart = Date.now()
+	logger.info({ stepName: "listDistinctSubTypes", sessionId }, "step:start")
 	const result = await errors.try(
 		db
 			.selectDistinct({ subTypeId: items.subTypeId })
@@ -96,6 +108,15 @@ async function listDistinctSubTypesStep(sessionId: string): Promise<SubTypeId[]>
 	for (const row of result.data) {
 		out.push(asSubTypeId(row.subTypeId))
 	}
+	logger.info(
+		{
+			stepName: "listDistinctSubTypes",
+			sessionId,
+			subTypeCount: out.length,
+			durationMs: Date.now() - tStepStart
+		},
+		"step:complete"
+	)
 	return out
 }
 
@@ -105,6 +126,19 @@ async function logRecomputeLoopStartingStep(input: {
 	source: MasterySource
 }): Promise<void> {
 	"use step"
+	const tStepStart = Date.now()
+	logger.info(
+		{
+			stepName: "logRecomputeLoopStarting",
+			sessionId: input.sessionId,
+			subTypeCount: input.subTypeCount
+		},
+		"step:start"
+	)
+	logger.info(
+		{ sessionId: input.sessionId, subTypeCount: input.subTypeCount },
+		"recompute:loop:starting"
+	)
 	logger.info(
 		{
 			sessionId: input.sessionId,
@@ -112,6 +146,14 @@ async function logRecomputeLoopStartingStep(input: {
 			source: input.source
 		},
 		"masteryRecomputeWorkflow: starting per-sub-type recompute loop"
+	)
+	logger.info(
+		{
+			stepName: "logRecomputeLoopStarting",
+			sessionId: input.sessionId,
+			durationMs: Date.now() - tStepStart
+		},
+		"step:complete"
 	)
 }
 
@@ -121,6 +163,8 @@ async function recomputeStep(
 	source: MasterySource
 ): Promise<void> {
 	"use step"
+	const tStepStart = Date.now()
+	logger.info({ stepName: "recompute", userId, subTypeId }, "step:start")
 	const result = await errors.try(recomputeForUser(userId, subTypeId, source))
 	if (result.error) {
 		logger.error(
@@ -129,6 +173,15 @@ async function recomputeStep(
 		)
 		throw errors.wrap(result.error, "recomputeForUser")
 	}
+	logger.info(
+		{
+			stepName: "recompute",
+			userId,
+			subTypeId,
+			durationMs: Date.now() - tStepStart
+		},
+		"step:complete"
+	)
 }
 
 export type { SessionMetadata }

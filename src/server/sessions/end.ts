@@ -37,8 +37,15 @@ interface EndSessionOptions {
 }
 
 async function endSession(sessionId: string, options?: EndSessionOptions): Promise<void> {
+	const tFnStart = Date.now()
+	const awaitCompletionFlag = options?.awaitCompletion === true
+	logger.info(
+		{ sessionId, awaitCompletion: awaitCompletionFlag },
+		"endSession:fn:start"
+	)
 	const skipWorkflow = options?.skipWorkflowTrigger === true
 
+	const tUpdateStart = Date.now()
 	const updateResult = await errors.try(
 		db
 			.update(practiceSessions)
@@ -50,6 +57,10 @@ async function endSession(sessionId: string, options?: EndSessionOptions): Promi
 				and(eq(practiceSessions.id, sessionId), isNull(practiceSessions.endedAtMs))
 			)
 			.returning({ id: practiceSessions.id })
+	)
+	logger.info(
+		{ sessionId, updateMs: Date.now() - tUpdateStart },
+		"endSession:fn:update"
 	)
 	if (updateResult.error) {
 		logger.error(
@@ -65,6 +76,10 @@ async function endSession(sessionId: string, options?: EndSessionOptions): Promi
 		// — log a warning and return; the caller's flow is allowed to continue
 		// regardless. This makes the call idempotent.
 		logger.warn({ sessionId }, "endSession: session row not finalized (already ended or missing)")
+		logger.info(
+			{ sessionId, totalMs: Date.now() - tFnStart, earlyReturn: "already-ended" },
+			"endSession:fn:complete"
+		)
 		return
 	}
 
@@ -75,11 +90,20 @@ async function endSession(sessionId: string, options?: EndSessionOptions): Promi
 			{ sessionId },
 			"endSession: skipWorkflowTrigger=true, skipping masteryRecomputeWorkflow"
 		)
+		logger.info(
+			{ sessionId, totalMs: Date.now() - tFnStart, earlyReturn: "skip-workflow" },
+			"endSession:fn:complete"
+		)
 		return
 	}
 
+	const tWorkflowStartStart = Date.now()
 	const startResult = await errors.try(
 		start(masteryRecomputeWorkflow, [{ sessionId }])
+	)
+	logger.info(
+		{ sessionId, workflowStartMs: Date.now() - tWorkflowStartStart },
+		"endSession:fn:workflowStart"
 	)
 	if (startResult.error) {
 		logger.error(
@@ -91,7 +115,12 @@ async function endSession(sessionId: string, options?: EndSessionOptions): Promi
 	const run = startResult.data
 
 	if (options?.awaitCompletion === true) {
+		const tAwaitStart = Date.now()
 		const completionResult = await errors.try(run.returnValue)
+		logger.info(
+			{ sessionId, runId: run.runId, awaitMs: Date.now() - tAwaitStart },
+			"endSession:fn:awaitComplete"
+		)
 		if (completionResult.error) {
 			logger.error(
 				{ error: completionResult.error, sessionId, runId: run.runId },
@@ -104,6 +133,10 @@ async function endSession(sessionId: string, options?: EndSessionOptions): Promi
 			"endSession: masteryRecomputeWorkflow body completed (awaited)"
 		)
 	}
+	logger.info(
+		{ sessionId, totalMs: Date.now() - tFnStart },
+		"endSession:fn:complete"
+	)
 }
 
 export type { EndSessionOptions }

@@ -117,20 +117,50 @@ async function submitAttempt(input: SubmitAttemptInput): Promise<SubmitAttemptRe
 }
 
 async function endSession(sessionId: string): Promise<void> {
+	const tActionStart = Date.now()
+	logger.info({ sessionId }, "endSession:action:start")
 	const userId = await requireUserId()
+	const tAssertStart = Date.now()
 	await assertSessionOwnedBy(sessionId, userId)
+	logger.info(
+		{ sessionId, assertOwnedMs: Date.now() - tAssertStart },
+		"endSession:action:assertOwned"
+	)
 	// awaitCompletion=true → wait for masteryRecomputeWorkflow's body to
 	// finish (recomputeStep writes the new mastery_state rows) BEFORE we
 	// invalidate the dashboard route below. Otherwise revalidatePath('/')
 	// fires while the workflow is still in flight and the next dashboard
 	// render serves stale belts. Round 1 §5.7 + §0.4.
+	const tSessionEndStart = Date.now()
 	await sessionEnd.endSession(sessionId, { awaitCompletion: true })
+	logger.info(
+		{ sessionId, sessionEndMs: Date.now() - tSessionEndStart },
+		"endSession:action:sessionEnd"
+	)
+	const tRevalidatePostStart = Date.now()
 	revalidatePath(`/post-session/${sessionId}`)
+	logger.info(
+		{
+			sessionId,
+			path: `/post-session/${sessionId}`,
+			revalidateMs: Date.now() - tRevalidatePostStart
+		},
+		"endSession:action:revalidate"
+	)
 	// Round 1 §5.7 + §0.4 — invalidate the dashboard so the user sees
 	// post-drill belts/mastery on next visit. Path-based per audit (c):
 	// the dashboard read path doesn't use cacheTag, so revalidateTag is
 	// not the right tool here.
+	const tRevalidateRootStart = Date.now()
 	revalidatePath("/")
+	logger.info(
+		{ sessionId, path: "/", revalidateMs: Date.now() - tRevalidateRootStart },
+		"endSession:action:revalidate"
+	)
+	logger.info(
+		{ sessionId, totalMs: Date.now() - tActionStart },
+		"endSession:action:complete"
+	)
 }
 
 // `recordDiagnosticOvertimeNote` was the polish-round in-flow overlay

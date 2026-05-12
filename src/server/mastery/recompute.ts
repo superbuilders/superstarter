@@ -97,8 +97,20 @@ async function recomputeForUser(
 	subTypeId: SubTypeId,
 	source: MasterySource
 ): Promise<MasteryLevel> {
+	const tRecomputeStart = Date.now()
+	logger.info({ userId, subTypeId }, "recompute:user:start")
+	const tReadAttemptsStart = Date.now()
 	const window = await readLastNAttempts(userId, subTypeId)
+	logger.info(
+		{ userId, subTypeId, readAttemptsMs: Date.now() - tReadAttemptsStart },
+		"recompute:user:readAttempts"
+	)
+	const tReadStateStart = Date.now()
 	const previous = await readPreviousState(userId, subTypeId)
+	logger.info(
+		{ userId, subTypeId, readStateMs: Date.now() - tReadStateStart },
+		"recompute:user:readState"
+	)
 	const newState = computeMastery({
 		last10Correct: window.correct,
 		last10LatencyMs: window.latencyMs,
@@ -112,6 +124,7 @@ async function recomputeForUser(
 	if (newState === "decayed") wasMasteredFlag = true
 	const nowMs = Date.now()
 
+	const tUpsertStart = Date.now()
 	const upsertResult = await errors.try(
 		db
 			.insert(masteryState)
@@ -132,6 +145,10 @@ async function recomputeForUser(
 				}
 			})
 			.returning({ currentState: masteryState.currentState })
+	)
+	logger.info(
+		{ userId, subTypeId, upsertMs: Date.now() - tUpsertStart },
+		"recompute:user:upsert"
 	)
 	if (upsertResult.error) {
 		logger.error(
@@ -158,6 +175,10 @@ async function recomputeForUser(
 		"recompute: mastery state upserted"
 	)
 
+	logger.info(
+		{ userId, subTypeId, totalMs: Date.now() - tRecomputeStart },
+		"recompute:user:complete"
+	)
 	return upserted.currentState
 }
 
