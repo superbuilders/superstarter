@@ -2,7 +2,8 @@
 
 Round: Testbank Ingest Prod.
 Round-open hash: `74e6549` (HEAD at this commit-0; verified clean working tree, `origin/main...HEAD = 0 0`).
-Target close hash: TBD.
+Round-close hash: this commit (C7).
+**Round status: CLOSED-PARTIAL.** Data-side goal achieved (prod items=2150, embeddings=100%). Functional verification of `/diagnostic/run` deferred to a follow-up round (`auth-oidc-restore`) because Vercel OIDC Federation was disabled at the project level mid-round, breaking runtime IAM-auth for any DB-touching route — see §1.6 and §0.11 R-vercel-oidc-disablement-cause-unknown.
 
 > Narrow operational round (9 ledger commits per the schema-divergence
 > sub-round expansion — C1, C2, C2.5b, C3, C4, C5, C5.5b, C6, C7; plus
@@ -201,7 +202,14 @@ If a future round upgrades to pgvector 0.9.x or 1.0.x, that would change the on-
 
 ### §0.11 Forward-pin index
 
-Empty at round-open. Populated at round-close.
+Populated at round-close (C7). Six R-* entries:
+
+- **R-purveyor-companion-resources-still-up** — inherited from deployment-runbook handoff §E.2. Platform-team's Terraform-managed `purveyor` stack: ECR repos + ECS cluster + ECS service + ALB + target group still up in account 496780244141 even though the RDS instance was deleted 2026-05-11. Out-of-scope to chase; flag for any future cost-optimization or account-cleanup round.
+- **R-strategy-linkage-unused** — surfaced at C2 audit. All 2,150 items have `strategy_id IS NULL` on local AND on prod. Prod's 42 strategies (seeded by `bun db:seed`) are unreferenced. Future round decides whether to populate strategy linkage or remove the strategies table entirely.
+- **R-local-prod-rejected_by-divergence** — created at C2.5b (wipe) + C5.5b (restore-local-only). Local has 7 rows with `rejected_by = 726e433e-...` (local-Leo UUID); prod has 0 rows with non-null `rejected_by`. Intentional end-state per strategy B. Documents the local/prod asymmetry for any future user-merge round or schema-diff audit. Backup CSV at `/tmp/rejected_by_backup.csv` is no longer load-bearing post-C5.5b but stayed on disk through round-close.
+- **R-vercel-oidc-disablement-cause-unknown** — NEW from C6 audit. Between C5 completion (~23:24Z) and Leo's C6 sign-in attempt (~23:38Z), Vercel OIDC Federation transitioned from enabled→disabled at the project level. Symptom: `awsCredentialsProvider` throws `"The 'x-vercel-oidc-token' header is missing from the request"` on any runtime path that calls IAM-authed RDS (which is every DB-touching route since `src/db/index.ts` uses RDS Signer). Cause unknown — possibly Vercel project recreation (project "Created 5h ago" but ID matches); possibly a Vercel platform-side toggle; possibly Leo manually disabling. Symptom-fix is "re-enable Federation in project settings"; root-cause investigation lives in `auth-oidc-restore` round.
+- **R-script-log-verbosity** — banked from C5. `scripts/backfill-missing-embeddings.ts` emits ~5 Pino debug lines per row (10,758 lines for 2,150 items). Future runs at `LOG_LEVEL=info` would produce cleaner output. Minor; one-line CLI override at runtime suffices.
+- **R-script-no-concurrency** — banked from C5. Backfill ran sequentially at ~437ms/row (15m39s wall-clock for 2,150 rows). For >10k future ingest, batched `embeddings.create({ input: [text1, text2, ...] })` would cut wall-clock ~10x. Minor for current scale; relevant if testbank grows substantially.
 
 ---
 
@@ -394,7 +402,7 @@ PGPASSWORD="$DB_PASS" psql \
 
 **Operation:** `bun run scripts/backfill-missing-embeddings.ts`.
 
-**Expected behavior:** the script logs `backfill-missing-embeddings: starting`, queries items where `embedding IS NULL`, finds **2,150 rows** (per strategy β — C4 wiped them all), processes them sequentially via OpenAI's `text-embedding-3-small`, exits cleanly. Expected cost per the strategy-β trade-off note: ~$5-10.
+**Expected behavior:** the script logs `backfill-missing-embeddings: starting`, queries items where `embedding IS NULL`, finds **2,150 rows** (per strategy β — C4 wiped them all), processes them sequentially via OpenAI's `text-embedding-3-small`, exits cleanly. Expected cost per the strategy-β trade-off note: ~$5-10. **Actual cost (C7 round-close note): ~$0.0007.** The original ~$5-10 figure was off by ~4 orders of magnitude — the text-embedding-3-small model ($0.02/1M input tokens) plus short body text (~17 tokens/item average) made the round's embedding cost negligible. Wall-clock landed at 15m39s (vs 5-15min estimated).
 
 **Verification (in C5's stop-and-report):**
 - Script exit code 0
@@ -450,6 +458,26 @@ SQL
 **Verification (in C6's stop-and-report):** all four checks above pass.
 
 **Commit message shape:** `docs(plans): testbank-ingest-prod C6 — verification (prod items=2150, /diagnostic/run returns 200)`.
+
+#### §1.6.A C6 outcome (recorded at C7 round-close)
+
+**Data-side checks (steps 1, 3): PASS.** Prod items=2150 ✓, embedding coverage=100% ✓, 14 sub_types populated ✓, status distribution matches local exactly (live=448 / candidate=1695 / rejected=7) ✓, `verbal.sentence_completion` live=61 + `verbal.critical_reasoning` live=59 — both original 500-blocking slots have ample coverage. `/api/health` 200, anonymous `/diagnostic/run` 302→/login.
+
+**Functional smoke (step 2): BLOCKED.** Leo signed in via Google OAuth and was redirected to `https://18seconds.vercel.app/api/auth/error?error=Configuration` ("There is a problem with the server configuration. Check the server logs for more information."). The `/diagnostic/run` route was never reached because the auth callback failed first.
+
+**Root cause (verbatim from prod logs at 23:38:54.86):**
+
+```
+{"level":50,"error":{"type":"Error","message":"The 'x-vercel-oidc-token' header is missing from the request. Do you have the OIDC option enabled in the Vercel project settings?",...},"host":"superstarter-main-db.cyhk02a6cfpn.us-east-1.rds.amazonaws.com","user":"app","msg":"rds iam auth token fetch failed"}
+[auth][error] AdapterError: Read more at https://errors.authjs.dev#adaptererror
+[auth][cause]: Error: Failed query: select "users"."id", ... from "users" inner join "accounts" on "accounts"."user_id" = "users"."id" where ("accounts"."provider" = $1 and "accounts"."provider_account_id" = $2) limit $3 params: google,111305886159585245443,1
+```
+
+The IAM-authed RDS pool in `src/db/index.ts` calls `awsCredentialsProvider({ roleArn })` from `@vercel/oidc-aws-credentials-provider`, which reads `x-vercel-oidc-token` from the runtime request context. That header is missing because Vercel OIDC Federation is not currently enabled at the project level. The AWS IAM trust policy on `superstarter-main-vercel` is correct (verified at C6 audit); the failure is on the Vercel side delivering the token. **Fix is a Vercel project-settings toggle, not a code or env change** — see R-vercel-oidc-disablement-cause-unknown in §0.11.
+
+**Functional verification of `/diagnostic/run` is therefore deferred to a follow-up round (`auth-oidc-restore`).** The data-side proof-of-fix for the original 500 (digest 2170494947) is complete: prod has the 2,150 items the route's `getNextFixedCurve` lookup needs. The remaining smoke test (load route, render question, verify no Vercel error page) requires the OIDC issue to be resolved first.
+
+**Step 4 (verify original failing user's session can resume): N/A** — same blocker.
 
 ### §1.7 C7 — Round-close
 
@@ -530,7 +558,23 @@ This produces a stronger invariant — "all FKs verified" rather than "the FKs t
 
 **Distinct from existing §6.14:** §6.14.43 sub-type 6 covers redirector-vs-remembered-conventions. §3.4 covers redirector-vs-derivable-truth (the FK list is derivable from the schema; remembering it is the wrong tool). Different surface, different mitigation.
 
-**Status:** instance #1 (the C3 FK miss in this round). **Banked at 1/5.** Promotion threshold to a numbered §6.14 entry is 3 instances or a round-close decision to pre-emptively promote based on the depth of the round-disrupting consequence (this round added 2 ledger commits + 1 doc patch + ~30 minutes of executor time, which is on the high-cost end of "audit gap" outcomes).
+**Status:** instance #1 (the C3 FK miss in this round). **Banked at 1/5.** Promotion threshold to a numbered §6.14 entry is 3 instances or a round-close decision to pre-emptively promote based on the depth of the round-disrupting consequence (this round added 2 ledger commits + 1 doc patch + ~30 minutes of executor time, which is on the high-cost end of "audit gap" outcomes). **C7 round-close decision: HOLD AT 1/5** — round impact is consequential but not yet a 3-instance pattern; let the next round's audit work either reproduce or fail to reproduce before promotion.
+
+### §3.5 Candidate: "local-CLI OIDC token in .env.local is independent of runtime OIDC Federation; local working ≠ runtime working"
+
+**Surface:** C5 phase 5a audit verified that `VERCEL_OIDC_TOKEN` was set in `.env.local` (via `vercel env pull`), and concluded that `scripts/backfill-missing-embeddings.ts` would route correctly to prod RDS via the OIDC-based AWS credentials provider. The script then ran successfully end-to-end at C5 (15m39s, 2,150/2,150 backfilled). At C6, the same OIDC machinery failed inside Vercel runtime — the runtime never receives `x-vercel-oidc-token` because Federation is not enabled at the project level.
+
+**Generalization:** Vercel issues OIDC tokens via two independent paths:
+1. **Local-CLI path:** `vercel env pull` ships an OIDC token into `.env.local` for use by local scripts. Works regardless of project-level Federation setting.
+2. **Runtime injection path:** Vercel injects per-request `x-vercel-oidc-token` headers into function invocations only when Federation is enabled at the project level.
+
+These paths are independent. A local script can authenticate to AWS via OIDC successfully even when runtime OIDC is broken in prod. C5's success therefore did NOT prove C6 would work — they exercise different OIDC delivery mechanisms. Future rounds that use the "if local works, prod works" heuristic for OIDC-dependent code paths will have the same blind spot.
+
+**Distinct from existing §6.14:** §6.14.10 covers env-var pattern errors (the wrong var or the right var with wrong value). §3.5 covers infrastructure-vs-runtime delivery-mechanism asymmetry where the same logical credential has two physically distinct delivery paths. Different surface; different mitigation (need to verify Federation toggle, not just env-var presence).
+
+**Distinct from §3.1 (audit-prompts-resource-existence-preflight):** §3.1 addresses missing existence checks for named resources. §3.5 addresses non-equivalent execution contexts for the same code path (local Bun vs Vercel function runtime).
+
+**Status:** instance #1 (the C5→C6 misleading-success). **Banked at 1/5.** Hold pending second instance.
 
 ---
 
@@ -569,4 +613,101 @@ Required entries in the round-close stop-and-report:
 
 ## §6 ROUND-CLOSE STATUS — populated at C7
 
-(Empty at commit-0. Populated when C7 lands.)
+**Status: CLOSED-PARTIAL.** Data-side success; functional verification deferred to `auth-oidc-restore` round.
+
+### §6.1 Commit ledger (actual)
+
+| C# | SHA | Description | Type |
+|---|---|---|---|
+| C0 | `8e2f67f` | open testbank-ingest-prod plan-doc with commit-0 empirical audit | doc patch (not in 9-commit ledger) |
+| C0.5 | `9c405ea` | adopt strategy β — wipe prod embeddings before backfill | doc patch (not in 9-commit ledger) |
+| C1 | (no git) | dump local items to `/tmp/items.dump` (15,206,136 bytes, 2150 rows, embeddings preserved) | data op |
+| C2 | (no git) | verify dump integrity + schema parity local↔prod (17 cols, 14 sub_types, 4 indexes match) | read-only audit |
+| C2.5a | `8a74165` | schema-divergence sub-round plan-doc patch — adopt strategy B (NULL rejected_by, restore local post-success) | doc patch + ledger entry |
+| C2.5b | (no git) | wipe local `rejected_by` (7 rows) → re-dump (15,205,540 bytes) → exhaustive 3-FK re-audit | data op |
+| C3 first | (no git) | pg_restore — FAILED on `items_rejected_by_users_id_fk`; --single-transaction rolled back cleanly; prod unchanged at 0 rows | data op (rolled back) |
+| C3 retry | (no git) | pg_restore (post-C2.5b dump) — SUCCESS, 27.270s, 2150 rows inserted with embeddings | data op |
+| C4 | (no git) | UPDATE prod `items SET embedding = NULL` — SUCCESS, 5.987s, UPDATE 2150 | data op |
+| C5 phase 5a | (no git) | audit script + .env.local routing — verdict GREEN | read-only audit |
+| C5 phase 5b | (no git) | execute `bun run scripts/backfill-missing-embeddings.ts` — SUCCESS, 15m39s, 2150/0 backfilled/failed | data op |
+| C5.5b | (no git) | restore local `rejected_by` from `/tmp/rejected_by_backup.csv` — SUCCESS, BEGIN/COPY 7/UPDATE 7/COMMIT | data op |
+| C6 | (no git) | functional verification — data-side PASS; functional smoke BLOCKED by Vercel OIDC Federation disablement (see §1.6.A) | read-only audit (partial) |
+| C7 | this commit | round-close: populate §0.11 forward-pin index, §6 ROUND-CLOSE STATUS, §3.4/3.5 candidate decisions, fix §1.5 cost estimate, mark §1.6 deferred | doc patch |
+
+### §6.2 Data outcomes (final state)
+
+| Metric | Pre-round | Post-C5 | Final |
+|---|---|---|---|
+| Prod `items` row count | 0 | 2150 | **2150** ✓ |
+| Prod embedding coverage | n/a | 100% (2150/2150) | **100%** ✓ |
+| Prod sub_types referenced | n/a | 14/14 | **14/14** ✓ |
+| Prod `rejected_by` non-null | 0 | 0 | **0** (intended per strategy B) |
+| Prod `users` count | 1 (cb54eeab — ryoi360@gmail.com) | 2 (added 24802ad9 — leonardiwata@gmail.com mid-round) | **2** |
+| Local `items` row count | 2150 | 2150 | **2150** (unchanged) |
+| Local embedding coverage | 100% | 100% | **100%** (unchanged) |
+| Local `rejected_by` non-null | 7 | 0 (post-C2.5b) | **7** (restored at C5.5b) |
+
+### §6.3 Functional outcomes
+
+- `/diagnostic/run` data prerequisite **MET** — the route's `getNextFixedCurve` lookup now finds rows for every diagnostic-mix slot, including the two original 500-blocking slots (`verbal.sentence_completion`, `verbal.critical_reasoning`).
+- `/diagnostic/run` functional smoke **BLOCKED** — Vercel OIDC Federation disablement breaks any DB-touching auth path. See §1.6.A and R-vercel-oidc-disablement-cause-unknown.
+- Original Vercel error digest `2170494947` (data-side: ErrFirstItemMissing): **resolved** — data-side prerequisites for the failing code path are now in place. Empirical re-verification awaits OIDC restoration.
+
+### §6.4 §6.14.31 gates fired
+
+3 gate confirmations during this round:
+
+1. **Gate 1, first fire:** before C3 first attempt (pg_restore against prod). Confirmed by Leo. Restore failed on FK violation, rolled back cleanly.
+2. **Gate 1, re-fire:** before C3 retry (pg_restore post-C2.5b regeneration). Confirmed by Leo. Restore succeeded.
+3. **Gate 2:** before C4 (UPDATE prod `embedding = NULL`). Confirmed by Leo. UPDATE 2150 succeeded.
+
+### §6.5 Sub-rounds fired
+
+1. **schema-divergence-sub-round** — pre-authorized in §0.10; FIRED at C3 first-attempt failure; CLOSED at C5.5b. Realized cost: 1 git commit (C2.5a) + 2 data ops (C2.5b, C5.5b) + 1 forensic subsection (§1.3.A). Trigger generalized from "non-default `source_folder` / `metadata_json` shapes" to "any FK-target mismatch" — see §0.10 update.
+
+The two other pre-authorized sub-rounds (`script-env-routing-sub-round`, `vector-extension-skew-sub-round`) did NOT fire.
+
+### §6.6 Cost ledger
+
+| Item | Cost |
+|---|---|
+| OpenAI text-embedding-3-small (2,150 items × ~17 input tokens avg) | ~$0.0007 |
+| RDS billing during round (~5h × ~$0.50/day) | ~$0.10-0.15 |
+| Vercel function invocations (4-5 hits during audits) | ~$0.00 (within free tier) |
+| **Total** | **<$0.20** |
+
+The plan-doc's pre-round estimate of "~$5-10" (top-of-doc strategy β note + §1.5) was off by ~4 orders of magnitude. §1.5 is updated with the actual figure.
+
+### §6.7 §6.14.43 sub-type 6 deviation count
+
+- Entering round: **3/5** (held from deployment-runbook close per §0.10).
+- Deviations during this round:
+  - **Dev-1 at C2.5a:** redirector hand-listed candidate-pattern section as `§10.8` while plan-doc uses `§3.x` numbering. Re-mapped to §3.4 in the actual edit. Surfaced at C2.5a stop-and-report flag #1. Sub-type-6 instance: redirector authoring against remembered-rather-than-verified plan-doc shape.
+- **Cumulative: 4/5.** Promotion candidate 2 HOLDS at 4/5. **One more sub-type-6 deviation in any future round triggers promotion at that round's close.**
+
+### §6.8 §3 candidate-pattern decisions
+
+| § | Title | Status |
+|---|---|---|
+| §3.1 | audit-prompts-should-include-resource-existence-preflight | Banked at 1/5 (purveyor audit). HOLD. |
+| §3.2 | post-deploy-data-seed-dependency-canary | Banked at 1/5 (the original 500). HOLD. |
+| §3.3 | pgvector-patch-version-skew-tolerance | Banked at §0.5.D as non-blocking. HOLD. |
+| §3.4 | FK audits must be exhaustive over the source table's full FK set, derived from information_schema | Banked at 1/5 (C3 first-attempt failure). HOLD. |
+| §3.5 | local-CLI OIDC token in .env.local is independent of runtime OIDC Federation; local working ≠ runtime working | Banked at 1/5 (C5→C6 misleading-success). HOLD. |
+
+No promotions. Five distinct candidates banked across 1-instance evidence. Promotion threshold remains 3 instances or pre-emptive round-close decision based on consequence depth.
+
+### §6.9 Wall-clock + working-time
+
+- Round opened at C0 (`8e2f67f`) at ~2026-05-12 00:13 UTC (timestamp from commit metadata).
+- Round closes at C7 at ~2026-05-12 04:50 UTC (this commit).
+- Total elapsed: ~4h 37min.
+- Net executor work-time (excluding stop-and-report human-loop pauses): ~3h.
+
+### §6.10 Push status
+
+`git push origin main` executed at C7 round-close per the deployment-runbook convention (push-once-at-round-close, not per-commit). Post-push `git rev-list --left-right --count origin/main...HEAD` returns `0 0`.
+
+### §6.11 Successor round
+
+**`auth-oidc-restore`** — open against this commit's HEAD when the redirector authors it. Scope: re-enable Vercel OIDC Federation at the project level, root-cause the disablement event (R-vercel-oidc-disablement-cause-unknown), then re-run the C6 functional smoke from this round to close the proof-of-fix loop on the original `2170494947` digest.
