@@ -1,9 +1,9 @@
 # cacheComponents Investigation — Plan-Doc
 
 Round: cacheComponents Investigation.
-Round-open hash: `bcb77c3` (HEAD at C0 audit; verified clean working tree; `git rev-list --left-right --count origin/main...HEAD = 0 1` — `bcb77c3` is the prior `onboarding-flow-removal` round's close commit, locally committed but unpushed at C0 of this round).
-Round-close hash: TBD.
-**Round status: OPEN — commit-0 audit only.**
+Round-open hash: `bcb77c3` (HEAD at C0 audit; verified clean working tree; `git rev-list --left-right --count origin/main...HEAD = 0 1` at C0 — `bcb77c3` is the prior `onboarding-flow-removal` round's close commit, **pushed to origin at that round's close**. The single locally-unpushed commit at C0 of this round was `927e7b0` (the prior round's session-log commit, not `bcb77c3`). The original §0.1 text was wrong on this point; corrected at C3-close per §6.14.28 (redirector-vs-empirical drift).
+Round-close hash: this commit (C3-close).
+**Round status: CLOSED — root cause fixed in production. Hangs eliminated; cold-start improved ~3.3×.**
 
 > **Round-shape decision (closed-plan-immutable from C0).** Audit-only commit-0. No production deploys, no runtime swaps, no code changes. C0 deeply audits the failure mechanism — reads Next.js 16's cacheComponents implementation, locates the warning emission site, identifies every call path, and articulates a hypothesis register with concrete falsification tests. A user-reviewed plan is the precondition for any code change or experiment. C1+ will execute the chosen experiment (likely: Bun → Node.js runtime swap on a Vercel preview deployment) and either confirm or refute the root-cause hypothesis.
 
@@ -15,9 +15,9 @@ Round-close hash: TBD.
 
 - **Name:** cacheComponents Investigation.
 - **Plan-doc filename:** `docs/plans/cacheComponents-investigation.md`.
-- **Open hash (empirical, verified at commit-0):** `bcb77c3` — `docs(plans): close onboarding-flow-removal ...`. Working tree clean (`git status` — clean). One commit ahead of `origin/main` (the prior round's session-log commit `927e7b0` and round-close commit `bcb77c3` are local-committed-but-unpushed; the user explicitly does not push at round close).
+- **Open hash (empirical, verified at commit-0):** `bcb77c3` — `docs(plans): close onboarding-flow-removal ...`. Working tree clean (`git status` — clean). One commit ahead of `origin/main` at C0. **Drift caught at C3-close (§6.14.28):** the original §0.1 text claimed both `bcb77c3` and `927e7b0` were local-committed-but-unpushed at C0. Empirically `bcb77c3` was already on origin/main at this round's C0 (pushed at the prior round's close); only `927e7b0` (the prior round's session-log commit) was unpushed. The "one commit ahead" was `927e7b0` alone, not the pair. Corrected here at C3-close.
 - **Concurrent rounds:** none.
-- **Target close hash:** TBD.
+- **Target close hash:** this commit (C3-close).
 
 ### §0.2 Trigger
 
@@ -229,13 +229,25 @@ Pins **carried forward** from `onboarding-flow-removal` §0.11 (status unchanged
 - **R-stale-comments-after-route-removal** — unchanged.
 - **R-phantom-vercel-deployment** — unchanged.
 
-Pin **under active investigation this round** (status remains "degraded UX, survivable" until empirical resolution):
+Pins **retired** at this round's close (preserved historically; flagged as retired):
 
-- **R-cacheComponents-bun-settimeout-incompat** — refined in §0.6 from "three-way interaction" to "two-way interaction (Bun + cacheComponents)"; Server Actions are a consequence surface, not a causal factor. Root-cause hypothesis (H1) and falsification test articulated in §4. Closure of this pin is the goal of this round.
+- ~~**R-cacheComponents-bun-settimeout-incompat**~~ — **RESOLVED 2026-05-12 by C2 runtime swap.** Original characterization (Bun + cacheComponents two-way interaction) was empirically refined during execution: C1 disabled cacheComponents on Bun and the warning disappeared, but **submit-hangs persisted at ~1-in-5-to-20** in Leo's 50-Q preview test — refuting cacheComponents as the operative cause. C2 swapped Bun → Node (keeping cacheComponents off) and hangs went to **0-in-50** in Leo's 50-Q preview test, then 0-in-50 again on prod after promotion (`dpl_HaYWegFbr7CLsY7qcS5NKcDhSv8v` built from commit `0e759bf`). The Bun runtime is the operative cause. The cacheComponents-leg of the original two-way model contributes only the build/runtime *warning*, not the user-visible hang. The deeper Next.js source mechanism remains uncharacterized — see new pin `R-bun-nextjs16-action-stream-mechanism-uncharacterized`.
 
-Pins **newly opened** at this round's commit-0:
+- ~~**R-no-use-cache-directive-in-app**~~ — **MOOT 2026-05-12.** With `cacheComponents: true` removed from `next.config.ts` at C1, the directive surfaces are now inaccessible anyway. The pin's premise ("we pay the cacheComponents cost without using cacheComponents features") is no longer load-bearing. If we ever want to use `'use cache'` features in the future, see the new pin `R-future-use-cache-requires-runtime-investigation-revisit`.
 
-- **R-no-use-cache-directive-in-app** — Our app sets `cacheComponents: true` in `next.config.ts` but uses zero `'use cache'` directives, zero `cacheLife` calls, and zero `cacheTag` calls. The only cacheComponents-adjacent code is `connection()` in `queue-data.ts` (per-request marker, the opposite of caching). This means we pay the full cacheComponents-staged-rendering cost (and now its Bun-incompatibility) without using any of the cacheComponents features. Worth re-evaluating after the runtime-swap experiment whether `cacheComponents: true` is even providing value to our app — but disabling it is H3's falsification test, not a default action.
+Pins **newly opened** at this round's close:
+
+- **R-bun-nextjs16-action-stream-mechanism-uncharacterized** — The C0 audit articulated a clean mechanism for the build-time warning (Bun's missing `_idleStart` → `runInSequentialTasks` atomicity break → cacheComponents staged-rendering stream-stall). That mechanism explained the warning. **It did NOT explain the user-visible submit-hangs**, because C1 removed cacheComponents (taking `runInSequentialTasks` off the render path entirely) yet the hangs persisted. C2's Bun → Node swap eliminated the hangs, confirming Bun as the operative cause, but the **exact Next.js source mechanism** by which Bun + Next.js 16 server-action streaming produces hangs (independent of `runInSequentialTasks`) was never identified. Symptoms are resolved in production. Mechanism-level root cause is someday-later work. **Priority: low** — the fix works empirically; the audit is academic.
+
+- **R-future-use-cache-requires-runtime-investigation-revisit** — If we ever want to use `'use cache'` / `cacheLife` / `cacheTag` features in the codebase, we must either (a) keep Node runtime permanently (re-enabling `cacheComponents: true` on Node is the simplest path; Node honors `_idleStart` mutations so the staged-rendering primitive works correctly), OR (b) wait for upstream resolution (Bun honoring `_idleStart` mutations OR `vercel/next.js#88514`'s postMessage-based scheduling shipping). Current path of least resistance: stay on Node. **Priority: low** — no current use case demands these features.
+
+- **R-vercel-logs-cli-duplication-artifact** — `vercel logs --limit N` returns each log event 3-12 times verbatim (observed 2026-05-12 at C3-verify and again at end-session-perf log capture). Absolute event counts from `vercel logs` should be deduplicated before quantitative reasoning. Qualitative interpretation (present/absent, healthy/error) still works. **Priority: medium-low** — affects log-based diagnostics methodology, not production behavior.
+
+- **R-vercel-logs-staleness** — `vercel logs` for prod returned identical content at C3-verify (`14:16 UTC`) and at end-session-perf log capture (`14:24 UTC`, 8 min later) despite known prod traffic in between. Vercel CLI log pull has 5–10+ minute indexing latency or caching. Use-case impact: real-time post-deploy verification is unreliable; rely on direct in-browser testing for fresh-traffic signal. **Priority: medium-low** — methodology, not a production defect.
+
+- **R-end-session-perf-slow** — 50-question full-length `endSession` path takes ~1 minute end-to-end. The `endSession` happy-path emits zero log lines today (only a level-40 warn when finalized-twice). Optimization blocked on instrumentation. Investigation deferred to a successor `end-session-perf` round (to be opened next). **Note:** this issue was pre-existing on Bun production, just masked by the more-visible mid-session hangs that C2 eliminated. **Priority: medium** — user-visible 60s wait at the end of every full-length session.
+
+- **R-vercel-workflow-pins-to-deployment-hostname** — Vercel Workflow POST `/.well-known/workflow/v1/step` and `/.well-known/workflow/v1/flow` invocations log under the **deployment hostname** (e.g., `18seconds-gxbup1hfw-...`), not the prod alias `18seconds.vercel.app`. Suggests workflows are pinned to specific deployments rather than the floating alias. Worth confirming during end-session-perf C0 audit — has implications for how mastery recompute runs during post-promotion cutover windows. **Priority: medium** — could affect every promotion if workflows-in-flight reference the pre-promotion deployment.
 
 ### §0.12 Sub-round triggers (pre-authorized)
 
@@ -248,8 +260,22 @@ Pins **newly opened** at this round's commit-0:
 ## §1 Commit Ledger
 
 - **C0 — Plan-doc + commit-0 audit.** Commit `d3196b4`. No code changes. Plan-doc lands at `docs/plans/cacheComponents-investigation.md`. Round-open hash `bcb77c3`; this commit is C0.
-- **C0.5 — Plan-doc amendment: integrate H2 search findings; reframe Option B as first-line intervention.** This commit. No code changes. Documents upstream stall (Bun and Vercel both have open issues, no shipping fix), refutes H2 (§0.5 Finding 7 added; §4 H2 confidence → REFUTED), restructures §5 to present Option B (disable `cacheComponents`) as the new default first-line intervention and Option A (runtime swap) as the alternative. §0.4 anti-scope updated; §0.6 reconciled; §0.10 retires `W-bun-1.4+-fix`; §4 H1 gets an Option-B falsification angle note; §4 H3 deprioritized.
-- **C1+ — TBD pending user authorization on the recommended experiment in §5.**
+
+- **C0.5 — Plan-doc amendment: integrate H2 search findings; reframe Option B as first-line intervention.** Commit `d02e5db`. No code changes. Documents upstream stall (Bun and Vercel both have open issues, no shipping fix), refutes H2 (§0.5 Finding 7 added; §4 H2 confidence → REFUTED), restructures §5 to present Option B (disable `cacheComponents`) as the new default first-line intervention and Option A (runtime swap) as the alternative. §0.4 anti-scope updated; §0.6 reconciled; §0.10 retires `W-bun-1.4+-fix`; §4 H1 gets an Option-B falsification angle note; §4 H3 deprioritized.
+
+- **C1 — Disable `cacheComponents: true` in `next.config.ts`.** Commit `445599b`. Single-line removal. Preview deploy `dpl_BWnjzqqVJoupLK8pevTWaM3H3mbS` at `https://18seconds-r8mxxmeho-ryo-iwatas-projects.vercel.app`. Build warning gone; build duration 2m, no errors. Leo's 50-Q in-browser preview test: **submit-hangs persisted at ~1-in-5-to-20**, defensive fix (commit `9ece713`) recovered each hang cleanly. **cacheComponents-mechanism refuted as the operative cause of user-facing hangs.** The C0 audit-articulated mechanism explained only the build warning. Pivot to H3/runtime-swap (Option A) for C2.
+
+- **C2 — Bun → Node runtime swap.** Commit `0e759bf`. Removed `"bunVersion": "1.x"` from `vercel.json`; dropped `--bun` flag from `build` and `start` scripts in `package.json` (3 lines deleted, 2 inserted). Other Bun-using scripts (`dev`, `db:*`, `lint`, `typecheck`) unchanged. Preview deploy `dpl_3RQZ8nXE8GuzAtkLtQECfE33KKjD` at `https://18seconds-27qljlni7-ryo-iwatas-projects.vercel.app`. Build duration ~1m (33% faster than C1). Leo's 50-Q in-browser preview test: **0-in-50 submit-hangs.** Bun runtime confirmed as the operative cause. Secondary win: ~3.3× cold-start improvement (Node vs Bun on Vercel) measured at C3-verify.
+
+- **C3-prep — Read-only state capture; rollback target identification.** No commits. Captured current production deployment (`dpl_2oT9L3jixcX7ni5tQE4ac25kFpA6`, commit `9ece713`, age 2h, healthy) as rollback target; identified C2 preview `dpl_3RQZ8nXE8GuzAtkLtQECfE33KKjD` as promotion target. Production log baseline: 4 cacheComponents warning emissions in 177-line window, 20 healthy `hasContextToken:true` OIDC poll lines, 0 errors. Rollback command constructed but not executed.
+
+- **C3-promote — `vercel promote dpl_3RQZ8nXE8GuzAtkLtQECfE33KKjD --yes`.** No git commits. Destructive operation (§6.14.31, pre-authorized). **Surprise finding:** `vercel promote` did NOT do an atomic alias swap on the existing deployment; instead it triggered a **rebuild** (Vercel's documented behavior for preview→prod promotion), creating new production deployment `dpl_HaYWegFbr7CLsY7qcS5NKcDhSv8v` from commit `0e759bf` with prod env vars. The executor's §6 discipline rule ("STOP if alias hasn't swapped") fired correctly. Executor stopped; redirector reviewed via web-searched docs, confirmed rebuild-then-swap was correct behavior, and proceeded to C3-verify. No rollback needed. New §3.13 pattern banked from this episode.
+
+- **C3-verify — Wait for rebuild to complete; verify alias swap; post-swap health checks.** No commits. Read-only polling + verification. Rebuild completed in ~4m 24s. Alias `https://18seconds.vercel.app` swapped to `dpl_HaYWegFbr7CLsY7qcS5NKcDhSv8v` atomically on build completion. Post-swap health: 879ms cold-start (vs old prod's 2.9s — **3.3× faster**), 282–358ms warm. Post-swap log window: 0 cacheComponents warning emissions, 0 level-40+ pino, 0 errors. Rollback target `dpl_2oT9L3...` remained Ready and re-promotable.
+
+- **C3-monitor — Leo's in-browser end-to-end validation on production.** No commits. Leo completed a 50-question full-length practice session on production: **0 submit-hangs**, OIDC poll healthy throughout, no errors. End-session path emerged as a separate concern (~1 minute total wait, no log emissions on happy path) — banked as `R-end-session-perf-slow` for a successor round. Pre-existing on Bun, just masked by the more-visible mid-session hangs that C2 eliminated.
+
+- **C3-close — This commit.** Plan-doc finalized: §0.1 drift fix (per §6.14.28); §1 ledger filled; §6 round-close section added (H1/H2/H3 dispositions, empirical wins); §0.11 pin index updated (2 retired, 7 added); §3 new patterns banked (§3.12 audit-mechanism-vs-symptom 1/5, §3.13 redirector-vs-tool-behavior 1/5); §6.14.43 sub-type 6 tracker updated (4/5 → 4/5, no sub-type 6 deviations this round). Session log added at `docs/claude_logs/session_2026-05-12_cacheComponents-investigation.md`. Local commit stack pushed to origin at this commit.
 
 ---
 
@@ -257,9 +283,13 @@ Pins **newly opened** at this round's commit-0:
 
 **Carryover from prior rounds** (preserved per closed-plan-immutable):
 
-- §3.1 through §3.11 — see `auth-oidc-restore.md` §3, `prod-runtime-credentials-audit.md` §3, and `onboarding-flow-removal.md` §3 for canonical definitions. All carry forward unchanged. No recurrences this round at C0 (commit-0 is plan-doc-only).
+- §3.1 through §3.11 — see `auth-oidc-restore.md` §3, `prod-runtime-credentials-audit.md` §3, and `onboarding-flow-removal.md` §3 for canonical definitions. All carry forward unchanged. No recurrences this round.
 
-**NEW from this round at C0:** none yet. New patterns surface during execution, not during audit. Pattern candidates will be evaluated at each subsequent commit boundary.
+**NEW from this round** (canonical definitions; counts at this round's close):
+
+- **§3.12 — Audit-articulated mechanism explains the warning/signal but not the symptom.** When a code-level audit articulates a clean mechanism for an observed signal (e.g., a warning emission), that mechanism may turn out to explain only the signal, not the user-visible failure mode — even when both share the same suspect (e.g., the runtime). Discrimination requires falsifying the mechanism while keeping the suspect, which is what C1 did this round: removing `cacheComponents` took `runInSequentialTasks` off the render path entirely, eliminating the warning, but the hangs persisted — proving the audit-articulated mechanism was orthogonal to the user-facing defect. The fix (C2 runtime swap) addresses the suspect; the mechanism remains uncharacterized. **Treatment:** when a clean audit-articulated mechanism is available, design the first falsification experiment to test the mechanism alone, not the suspect — the answer (signal-vs-symptom decoupling) is high-information regardless of outcome. **Count: 1/5.**
+
+- **§3.13 — Redirector-assumed tool behavior diverges from actual tool behavior; executor's discipline-rule STOP catches the mismatch; mid-execution adjustment without rollback.** Sibling to §3.1 (executor-vs-redirector divergence) and §3.10 (user-direct prompt override). Specific to *third-party tool* behavior rather than executor or user behavior. Example surfaced this round: the redirector's C3-promote prompt modeled `vercel promote <preview-id>` as a **pure alias swap**; the actual Vercel behavior is **rebuild-then-swap** (the preview source is re-built with prod env vars and the alias swaps atomically on build completion). The executor's "STOP if alias hasn't swapped after promote" discipline rule fired correctly, the executor reported without retrying or rolling back, the redirector reviewed via web-searched docs and confirmed the rebuild-then-swap was correct behavior, and execution resumed on the next prompt. **Treatment:** when a tool's CLI surface or platform behavior is the load-bearing assumption of a prompt, write the executor's discipline rule to catch the assumed-vs-actual divergence (e.g., "STOP if X hasn't happened by step N"), not to retry. The STOP-and-report path lets the redirector reconcile the mental model without polluting in-flight execution state. **Count: 1/5.**
 
 ---
 
@@ -374,16 +404,76 @@ Trigger a fresh investigation sub-round to:
 
 ## §6 ROUND-CLOSE STATUS
 
-**Round-open at C0. Round-close pending.**
+**Round CLOSED at C3-close (this commit).** `R-cacheComponents-bun-settimeout-incompat` retired via outcome path (a): runtime swap shipped to production; warning + user-visible hangs both empirically eliminated.
 
-The round closes when **R-cacheComponents-bun-settimeout-incompat** is either:
-- (a) **Retired (validated)** — runtime swap or alternative intervention is in production and empirical evidence shows the warning + both symptoms have disappeared, OR
-- (b) **Refined and rebanked** — H1 is refuted, the actual root cause is documented in a successor round's plan-doc, and the pin is updated with the refined causal model.
+### §6.1 H1 final disposition
 
-Round close will include:
-- Final §1 commit ledger.
-- §6.X round-close summary with deploy IDs, validation evidence, and pin disposition.
-- §0.11 forward-pin index update.
-- §3 candidate-pattern recurrence counts.
+H1 was framed at C0 as: *"Bun's missing `_idleStart` on setTimeout timers causes `runInSequentialTasks` to lose its atomic-timer-group guarantee, which under load produces intermittent stream-emission failures."*
+
+**Empirical refinement:**
+
+- **cacheComponents-leg of H1: refuted.** C1 removed `cacheComponents: true` from the config, taking `runInSequentialTasks` off the render path entirely (verified: the build warning disappeared from both build-time and runtime logs). Hangs persisted at ~1-in-5-to-20 on preview. The audit-articulated mechanism explained only the warning, not the symptom (banked as §3.12).
+- **Bun-leg of H1: confirmed.** C2 kept cacheComponents off AND swapped Bun → Node. Hangs went to 0-in-50 on preview, then 0-in-50 on prod after promotion. The Bun runtime is the operative cause of the user-facing defect.
+
+**Cleanly restated final causal model:** the Bun runtime (independent of cacheComponents) produces intermittent hangs in Next.js 16 server-action streaming. The cacheComponents staged-rendering primitive (`runInSequentialTasks`) is a *separate* Bun incompatibility that produces a (now eliminated) build warning but not the user-visible hangs. The two were observationally co-located but mechanistically independent.
+
+### §6.2 H2 final disposition
+
+**Refuted empirically at C0.5** by the H2 search (§0.5 Finding 7). Upstream is stalled: Bun maintainer `190n` explicitly rejected the fix path (`oven-sh/bun#27060`) on 2026-02-16 with *"Bun does not intend to honor `_idleStart` mutations"*; Vercel's runtime-agnostic alternative (`vercel/next.js#88514`, postMessage-based scheduling) is still Draft. No targeted upstream fix to adopt now or in any visible timeline. Forward-watch `W-bun-1.4+-fix` retired at C0.5 on this evidence.
+
+### §6.3 H3 final disposition
+
+H3 was framed at C0 as: *"The defect is not cacheComponents-specific but a broader Bun + Next.js 16 server-action or RSC-streaming incompatibility."* C0.5 deprioritized H3 in favor of practical symptom resolution.
+
+**Empirically: confirmed via symptom resolution.** C1 disabled cacheComponents on Bun → hangs persisted → H1's cacheComponents-leg eliminated → the only remaining variable was Bun itself. C2 swapped to Node → hangs eliminated → H3's "broader Bun-incompat" claim is what the data fit best.
+
+**Clean H1-vs-H3 discrimination NOT performed.** Doing so would have required testing cacheComponents-on-Node (re-enabling cacheComponents while keeping Node runtime) to see whether the cacheComponents-leg of H1 had any independent effect. This is academic now — symptoms are resolved without performing the discrimination, and re-enabling cacheComponents in production would be a regression risk for no operational benefit. Banked under `R-future-use-cache-requires-runtime-investigation-revisit`.
+
+### §6.4 What the audit got right vs. what it missed
+
+**Got right (§0.5 Finding 7):** the H2 upstream search at C0.5 — saved us from waiting for a non-existent Bun fix.
+
+**Got right (§0.5 Finding 6):** the runtime-swap surface inventory — 4 lines across `vercel.json` + `package.json`, no Bun-API lock-in in `src/`. C2 swap built and ran cleanly on first try; the audit's prediction was exactly correct.
+
+**Missed:** the audit articulated a beautiful mechanism for the cacheComponents/Bun-`_idleStart` interaction explaining the build warning, then implicitly extrapolated that this mechanism also explained the user-visible hangs. C1's empirical result decoupled the two. **The audit was correct about what it directly examined (the warning's emission site and call-fanout); it over-reached when generalizing to the user-facing symptom.** The deeper mechanism for Bun + Next.js 16 server-action streaming hangs is uncharacterized at the Next.js source level — banked as `R-bun-nextjs16-action-stream-mechanism-uncharacterized`.
+
+### §6.5 Empirical wins
+
+1. **Submit-hangs eliminated in production.** Pre-C2 prod: ~1-in-5-to-20 hang frequency, defensive recovery survivable. Post-C2 prod: 0-in-50 on Leo's full-length session.
+2. **Cold-start performance improved ~3.3×.** Pre-C2 prod: `/api/health` cold-start = 2.9s. Post-C2 prod: 879ms. Warm sub-360ms. Direct measurement at C3-verify.
+3. **cacheComponents warning eliminated.** Pre-C2 prod baseline (last 5min): 4 emissions in a 177-line window. Post-C2 prod (same query shape): 0 emissions.
+4. **OIDC poll fix (from `auth-oidc-restore` round) confirmed working on Node runtime.** No `hasContextToken:false` lines in post-swap window; OIDC was already runtime-agnostic but worth confirming.
+5. **Round arc executed cleanly:** audit → falsify-via-Option-B → empirical refutation → pivot-to-Option-A → preview-validate → ship → monitor → close. Zero wasted commits. Zero rollbacks.
+
+### §6.6 Audit-first paid off
+
+Every commit was guided by the prior commit's empirical outcome:
+
+- C0 audit identified two candidate interventions (Option A runtime swap, Option B disable cacheComponents).
+- C0.5 H2 search refuted the wait-for-upstream path and reframed Option B as the smaller first experiment.
+- C1 executed Option B and produced the highest-information result possible: *the warning's mechanism was real, but it wasn't the symptom's mechanism*. Without C0's audit, we would not have known what we were testing precisely enough to interpret the C1 result.
+- C2 executed Option A on top of Option B (kept cacheComponents off, added runtime swap) and produced the confirmed fix.
+- C3 promoted, verified, and monitored.
+
+The alternative path — guessing and shipping the runtime swap first — would have eliminated the symptom but left us thinking cacheComponents was the cause. The empirical discrimination performed by C1 → C2 is durable knowledge. **Cost:** one extra preview deploy. **Value:** a correct causal model that won't lead us astray when we revisit `use cache` features later.
+
+### §6.7 §6.14.43 sub-type 6 tracker
+
+Sub-type 6 (executor-disregards-explicit-redirector-instruction) recurrence-counter status:
+
+- **Count entering this round:** 4/5 (from `onboarding-flow-removal` close).
+- **Sub-type 6 deviations observed this round:** **0.**
+- **Count exiting this round:** **4/5.**
+
+The §0.1 drift caught at C3-close was §6.14.28-shaped (redirector-vs-empirical doc divergence), not sub-type 6. The C3-promote mental-model error was §3.13-shaped (redirector-vs-tool-behavior; executor's STOP rule caught it correctly), not sub-type 6. The redirector's mid-execution scope adjustment at C0.5 (H2 search) was prompt-authorized, not executor deviation.
+
+**One more sub-type 6 deviation in any future round triggers promotion at that round's close.**
+
+### §6.8 Deploy IDs for the record
+
+- **Round-open prod (also the rollback target at C3 time):** `dpl_2oT9L3jixcX7ni5tQE4ac25kFpA6` — commit `9ece713` (C5.5 defensive-fix deploy from prior `onboarding-flow-removal` round). Still Ready as of round-close; re-promotable via `vercel rollback dpl_2oT9L3jixcX7ni5tQE4ac25kFpA6 --yes` during the 24–48h monitor window.
+- **C1 preview:** `dpl_BWnjzqqVJoupLK8pevTWaM3H3mbS` — commit `445599b` — `https://18seconds-r8mxxmeho-ryo-iwatas-projects.vercel.app`. cacheComponents-off, Bun-on. Validated as warning-free but hang-bearing.
+- **C2 preview:** `dpl_3RQZ8nXE8GuzAtkLtQECfE33KKjD` — commit `0e759bf` — `https://18seconds-27qljlni7-ryo-iwatas-projects.vercel.app`. cacheComponents-off, Node-on. Validated as warning-free AND hang-free. The promotion source.
+- **Round-close prod (the new production):** `dpl_HaYWegFbr7CLsY7qcS5NKcDhSv8v` — built from commit `0e759bf` at C3-promote-time with prod env vars. Aliased at `https://18seconds.vercel.app` from `2026-05-12T18:56:22Z` onward.
 
 ---
