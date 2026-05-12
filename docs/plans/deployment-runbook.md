@@ -168,7 +168,7 @@ For each DIVERGENT or DOC-WRONG finding, canonical-source decision for this roun
 | # | Doc claim | Empirical state | Canonical | Disposition |
 |---|---|---|---|---|
 | 1 | `bun db:seed` produces "11 sub_types + 33 strategies" (§3 line 143) | 14 sub_types + 42 strategies | **Repo** | Drift-commit pre-close to patch `DEPLOYMENT.md:143` to "14 sub_types + 42 strategies (3 per sub-type)". §6.14.28. |
-| 2 | `docs/phase-1-manual-verification.md` exists (§6 line 203, §X-refs line 262) | File absent | **Repo** | Defer: either (a) patch doc to drop the reference, (b) author the file as part of this round's C11, or (c) pin as residual for a docs-cleanup round. Decision in round-close. |
+| 2 | `docs/phase-1-manual-verification.md` exists (§6 line 203, §X-refs line 262) | File absent | **Repo** | **Round-close decision: (c) pin as residual.** Phase-1 verification substituted in this round by ad-hoc C7 (`/api/health` = 200 `{ok:true}`) + C8 (OAuth round-trip + Auth.js DB write confirmed via psql audit of `users`/`accounts`/`sessions`). Authoring the markdown checklist deferred to a future docs-cleanup round (R-phase1-manual-checklist-absent in §0.11). |
 | 3 | abandon-sweep route handles cron tick (§5 line 179–185) | Route exports `POST` only; Vercel cron sends GET | **Empirical (needs runtime verify)** | Block C10: probe whether Vercel-cron→POST actually fires this route. If 405, code-fix is required → spawn mid-round sub-round (§6.14.34) to add `GET` handler that delegates to `POST`. |
 | 4 | `AWS_ROLE_ARN`/`DATABASE_HOST`/`DATABASE_ADMIN_SECRET_ARN` are "Required environment variables" (§2 table) | Marked `.optional()` in `src/env.ts` | **Both correct in context** | No change. Doc is operationally correct (must be set in Vercel for runtime). Zod is `.optional()` to permit local-dev (DATABASE_LOCAL_URL path). Note in plan-doc for future readers; no action. |
 | 5 | Filename `docs/deployment.md` per redirector | Actual filename `docs/DEPLOYMENT.md` | **Empirical** | Plan-doc references use uppercase form; redirector's lowercase form is a normalized-token artifact. No code change. |
@@ -217,9 +217,44 @@ Per redirector requirement: front-load blockers. **All items below are flagged `
   - Discovery that `docs/phase-1-manual-verification.md` is required and must be authored → spawn `phase-1-checklist-author` sub-round.
   - Discovery that `src/env.ts` `.optional()` allows a missing-AWS-var deploy to build but crash at runtime, and Leo prefers build-time failure → spawn `env-required-tighten` sub-round.
 
+- **Round-close: §6.14.43 sub-type 6 final count** = **3 in-round deviations**. Per-deviation:
+  - **Dev-1** (helper-script `~/bin/refresh-aws-creds.sh`): timestamp format `+00:00` vs `Z`. Zod's `z.iso.datetime()` strict-Z validator rejected `2026-05-12T10:17:39+00:00` produced by `aws sts get-session-token`. Recovery: helper script patched to `sub("\\+00:00$"; "Z")` via jq. Blocked initial deploy at cred-validation step; no AWS resources created. Single line of pseudo-code in redirector helper-script draft was wrong.
+  - **Dev-2** (Vercel env var dashboard configuration): redirector's C2 prompt listed 9 vars to add but did not explicitly enumerate what NOT to add. User uploaded `packages/superstarter-iac/.env.local` (4 IaC vars) + manually added `DATABASE_LOCAL_URL` = 5 wrong vars on Vercel. Recovery: 5x `vercel env rm` per environment (deletes succeeded), then Development environment added to 9 legitimate vars. `DATABASE_LOCAL_URL` value was `postgres:postgres@localhost:54320/postgres` — universal-default, not a real credential leak. Prompt-design issue: the implicit exclusion list (IaC-only vars, local-only vars) should have been explicit.
+  - **Dev-3** (Secrets Manager probe in C5 diagnostic): redirector provided `aws secretsmanager get-secret-value --secret-id "arn:...rds!db-...-HMVNfo"` without anticipating bash history expansion. Bash interpreted `!db` as a history command, errored with `bash: !db: event not found`, downstream `jq` failed on empty input. Recovery: `set +H` (disable history expansion) before the command, plus single-quoted ARN. Diagnostic was non-blocking but added 2 minutes of confusion.
+- **Round-close: §6.14.34 (mid-round narrow-scope sub-round) — what actually fired:**
+  - **Sub-round `oidc-cloudcontrol-bypass`** (commit `4a17294`): triggered by CloudControl `InternalFailure` on AWS::IAM::OIDCProvider. Three-file BUILD commit (env.ts + identity.ts + alchemy.run.ts). Lint + typecheck clean on first run. Not pre-authorized in §0.10; surfaced empirically.
+  - **Sub-round `cron-hobby-compat`** (commit `9a6b563`): triggered by Vercel Hobby cron-frequency rejection (`* * * * *` not allowed). Bundled with the pre-authorized `abandon-sweep-method-fix` trigger from §0.10 since both edits to `route.ts` happen together. Two-file BUILD commit (vercel.json + route.ts). Lint + typecheck clean.
+  - **Sub-round `phase-1-checklist-author`** (pre-authorized in §0.10): **did NOT fire**. Decision: defer per §0.6 row 2 (c).
+  - **Sub-round `env-required-tighten`** (pre-authorized in §0.10): **did NOT fire**. No env-var divergence observed at runtime; deferred to a future round if Leo prefers build-time failure for missing AWS_ROLE_ARN/DATABASE_HOST.
+- **Round-close: PROMOTION CANDIDATE 2 (§6.14.43 sub-type 6) status:** **HOLDS at 3/5** — 3 in-round deviations triggered correction, so no increment per §9 step 7. Inherited cumulative count moves to ~36+.
+
 ### §0.11 Forward-pin index
 
-(Empty at commit-0. Populated at round-close.)
+Cross-round bookmarks surfaced during this round, to be consulted by future rounds:
+
+- **R-cloudcontrol-oidc-internal-failure** — AWS CloudControl `InternalFailure` for `AWS::IAM::OIDCProvider` creation in `us-east-1` against account `496780244141` (observed 2026-05-11, two distinct RequestTokens `6173a493` + `588607cb`, identical error). Bypass committed at `4a17294`: `env.ts` adds optional `EXISTING_OIDC_PROVIDER_ARN`; `modules/identity.ts` conditional branch; `alchemy.run.ts` wires through. OIDC provider created out-of-band via `aws iam create-open-id-connect-provider`. Revert path when AWS fixes: drop env var + delete provider via direct IAM API + revert `identity.ts`. **Periodically re-test** vanilla `bun run deploy` with `EXISTING_OIDC_PROVIDER_ARN` unset on a throwaway stage to detect AWS-side fix.
+
+- **R-sts-session-token-iam-write-restriction** — STS `get-session-token` credentials from MFA-less IAM users (i.e., personal AWS accounts) fail IAM write operations with `InvalidClientTokenId` / `"security token is invalid"` (HTTP 403). The `packages/superstarter-iac/scripts/with-aws.ts` shim assumes DevFactory-style session tokens that don't have this restriction. Workaround used this round: invoke alchemy directly with long-term creds — `bun --bun run alchemy.run.ts` (skip the shim wrapper). Same path needed for teardown: `bun --bun run alchemy.run.ts --destroy`. **Future task**: either add MFA to `iac-admin` user (cleaner), or patch `package.json` scripts + `with-aws.ts` to fall back to long-term creds, or document the bypass in IaC `README.md`.
+
+- **R-drizzle-migrate-ordering-fresh-rds** — `db:migrate` script in `package.json` chains `drizzle-kit-shim migrate && db:push:programs`. Migration `drizzle/0000_typical_golden_guardian.sql` uses `vector(1536)` requiring `pgvector` extension, but pgvector is only installed by `db:push:programs` which runs **after** migrations. On fresh AWS RDS, `bun db:migrate` fails opaquely (drizzle-kit code 1, no SQL trace). Workaround used: manual `CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;` via psql before re-running `bun db:migrate`. **Permanent fix candidate**: swap order in `package.json` `db:migrate` script — `db:push:programs && drizzle-kit-shim migrate`. Verify with a fresh DB first (the swap may have its own ordering dependency).
+
+- **R-iac-env-local-contamination** — `packages/superstarter-iac/.env.local` accumulated repo-root `.env` template content (AWS_ROLE_ARN, DATABASE_HOST, ANTHROPIC_API_KEY, etc.) during the C1 deploy back-and-forth. The 4 IaC-required vars at the top (VERCEL_TEAM_SLUG, VERCEL_PROJECT_NAME, ALCHEMY_PASSWORD, EXISTING_OIDC_PROVIDER_ARN) remain valid; zod `safeParse` ignores extras so deploy works. **Cleanup task**: rewrite `packages/superstarter-iac/.env.local` to only the 4 IaC vars; the contamination is cosmetic but invites confusion.
+
+- **R-purveyor-rds-prexisting** — Pre-existing RDS instance `purveyor` (`db.t3.micro`, created 2026-03-13, endpoint `purveyor.cyhk02a6cfpn.us-east-1.rds.amazonaws.com`) discovered in account `496780244141` during C1 recovery survey. Unrelated to 18seconds (different name, class, creation date). Billing ~$0.40/day = ~$11/month, has accumulated ~$22 over 2 months unobserved. **Leo to investigate ownership** — if abandoned, teardown via `aws rds delete-db-instance --db-instance-identifier purveyor --skip-final-snapshot`. Outside this round's scope.
+
+- **R-vercel-hobby-cron-tradeoff** — Vercel Hobby plan caps cron at once-per-day. Schedule changed from `* * * * *` (every minute) to `0 4 * * *` (daily 4 AM UTC) in commit `9a6b563`. `abandon-sweep` now finalizes abandoned sessions up to ~24h late vs ~1min previously. Acceptable for preview; **revisit if upgrading to Pro plan** (~$20/month unlocks sub-daily crons).
+
+- **R-cron-method-post-to-get** — `src/app/api/cron/abandon-sweep/route.ts` was `POST`-only; Vercel Cron sends HTTP GET (not configurable). Pre-this-round, cron would have silently 405'd on every fire. Renamed to `GET` in commit `9a6b563`. Other `/api/cron/*` routes (none currently exist) should follow the GET-with-bearer-auth convention.
+
+- **R-cache-components-settimeout-warning** — Next.js 16 build warning during deploy: "Next.js cannot guarantee that Cache Components will run as expected due to the current runtime's implementation of `setTimeout()`." No observed runtime impact at C7/C8. **Revisit if Cache Components misbehave** (stale cache, unexpected invalidation, partial-prerender artifacts). Currently `next.config.ts` has `cacheComponents: true`.
+
+- **R-github-vercel-connect-deferred** — `vercel link` attempted GitHub repo connection (`ryoiwata/18seconds`) and failed: "Failed to connect ... Make sure there aren't any typos and that you have access". Manual `vercel --prod` works fine. **Future task**: install/authorize Vercel's GitHub app at https://vercel.com/account/integrations, then re-connect via project's Settings → Git → Connect Git Repository. Once connected, push-to-main auto-deploys to production; preview branches auto-deploy on push.
+
+- **R-phase1-manual-checklist-absent** — `docs/phase-1-manual-verification.md` referenced by `docs/DEPLOYMENT.md` §6 line 203 and §X-refs line 262 but does not exist. Per §0.6 row 2 decision, deferred to a future docs-cleanup round. Phase-1 verification this round was: C7 `/api/health` = 200 `{ok:true}`; C8 Google OAuth round-trip with confirmed `users`/`accounts`/`sessions` writes via psql audit; C10 cron (daily schedule means first fire is ~4 AM UTC, not verified in this round).
+
+- **R-deploy-package-json-scripts-need-bypass** — Both `bun run deploy` and `bun run destroy` in `packages/superstarter-iac/package.json` route through `scripts/with-aws.ts` which is broken for this account (per R-sts-session-token-iam-write-restriction). **Document in `packages/superstarter-iac/README.md`** that the working invocations are `bun --bun run alchemy.run.ts` and `bun --bun run alchemy.run.ts --destroy` (with long-term AWS creds in environment), pending a permanent fix to either the shim or the IaC auth path.
+
+- **R-deployment-md-references-bun-run-deploy** — `docs/DEPLOYMENT.md` likely references `bun run deploy` as the IaC invocation. With the bypass workaround now permanent until R-sts-session-token-iam-write-restriction resolves, the doc should be updated to reflect the bypass path or note the conditions under which the shim works. Not patched in this round-close drift commit; pin for docs-cleanup.
 
 ---
 
@@ -578,6 +613,20 @@ Round-prompt flagged 4 cross-pollination signals; empirically only 1 (sub-type c
 
 ---
 
+### §10.3 Candidate: "CloudControl-vs-direct-IAM-API trade-off for IAM resources"
+
+AWS CloudControl is the abstraction layer Alchemy uses for `AWS.IAM.OIDCProvider` (and other IAM resource types). This round surfaced that CloudControl returns `InternalFailure` for OIDCProvider creation in `us-east-1` against this account, while the equivalent direct IAM API (`aws iam create-open-id-connect-provider`) succeeds immediately. Two retries via CloudControl, two failures with different RequestTokens. The InternalFailure is AWS-side; bypass code is permanent until AWS fixes. **Pattern candidate**: IaC frameworks that abstract over CloudControl inherit its reliability gaps. For IAM resources specifically, direct service APIs are more reliable than CloudControl. **§6.14.X candidate**: "abstraction-vs-direct-API reliability gap — when the abstraction layer has lower reliability than the underlying service API, the abstraction's promise of universality breaks." Track at 1/5.
+
+### §10.4 Candidate: "DevFactory-shape-credentials assumption breaks for personal-account-without-MFA"
+
+The `packages/superstarter-iac/scripts/with-aws.ts` shim was designed around DevFactory's session-token-based AWS credential flow. The shim assumes STS `get-session-token` credentials work universally for all AWS operations. **Empirically**: STS session credentials from MFA-less IAM users fail IAM write operations with `InvalidClientTokenId`. This is a vendored-pattern divergence: a script designed against one environment's auth shape doesn't work in a different environment's auth shape. **Pattern candidate**: "credential-shape-assumption divergence — when a vendored auth pattern hard-codes assumptions about the source environment's credentials (MFA, federation, session-vs-long-term), portability breaks at the operations that the source environment never exercised." Track at 1/5.
+
+### §10.5 Candidate: "fresh-database migration ordering with extension dependencies"
+
+`bun db:migrate` chains `drizzle-kit-shim migrate && db:push:programs`. Migration `0000` references `vector(1536)` requiring pgvector extension. pgvector is installed only by `db:push:programs`, which runs AFTER migrations. The chained order works on databases where extensions already exist (local Docker postgres pre-built with extensions, OR a previously-bootstrapped RDS); **it fails opaquely on fresh AWS RDS** because the first migration references a type from an uninstalled extension. **Pattern candidate**: "chained-script ordering assumption — when `script-A && script-B` works, the assumption is dependency-order-correct; on a fresh environment, the assumption inverts and `B`'s outputs are required by `A`'s inputs." Track at 1/5.
+
+---
+
 ## §11 Commit-0 stop-and-report shape
 
 Per redirector STEP 4:
@@ -593,3 +642,30 @@ Per redirector STEP 4:
 5. **§6.14.43 sub-type 6 cumulative-deviation count at commit-0:** 0 in-round delta (commit-0 is read-only audit + plan-doc; no app code drafted).
 6. **New §6.14 candidate patterns:** 2 (§10.1 redirector-token-pattern-match false positive; §10.2 build-passes / runtime-fails env-var). Both track at 1/5.
 7. **Recommended next redirect:** **§1.0 pre-flight commit** — Leo runs the §0.9 probe commands and reports back which items are `have-it` vs `need-to-acquire`. Once §1.0 clears, proceed to §2 C1 (IaC deploy). Do NOT auto-proceed.
+
+
+---
+
+## §12 Round-close stop-and-report shape
+
+1. **Commit hash + diff summary:** `e44cac9` (drift patch only, 1 line) + this commit (plan-doc round-close populate, ~250 lines). The two-commit split is due to a redirector script anchor mismatch on first attempt; content equivalence preserved.
+2. **Round outcome:** **CLOSED-SUCCESS**. Full runbook executed C1 through C8 with two surfaced mid-round BUILD sub-rounds (`oidc-cloudcontrol-bypass`, `cron-hobby-compat`). Infrastructure live and verified: RDS Postgres 18.3 instance `superstarter-main-db` provisioned, 9 migrations applied, 14 sub_types + 42 strategies seeded, Vercel deploy `https://18seconds.vercel.app` serving 200 on `/api/health`, OAuth round-trip succeeded with Auth.js DB writes confirmed via psql audit.
+3. **§6.14.43 sub-type 6 final count this round:** 3 in-round deviations (Dev-1 timestamp format, Dev-2 Vercel env var prompt ambiguity, Dev-3 bash history expansion in ARN probe). Inherited ~33+ → ~36+ cumulative.
+4. **PROMOTION CANDIDATE 2 status:** HOLDS at 3/5 (3 deviations triggered correction; no increment per §9 step 7).
+5. **§6.14.34 sub-rounds fired:** 2 (`oidc-cloudcontrol-bypass` `4a17294`; `cron-hobby-compat` `9a6b563`). 2 pre-authorized triggers did NOT fire (`phase-1-checklist-author`, `env-required-tighten`).
+6. **New §6.14 candidate patterns added:** 3 (§10.3 CloudControl-vs-direct-API reliability gap; §10.4 DevFactory-shape-credentials assumption; §10.5 fresh-database migration ordering). Each tracks at 1/5.
+7. **Residuals pinned:** 11 entries in §0.11 forward-pin index — see that section.
+8. **Verification not completed in this round:**
+   - C9 (DB studio via OIDC) — optional, not exercised.
+   - C10 (cron tick) — schedule is now daily at 4 AM UTC; next fire will be the morning after this commit. Verification deferred to a follow-up check.
+   - C11 (phase-1 manual checklist) — deferred per §0.6 row 2 (c).
+9. **Live infrastructure cost clock:**
+   - RDS `db.t4g.micro`: ~$0.016/hr = ~$11/month.
+   - 20GB gp3 storage: ~$2.30/month.
+   - Secrets Manager (1 secret): ~$0.40/month.
+   - **Total: ~$14/month** while live. Teardown via `cd packages/superstarter-iac && unset AWS_SESSION_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY && export AWS_REGION=us-east-1 && bun --bun run alchemy.run.ts --destroy`. (Note the bypass invocation per R-deploy-package-json-scripts-need-bypass.)
+10. **Recommended next redirect:**
+    - **Option A (preferred): pause and resume user-question-reports round** at `4cfb3b9`, which is the active paused round with §1.1 + §1.2 complete and §2 next.
+    - **Option B**: open a new docs-cleanup round to author `docs/phase-1-manual-verification.md` + patch `docs/DEPLOYMENT.md` references to `bun run deploy` (R-deploy-package-json-scripts-need-bypass + R-deployment-md-references-bun-run-deploy + R-phase1-manual-checklist-absent).
+    - **Option C**: open a permanent-fix round for R-sts-session-token-iam-write-restriction (add MFA to iac-admin, OR patch with-aws.ts to fall back to long-term creds).
+    - **Option D**: investigate R-purveyor-rds-prexisting and decide teardown.
