@@ -4,10 +4,18 @@ Round: Testbank Ingest Prod.
 Round-open hash: `74e6549` (HEAD at this commit-0; verified clean working tree, `origin/main...HEAD = 0 0`).
 Target close hash: TBD.
 
-> Narrow operational round (5-6 commits). Plan-doc shape is the lightweight
+> Narrow operational round (7 commits). Plan-doc shape is the lightweight
 > scaffold established by `docs/plans/user-question-reports.md` — full §0
 > metadata, condensed per-commit ledger, retained per-commit stop-and-report
 > gates.
+
+> **Strategy β confirmed at commit-0 follow-up:** dump preserves embeddings
+> (mechanical simplicity at C1/C2/C3), then C4 deliberately wipes prod
+> embeddings to NULL so the C5 backfill script exercises against real NULL
+> rows. Trade-off: ~$5-10 OpenAI cost and one extra destructive-operation
+> gate, in exchange for operational confidence in the backfill path. See
+> §0.7 for the second §6.14.31 gate this introduces and §1.4 for the C4
+> commit shape.
 
 ---
 
@@ -69,7 +77,7 @@ Audit performed at HEAD = `74e6549`. Findings classified per redirector rubric: 
 |---|---|---|
 | `scripts/backfill-missing-embeddings.ts` | PRESENT | 140 lines. Imports `@/env` at line 23 (so env validation at startup). Calls `createAdminDb()` from `@/db/admin`, calls `embedText` from `@/server/generation/embeddings`. CLI accepts `--limit N` and `--help`. EXEMPT FROM PROJECT RULESET (uses `console.log`). |
 | `src/db/admin.ts` | PRESENT | `createAdminDb()` returns an `AsyncDisposable` `{ db: Db }`. Branches on `env.DATABASE_LOCAL_URL`: if set → local Docker pool via `connectionString`; else → RDS pool via `fetchAdminSecret()` + `RDS_CA_BUNDLE` + admin username/password from secret. **This is the env-routing surface that determines whether the script targets local or prod.** |
-| `src/db/admin-secret.ts` | PRESENT | `fetchAdminSecret()` requires both `env.DATABASE_ADMIN_SECRET_ARN` and `env.AWS_ROLE_ARN`. Uses `awsCredentialsProvider({ roleArn })` from `@vercel/oidc-aws-credentials-provider`. **For local execution against prod, the executor needs the role-assumption to succeed without an OIDC token — confirm at C4 pre-flight whether iac-admin static creds are sufficient or whether DATABASE_LOCAL_URL needs to be unset and the script invoked under a different mechanism.** |
+| `src/db/admin-secret.ts` | PRESENT | `fetchAdminSecret()` requires both `env.DATABASE_ADMIN_SECRET_ARN` and `env.AWS_ROLE_ARN`. Uses `awsCredentialsProvider({ roleArn })` from `@vercel/oidc-aws-credentials-provider`. **For local execution against prod, the executor needs the role-assumption to succeed without an OIDC token — confirm at C5 pre-flight whether iac-admin static creds are sufficient or whether DATABASE_LOCAL_URL needs to be unset and the script invoked under a different mechanism.** |
 | `src/db/schemas/catalog/items.ts` | PRESENT | Schema is identical between local and prod (both built from the same drizzle migrations). Required columns: `id` (uuidv7 default), `sub_type_id` (FK → `sub_types.id`), `difficulty` (enum), `source` (enum), `status` (enum, default `candidate`), `body` (jsonb), `options_json` (jsonb), `correct_answer` (varchar(64)), `metadata_json` (jsonb, default `'{}'::jsonb`). Optional: `explanation`, `strategy_id` (FK → `strategies.id`), `embedding` (vector(1536)), `source_folder`, `source_filename`, `rejected_at_ms`, `rejected_by` (FK → `users.id` ON DELETE SET NULL), `rejection_reason`. |
 | `pg_dump` | PRESENT | `/usr/bin/pg_dump`, version `18.1` (Ubuntu 18.1-1.pgdg22.04+2). Both source (local Docker) and target (RDS) are postgres 18.3. Client 18.1 against 18.3 server is forward-compatible per PostgreSQL versioning policy. |
 | `pg_restore` | PRESENT | `/usr/bin/pg_restore`, version `18.1`. |
@@ -104,7 +112,7 @@ If a future round upgrades to pgvector 0.9.x or 1.0.x, that would change the on-
 
 #### E. `.env.local` shape
 
-`.env.local` exists at repo root (2,113 bytes, modified 2026-05-11 19:04). The grep audit was permission-denied at this commit-0. **Pre-flight check at C4: executor must verify `.env.local` carries DATABASE_HOST + DATABASE_ADMIN_SECRET_ARN + AWS_ROLE_ARN + OPENAI_API_KEY pointing at the prod values, or invoke `bun --bun vercel env pull .env.local` against the production environment to refresh.** Decision deferred to C4.
+`.env.local` exists at repo root (2,113 bytes, modified 2026-05-11 19:04). The grep audit was permission-denied at this commit-0. **Pre-flight check at C5: executor must verify `.env.local` carries DATABASE_HOST + DATABASE_ADMIN_SECRET_ARN + AWS_ROLE_ARN + OPENAI_API_KEY pointing at the prod values, or invoke `bun --bun vercel env pull .env.local` against the production environment to refresh.** Decision deferred to C5.
 
 ### §0.6 Doc-vs-empirical reconciliation (handoff drift surfaced at audit)
 
@@ -118,23 +126,35 @@ If a future round upgrades to pgvector 0.9.x or 1.0.x, that would change the on-
 
 ### §0.7 Destructive-operation surface
 
-**One destructive operation:** `pg_restore` (or `psql -f`) against production `items` at C3.
+**Two destructive operations:** `pg_restore` against production `items` at C3, and `UPDATE items SET embedding = NULL` against production at C4 (strategy β).
 
-- **Pre-state:** prod `items` table is empty (`COUNT = 0` confirmed at §0.5). INSERTs only; no UPDATE/DELETE/TRUNCATE.
-- **Rollback:** `TRUNCATE items` against prod. Safe: no dependent data exists yet (no users have generated `attempts` against items, no `item_admin_actions` rows logged, no `item_user_reports` filed). The only user in prod is Leo's first-sign-in row in `users`; that row has no FK pointing into `items`.
-- **§6.14.31 confirmation gate:** REQUIRED before C3. The plan-doc records this gate. Executor must STOP at C3 and obtain Leo's explicit "yes go" before running `pg_restore` against the prod RDS endpoint.
-- **C4 (`backfill-missing-embeddings.ts`)**: writes UPDATE `embedding = ...` for any row where `embedding IS NULL`. After C3 with the embedding column preserved by the dump, this should be a 0-row backfill. Even in the worst case (column lost, all 2,150 rows need embeddings), it is INSERT-equivalent on a column that was empty — non-destructive.
+- **C3 pre-state:** prod `items` table is empty (`COUNT = 0` confirmed at §0.5). INSERTs only; no UPDATE/DELETE/TRUNCATE.
+- **C3 §6.14.31 confirmation gate (gate 1):** REQUIRED before C3. The plan-doc records this gate. Executor must STOP at C3 and obtain Leo's explicit "yes go" before running `pg_restore` against the prod RDS endpoint.
+- **C4 destructive op (NEW per strategy β):** `UPDATE items SET embedding = NULL` against prod. Fully reversible — the dump file at `/tmp/items.dump` is retained through round-close as the rollback source. The embeddings will be re-populated at C5 by `scripts/backfill-missing-embeddings.ts`.
+- **C4 §6.14.31 confirmation gate (gate 2):** REQUIRED before C4. Executor must STOP and obtain Leo's explicit "yes go" before running the UPDATE statement against prod.
+- **Rollback (any failure point):** If C4 fails partway, no recovery needed (NULL is the intended state for any row touched). If C5 backfill fails partway, re-running it picks up remaining NULL rows. If full round must roll back: `TRUNCATE items` then re-restore from `/tmp/items.dump` (which still carries the original embeddings) — no users have generated dependent data (no `attempts`, no `item_admin_actions`, no `item_user_reports`; the only prod user is Leo's first-sign-in row in `users`, which has no FK pointing into `items`).
+- **C5 (`backfill-missing-embeddings.ts`)**: writes UPDATE `embedding = <vec>` for every row where `embedding IS NULL` (i.e., all 2,150 rows after C4 wipe). Recovery from the C4 wipe. Not itself destructive — populates a previously-NULLed column.
 - **No other destructive ops anticipated** in this round.
 
 ### §0.8 §6.14.31 gate placement summary
 
-Single gate: **before C3 `pg_restore` execution**. Executor must:
+**Two gates (per strategy β).**
+
+**Gate 1 — before C3 `pg_restore` execution.** Executor must:
 
 1. Show the dump file path + size + line count + estimated row count to Leo.
 2. Show the `pg_restore` (or `psql`) command verbatim including the prod hostname.
 3. Wait for explicit "yes go" reply.
 4. Execute.
 5. Immediately re-probe `SELECT COUNT(*) FROM items` against prod and report.
+
+**Gate 2 — before C4 `UPDATE items SET embedding = NULL` execution.** Executor must:
+
+1. Confirm the `/tmp/items.dump` file is still present and intact (rollback source).
+2. Show the UPDATE command verbatim including the prod hostname.
+3. Wait for explicit "yes go" reply.
+4. Execute.
+5. Immediately re-probe `SELECT COUNT(*) FROM items WHERE embedding IS NULL` (expect 2150) and `SELECT COUNT(*) FROM items` (expect 2150 — no rows deleted) against prod and report.
 
 ### §0.9 Pre-flight readiness checklist (run at C1 boundary)
 
@@ -144,9 +164,9 @@ Single gate: **before C3 `pg_restore` execution**. Executor must:
 - [x] Local items count > 0 (2,150) ← confirmed §0.5.B
 - [x] Prod items count = 0 ← confirmed §0.5.C
 - [x] Prod sub_types and strategies seeded (FK targets exist) ← confirmed §0.5.C
-- [x] Local embedding coverage = 100% ← confirmed §0.5.B (no NULL embeddings; backfill at C4 should be no-op)
+- [x] Local embedding coverage = 100% ← confirmed §0.5.B (no NULL embeddings; under strategy β, C4 wipes prod embeddings to NULL so C5 backfill exercises against the full 2,150-row NULL set)
 - [x] `OPENAI_API_KEY` configured in prod env vars ← per the prior env-var audit (handoff §D.5: all 9 vars present)
-- [ ] `.env.local` carries DATABASE_HOST + DATABASE_ADMIN_SECRET_ARN + AWS_ROLE_ARN + OPENAI_API_KEY pointing at prod ← deferred to C4 pre-flight (see §0.5.E)
+- [ ] `.env.local` carries DATABASE_HOST + DATABASE_ADMIN_SECRET_ARN + AWS_ROLE_ARN + OPENAI_API_KEY pointing at prod ← deferred to C5 pre-flight (see §0.5.E)
 - [ ] iac-admin AWS creds active in current shell ← already true at commit-0 audit (`aws sts get-caller-identity` returned Account 496780244141 / iac-admin); re-verify at each commit boundary
 
 ### §0.10 Forward-watch entries
@@ -154,7 +174,7 @@ Single gate: **before C3 `pg_restore` execution**. Executor must:
 - **Sub-type 6 promotion candidate 2** (per `docs/plans/deployment-runbook.md` §0.10): held at 3/5 entering this round. Track deviations during this round; round-close updates the count.
 - **Pre-authorized §6.14.34 sub-rounds:**
   - `schema-divergence-sub-round` — triggers if local rows have non-default `source_folder` or `metadata_json` shapes that the prod schema rejects.
-  - `script-env-routing-sub-round` — triggers if `scripts/backfill-missing-embeddings.ts` fails because of an env-var routing issue (R-iac-env-local-contamination is a precedent).
+  - `script-env-routing-sub-round` — triggers if `scripts/backfill-missing-embeddings.ts` fails at C5 because of an env-var routing issue (R-iac-env-local-contamination is a precedent). C-number reference shifted from C4 to C5 per strategy β ledger renumber.
   - `vector-extension-skew-sub-round` — triggers ONLY if pg_restore fails to load embedding values due to the 0.8.2-vs-0.8.1 patch-version difference (judgment: should not happen — see §0.5.D — but pre-authorize the sub-round so we can act immediately).
 - **R-purveyor-companion-resources-still-up** — banked, not promoted. Future round may decide whether to chase the platform team for a teardown.
 
@@ -166,7 +186,7 @@ Empty at round-open. Populated at round-close.
 
 ## §1 Commit ledger skeleton
 
-Five-to-six commits planned. Each commit gates on a stop-and-report.
+Seven commits planned (per strategy β adopted at commit-0 follow-up — see top-of-doc note). Each commit gates on a stop-and-report.
 
 ### §1.1 C1 — Dump local items to /tmp/items.dump
 
@@ -198,9 +218,9 @@ Five-to-six commits planned. Each commit gates on a stop-and-report.
 
 **Commit message shape:** `docs(plans): testbank-ingest-prod C2 — verify items dump integrity (2150 rows, embeddings preserved)`.
 
-### §1.3 C3 — Restore dump to prod RDS [§6.14.31 gate]
+### §1.3 C3 — Restore dump to prod RDS [§6.14.31 gate 1]
 
-**§6.14.31 confirmation REQUIRED before execution.** See §0.8.
+**§6.14.31 confirmation REQUIRED before execution.** See §0.8 (gate 1).
 
 **Operation:**
 ```bash
@@ -224,28 +244,51 @@ PGPASSWORD="$DB_PASS" pg_restore \
 **Verification (in C3's stop-and-report):**
 - `SELECT COUNT(*) FROM items` against prod returns 2,150
 - `SELECT status, COUNT(*) FROM items GROUP BY status` matches local distribution exactly
-- `SELECT COUNT(*) FROM items WHERE embedding IS NULL` against prod returns 0 (or, if not 0, document the count and explain at C4)
+- `SELECT COUNT(*) FROM items WHERE embedding IS NULL` against prod returns 0 (or, if not 0, document the count — under strategy β, C4 will null all rows anyway, so a partial-NULL state from C3 is observationally interesting but not a blocker; explain at C5).
 
 **Commit message shape:** `docs(plans): testbank-ingest-prod C3 — restore items to prod RDS (2150 rows)`.
 
-### §1.4 C4 — Backfill embeddings on prod (no-op if dump preserved them)
+### §1.4 C4 — Wipe prod embeddings to NULL [§6.14.31 gate 2 — strategy β]
+
+**§6.14.31 confirmation REQUIRED before execution.** See §0.8 (gate 2).
+
+**Rationale:** strategy β. The dump preserves embeddings for mechanical simplicity through C1/C2/C3, then C4 deliberately wipes prod embeddings so the C5 backfill script exercises against real NULL rows. This trades ~$5-10 OpenAI cost and one extra destructive-operation gate for operational confidence in the backfill path — we want to know `scripts/backfill-missing-embeddings.ts` actually works in prod before relying on it for any future round.
+
+**Operation:**
+```bash
+set +H
+SECRET_JSON=$(aws secretsmanager get-secret-value \
+  --secret-id 'arn:aws:secretsmanager:us-east-1:496780244141:secret:rds!db-cdcdd9e3-3f74-43fa-9e11-42292f4fd2ed-HMVNfo' \
+  --query SecretString --output text)
+DB_PASS=$(echo "$SECRET_JSON" | jq -r .password)
+PGPASSWORD="$DB_PASS" psql \
+  "host=superstarter-main-db.cyhk02a6cfpn.us-east-1.rds.amazonaws.com port=5432 user=postgres dbname=postgres sslmode=require" \
+  -c "UPDATE items SET embedding = NULL;"
+```
+
+**Verification (in C4's stop-and-report):**
+- `SELECT COUNT(*) FROM items WHERE embedding IS NULL` against prod returns **2150** (the full row count).
+- `SELECT COUNT(*) FROM items` against prod still returns **2150** (no rows deleted).
+- The dump file at `/tmp/items.dump` is still present and intact (rollback source for the round).
+
+**Commit message shape:** `docs(plans): testbank-ingest-prod C4 — wipe prod embeddings to NULL (strategy β setup for backfill)`.
+
+### §1.5 C5 — Backfill embeddings on prod
 
 **Pre-flight (this commit's first action):** verify `.env.local` carries DATABASE_HOST + DATABASE_ADMIN_SECRET_ARN + AWS_ROLE_ARN + OPENAI_API_KEY pointing at production. If any are missing or local-pointing, refresh via `bun --bun vercel env pull .env.local --environment=production` and confirm `DATABASE_LOCAL_URL` is **unset** in `.env.local` (the `createAdminDb()` branch in `src/db/admin.ts` keys on this).
 
 **Operation:** `bun run scripts/backfill-missing-embeddings.ts`.
 
-**Expected behavior:** the script logs `backfill-missing-embeddings: starting`, queries items where `embedding IS NULL`, finds zero rows (because the dump preserved embeddings), exits cleanly with "no items to backfill."
+**Expected behavior:** the script logs `backfill-missing-embeddings: starting`, queries items where `embedding IS NULL`, finds **2,150 rows** (per strategy β — C4 wiped them all), processes them sequentially via OpenAI's `text-embedding-3-small`, exits cleanly. Expected cost per the strategy-β trade-off note: ~$5-10.
 
-**Worst case behavior:** dump did not preserve embeddings cleanly, all 2,150 rows need embeddings. Script processes them sequentially via OpenAI's `text-embedding-3-small`. At ~$0.00002/1k tokens and ~200 tokens/item, expect ~$0.01 total cost — negligible.
-
-**Verification (in C4's stop-and-report):**
+**Verification (in C5's stop-and-report):**
 - Script exit code 0
 - Final `SELECT COUNT(*) FROM items WHERE embedding IS NULL` against prod returns 0
-- Script's log output (count of items processed)
+- Script's log output (count of items processed; expect 2150)
 
-**Commit message shape:** `docs(plans): testbank-ingest-prod C4 — backfill embeddings on prod (N items)`.
+**Commit message shape:** `docs(plans): testbank-ingest-prod C5 — backfill embeddings on prod (2150 items)`.
 
-### §1.5 C5 — Verification (functional smoke against prod)
+### §1.6 C6 — Verification (functional smoke against prod)
 
 **Operations:**
 1. Re-probe prod `items`:
@@ -262,16 +305,16 @@ PGPASSWORD="$DB_PASS" pg_restore \
 4. Verify the original failing user's session can resume:
    - The session id from the original 500 (`019e19ad-23f4-7918-b585-f49defc54a3c`) belongs to user `cb54eeab-5132-458b-8d25-046ae20d2e9e` (Leo). After C3, that session's `getNextItem` lookup should find a row for the `verbal.sentence_completion / medium` slot. Confirm by manual `/diagnostic/run` hit (step 2).
 
-**Verification (in C5's stop-and-report):** all four checks above pass.
+**Verification (in C6's stop-and-report):** all four checks above pass.
 
-**Commit message shape:** `docs(plans): testbank-ingest-prod C5 — verification (prod items=2150, /diagnostic/run returns 200)`.
+**Commit message shape:** `docs(plans): testbank-ingest-prod C6 — verification (prod items=2150, /diagnostic/run returns 200)`.
 
-### §1.6 C6 — Round-close
+### §1.7 C7 — Round-close
 
 **Operations:**
-1. Populate §0.11 forward-pin index with anything surfaced during C1-C5 that needs forward-tracking.
+1. Populate §0.11 forward-pin index with anything surfaced during C1-C6 that needs forward-tracking.
 2. Populate this section's "ROUND-CLOSE STATUS" block.
-3. Promote any §10 candidate patterns that hit promotion threshold.
+3. Promote any §3 candidate patterns that hit promotion threshold.
 4. Update sub-type 6 promotion candidate count if applicable.
 5. `git push origin main` — first push of this round (per deployment-runbook convention: push only at round-close).
 
@@ -283,10 +326,10 @@ PGPASSWORD="$DB_PASS" pg_restore \
 
 - **DO NOT** `pg_dump` without `--data-only --table=items`. A schema-bearing dump will conflict with prod's existing schema and risk DROP TABLE statements.
 - **DO NOT** `pg_dump` other tables. The dump file should contain ONLY `items` data.
-- **DO NOT** run `pg_restore` against prod without first showing the command + dump-file fingerprint to Leo and waiting for "yes go." This is the §0.8 §6.14.31 gate.
+- **DO NOT** run `pg_restore` against prod without first showing the command + dump-file fingerprint to Leo and waiting for "yes go." This is §0.8 gate 1. Same applies for the C4 `UPDATE items SET embedding = NULL` (gate 2).
 - **DO NOT** use `--clean` or `--if-exists` with `pg_restore`. Prod items table is empty at C3; a `--clean` flag would emit a DROP TABLE and break FK references.
 - **DO NOT** modify the dump file by hand. If the dump is malformed, regenerate at C1, do not patch.
-- **DO NOT** push commits to `origin/main` between C1 and C5. Push only at C6 round-close.
+- **DO NOT** push commits to `origin/main` between C1 and C6. Push only at C7 round-close.
 
 ---
 
@@ -340,14 +383,14 @@ Required entries in the commit-0 stop-and-report:
 10. Modified anything besides the plan-doc? (must be "no")
 11. Anything unexpected to flag for the redirector before C1?
 
-## §5 Round-close stop-and-report shape (populated at C6)
+## §5 Round-close stop-and-report shape (populated at C7)
 
 Required entries in the round-close stop-and-report:
 
-1. All commit SHAs (C1 through C6) with one-line summary each.
+1. All commit SHAs (C1 through C7) with one-line summary each.
 2. Final prod items count + status distribution (must match local 2,150 / 448-1695-7).
 3. Final prod embedding coverage (must be 100% / 0 NULL rows).
-4. C5 functional smoke result (`/diagnostic/run` returns 200, first item renders, attempt submission succeeds).
+4. C6 functional smoke result (`/diagnostic/run` returns 200, first item renders, attempt submission succeeds).
 5. Final Vercel logs `--level error --since 1h --no-branch` against `/diagnostic/run`: expect zero new errors after C3.
 6. §3 candidate patterns: which (if any) promoted? Which banked?
 7. Sub-type 6 promotion candidate 2 final count after this round.
@@ -357,6 +400,6 @@ Required entries in the round-close stop-and-report:
 
 ---
 
-## §6 ROUND-CLOSE STATUS — populated at C6
+## §6 ROUND-CLOSE STATUS — populated at C7
 
-(Empty at commit-0. Populated when C6 lands.)
+(Empty at commit-0. Populated when C7 lands.)
