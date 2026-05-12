@@ -140,7 +140,7 @@ Run from your machine, with `.env.local` populated via `vercel env pull`:
 ```bash
 bun db:push:programs    # creates the `app` user, GRANTs rds_iam, installs pgcrypto + pgvector
 bun db:migrate          # applies drizzle/0000_*.sql and subsequent migrations
-bun db:seed             # 11 sub_types + 33 strategies (idempotent)
+bun db:seed             # 14 sub_types + 42 strategies (3 per sub-type: recognition / technique / trap) (idempotent)
 ```
 
 `db:push:programs` connects as the RDS **master** user (via Secrets Manager) and is the only path that creates the `app` role. The runtime app connects as `app` and has no privilege to create roles or extensions — that separation is by design.
