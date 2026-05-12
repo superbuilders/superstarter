@@ -24,7 +24,7 @@
 // state matches <WrongItemsBrowser>'s pattern: a single neutral-toned
 // line.
 
-import type { SurfacedStrategy } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+import type { SurfacedStrategy } from "@/app/(app)/post-session/[sessionId]/page"
 import { SUB_TYPE_BY_ID, compareBySubTypeDisplay } from "@/components/post-session/_lib/sub-type-display"
 import type { SubTypeId } from "@/config/sub-types"
 

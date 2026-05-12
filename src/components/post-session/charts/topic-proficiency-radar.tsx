@@ -23,7 +23,7 @@
 // (computed once in the shell via computeOuterRingValue, passed as a
 // prop) so the two radars are visually comparable.
 
-import type { PerSubTypePerformance } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+import type { PerSubTypePerformance } from "@/app/(app)/post-session/[sessionId]/page"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
 import { cn } from "@/lib/utils"
 

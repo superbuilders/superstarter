@@ -18,7 +18,7 @@
 import type {
 	PerSubTypePerformance,
 	SurfacedStrategy
-} from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+} from "@/app/(app)/post-session/[sessionId]/page"
 import { type SubTypeId, subTypes } from "@/config/sub-types"
 
 // ---------------- Numeric anchors + lookup ----------------

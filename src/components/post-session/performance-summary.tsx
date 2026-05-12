@@ -36,7 +36,7 @@
 // audit doc §A.3 + structured comment trail in the deleted
 // `latency-summary.tsx:160-170`).
 
-import type { PerSubTypePerformance } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+import type { PerSubTypePerformance } from "@/app/(app)/post-session/[sessionId]/page"
 import { SUB_TYPE_BY_ID, compareBySubTypeDisplay } from "@/components/post-session/_lib/sub-type-display"
 import type { SubTypeId } from "@/config/sub-types"
 

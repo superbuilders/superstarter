@@ -9,7 +9,7 @@
 // the shell's `<PerformanceSummary>` slot.
 
 import * as React from "react"
-import type { SessionInfo } from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+import type { SessionInfo } from "@/app/(app)/post-session/[sessionId]/page"
 import { PostSessionShell } from "@/components/post-session/post-session-shell"
 
 interface PostSessionContentProps {

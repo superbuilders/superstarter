@@ -23,7 +23,7 @@
 // **Median query:** PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY
 // latency_ms)::int per session. Cross-DB-portable PG aggregate.
 // Established precedent at
-// src/app/(diagnostic-flow)/post-session/[sessionId]/page.tsx:95.
+// src/app/(app)/post-session/[sessionId]/page.tsx:95.
 // LEFT JOIN keeps sessions even if they have zero attempts; in that
 // edge case PERCENTILE_CONT returns NULL → mapped to undefined in
 // the JS layer. Real full_length sims always have attempts; the

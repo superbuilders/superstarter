@@ -19,7 +19,7 @@ import { z } from "zod"
 import type {
 	ItemDifficulty,
 	WrongItem
-} from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+} from "@/app/(app)/post-session/[sessionId]/page"
 import { NumberSeriesBody } from "@/components/item/body-renderers/number-series"
 import { TextBody } from "@/components/item/body-renderers/text"
 import {

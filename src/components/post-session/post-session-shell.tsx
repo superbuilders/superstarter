@@ -22,7 +22,7 @@ import type {
 	PerSubTypePerformance,
 	SurfacedStrategy,
 	WrongItem
-} from "@/app/(diagnostic-flow)/post-session/[sessionId]/page"
+} from "@/app/(app)/post-session/[sessionId]/page"
 import { BeltIndicator } from "@/components/post-session/belt-indicator"
 import { CumulativeTimeChart } from "@/components/post-session/charts/cumulative-time-chart"
 import { TimeSinkChart } from "@/components/post-session/charts/time-sink-chart"
