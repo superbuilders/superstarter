@@ -159,7 +159,32 @@ No new pins opened at C0.
 - **W-* items:** **W-session-composition resolved** (uniform random within user-selected pool, tier-agnostic, within-session no-repeat). **W-offline-url-resolution remains open for C3** (does the bare `/offline-app/` path resolve to `index.html` on the deployed site?).
 - **Outcome:** `public/offline-app/index.html` complete and locally verified. C3 (cross-browser test) is next.
 
-### C3+ (TBD)
+### C3a — preview deploy + URL resolution check (this commit)
+
+- **Type:** deploy + verification. No code changes. Touches `docs/plans/offline-app.md` (this ledger entry) only.
+- **Preview deployment:** `dpl_nNVewd8TTPDe6KhpXii5xz7vcgdg` — `https://18seconds-oo30wiu2y-ryo-iwatas-projects.vercel.app`. Deployed from branch `offline-app` @ `383034b` via `vercel --no-wait` (preview target — `target: null`, not prod). Build **Ready** in ~1 min (Building 17:45:43Z → Ready by 17:46:14Z). Preview app health: `/api/health` → `{"ok":true}` 200 — the build is genuinely healthy.
+- **⚠️ Headline finding — the `/offline-app/*` paths are auth-gated; not publicly served.** All four probed paths redirect to the app login:
+
+  | Path | Result |
+  |------|--------|
+  | `/offline-app/index.html` | `302 → /login` |
+  | `/offline-app/` | `302 → /login` |
+  | `/offline-app` | `302 → /login` |
+  | `/offline-app/testbank.json` | `302 → /login` |
+
+  Two protection layers observed. (1) Vercel **Deployment Protection** (SSO) returns `401 "Authentication Required"` to anonymous curl on every preview path — bypassed for this check with `vercel curl` (auto-generates a protection-bypass token; the sanctioned agent path, per the 401 page's own embedded `llms.txt` note). (2) Past the Vercel SSO layer, the **app's own NextAuth proxy** (`src/proxy.ts` — Next 16's `proxy`, i.e. middleware) 302-redirects to `/login` with `authjs` cookies set.
+- **Root cause (`src/proxy.ts`):** the proxy matcher `/((?!_next/static|_next/image|favicon|\.well-known/workflow/|api/sessions/[^/]+/heartbeat).*)` matches `/offline-app/*` — it excludes only `_next` / `favicon` / workflow / heartbeat, **not** `public/` static assets. The handler's `PUBLIC_PREFIXES` (`/api/auth`, `/login`, `/api/health`, `/api/cron`, `/api/admin`) does not include `/offline-app`, so an unauthenticated `/offline-app/*` request falls through to `Response.redirect("/login")`. Static files under `public/offline-app/` are thus gated behind app authentication.
+- **Impact:**
+  1. **§0.4 distribution path broken** — "visit `https://18seconds.vercel.app/offline-app/` and open the HTML" bounces unauthenticated visitors (cohort members without 18seconds accounts) to `/login`.
+  2. **C2 testbank-refresh link broken** — the offline app's footer "Download latest testbank" link to `https://18seconds.vercel.app/offline-app/testbank.json` redirects to `/login` for unauthenticated users.
+  3. **Primary distribution path unaffected** — downloading both files and opening `index.html` via `file://` does not depend on the URL being public.
+- **W-offline-url-resolution — NOT resolved; escalated.** The original question (does bare `/offline-app/` resolve to `index.html`?) could **not** be measured: the NextAuth proxy short-circuits the request before Vercel's static-file layer is reached. The more consequential answer supersedes it — `/offline-app/*` is not publicly served at all. Even after a proxy fix, the bare-directory-index behavior still needs a re-probe.
+- **Suggested fix (NOT done in C3a — no code changes this commit):** add `"/offline-app"` to `PUBLIC_PREFIXES` in `src/proxy.ts` (one line; the `startsWith` carve-out mechanism already exists). Redirector decision for a follow-up commit.
+- **Content verification — blocked.** `index.html` / `testbank.json` content could not be HTTP-verified past the proxy redirect. Both files are confirmed committed at `383034b` (`git ls-tree`) and static `public/` assets deploy verbatim, so they are in the deployment — just not anonymously reachable.
+- **Prod unaffected (§3.16):** the production deployment before and after the preview deploy is unchanged — `dpl_GK52EP42MKndso7ZWehtzQoLCdNu` (`18seconds-2tsdnmokh…`, 4d old, the `end-session-perf` C3 promotion). Prod health `https://18seconds.vercel.app/api/health` → 200. The preview deploy did not touch prod.
+- **Handoff to C3b (user-driven manual test):** the preview URL now requires **two** logins (Vercel SSO, then 18seconds NextAuth) before `/offline-app/index.html` is reachable — so the `file://` test is the priority and is unaffected. The redirector may want to fix `src/proxy.ts` before C3b so the preview-URL test is meaningful for the unauthenticated-distribution scenario.
+
+### C3b+ (TBD)
 
 To be filled at the corresponding commit.
 
