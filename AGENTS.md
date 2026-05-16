@@ -115,3 +115,10 @@ Stable cross-round metadata. Add new entries here when they emerge.
 - GitHub username: `ryoiwata`
 - These are the same person.
 - Banked at end-session-perf C4 housekeeping (commit `79dee59`), promoted to durable cross-round home at offline-app C1.
+
+### Public route carve-outs
+
+`src/proxy.ts` `PUBLIC_PREFIXES` exempts these paths from the NextAuth proxy redirect:
+- `/api/auth`, `/login` — auth machinery.
+- `/api/health`, `/api/cron`, `/api/admin` — operational endpoints.
+- `/offline-app` — cohort-distribution path for the standalone offline practice app. Intentionally public; nothing sensitive belongs under this prefix.

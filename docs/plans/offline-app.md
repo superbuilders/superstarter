@@ -184,6 +184,16 @@ No new pins opened at C0.
 - **Prod unaffected (§3.16):** the production deployment before and after the preview deploy is unchanged — `dpl_GK52EP42MKndso7ZWehtzQoLCdNu` (`18seconds-2tsdnmokh…`, 4d old, the `end-session-perf` C3 promotion). Prod health `https://18seconds.vercel.app/api/health` → 200. The preview deploy did not touch prod.
 - **Handoff to C3b (user-driven manual test):** the preview URL now requires **two** logins (Vercel SSO, then 18seconds NextAuth) before `/offline-app/index.html` is reachable — so the `file://` test is the priority and is unaffected. The redirector may want to fix `src/proxy.ts` before C3b so the preview-URL test is meaningful for the unauthenticated-distribution scenario.
 
+### C3a.5 — proxy carve-out for /offline-app (this commit)
+
+- **Type:** code (one-line fix) + durable-doc edit. Resolves the C3a headline finding.
+- **Redirector decision:** View A — keep the offline app publicly distributable. Add `/offline-app` to the proxy's public allowlist.
+- **Files changed:** `src/proxy.ts` (one entry added to `PUBLIC_PREFIXES` + a 7-line contract comment), `AGENTS.md` ("Public route carve-outs" entry appended to Project facts), `docs/plans/offline-app.md` (this ledger entry).
+- **The fix:** `"/offline-app"` added to `src/proxy.ts`'s `PUBLIC_PREFIXES`. The proxy handler already iterates that list with `path.startsWith(prefix)` and returns `undefined` (allow) on a match, so the one entry makes every `/offline-app/*` request — `index.html`, `testbank.json`, and any future asset — bypass the NextAuth redirect. The matcher regex is left untouched; the allowlist check inside the handler is the carve-out point.
+- **Carve-out contract (documented in both `src/proxy.ts` and `AGENTS.md`):** `/offline-app` is the first *content-delivery* entry in `PUBLIC_PREFIXES` — the others are all auth machinery (`/api/auth`, `/login`) or operational endpoints (`/api/health`, `/api/cron`, `/api/admin`). It is intentionally public: the testbank ships answers + explanations and is designed for unauthenticated download by cohort members who may have no 18seconds account. **Nothing sensitive may be placed under `public/offline-app/`.**
+- **W-proxy-carve-out-contract-documented — resolved.** The contract is recorded in `src/proxy.ts` (inline comment above the entry) and `AGENTS.md` Project facts (durable cross-round home).
+- **W-offline-url-resolution — pending final confirmation.** This commit applies the fix; the preview redeploy + anonymous re-curl that confirm `/offline-app/*` no longer redirects to `/login` run *after* this commit (results in the C3a.5 stop-and-report). Note the prod-vs-preview auth distinction: preview URLs sit behind Vercel Deployment Protection (SSO) regardless of the app's NextAuth proxy, so anonymous curl against the *preview* may still 401 at the Vercel layer — `vercel curl` is used to bypass Vercel SSO and observe the app proxy's real (post-fix) behavior.
+
 ### C3b+ (TBD)
 
 To be filled at the corresponding commit.

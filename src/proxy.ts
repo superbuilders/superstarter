@@ -9,7 +9,15 @@ const PUBLIC_PREFIXES: ReadonlyArray<string> = [
 	// (currently with `Authorization: Bearer ${CRON_SECRET}`). Form-based admin
 	// flows go through server actions under /admin/*, which do session +
 	// admin-allowlist checks via requireAdminEmail() — not this prefix.
-	"/api/admin"
+	"/api/admin",
+	// /offline-app is the cohort-distribution path for the standalone offline
+	// practice app (public/offline-app/index.html + public/offline-app/
+	// testbank.json). It is the first content-delivery entry in this list —
+	// the others are all auth machinery or operational endpoints.
+	// Intentionally public: the testbank ships answers + explanations and is
+	// designed for unauthenticated download by cohort members who may have no
+	// 18seconds account. DO NOT place anything sensitive under this prefix.
+	"/offline-app"
 ]
 
 const proxy = auth(function proxyHandler(req) {
