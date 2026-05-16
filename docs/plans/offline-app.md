@@ -96,7 +96,47 @@ No new pins opened at C0.
 - **Branch:** `offline-app` created off `main` at `79dee59`.
 - **Outcome:** testbank content shape audited; repo conventions audited; design decisions recorded; content gotchas surfaced (§2). DB found unreachable — live counts deferred to C1.
 
-### C1+ (TBD)
+### C1 — testbank export (this commit)
+
+- **Type:** code. Net-new export script + generated artifact + durable-doc edit.
+- **Files touched:** `scripts/export-testbank.ts` (new), `public/offline-app/testbank.json` (new, generated), `AGENTS.md` ("Project facts" section appended), `docs/plans/offline-app.md` (this ledger entry).
+- **Redirector decisions at C1-open:**
+  - Path A — refresh OIDC, export against production RDS. No local Docker fallback.
+  - Null-explanation policy: option (3) — export `explanation: null` as-is; count and report; never skip or fail.
+  - Sub-type display names sourced from `src/config/sub-types.ts` (live-app source of truth), not the `sub_types` DB rows.
+  - Identity-mapping durable home: `AGENTS.md` "Project facts" section (chosen over a new `docs/project-facts.md`).
+- **OIDC refresh:** `vercel env pull .env.local` refreshed `VERCEL_OIDC_TOKEN` (project `ryo-iwatas-projects/18seconds`, `development` env). A temporary reachability probe (`scripts/_c1-reachability-check.ts`, deleted before staging — never committed) confirmed `hasEnvToken: true` and a live sample row. Path A succeeded; no Docker fallback needed.
+- **Hard-fail validations:** all four implemented in `export-testbank.ts` — (1) non-`text` `body.kind`; (2) `correct_answer` not matching exactly one `options_json[].id`; (3) option count `< 2` or `> 5` (canonical max from `optionsJsonSchema` in `src/server/items/selection.ts`); (4) row `status !== 'live'`. **None triggered** — all 448 live items passed validation.
+- **Live counts measured (resolving §0.10 W-* items):**
+  - **Total live items:** 448 (vs the §2.5 on-disk approximation of "at least a few hundred").
+  - **Per tier** (W-per-tier-item-count): easy 141, medium 228, hard 73, **brutal 6**.
+  - **Per sub-type** (W-per-sub-type-item-count):
+
+    | Sub-type | Section | Live count |
+    |----------|---------|-----------:|
+    | verbal.antonyms | verbal | 35 |
+    | verbal.letter_series | verbal | 16 |
+    | verbal.analogies | verbal | 43 |
+    | verbal.sentence_completion | verbal | 61 |
+    | verbal.critical_reasoning | verbal | 59 |
+    | numerical.number_series | numerical | 49 |
+    | numerical.lowest_values | numerical | 41 |
+    | numerical.fractions | numerical | 9 |
+    | numerical.percentages | numerical | 34 |
+    | numerical.averages | numerical | 18 |
+    | numerical.ratios | numerical | 16 |
+    | numerical.workrate | numerical | 21 |
+    | numerical.speed_distance_time | numerical | 17 |
+    | numerical.word_problems | numerical | 29 |
+
+  - **Explanation coverage** (W-explanation-coverage): **448/448 = 100%.** Zero null explanations. The null-explanation policy (option 3) is wired into the script, but the live null set is empty — no items export with `explanation: null`.
+  - **testbank.json size** (W-testbank-json-size): 493,285 bytes ≈ **481.7 KB** (2-space pretty-printed; 448 items + 14 sub-types). Comfortably a single file — confirms H2 lean (a).
+- **§0.9 reconciliation:** the §2.5 on-disk-artifact counts are now superseded by these live numbers. Per-sub-type and per-tier live counts run higher than the import-log approximation (seed items + promoted generated siblings) except `numerical.fractions` (import 10 → live 9). This is the refinement §0.9 anticipates, not a silent rewrite — §2.5 is left intact as the C0-frozen approximation.
+- **AGENTS.md:** "Project facts" section appended (10 lines) with the `leonardiwata-2680` ↔ `ryoiwata` identity mapping — promoted from the round-scoped `end-session-perf` plan-doc to a durable cross-round home. `CLAUDE.md` symlink → `AGENTS.md` verified intact (resolves §0.6 TBD).
+- **Outcome:** `public/offline-app/testbank.json` generated and validated. C2 (offline HTML) is unblocked.
+- **C2 readiness note:** the `brutal` tier holds only **6** live items bank-wide — a per-sub-type `brutal` draw is effectively impossible (6 items spread across 14 sub-types). C2's 50-Q session composition (W-session-composition) must not assume four evenly-stocked tiers. A balanced per-sub-type draw of 50 across 14 sub-types (~3–4 each) is feasible: the thinnest sub-type, `numerical.fractions`, has 9 live items.
+
+### C2+ (TBD)
 
 To be filled at the corresponding commit.
 

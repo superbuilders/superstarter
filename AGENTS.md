@@ -104,3 +104,14 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## Project facts
+
+Stable cross-round metadata. Add new entries here when they emerge.
+
+### Identity mapping
+
+- Vercel username: `leonardiwata-2680`
+- GitHub username: `ryoiwata`
+- These are the same person.
+- Banked at end-session-perf C4 housekeeping (commit `79dee59`), promoted to durable cross-round home at offline-app C1.
