@@ -136,7 +136,30 @@ No new pins opened at C0.
 - **Outcome:** `public/offline-app/testbank.json` generated and validated. C2 (offline HTML) is unblocked.
 - **C2 readiness note:** the `brutal` tier holds only **6** live items bank-wide — a per-sub-type `brutal` draw is effectively impossible (6 items spread across 14 sub-types). C2's 50-Q session composition (W-session-composition) must not assume four evenly-stocked tiers. A balanced per-sub-type draw of 50 across 14 sub-types (~3–4 each) is feasible: the thinnest sub-type, `numerical.fractions`, has 9 live items.
 
-### C2+ (TBD)
+### C2 — offline HTML (this commit)
+
+- **Type:** code. Net-new single-file offline app.
+- **Files touched:** `public/offline-app/index.html` (new), `biome/base.jsonc` (lint-exempt registration), `docs/plans/offline-app.md` (this ledger entry).
+- **Decisions locked at C2-open:**
+  - **H1 stack:** vanilla JS, single HTML file. No Alpine, no Preact, no build step, no runtime CDN. CSS inline in `<style>`, JS inline in `<script>` IIFE.
+  - **H2 packaging:** single `testbank.json` — confirmed by C1's 481.7 KB measurement.
+  - **H3 don't-reshow:** within-session only — Fisher-Yates shuffle + slice. No `localStorage` / `sessionStorage` / `IndexedDB`; state is in-memory only.
+  - **Session composition (resolves W-session-composition):** user-selected sub-types (default all 14 checked), uniform random within the selected pool, **tier-agnostic** (`brutal` at 6 items bank-wide is too thin to balance).
+  - **Session length picker:** `10 / 25 / 50 / All selected`, default 50.
+  - **Testbank refresh:** footer "Download latest testbank" link to `https://18seconds.vercel.app/offline-app/testbank.json` (the `.vercel.app` domain per the `R-prod-domain-mismatch` pin), `target="_blank" rel="noopener"`, user-initiated.
+  - **UX:** light theme, system font stack, neutral zinc grays with green `#16a34a` / red `#dc2626` correct-wrong feedback, no animations.
+- **File:** `public/offline-app/index.html` — 28,005 bytes (~27 KB), **790 lines** total (159 CSS, 602 JS, 29 HTML skeleton incl. an 18-line header comment). Under the 1000-line target.
+- **Lint exemption (unanticipated by the C2 brief):** the pre-commit hook's biome lints JS embedded in HTML files with the full TS-app ruleset. That ruleset's `no-iife` plugin directly contradicts the C2 brief, which itself specifies a "module-pattern IIFE"; `noForEach` / `no-inline-ternary` / `noExcessiveCognitiveComplexity` likewise target app source, not a standalone vanilla-JS static artifact. `biome/base.jsonc` already has a sanctioned mechanism for this — a `files.includes` exempt list whose contract requires both a `!`-negation entry **and** an "EXEMPT FROM THE PROJECT RULESET" file header. `public/offline-app/index.html` was registered in both per that contract. This is the third file in the commit (the brief assumed two); flagged as a §3.15-style assumption-meets-reality deviation.
+- **Three screens, single page:** setup (`setup-empty` → `setup-configured`), question, summary. Single module-scope `state` object; `render()` rebuilds `#app` via `replaceChildren`; handlers mutate state then `render()`. All testbank text rendered via `textContent` (XSS guard) — never `innerHTML`. Keyboard: `1-5` / `a-e` select an option, `Enter` advances.
+- **Manual sanity check (served over `http://localhost` — Playwright blocks `file://`; the file-picker flow is identical either way):** all checks **passed** — setup screen renders ✓; file picker loads `testbank.json` ✓; 14 sub-type checkboxes with counts matching C1 (Antonyms 35, Fractions 9, …) ✓; 10-Q session completes end-to-end via both mouse and keyboard ✓; wrong-answer feedback colors options `wrong`/`correct`/`muted` + verdict + explanation ✓; summary renders per-sub-type and per-tier tables (Brutal row `0 / 0 / —`) ✓; missed-questions disclosure, "Start new session", and invalid-file inline error all work ✓. No app-originated console errors or network requests.
+- **Unexpected discoveries:**
+  - Many items carry **5 options**, not 4 — Sentence Completion / Critical Reasoning items are commonly 5-option. The app handles the full 2–5 range (letters A–E, keys `1-5`/`a-e`); C1's export already confirmed the 2–5 bound.
+  - Invalid-file-while-configured: the app keeps the previously-loaded testbank and shows the error inline rather than resetting to empty — a deliberate resilience improvement over the spec's "reset" (which was written for the empty case).
+- **Rough edges flagged for C3 testing:** (1) long Critical-Reasoning stems and long explanations rely on `white-space: pre-wrap` + the 680px container — eyeball overflow on narrow viewports; (2) `newSession()` preserves the chosen session length rather than resetting to 50 (intentional, but confirm it reads well); (3) "End session" has no confirmation dialog — an accidental click ends the run.
+- **W-* items:** **W-session-composition resolved** (uniform random within user-selected pool, tier-agnostic, within-session no-repeat). **W-offline-url-resolution remains open for C3** (does the bare `/offline-app/` path resolve to `index.html` on the deployed site?).
+- **Outcome:** `public/offline-app/index.html` complete and locally verified. C3 (cross-browser test) is next.
+
+### C3+ (TBD)
 
 To be filled at the corresponding commit.
 

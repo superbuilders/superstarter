@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>18seconds — Offline Practice</title>
+<!--
+  offline-app round, C2. Single-file offline practice app.
+
+  Vanilla JS, no build step, no runtime network requests. The question bank
+  is loaded at runtime via a file picker (<input type="file">) so the page
+  works from file:// with no CORS error and no server. See C1's export
+  script (scripts/export-testbank.ts) for the testbank.json shape this
+  consumes; see docs/plans/offline-app.md for the round design.
+
+  No localStorage / sessionStorage / IndexedDB — state is in-memory only.
+  All testbank-derived text is rendered via textContent, never innerHTML.
+
+  EXEMPT FROM THE PROJECT RULESET. This is a standalone static artifact, not
+  application source — it deliberately uses a module IIFE, forEach, and other
+  vanilla-JS patterns the TypeScript-app lint rules ban by design. It is
+  listed under files.includes in biome/base.jsonc so biome does not lint it
+  as app code; the two must stay in sync (see the contract there).
+-->
+<style>
+:root {
+  --bg: #f4f4f5;
+  --card: #ffffff;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text: #18181b;
+  --muted: #71717a;
+  --accent: #18181b;
+  --accent-hover: #3f3f46;
+  --correct: #16a34a;
+  --correct-bg: #dcfce7;
+  --wrong: #dc2626;
+  --wrong-bg: #fee2e2;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+  padding: 32px 16px 64px;
+  -webkit-text-size-adjust: 100%;
+}
+#app { max-width: 680px; margin: 0 auto; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+}
+h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+h2 { font-size: 19px; font-weight: 650; }
+.subtitle { color: var(--muted); margin-top: 4px; font-size: 15px; }
+.section-label {
+  font-size: 12px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); margin: 20px 0 8px;
+}
+.info-line { font-size: 13px; color: var(--muted); margin-top: 14px; }
+.divider { height: 1px; background: var(--border); margin: 22px 0; }
+
+.file-row { margin-top: 18px; }
+.file-label { font-size: 14px; font-weight: 550; display: block; margin-bottom: 6px; }
+input[type=file] { font: inherit; font-size: 14px; max-width: 100%; }
+.error {
+  margin-top: 14px; padding: 10px 12px; border-radius: 8px;
+  background: var(--wrong-bg); color: var(--wrong); font-size: 14px;
+}
+
+.checks { display: flex; flex-direction: column; gap: 2px; }
+.check {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 15px;
+}
+.check:hover { background: var(--bg); }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.check .count { color: var(--muted); font-size: 13px; }
+.pool-line { font-size: 14px; margin-top: 16px; }
+.pool-line strong { font-weight: 650; }
+
+.btn {
+  font: inherit; font-size: 15px; font-weight: 550;
+  padding: 10px 18px; border-radius: 8px; cursor: pointer;
+  border: 1px solid transparent;
+}
+.btn:disabled { cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-primary:disabled { background: var(--border-strong); color: #fff; }
+.btn-secondary {
+  background: #fff; color: var(--text); border-color: var(--border-strong);
+}
+.btn-secondary:hover { border-color: var(--muted); }
+
+.lengths { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.len-btn {
+  font: inherit; font-size: 14px; font-weight: 550;
+  padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  background: #fff; border: 1px solid var(--border-strong); color: var(--text);
+}
+.len-btn:hover { border-color: var(--muted); }
+.len-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.start-row { margin-top: 22px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.hint { font-size: 13px; color: var(--muted); }
+
+.footer { margin-top: 20px; text-align: center; font-size: 13px; color: var(--muted); }
+.footer a { color: var(--muted); }
+.footer .version { margin-top: 4px; }
+
+.topbar { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.progress {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.link-btn {
+  background: none; border: none; font: inherit; font-size: 13px;
+  color: var(--muted); cursor: pointer; text-decoration: underline; padding: 0;
+}
+.link-btn:hover { color: var(--text); }
+.q-meta {
+  font-size: 12px; color: var(--muted); margin-top: 18px;
+  text-transform: capitalize; letter-spacing: 0.02em;
+}
+.stem { font-size: 18px; margin-top: 6px; white-space: pre-wrap; }
+.options { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+.option {
+  display: flex; align-items: flex-start; gap: 12px; text-align: left;
+  width: 100%; font: inherit; font-size: 15px;
+  padding: 12px 14px; border-radius: 8px; cursor: pointer;
+  background: #fff; border: 1px solid var(--border-strong); color: var(--text);
+}
+.option:hover:not(:disabled) { border-color: var(--muted); }
+.option:disabled { cursor: default; }
+.option .letter {
+  flex: none; width: 22px; height: 22px; border-radius: 4px;
+  background: var(--bg); font-size: 12px; font-weight: 650;
+  display: flex; align-items: center; justify-content: center;
+}
+.option .otext { white-space: pre-wrap; }
+.option.correct { background: var(--correct-bg); border-color: var(--correct); }
+.option.correct .letter { background: var(--correct); color: #fff; }
+.option.wrong { background: var(--wrong-bg); border-color: var(--wrong); }
+.option.wrong .letter { background: var(--wrong); color: #fff; }
+.option.muted { opacity: 0.55; }
+.verdict { font-weight: 650; margin-top: 16px; font-size: 15px; }
+.verdict.correct { color: var(--correct); }
+.verdict.wrong { color: var(--wrong); }
+.explanation {
+  margin-top: 12px; padding: 14px 16px; border-radius: 8px;
+  background: var(--bg); border-left: 3px solid var(--accent); font-size: 14px;
+}
+.explanation .label { font-weight: 650; }
+.explanation .body { white-space: pre-wrap; margin-top: 2px; }
+.next-row { margin-top: 18px; }
+
+.big-stat { font-size: 30px; font-weight: 700; margin-top: 8px; letter-spacing: -0.02em; }
+.big-stat .pct { color: var(--muted); font-size: 20px; font-weight: 600; }
+.summary-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+.summary-table th, .summary-table td {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border);
+}
+.summary-table th {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+}
+.summary-table td.num, .summary-table th.num { text-align: right; }
+details { margin-top: 22px; }
+summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.missed {
+  margin-top: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px;
+}
+.missed .m-stem { font-weight: 550; white-space: pre-wrap; }
+.missed .m-line { font-size: 14px; margin-top: 6px; }
+.missed .m-wrong { color: var(--wrong); }
+.missed .m-right { color: var(--correct); }
+.missed .m-exp {
+  font-size: 13px; color: var(--muted); margin-top: 8px; white-space: pre-wrap;
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function () {
+  'use strict';
+
+  // --- constants --------------------------------------------------------
+  // Distribution URL for the testbank refresh link. Uses 18seconds.vercel.app
+  // (not a .tech domain) per the R-prod-domain-mismatch pin.
+  var TESTBANK_URL = 'https://18seconds.vercel.app/offline-app/testbank.json';
+  var SESSION_LENGTHS = [10, 25, 50];
+  var TIERS = ['easy', 'medium', 'hard', 'brutal'];
+
+  // --- state ------------------------------------------------------------
+  // Single module-scope state object, mutated by handlers. render() reads it.
+  var state = {
+    screen: 'setup-empty',                 // setup-empty | setup-configured | question | summary
+    testbank: null,                        // { version, subTypes, items }
+    config: { selectedSubTypes: new Set(), sessionLength: 50 },
+    session: null                          // { items, currentIndex, answers }
+  };
+
+  // Transient UI bits that are not part of the persistent state model.
+  var loadError = null;                    // inline file-load error message
+  var subTypeCounts = {};                  // subTypeId -> live item count
+  var subTypeNames = {};                   // subTypeId -> display name
+  var pendingFocusKey = null;              // data-focus attr to refocus after render
+
+  var app = document.getElementById('app');
+
+  // --- DOM helper -------------------------------------------------------
+  // Builds an element. `text` sets textContent (XSS-safe — never innerHTML).
+  // `on*` props attach listeners; boolean props set the property directly.
+  function el(tag, props, children) {
+    var node = document.createElement(tag);
+    if (props) {
+      Object.keys(props).forEach(function (key) {
+        var val = props[key];
+        if (val === null || val === undefined) return;
+        if (key === 'class') node.className = val;
+        else if (key === 'text') node.textContent = val;
+        else if (key.slice(0, 2) === 'on' && typeof val === 'function') {
+          node.addEventListener(key.slice(2), val);
+        } else if (typeof val === 'boolean') {
+          node[key] = val;
+        } else {
+          node.setAttribute(key, val);
+        }
+      });
+    }
+    if (children) {
+      children.forEach(function (child) {
+        if (child === null || child === undefined) return;
+        node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+      });
+    }
+    return node;
+  }
+
+  // --- testbank helpers -------------------------------------------------
+  // Validates the shape of a parsed testbank. Returns an error string, or
+  // null when the testbank is usable.
+  function validateTestbank(data) {
+    if (typeof data !== 'object' || data === null) return 'not a JSON object';
+    if (!Array.isArray(data.items)) return 'missing "items" array';
+    if (!Array.isArray(data.subTypes)) return 'missing "subTypes" array';
+    if (typeof data.version !== 'string') return 'missing "version" string';
+    if (data.items.length === 0) return '"items" array is empty';
+    if (data.subTypes.length === 0) return '"subTypes" array is empty';
+    return null;
+  }
+
+  // Tallies live item counts per sub-type and caches display names.
+  function indexTestbank() {
+    subTypeCounts = {};
+    subTypeNames = {};
+    state.testbank.subTypes.forEach(function (st) {
+      subTypeCounts[st.id] = 0;
+      subTypeNames[st.id] = st.name;
+    });
+    state.testbank.items.forEach(function (it) {
+      if (subTypeCounts[it.subTypeId] === undefined) subTypeCounts[it.subTypeId] = 0;
+      subTypeCounts[it.subTypeId] += 1;
+    });
+  }
+
+  function subTypeName(id) {
+    return subTypeNames[id] === undefined ? id : subTypeNames[id];
+  }
+
+  // Items belonging to the currently selected sub-types.
+  function selectedPool() {
+    var sel = state.config.selectedSubTypes;
+    return state.testbank.items.filter(function (it) {
+      return sel.has(it.subTypeId);
+    });
+  }
+
+  // Resolved numeric session length given the current pool.
+  function resolvedLength(poolSize) {
+    if (state.config.sessionLength === 'all-selected') return poolSize;
+    return state.config.sessionLength;
+  }
+
+  // Fisher-Yates shuffle on a copy — within-session no-repeat (H3).
+  function shuffled(arr) {
+    var copy = arr.slice();
+    for (var i = copy.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = copy[i];
+      copy[i] = copy[j];
+      copy[j] = tmp;
+    }
+    return copy;
+  }
+
+  function pct(correct, total) {
+    if (total === 0) return '—';
+    return Math.round((correct / total) * 100) + '%';
+  }
+
+  function capitalize(s) {
+    return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  // --- handlers ---------------------------------------------------------
+  function handleFile(file) {
+    loadError = null;
+    var reader = new FileReader();
+    reader.onload = function () { onFileText(String(reader.result)); };
+    reader.onerror = function () {
+      loadError = 'Could not read the file.';
+      render();
+    };
+    reader.readAsText(file);
+  }
+
+  function onFileText(txt) {
+    var data;
+    try {
+      data = JSON.parse(txt);
+    } catch (e) {
+      loadError = 'Not valid JSON: ' + (e && e.message ? e.message : 'parse error') + '.';
+      render();
+      return;
+    }
+    var err = validateTestbank(data);
+    if (err) {
+      loadError = 'Invalid testbank — ' + err + '.';
+      render();
+      return;
+    }
+    state.testbank = data;
+    indexTestbank();
+    state.config.selectedSubTypes = new Set(data.subTypes.map(function (st) { return st.id; }));
+    state.config.sessionLength = 50;
+    state.screen = 'setup-configured';
+    render();
+  }
+
+  function toggleSubType(id) {
+    var sel = state.config.selectedSubTypes;
+    if (sel.has(id)) sel.delete(id);
+    else sel.add(id);
+    pendingFocusKey = 'check-' + id;
+    render();
+  }
+
+  function setLength(value) {
+    state.config.sessionLength = value;
+    render();
+  }
+
+  function startSession() {
+    var pool = selectedPool();
+    var length = resolvedLength(pool.length);
+    var picked = shuffled(pool).slice(0, length);
+    state.session = { items: picked, currentIndex: 0, answers: [] };
+    state.screen = 'question';
+    render();
+  }
+
+  function answerQuestion(optionId) {
+    var session = state.session;
+    if (session.answers.length > session.currentIndex) return; // already answered
+    var item = session.items[session.currentIndex];
+    session.answers.push({
+      itemId: item.id,
+      selectedOptionId: optionId,
+      correct: optionId === item.correctAnswer
+    });
+    render();
+  }
+
+  function nextQuestion() {
+    var session = state.session;
+    if (session.answers.length <= session.currentIndex) return; // not answered yet
+    session.currentIndex += 1;
+    if (session.currentIndex >= session.items.length) state.screen = 'summary';
+    render();
+  }
+
+  function endSession() {
+    state.screen = 'summary';
+    render();
+  }
+
+  function newSession() {
+    state.session = null;
+    state.screen = 'setup-configured';
+    render();
+  }
+
+  // --- keyboard ---------------------------------------------------------
+  // 1-5 / a-e select an option; Enter advances after answering.
+  function keyToOptionIndex(key, count) {
+    var k = key.toLowerCase();
+    var idx = -1;
+    if (k >= '1' && k <= '9') idx = k.charCodeAt(0) - 49;
+    else if (k >= 'a' && k <= 'e') idx = k.charCodeAt(0) - 97;
+    if (idx >= 0 && idx < count) return idx;
+    return -1;
+  }
+
+  function onKeyDown(e) {
+    if (state.screen !== 'question') return;
+    var session = state.session;
+    var item = session.items[session.currentIndex];
+    var answered = session.answers.length > session.currentIndex;
+    if (!answered) {
+      var idx = keyToOptionIndex(e.key, item.options.length);
+      if (idx >= 0) {
+        e.preventDefault();
+        answerQuestion(item.options[idx].id);
+      }
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      nextQuestion();
+    }
+  }
+
+  // --- setup screen -----------------------------------------------------
+  function renderFileRow() {
+    var input = el('input', {
+      type: 'file',
+      accept: '.json,application/json',
+      onchange: function (e) {
+        if (e.target.files && e.target.files.length > 0) handleFile(e.target.files[0]);
+      }
+    });
+    return el('div', { class: 'file-row' }, [
+      el('label', { class: 'file-label', text: 'Load testbank.json' }),
+      input
+    ]);
+  }
+
+  function renderCheckGroup(sectionName, sectionKey) {
+    var rows = state.testbank.subTypes
+      .filter(function (st) { return st.section === sectionKey; })
+      .map(function (st) {
+        var box = el('input', {
+          type: 'checkbox',
+          'data-focus': 'check-' + st.id,
+          checked: state.config.selectedSubTypes.has(st.id),
+          onchange: function () { toggleSubType(st.id); }
+        });
+        return el('label', { class: 'check' }, [
+          box,
+          el('span', { text: st.name }),
+          el('span', { class: 'count', text: '(' + subTypeCounts[st.id] + ')' })
+        ]);
+      });
+    if (rows.length === 0) return null;
+    return el('div', {}, [
+      el('div', { class: 'section-label', text: sectionName }),
+      el('div', { class: 'checks' }, rows)
+    ]);
+  }
+
+  function renderLengthPicker() {
+    var buttons = SESSION_LENGTHS.map(function (len) {
+      var active = state.config.sessionLength === len;
+      return el('button', {
+        class: 'len-btn' + (active ? ' active' : ''),
+        text: String(len),
+        onclick: function () { setLength(len); }
+      });
+    });
+    var allActive = state.config.sessionLength === 'all-selected';
+    buttons.push(el('button', {
+      class: 'len-btn' + (allActive ? ' active' : ''),
+      text: 'All selected',
+      onclick: function () { setLength('all-selected'); }
+    }));
+    return el('div', { class: 'lengths' }, buttons);
+  }
+
+  function renderStartRow() {
+    var sel = state.config.selectedSubTypes;
+    var pool = selectedPool();
+    var length = resolvedLength(pool.length);
+    var disabled = false;
+    var hint = '';
+    if (sel.size === 0) {
+      disabled = true;
+      hint = 'Select at least one sub-type to start.';
+    } else if (length === 0) {
+      disabled = true;
+      hint = 'No items in the selected pool.';
+    } else if (state.config.sessionLength !== 'all-selected' && pool.length < length) {
+      disabled = true;
+      hint = 'Selected pool (' + pool.length + ') is smaller than the session length ('
+        + length + '). Pick more sub-types or a shorter session.';
+    } else {
+      hint = 'Starts a ' + length + '-question session.';
+    }
+    var startBtn = el('button', {
+      class: 'btn btn-primary',
+      text: 'Start Session',
+      disabled: disabled,
+      onclick: function () { if (!disabled) startSession(); }
+    });
+    return el('div', { class: 'start-row' }, [
+      startBtn,
+      el('span', { class: 'hint', text: hint })
+    ]);
+  }
+
+  function renderFooter() {
+    var children = [
+      el('a', {
+        href: TESTBANK_URL,
+        target: '_blank',
+        rel: 'noopener',
+        text: 'Download latest testbank'
+      })
+    ];
+    if (state.testbank) {
+      children.push(el('div', {
+        class: 'version',
+        text: 'Version: ' + state.testbank.version
+      }));
+    }
+    return el('div', { class: 'footer' }, children);
+  }
+
+  function renderSetup() {
+    var children = [
+      el('h1', { text: '18seconds — Offline Practice' }),
+      el('p', { class: 'subtitle', text: 'Load a testbank to start.' }),
+      renderFileRow()
+    ];
+
+    if (loadError) {
+      children.push(el('div', { class: 'error', text: loadError }));
+    }
+
+    if (state.screen === 'setup-configured' && state.testbank) {
+      var tb = state.testbank;
+      var sel = state.config.selectedSubTypes;
+      var pool = selectedPool();
+      children.push(el('div', {
+        class: 'info-line',
+        text: 'Loaded: ' + tb.items.length + ' items · ' + tb.subTypes.length
+          + ' sub-types · version ' + tb.version + ' · ' + sel.size + ' of '
+          + tb.subTypes.length + ' sub-types selected'
+      }));
+      children.push(el('div', { class: 'divider' }));
+
+      var verbal = renderCheckGroup('Verbal', 'verbal');
+      var numerical = renderCheckGroup('Numerical', 'numerical');
+      if (verbal) children.push(verbal);
+      if (numerical) children.push(numerical);
+
+      children.push(el('div', { class: 'pool-line' }, [
+        el('strong', { text: String(pool.length) }),
+        ' items in selected pool'
+      ]));
+
+      children.push(el('div', { class: 'section-label', text: 'Session length' }));
+      children.push(renderLengthPicker());
+      children.push(renderStartRow());
+    }
+
+    var card = el('div', { class: 'card' }, children);
+    app.replaceChildren(card, renderFooter());
+  }
+
+  // --- question screen --------------------------------------------------
+  function renderOption(item, option, index, answered, answer) {
+    var letter = String.fromCharCode(65 + index);
+    var cls = 'option';
+    if (answered) {
+      if (option.id === item.correctAnswer) cls += ' correct';
+      else if (option.id === answer.selectedOptionId) cls += ' wrong';
+      else cls += ' muted';
+    }
+    return el('button', {
+      class: cls,
+      disabled: answered,
+      onclick: function () { if (!answered) answerQuestion(option.id); }
+    }, [
+      el('span', { class: 'letter', text: letter }),
+      el('span', { class: 'otext', text: option.text })
+    ]);
+  }
+
+  function renderQuestion() {
+    var session = state.session;
+    var item = session.items[session.currentIndex];
+    var total = session.items.length;
+    var answered = session.answers.length > session.currentIndex;
+    var answer = answered ? session.answers[session.currentIndex] : null;
+
+    var topbar = el('div', { class: 'topbar' }, [
+      el('span', {
+        class: 'progress',
+        text: 'Question ' + (session.currentIndex + 1) + ' of ' + total
+      }),
+      el('button', { class: 'link-btn', text: 'End session', onclick: endSession })
+    ]);
+
+    var children = [
+      topbar,
+      el('div', {
+        class: 'q-meta',
+        text: subTypeName(item.subTypeId) + ' · ' + item.difficulty
+      }),
+      el('div', { class: 'stem', text: item.stem }),
+      el('div', { class: 'options' }, item.options.map(function (option, index) {
+        return renderOption(item, option, index, answered, answer);
+      }))
+    ];
+
+    if (answered) {
+      var verdictCls = answer.correct ? 'verdict correct' : 'verdict wrong';
+      var verdictText = answer.correct ? 'Correct' : 'Incorrect';
+      children.push(el('div', { class: verdictCls, text: verdictText }));
+
+      var expText = (item.explanation === null || item.explanation === undefined)
+        ? 'No explanation provided for this item.'
+        : item.explanation;
+      children.push(el('div', { class: 'explanation' }, [
+        el('span', { class: 'label', text: 'Explanation: ' }),
+        el('span', { class: 'body', text: expText })
+      ]));
+
+      var isLast = session.currentIndex === total - 1;
+      children.push(el('div', { class: 'next-row' }, [
+        el('button', {
+          class: 'btn btn-primary',
+          text: isLast ? 'Finish' : 'Next',
+          onclick: nextQuestion
+        })
+      ]));
+    }
+
+    app.replaceChildren(el('div', { class: 'card' }, children));
+  }
+
+  // --- summary screen ---------------------------------------------------
+  function computeSummary() {
+    var answers = state.session.answers;
+    var items = state.session.items;
+    var correct = 0;
+    var bySubType = {};   // subTypeId -> { correct, total }
+    var byTier = {};
+    TIERS.forEach(function (t) { byTier[t] = { correct: 0, total: 0 }; });
+
+    for (var i = 0; i < answers.length; i++) {
+      var a = answers[i];
+      var item = items[i];
+      if (a.correct) correct += 1;
+
+      if (!bySubType[item.subTypeId]) bySubType[item.subTypeId] = { correct: 0, total: 0 };
+      bySubType[item.subTypeId].total += 1;
+      if (a.correct) bySubType[item.subTypeId].correct += 1;
+
+      if (!byTier[item.difficulty]) byTier[item.difficulty] = { correct: 0, total: 0 };
+      byTier[item.difficulty].total += 1;
+      if (a.correct) byTier[item.difficulty].correct += 1;
+    }
+    return { correct: correct, total: answers.length, bySubType: bySubType, byTier: byTier };
+  }
+
+  function statRow(label, stat) {
+    return el('tr', {}, [
+      el('td', { text: label }),
+      el('td', { class: 'num', text: String(stat.correct) }),
+      el('td', { class: 'num', text: String(stat.total) }),
+      el('td', { class: 'num', text: pct(stat.correct, stat.total) })
+    ]);
+  }
+
+  function summaryTable(firstHeader, rows) {
+    var head = el('tr', {}, [
+      el('th', { text: firstHeader }),
+      el('th', { class: 'num', text: 'Correct' }),
+      el('th', { class: 'num', text: 'Total' }),
+      el('th', { class: 'num', text: '%' })
+    ]);
+    return el('table', { class: 'summary-table' }, [
+      el('thead', {}, [head]),
+      el('tbody', {}, rows)
+    ]);
+  }
+
+  function renderMissed() {
+    var session = state.session;
+    var blocks = [];
+    for (var i = 0; i < session.answers.length; i++) {
+      var a = session.answers[i];
+      if (a.correct) continue;
+      var item = session.items[i];
+      var picked = item.options.filter(function (o) { return o.id === a.selectedOptionId; })[0];
+      var right = item.options.filter(function (o) { return o.id === item.correctAnswer; })[0];
+      var expText = (item.explanation === null || item.explanation === undefined)
+        ? 'No explanation provided for this item.'
+        : item.explanation;
+      blocks.push(el('div', { class: 'missed' }, [
+        el('div', { class: 'm-stem', text: item.stem }),
+        el('div', { class: 'm-line m-wrong' }, [
+          'Your answer: ', picked ? picked.text : '(none)'
+        ]),
+        el('div', { class: 'm-line m-right' }, [
+          'Correct answer: ', right ? right.text : '(unknown)'
+        ]),
+        el('div', { class: 'm-exp', text: expText })
+      ]));
+    }
+    if (blocks.length === 0) return null;
+    var details = el('details', {}, [
+      el('summary', { text: 'View missed questions (' + blocks.length + ')' })
+    ]);
+    blocks.forEach(function (b) { details.appendChild(b); });
+    return details;
+  }
+
+  function renderSummary() {
+    var s = computeSummary();
+
+    var children = [
+      el('h2', { text: 'Session complete' }),
+      el('div', { class: 'big-stat' }, [
+        s.correct + ' / ' + s.total + ' correct ',
+        el('span', { class: 'pct', text: '(' + pct(s.correct, s.total) + ')' })
+      ])
+    ];
+
+    if (s.total === 0) {
+      children.push(el('p', {
+        class: 'subtitle',
+        text: 'No questions were answered in this session.'
+      }));
+    } else {
+      // Per-sub-type table — sub-types with at least one answered question,
+      // in the testbank's sub-type order.
+      var subTypeRows = state.testbank.subTypes
+        .filter(function (st) { return s.bySubType[st.id]; })
+        .map(function (st) { return statRow(st.name, s.bySubType[st.id]); });
+      children.push(el('div', { class: 'section-label', text: 'By sub-type' }));
+      children.push(summaryTable('Sub-type', subTypeRows));
+
+      // Per-tier table — all four tiers, fixed order.
+      var tierRows = TIERS.map(function (t) {
+        return statRow(capitalize(t), s.byTier[t]);
+      });
+      children.push(el('div', { class: 'section-label', text: 'By tier' }));
+      children.push(summaryTable('Tier', tierRows));
+
+      var missed = renderMissed();
+      if (missed) children.push(missed);
+    }
+
+    children.push(el('div', { class: 'next-row' }, [
+      el('button', {
+        class: 'btn btn-primary',
+        text: 'Start new session',
+        onclick: newSession
+      })
+    ]));
+
+    app.replaceChildren(el('div', { class: 'card' }, children));
+  }
+
+  // --- top-level render -------------------------------------------------
+  function render() {
+    if (state.screen === 'question') renderQuestion();
+    else if (state.screen === 'summary') renderSummary();
+    else renderSetup();
+
+    if (pendingFocusKey) {
+      var target = app.querySelector('[data-focus="' + pendingFocusKey + '"]');
+      if (target) target.focus();
+      pendingFocusKey = null;
+    }
+  }
+
+  document.addEventListener('keydown', onKeyDown);
+  render();
+})();
+</script>
+</body>
+</html>
