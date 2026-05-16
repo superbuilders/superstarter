@@ -182,6 +182,14 @@ The deployment-hostname pinning (workflows log under `18seconds-gxbup1hfw-...` n
 
 - The `src/server/sessions/end.ts:31-35` comment + `src/app/(app)/actions.ts:122-126` comment justify `awaitCompletion: true` by citing "Round 1 §5.7 + §0.4." That citation is from `docs/plans/phase5-master-plan.md`-era doc (predates this audit). The design constraint is real: `revalidatePath('/')` must fire after `mastery_state` writes land, or the dashboard renders stale belts. Any C1+ fire-and-forget intervention must preserve that constraint (likely by moving the `revalidatePath('/')` into the workflow's terminal step).
 
+**Round-close addendum (C4) — between-round deviations reconciled.**
+
+- **Commit `a2b68c7` (between-round, executor-authored).** `a2b68c7` was authored by the executor after `a830b23` (cacheComponents-investigation C3-close) was pushed, and before the end-session-perf round opened. It added a second session log — `docs/claude_logs/session_2026-05-12_14-33_cachecomponents-investigation-shipped.md` (77 lines) — which coexists with the 69-line session log committed by `a830b23`. **The deviation:** a commit was authored outside an explicit prompt boundary. **Decision at C0:** keep `a2b68c7` (content is benign and arguably more detailed than the original log); document the deviation; bank it as a candidate pattern at round-close. Two session logs for one round is mildly cluttered but not harmful — consolidation is deferred as future housekeeping, not urgent. Banked at C4 as **§3.14** (see §3).
+
+- **`leonardiwata-2680` out-of-band production activity (flagged at C3).** At C3 step 4, the executor's `vercel ls --prod` revealed four production deployments between this round and the prior one, authored by `leonardiwata-2680`, none of which the redirector was aware of. The C3 target promotion was unaffected — the correct source (`dpl_9Rm1Et…`) was promoted. Likely manual Vercel dashboard deploys or a second-machine workflow. Documented for awareness; opens pin `R-leonardiwata-2680-out-of-band-prod-deploys` (see §0.11).
+
+- **§6.14.43 sub-type 6 tracker.** The `a2b68c7` deviation was considered under cross-round registry §6.14.43 sub-type 6 at the C0 diagnostic, then reclassified as §3.14 — different actor (executor, not redirector) and different mechanism (unprompted action, not a mistaken convention assumption). Sub-type 6 events this round: zero. The tracker enters and exits this round at **4/5, unchanged**.
+
 ### §0.7 Destructive-operation surface
 
 C0 is read-only. No destructive operations.
@@ -249,6 +257,23 @@ New pins **opened** at this round's C0:
 
 - **R-workflow-comment-stale-on-parallelism-savings** — `src/workflows/mastery-recompute.ts:8-9` comment asserts parallelism saves "only a few hundred milliseconds." If C1 measurement shows the per-step Vercel Workflow overhead is the dominant cost, this comment is wrong by an order of magnitude and the design rationale ("partial-failure complexity not worth a few hundred ms") needs reconsideration. **Priority: low** — code comment hygiene, but it currently encodes a design constraint that may not survive measurement.
 
+### §0.11-RC Round-close pin reconciliation (C4)
+
+**Pins RETIRED at round-close:**
+
+- **`R-end-session-perf-slow` — RESOLVED** at C2/C3. 50-Q full-length `endSession` went 13.6s → 2.27s measured (6× improvement, well under the <5s criterion). Mechanism: workflow step collapse eliminated per-boundary dispatch overhead. Prod confirmed smooth by the user on `dpl_GK52EP42MKndso7ZWehtzQoLCdNu`.
+- **`R-mastery-recompute-query-unindexed-for-filter-shape` — REFUTED** at C1. Measured per-query times were 2–96ms (median ≈5ms). The unindexed filter shape is not a measurable cost at current scale; indexing is not warranted. (If user attempt-history grows by orders of magnitude this could re-surface, but there is no evidence for it now.)
+- **`R-workflow-comment-stale-on-parallelism-savings` — MOOT** at C2. The workflow body was collapsed; the stale comment asserting "parallelism saves only a few hundred ms" was removed with the code it annotated.
+
+**Pins in the OPEN set at round-close:**
+
+- **`R-submit-attempt-1s-per-call`** (opened at C0 Finding 8; carries forward unresolved). Each `submitAttempt` averages ≈1s. Affects per-question latency, not end-of-session. Future `submit-perf` round target. **Priority: medium.**
+- **`R-await-completion-polling-tail-1.75s`** (new at C4). `endSession` has ≈1.75s of residual latency after C2 (2.27s total − ≈422ms collapsed step work ≈ 1.85s of workflow dispatch + start + polling tail). Addressable via **Path C**: move `revalidatePath` into the workflow tail and switch to `awaitCompletion: false` + `after()`, which would drop user-perceived latency to ≈300–500ms. **Not urgent** — current latency is well within target. Open for a future round only if ever needed.
+- **`R-prod-domain-mismatch-18seconds-tech-vs-vercel-app`** (new at C4). The redirector's model carried an incorrect `18seconds.tech` assumption; the actual prod alias is `https://18seconds.vercel.app`. No custom `.tech` domain is attached. Banked for future prompt-template correctness. **Priority: low.**
+- **`R-leonardiwata-2680-out-of-band-prod-deploys`** (new at C4). Four prod deployments by `leonardiwata-2680` landed between the cacheComponents-investigation close and end-session-perf C3, outside redirector awareness (see §0.6). Likely intentional manual deploys or a second-machine workflow. Flag for awareness; not blocking. Worth a one-line check-in with Leo at some point ("are you doing manual deploys outside our rounds?"). **Priority: low.**
+
+**Carried-forward pins** (from the §0.11 C0 list above) — status unchanged at round-close; they were not in this round's scope.
+
 ### §0.12 Trigger conditions for successor rounds
 
 - **`submit-perf` sub-round / successor round** — fires if C1 measurement isolates the per-submit ~1s cost as independent of end-of-session work (W-submit-cost-independent confirmed).
@@ -259,24 +284,80 @@ New pins **opened** at this round's C0:
 
 ## §1 Commit ledger
 
-### C0 (this commit)
+### C0 — audit (commit `06b1930`)
 
 - **Type:** plan-doc, read-only audit, no source changes.
 - **Files touched:** `docs/plans/end-session-perf.md` (new).
 - **Code changes:** none.
 - **Deploys:** none.
-- **Lefthook status:** expected clean (plan-doc only).
-- **Outcome:** §4 hypothesis register populated; §5 recommended C1 articulated; round opened.
+- **Lefthook status:** clean (plan-doc only).
+- **Outcome:** 17-step workflow + 44 serial DB queries identified (§0.5 Findings 1–9). §4 hypothesis register opened. §5 recommended C1 articulated. Round opened.
 
-### C1+ (TBD)
+### C1 — instrumentation (commit `7eb56d5`, preview `dpl_9gWMRpgikeQaSYLfEfwVQV5hL2Xn`)
 
-To be filled at the corresponding commit.
+- **Type:** Pino timing instrumentation; preview deploy; measurement.
+- **Change:** 26 timing logs added across 4 files (action wrapper, `end.ts`, workflow steps, `recompute.ts`).
+- **Measurement:** preview 50-Q full-length run measured `endSession:action:complete` `totalMs` = **13.6s**.
+- **Outcome:** H1 reframed from "per-step *work*" to "per-step *transitions*"; H3 and H4 refuted. Step *transitions* identified as ≈700ms each — 15 transitions × ≈700ms ≈ 10s of pure boundary overhead.
+
+### C2 — collapse (commit `10555f2`, preview `dpl_9Rm1EtBrEhWtgv7Y6j3or9X5TUVA`)
+
+- **Type:** workflow restructure — collapse 4 workflow steps into 1 (`recomputeAllForSession`).
+- **Change:** the old 4 step functions kept exported for a one-line revert.
+- **Measurement:** preview 50-Q full-length run measured `endSession:action:complete` `totalMs` = **2.27s** (subjective ≈4.75s).
+- **Outcome:** 6× improvement; hit the <5s success criterion.
+
+### C3 — production promotion (deployment `dpl_GK52EP42MKndso7ZWehtzQoLCdNu`)
+
+- **Type:** `vercel promote` of the C2 preview to production.
+- **Note:** `vercel promote` triggered a rebuild-then-swap (per §3.13, now banked at 2/5 in the cross-round registry).
+- **Verification:** step 4 confirmed current prod before promotion; surfaced `leonardiwata-2680` out-of-band deploys (see §0.6).
+- **Outcome:** prod 50-Q full-length confirmed smooth by the user. Round-close authorized.
+
+### C4 — round-close (this commit)
+
+- **Type:** plan-doc, doc-only. No code touched, no deploys.
+- **Files touched:** `docs/plans/end-session-perf.md`.
+- **Outcome:** §0.6 reconciliation extended; §3.14/§3.15/§3.16 patterns banked; §4 final state recorded; §0.11 pins reconciled (3 retired, 4 in the open set); §6 round-close shape filled. Round CLOSED.
 
 ---
 
 ## §3 Candidate patterns (carryover; no new at C0)
 
 C0 introduces no new patterns. The endSession code already follows the established error-handling, structured-logging, and no-relative-import patterns. The audit identifies one piece of comment-as-design-rationale that may need revision (see `R-workflow-comment-stale-on-parallelism-savings` in §0.11), but that's not a new pattern, just a fact about an existing pattern's load-bearing rationale.
+
+### §3 round-close banking (C4)
+
+Three cross-round patterns are banked at this round's close, each at first occurrence (1/5).
+
+#### §3.14 — Executor takes a between-round, prompt-unauthorized action
+
+An executor performs an action — typically an autonomous "improvement" commit — without an explicit prompt authorizing it.
+
+- **Characteristics:** happens at the boundary between two prompts, when the executor has finished a stop-and-report and would normally idle. The action is usually benign or even useful (the executor is trying to do good work). The deviation is procedural: a commit lands without the redirector's prompt authorizing it.
+- **Discriminator from §6.14.43 sub-type 6:** sub-type 6 is the *redirector* assuming a project convention that doesn't match reality. §3.14 is the *executor* taking unprompted action. Different actor, different mechanism.
+- **First occurrence:** `a2b68c7` — the second cacheComponents session log, authored after the C3-close push of the prior round (see §0.6).
+- **Prevention adopted in this round:** an explicit "STOP HERE. No further commits, edits, deploys, or runs until the next prompt arrives." line at the end of every prompt from step 41 onward.
+- **Prevention outcome:** across C1 (step 41), C2 (step 42), C3 (step 43) of this round — zero recurrences. The prevention worked on first application.
+- **Status: 1/5.**
+
+#### §3.15 — Audit-confident hypothesis refuted by measurement (right direction, wrong mechanism)
+
+A C0 audit produces a hypothesis at HIGH confidence from code-reading and architectural reasoning. The measurement step (C1) confirms the audit identified the correct general *area* but reveals the *mechanism* is different from what was assumed. Without measurement, the next round (C2) would have optimized the wrong thing within the correct area, yielding no speedup.
+
+- **First occurrence:** end-session-perf C0 held H1 ("per-step Vercel Workflow overhead × 17 sequential steps dominates") at HIGH confidence in its "per-step *work* dominates" form. C1 measurement reframed it to "per-step *transitions* dominate" — same direction (workflow overhead) but a different mechanism (boundary transitions, not per-step DB cost). Had C2 instead indexed `readLastNAttempts` on the strength of H3, the speedup would have been ≈0 because per-query times were already 2–50ms.
+- **Implication:** when the C0 audit produces a HIGH-confidence hypothesis, the C1 measurement step is non-negotiable. The temptation to skip C1 and go straight to a C2 fix on audit confidence is dangerous — audits read *code*, measurements read *behavior*, and they don't always agree on mechanism.
+- **Prevention:** keep the measurement-first discipline. A HIGH-confidence C0 hypothesis *increases* (not decreases) the value of C1 measurement.
+- **Status: 1/5.**
+
+#### §3.16 — Redirector's model of out-of-band system state goes stale between rounds
+
+Between rounds, system state may change without the redirector's awareness — manual deploys, second-machine activity, dashboard actions, scheduled jobs, third-party-triggered events. The redirector enters the next round with a model that assumes state is what it was at the prior round-close. Acting on a stale model can fail safely (caught by a verification step) or fail dangerously (no verification step, wrong assumption acted upon).
+
+- **First occurrence:** end-session-perf C3 — the redirector's prompt stated current prod was `dpl_HaYWegFbr7CLsY7qcS5NKcDhSv8v` (from the prior round's C3-close). The executor's `vercel ls --prod` revealed four newer prod deployments from `leonardiwata-2680` between rounds. The C3 verification step (step 4: "confirm current prod") surfaced the divergence before promotion, so no harm done.
+- **Related shape, same round:** the redirector's health-check commands targeted `https://18seconds.tech/api/health`, which doesn't resolve. The actual prod alias is `https://18seconds.vercel.app`. This is a stale *domain* assumption rather than a stale *state* assumption — a slightly different shape, still under the §3.16 umbrella.
+- **Prevention:** pre-action prompts include explicit verification steps for the system state being acted upon (current prod, current branch, current alias). The C3 prompt's step 4 ("Confirm current prod and the preview being promoted") was exactly this prevention pattern and worked correctly.
+- **Status: 1/5.**
 
 ---
 
@@ -350,6 +431,19 @@ The round-open prompt listed this as a pre-bias hypothesis. Finding 5 refutes it
 
 **No falsification test needed; H5 is closed at C0.**
 
+### §4 final state (round-close, C4)
+
+| Hyp | C0 confidence | Final disposition |
+|-----|---------------|-------------------|
+| **H1** | HIGH | **REFUTED in original form** ("per-step *work* dominates"); **CONFIRMED in reframed form** ("per-step *transitions* dominate") at HIGH confidence after C1 measurement. |
+| **H2** (polling tail) | MEDIUM-LOW | **Partially confirmed.** Accounts for ≈1.75s of residual latency after C2; addressable via Path C if ever needed (see pin `R-await-completion-polling-tail-1.75s`). |
+| **H3** (unindexed query) | MEDIUM-LOW | **REFUTED at HIGH confidence.** C1 measured per-query times of 2–96ms (median ≈5ms); indexing would not have helped. |
+| **H4** (OIDC floor per step) | MEDIUM | **REFUTED implicitly.** No OIDC-per-step overhead observed; connection reuse working. |
+| **H5** (external AI call) | REFUTED at C0 | Stayed refuted — no external AI calls in the endSession path. |
+| **W** (sub-type count) | assumed 14 at C0 | **Confirmed at 14** in C2 prod data. C0 audit assumed 14; C1 saw 12; C2 saw 14 — minor variance from session content. |
+
+The dominant lesson: H1 was directionally right and mechanistically wrong, and only C1 measurement caught the distinction. Banked as pattern §3.15.
+
 ---
 
 ## §5 Recommended next actions (C1+, pending user authorization)
@@ -413,15 +507,35 @@ Pre-bias from the round-open prompt was "instrument first, then act unless the a
 
 ---
 
-## §6 Round-close shape (TBD)
+## §6 Round-close (C4)
 
-Round closes when one of:
-- C1+ measurement + C2+ fix lands and is verified to bring the 50-Q end-session below 5 seconds on production.
-- An interim mitigation is shipped (e.g., partial step-collapse) that brings latency below 5s and the remaining tail is captured as a successor-round pin.
-- Investigation determines the root cause is upstream (e.g., Vercel Workflow runtime has a known per-step floor that won't change) and the architecture must be changed (e.g., migrate off Vercel Workflow for this path).
+**Round status: CLOSED.**
 
-Round-close commit will:
-- Update §0.11 forward-pin index (retire `R-end-session-perf-slow`; bank any new pins from C1+ findings).
-- Update §0.10 forward-watch (resolve W-* items).
-- Promote any cross-round patterns identified (e.g., "workflow boundary count is a performance contract") to §3.
-- Push the round-close commit to origin.
+The round closed on the first of its three anticipated conditions: *"C1+ measurement + C2+ fix lands and is verified to bring the 50-Q end-session below 5 seconds on production."* (The other two anticipated conditions — interim mitigation, or root cause being immovably upstream — did not apply.)
+
+### §6.1 Outcome
+
+- 50-Q full-length `endSession` latency: **13.6s → 2.27s measured** (≈4.75s subjective), a **6× improvement**, comfortably under the <5s success criterion (§0.2).
+- **Mechanism:** four Vercel Workflow steps were collapsed into one (`recomputeAllForSession`), eliminating ≈10s of per-boundary dispatch overhead. The slowness was *step transitions*, not step *work* — a distinction only C1 measurement surfaced (banked as §3.15).
+- Production confirmed smooth by the user on a full 50-Q run against `dpl_GK52EP42MKndso7ZWehtzQoLCdNu`.
+
+### §6.2 Round-close actions taken (C4)
+
+- §0.6 reconciliation extended: `a2b68c7` between-round commit and `leonardiwata-2680` out-of-band prod activity documented.
+- §3 banking: §3.14, §3.15, §3.16 banked at 1/5 each (first occurrence).
+- §4 final state recorded: H1 refuted-then-reframed-confirmed; H2 partially confirmed; H3/H4/H5 refuted; W confirmed at 14.
+- §1 commit ledger extended with the C0–C4 cycle entries.
+- §0.11-RC pin reconciliation: 3 retired (`R-end-session-perf-slow`, `R-mastery-recompute-query-unindexed-for-filter-shape`, `R-workflow-comment-stale-on-parallelism-savings`); 4 in the open set at close (`R-submit-attempt-1s-per-call`, `R-await-completion-polling-tail-1.75s`, `R-prod-domain-mismatch-18seconds-tech-vs-vercel-app`, `R-leonardiwata-2680-out-of-band-prod-deploys`).
+
+### §6.3 Cross-round registry — §6.14.43 sub-type 6 tracker
+
+Entering this round: 4/5. Sub-type 6 events this round: zero — the `a2b68c7` deviation was considered under sub-type 6 at the C0 diagnostic but reclassified as §3.14 (executor unprompted action, not a redirector convention misassumption). Exiting this round: **4/5, unchanged.**
+
+### §6.4 Residual / deferred
+
+- `R-await-completion-polling-tail-1.75s` — the ≈1.75s residual is addressable via Path C but is not urgent (latency is within target).
+- `R-submit-attempt-1s-per-call` — per-question submit latency, out of this round's scope; future `submit-perf` round.
+- The two coexisting cacheComponents session logs (see §0.6) — consolidation deferred as non-urgent housekeeping.
+- §0.10 forward-watch W-* items were superseded by the §4 final-state dispositions (W-step-vs-db-attribution answered by C1; W-oidc-floor-per-step → H4 refuted; W-submit-cost-independent → confirmed, pinned; W-distinct-subtype-count → W confirmed at 14; W-polling-tail → H2 partially confirmed, pinned). They are left in place as a historical record of the C0 watch list.
+
+The round-close commit was pushed to `origin/main`.
