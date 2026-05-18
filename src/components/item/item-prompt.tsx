@@ -46,8 +46,11 @@ function ItemPrompt(props: ItemPromptProps) {
 	const { body, options, selectedOptionId, onSelect, subTypeId } = props
 	return (
 		<div className="flex flex-col gap-5">
-			<div>{renderBody(body, subTypeId)}</div>
-			<div className="flex flex-col gap-1.5">
+			<div data-focus-tutorial-region="question-prompt">{renderBody(body, subTypeId)}</div>
+			<div
+				className="flex flex-col gap-1.5"
+				data-focus-tutorial-region="answer-choices"
+			>
 				{options.map(function renderOption(option) {
 					return (
 						<OptionButton

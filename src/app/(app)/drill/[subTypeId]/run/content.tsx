@@ -59,6 +59,7 @@ function DrillRunContent(props: DrillRunContentProps) {
 			paceTrackVisible
 			initialItem={init.firstItem}
 			strictMode={false}
+			tutorialExitHref="/"
 			onSubmitAttempt={onSubmitAttempt}
 			onEndSession={onEndSession}
 		/>

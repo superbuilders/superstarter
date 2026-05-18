@@ -5,69 +5,118 @@ import * as React from "react"
 import { logger } from "@/logger"
 
 const FOCUS_PREFS_STORAGE_KEY = "18seconds.focusPrefs.v1"
+const FOCUS_TUTORIAL_SESSION_STORAGE_KEY = "18seconds.focusTutorialSession.v1"
 
 interface FocusPrefs {
 	warningSoundEnabled: boolean
-	tutorialSeen: boolean
-	tutorialReplayPending: boolean
+}
+
+interface FocusTutorialSessionState {
+	dismissedThisLogin: boolean
+	showOnNextRun: boolean
 }
 
 const DEFAULT_FOCUS_PREFS: FocusPrefs = {
-	warningSoundEnabled: true,
-	tutorialSeen: false,
-	tutorialReplayPending: false
+	warningSoundEnabled: true
+}
+
+const DEFAULT_FOCUS_TUTORIAL_SESSION_STATE: FocusTutorialSessionState = {
+	dismissedThisLogin: false,
+	showOnNextRun: false
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null
 }
 
-function readFocusPrefs(): FocusPrefs {
-	if (typeof window === "undefined") return DEFAULT_FOCUS_PREFS
-	const raw = window.localStorage.getItem(FOCUS_PREFS_STORAGE_KEY)
-	if (raw === null) return DEFAULT_FOCUS_PREFS
+function readJsonStorage<T extends object>(
+	storage: Storage | undefined,
+	key: string,
+	fallback: T,
+	logLabel: string
+): T {
+	if (!storage) return fallback
+	const raw = storage.getItem(key)
+	if (raw === null) return fallback
 	const parseResult = errors.trySync(function parse() {
 		return JSON.parse(raw)
 	})
 	if (parseResult.error) {
-		logger.warn(
-			{ error: parseResult.error, raw },
-			"focus-prefs: localStorage payload not valid JSON"
-		)
-		return DEFAULT_FOCUS_PREFS
+		logger.warn({ error: parseResult.error, raw }, `${logLabel}: payload not valid JSON`)
+		return fallback
 	}
 	if (!isRecord(parseResult.data)) {
-		logger.warn({ raw }, "focus-prefs: localStorage payload is not an object")
-		return DEFAULT_FOCUS_PREFS
+		logger.warn({ raw }, `${logLabel}: payload is not an object`)
+		return fallback
 	}
-	const data = parseResult.data
+	return { ...fallback, ...parseResult.data }
+}
+
+function getLocalStorage(): Storage | undefined {
+	if (typeof window === "undefined") return undefined
+	return window.localStorage
+}
+
+function getSessionStorage(): Storage | undefined {
+	if (typeof window === "undefined") return undefined
+	return window.sessionStorage
+}
+
+function readFocusPrefs(): FocusPrefs {
+	const data = readJsonStorage(
+		getLocalStorage(),
+		FOCUS_PREFS_STORAGE_KEY,
+		DEFAULT_FOCUS_PREFS,
+		"focus-prefs"
+	)
 	return {
 		warningSoundEnabled:
 			typeof data.warningSoundEnabled === "boolean"
 				? data.warningSoundEnabled
-				: DEFAULT_FOCUS_PREFS.warningSoundEnabled,
-		tutorialSeen:
-			typeof data.tutorialSeen === "boolean"
-				? data.tutorialSeen
-				: DEFAULT_FOCUS_PREFS.tutorialSeen,
-		tutorialReplayPending:
-			typeof data.tutorialReplayPending === "boolean"
-				? data.tutorialReplayPending
-				: DEFAULT_FOCUS_PREFS.tutorialReplayPending
+				: DEFAULT_FOCUS_PREFS.warningSoundEnabled
+	}
+}
+
+function readFocusTutorialSessionState(): FocusTutorialSessionState {
+	const data = readJsonStorage(
+		getSessionStorage(),
+		FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
+		DEFAULT_FOCUS_TUTORIAL_SESSION_STATE,
+		"focus-tutorial-session"
+	)
+	return {
+		dismissedThisLogin:
+			typeof data.dismissedThisLogin === "boolean"
+				? data.dismissedThisLogin
+				: DEFAULT_FOCUS_TUTORIAL_SESSION_STATE.dismissedThisLogin,
+		showOnNextRun:
+			typeof data.showOnNextRun === "boolean"
+				? data.showOnNextRun
+				: DEFAULT_FOCUS_TUTORIAL_SESSION_STATE.showOnNextRun
+	}
+}
+
+function writeStorage(storage: Storage | undefined, key: string, next: object, logLabel: string): void {
+	if (!storage) return
+	const writeResult = errors.trySync(function write() {
+		storage.setItem(key, JSON.stringify(next))
+	})
+	if (writeResult.error) {
+		logger.warn({ error: writeResult.error, next }, `${logLabel}: failed to write storage`)
 	}
 }
 
 function writeFocusPrefs(next: FocusPrefs): void {
-	if (typeof window === "undefined") return
-	const writeResult = errors.trySync(function write() {
-		window.localStorage.setItem(FOCUS_PREFS_STORAGE_KEY, JSON.stringify(next))
-	})
-	if (writeResult.error) {
-		logger.warn(
-			{ error: writeResult.error, next },
-			"focus-prefs: failed to write to localStorage"
-		)
-	}
+	writeStorage(getLocalStorage(), FOCUS_PREFS_STORAGE_KEY, next, "focus-prefs")
+}
+
+function writeFocusTutorialSessionState(next: FocusTutorialSessionState): void {
+	writeStorage(
+		getSessionStorage(),
+		FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
+		next,
+		"focus-tutorial-session"
+	)
 }
 
 function updateFocusPrefs(patch: Partial<FocusPrefs>): FocusPrefs {
@@ -76,35 +125,64 @@ function updateFocusPrefs(patch: Partial<FocusPrefs>): FocusPrefs {
 	return next
 }
 
+function updateFocusTutorialSessionState(
+	patch: Partial<FocusTutorialSessionState>
+): FocusTutorialSessionState {
+	const next = { ...readFocusTutorialSessionState(), ...patch }
+	writeFocusTutorialSessionState(next)
+	return next
+}
+
 function setWarningSoundEnabled(enabled: boolean): FocusPrefs {
 	return updateFocusPrefs({ warningSoundEnabled: enabled })
 }
 
-function markTutorialSeen(): FocusPrefs {
-	return updateFocusPrefs({ tutorialSeen: true })
+function markTutorialReplayPending(): FocusTutorialSessionState {
+	return updateFocusTutorialSessionState({ showOnNextRun: true })
 }
 
-function clearTutorialReplayPending(): FocusPrefs {
-	return updateFocusPrefs({ tutorialReplayPending: false })
+function clearTutorialReplayPending(): FocusTutorialSessionState {
+	return updateFocusTutorialSessionState({ showOnNextRun: false })
 }
 
-function markTutorialReplayPending(): FocusPrefs {
-	return updateFocusPrefs({ tutorialReplayPending: true })
+function completeTutorialDismissal(): FocusTutorialSessionState {
+	return updateFocusTutorialSessionState({
+		dismissedThisLogin: true,
+		showOnNextRun: false
+	})
 }
 
-function completeTutorialDismissal(): FocusPrefs {
-	return updateFocusPrefs({ tutorialSeen: true, tutorialReplayPending: false })
+function clearTutorialSessionForLoginReset(): void {
+	const storage = getSessionStorage()
+	if (!storage) return
+	storage.removeItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)
+}
+
+function shouldShowTutorialOnNextRun(): boolean {
+	const state = readFocusTutorialSessionState()
+	if (state.showOnNextRun) return true
+	return !state.dismissedThisLogin
 }
 
 function useFocusPrefs() {
 	const [prefs, setPrefs] = React.useState<FocusPrefs>(function initPrefs() {
 		return readFocusPrefs()
 	})
+	const [tutorialSession, setTutorialSession] = React.useState<FocusTutorialSessionState>(
+		function initTutorialSession() {
+			return readFocusTutorialSessionState()
+		}
+	)
 
 	React.useEffect(function syncFromStorage() {
 		function onStorage(event: StorageEvent) {
-			if (event.key !== FOCUS_PREFS_STORAGE_KEY) return
-			setPrefs(readFocusPrefs())
+			if (event.key === FOCUS_PREFS_STORAGE_KEY) {
+				setPrefs(readFocusPrefs())
+				return
+			}
+			if (event.key === FOCUS_TUTORIAL_SESSION_STORAGE_KEY) {
+				setTutorialSession(readFocusTutorialSessionState())
+			}
 		}
 		window.addEventListener("storage", onStorage)
 		return function cleanup() {
@@ -118,50 +196,55 @@ function useFocusPrefs() {
 		})
 	}, [])
 
-	const markTutorialSeenPref = React.useCallback(() => {
-		setPrefs(function writeNext() {
-			return markTutorialSeen()
-		})
-	}, [])
-
-	const clearTutorialReplayPendingPref = React.useCallback(() => {
-		setPrefs(function writeNext() {
-			return clearTutorialReplayPending()
-		})
-	}, [])
-
 	const markTutorialReplayPendingPref = React.useCallback(() => {
-		setPrefs(function writeNext() {
+		setTutorialSession(function writeNext() {
 			return markTutorialReplayPending()
 		})
 	}, [])
 
+	const clearTutorialReplayPendingPref = React.useCallback(() => {
+		setTutorialSession(function writeNext() {
+			return clearTutorialReplayPending()
+		})
+	}, [])
+
 	const completeTutorialDismissalPref = React.useCallback(() => {
-		setPrefs(function writeNext() {
+		setTutorialSession(function writeNext() {
 			return completeTutorialDismissal()
 		})
 	}, [])
 
+	const clearTutorialSessionForLoginResetPref = React.useCallback(() => {
+		clearTutorialSessionForLoginReset()
+		setTutorialSession(DEFAULT_FOCUS_TUTORIAL_SESSION_STATE)
+	}, [])
+
 	return {
 		prefs,
+		tutorialSession,
 		setWarningSoundEnabled: setWarningSoundEnabledPref,
-		markTutorialSeen: markTutorialSeenPref,
-		clearTutorialReplayPending: clearTutorialReplayPendingPref,
 		markTutorialReplayPending: markTutorialReplayPendingPref,
-		completeTutorialDismissal: completeTutorialDismissalPref
+		clearTutorialReplayPending: clearTutorialReplayPendingPref,
+		completeTutorialDismissal: completeTutorialDismissalPref,
+		clearTutorialSessionForLoginReset: clearTutorialSessionForLoginResetPref
 	}
 }
 
 export {
 	DEFAULT_FOCUS_PREFS,
+	DEFAULT_FOCUS_TUTORIAL_SESSION_STATE,
 	FOCUS_PREFS_STORAGE_KEY,
+	FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
 	clearTutorialReplayPending,
+	clearTutorialSessionForLoginReset,
 	completeTutorialDismissal,
 	markTutorialReplayPending,
-	markTutorialSeen,
 	readFocusPrefs,
+	readFocusTutorialSessionState,
 	setWarningSoundEnabled,
+	shouldShowTutorialOnNextRun,
 	useFocusPrefs,
-	writeFocusPrefs
+	writeFocusPrefs,
+	writeFocusTutorialSessionState
 }
-export type { FocusPrefs }
+export type { FocusPrefs, FocusTutorialSessionState }

@@ -63,6 +63,7 @@ interface FocusShellProps {
 	// `true` for simulation only (Phase 5). Disables any pause UI etc.
 	// Phase 3 callers pass `false`.
 	strictMode: boolean
+	tutorialExitHref: "/" | "/full-length/configure"
 	onSubmitAttempt: (input: SubmitAttemptInput) => Promise<SubmitAttemptResult>
 	onEndSession: () => Promise<void>
 }

@@ -68,6 +68,7 @@ type ShellAction =
 	| { kind: "submit_failed" }
 	| { kind: "advance"; next: ItemForRender; nowMs: number }
 	| { kind: "set_question_started"; nowMs: number }
+	| { kind: "pause_shift"; durationMs: number }
 	| { kind: "urgency_loop_started" }
 	| { kind: "session_ended" }
 
@@ -197,6 +198,13 @@ function dispatchPrimary(state: ShellState, action: ShellAction): ShellState | u
 			questionStartedAtMs: action.nowMs,
 			elapsedQuestionMs: 0,
 			submitPending: false
+		}
+	}
+	if (action.kind === "pause_shift") {
+		return {
+			...state,
+			questionStartedAtMs: state.questionStartedAtMs + action.durationMs,
+			sessionStartedAtMs: state.sessionStartedAtMs + action.durationMs
 		}
 	}
 	return undefined

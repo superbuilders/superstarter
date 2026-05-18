@@ -1,14 +1,19 @@
 import { afterEach, expect, test } from "bun:test"
 import {
 	clearTutorialReplayPending,
+	clearTutorialSessionForLoginReset,
 	completeTutorialDismissal,
 	DEFAULT_FOCUS_PREFS,
+	DEFAULT_FOCUS_TUTORIAL_SESSION_STATE,
 	FOCUS_PREFS_STORAGE_KEY,
+	FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
 	markTutorialReplayPending,
-	markTutorialSeen,
 	readFocusPrefs,
+	readFocusTutorialSessionState,
 	setWarningSoundEnabled,
-	writeFocusPrefs
+	shouldShowTutorialOnNextRun,
+	writeFocusPrefs,
+	writeFocusTutorialSessionState
 } from "@/components/focus-shell/focus-prefs"
 
 interface MockStorage {
@@ -38,13 +43,13 @@ function makeMockStorage(): MockStorage {
 	}
 }
 
-function installMockWindow(storage: MockStorage) {
+function installMockWindow(localStorage: MockStorage, sessionStorage: MockStorage) {
 	Object.defineProperty(globalThis, "window", {
-		value: { localStorage: storage },
+		value: { localStorage, sessionStorage },
 		configurable: true,
 		writable: true
 	})
-	return storage
+	return { localStorage, sessionStorage }
 }
 
 afterEach(function cleanup() {
@@ -52,127 +57,81 @@ afterEach(function cleanup() {
 })
 
 test("readFocusPrefs returns defaults when storage is empty", () => {
-	installMockWindow(makeMockStorage())
+	installMockWindow(makeMockStorage(), makeMockStorage())
 	expect(readFocusPrefs()).toEqual(DEFAULT_FOCUS_PREFS)
+})
+
+test("readFocusTutorialSessionState returns defaults when storage is empty", () => {
+	installMockWindow(makeMockStorage(), makeMockStorage())
+	expect(readFocusTutorialSessionState()).toEqual(DEFAULT_FOCUS_TUTORIAL_SESSION_STATE)
 })
 
 test("readFocusPrefs falls back to defaults for malformed JSON", () => {
-	const storage = installMockWindow(makeMockStorage())
-	storage.setItem(FOCUS_PREFS_STORAGE_KEY, "{not-json")
+	const { localStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	localStorage.setItem(FOCUS_PREFS_STORAGE_KEY, "{not-json")
 	expect(readFocusPrefs()).toEqual(DEFAULT_FOCUS_PREFS)
 })
 
-test("readFocusPrefs merges partial payloads with defaults", () => {
-	const storage = installMockWindow(makeMockStorage())
-	storage.setItem(FOCUS_PREFS_STORAGE_KEY, JSON.stringify({ tutorialSeen: true }))
-	expect(readFocusPrefs()).toEqual({
-		warningSoundEnabled: true,
-		tutorialSeen: true,
-		tutorialReplayPending: false
-	})
-})
-
 test("setWarningSoundEnabled persists the updated value", () => {
-	const storage = installMockWindow(makeMockStorage())
+	const { localStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
 	const next = setWarningSoundEnabled(false)
-	expect(next).toEqual({
-		warningSoundEnabled: false,
-		tutorialSeen: false,
-		tutorialReplayPending: false
-	})
-	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
-		JSON.stringify({
-			warningSoundEnabled: false,
-			tutorialSeen: false,
-			tutorialReplayPending: false
-		})
+	expect(next).toEqual({ warningSoundEnabled: false })
+	expect(localStorage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
+		JSON.stringify({ warningSoundEnabled: false })
 	)
 })
 
-test("markTutorialReplayPending persists the replay flag", () => {
-	const storage = installMockWindow(makeMockStorage())
-	writeFocusPrefs({
-		warningSoundEnabled: false,
-		tutorialSeen: true,
-		tutorialReplayPending: false
-	})
+test("markTutorialReplayPending persists the next-run flag in session storage", () => {
+	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
 	const next = markTutorialReplayPending()
-	expect(next).toEqual({
-		warningSoundEnabled: false,
-		tutorialSeen: true,
-		tutorialReplayPending: true
-	})
-	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
-		JSON.stringify({
-			warningSoundEnabled: false,
-			tutorialSeen: true,
-			tutorialReplayPending: true
-		})
+	expect(next).toEqual({ dismissedThisLogin: false, showOnNextRun: true })
+	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
+		JSON.stringify({ dismissedThisLogin: false, showOnNextRun: true })
 	)
 })
 
-test("markTutorialSeen persists seen without clearing replay by itself", () => {
-	const storage = installMockWindow(makeMockStorage())
-	writeFocusPrefs({
-		warningSoundEnabled: true,
-		tutorialSeen: false,
-		tutorialReplayPending: true
-	})
-	const next = markTutorialSeen()
-	expect(next).toEqual({
-		warningSoundEnabled: true,
-		tutorialSeen: true,
-		tutorialReplayPending: true
-	})
-	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
-		JSON.stringify({
-			warningSoundEnabled: true,
-			tutorialSeen: true,
-			tutorialReplayPending: true
-		})
-	)
-})
-
-test("clearTutorialReplayPending clears only the replay flag", () => {
-	const storage = installMockWindow(makeMockStorage())
-	writeFocusPrefs({
-		warningSoundEnabled: false,
-		tutorialSeen: true,
-		tutorialReplayPending: true
-	})
-	const next = clearTutorialReplayPending()
-	expect(next).toEqual({
-		warningSoundEnabled: false,
-		tutorialSeen: true,
-		tutorialReplayPending: false
-	})
-	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
-		JSON.stringify({
-			warningSoundEnabled: false,
-			tutorialSeen: true,
-			tutorialReplayPending: false
-		})
-	)
-})
-
-test("completeTutorialDismissal marks seen and clears replay together", () => {
-	const storage = installMockWindow(makeMockStorage())
-	writeFocusPrefs({
-		warningSoundEnabled: true,
-		tutorialSeen: false,
-		tutorialReplayPending: true
-	})
+test("completeTutorialDismissal marks dismissed and clears replay", () => {
+	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	writeFocusTutorialSessionState({ dismissedThisLogin: false, showOnNextRun: true })
 	const next = completeTutorialDismissal()
-	expect(next).toEqual({
-		warningSoundEnabled: true,
-		tutorialSeen: true,
-		tutorialReplayPending: false
-	})
-	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
-		JSON.stringify({
-			warningSoundEnabled: true,
-			tutorialSeen: true,
-			tutorialReplayPending: false
-		})
+	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: false })
+	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
+		JSON.stringify({ dismissedThisLogin: true, showOnNextRun: false })
 	)
+})
+
+test("clearTutorialReplayPending clears only the next-run flag", () => {
+	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: true })
+	const next = clearTutorialReplayPending()
+	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: false })
+	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
+		JSON.stringify({ dismissedThisLogin: true, showOnNextRun: false })
+	)
+})
+
+test("shouldShowTutorialOnNextRun is true on first start and false after dismissal", () => {
+	installMockWindow(makeMockStorage(), makeMockStorage())
+	expect(shouldShowTutorialOnNextRun()).toBe(true)
+	completeTutorialDismissal()
+	expect(shouldShowTutorialOnNextRun()).toBe(false)
+})
+
+test("clearTutorialSessionForLoginReset removes the session-scoped tutorial state", () => {
+	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: true })
+	clearTutorialSessionForLoginReset()
+	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(null)
+	expect(readFocusTutorialSessionState()).toEqual(DEFAULT_FOCUS_TUTORIAL_SESSION_STATE)
+})
+
+test("prefs and tutorial session storages stay independent", () => {
+	installMockWindow(makeMockStorage(), makeMockStorage())
+	writeFocusPrefs({ warningSoundEnabled: false })
+	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: false })
+	expect(readFocusPrefs()).toEqual({ warningSoundEnabled: false })
+	expect(readFocusTutorialSessionState()).toEqual({
+		dismissedThisLogin: true,
+		showOnNextRun: false
+	})
 })

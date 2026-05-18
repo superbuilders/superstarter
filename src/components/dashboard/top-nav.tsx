@@ -80,7 +80,12 @@ interface TopNavProps {
 
 function TopNav({ streakDays, initials }: TopNavProps) {
 	const pathname = usePathname()
-	const { prefs, setWarningSoundEnabled, markTutorialReplayPending } = useFocusPrefs()
+	const {
+		prefs,
+		setWarningSoundEnabled,
+		markTutorialReplayPending,
+		clearTutorialSessionForLoginReset
+	} = useFocusPrefs()
 	return (
 		<header className="mx-auto mb-2 flex max-w-[1100px] items-center justify-between border-border-soft border-b px-7 pt-[10px] pb-2">
 			<Link
@@ -146,6 +151,9 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 				<form action={signOutAction}>
 					<button
 						type="submit"
+						onClick={function onClick() {
+							clearTutorialSessionForLoginReset()
+						}}
 						aria-label="Sign out"
 						title="Sign out"
 						className={ICON_BUTTON_CLASS}

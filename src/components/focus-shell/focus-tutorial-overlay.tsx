@@ -3,180 +3,306 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
+interface TutorialRect {
+	top: number
+	left: number
+	width: number
+	height: number
+}
+
+type TutorialTargetKey =
+	| "session-clock"
+	| "timing-overview"
+	| "per-question-time"
+	| "question-progress"
+	| "overall-time"
+	| "question-prompt"
+	| "answer-choices"
+	| "submit-button"
+
+type TutorialCardPlacement = "bottom-left" | "bottom-right" | "top-left" | "top-right"
+
 interface TutorialStep {
+	target: TutorialTargetKey
+	placement: TutorialCardPlacement
 	title: string
 	body: string
 	bullets: ReadonlyArray<string>
 }
 
-const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
+const FOCUS_TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
 	{
-		title: "Read the shell first",
-		body:
-			"This screen is built to help you judge pace at a glance before you commit to an answer.",
+		target: "session-clock",
+		placement: "bottom-left",
+		title: "Session clock",
+		body: "This is the big session clock. Keep an eye on it so one stubborn question never hides the total runway.",
 		bullets: [
-			"The large clock tracks the whole session.",
-			"The progress bars show where you are in the session and on this question.",
-			"The question count reminds you how much runway is left."
+			"It tells you how much total test time is left.",
+			"Good pacing starts with awareness of the whole clock."
 		]
 	},
 	{
-		title: "The 18-second idea",
-		body:
-			"Eighteen seconds is a guide, not a rule. The point is to build judgment about which items deserve speed and which deserve patience.",
+		target: "timing-overview",
+		placement: "bottom-right",
+		title: "Pacing bars",
+		body: "The question bar tells you where you are in the test. The overall timer helps you compare that position against recommended average pacing. Together they help you judge whether you are ahead or behind.",
 		bullets: [
-			"Some questions are meant to be quick wins.",
-			"Some questions are worth slowing down for.",
-			"Your edge comes from noticing the difference early."
+			"Watch the overall time bar move and notice when it shifts from safe to costly pacing."
 		]
 	},
 	{
-		title: "When to guess and move",
-		body:
-			"If the path is still foggy after a quick scan, make the best guess you can and preserve time for cleaner points later.",
+		target: "per-question-time",
+		placement: "top-right",
+		title: "Per-question timer",
+		body: "This timer turns red at about 9 seconds and gives the warning sound at about 18 seconds. That is the cue to wrap it up and move on if needed.",
 		bullets: [
-			"Use elimination when you can.",
-			"Avoid burning time just because you already started.",
-			"A disciplined guess is often better than a late perfect solve attempt."
-		]
-	},
-	{
-		title: "When to stay longer",
-		body:
-			"If you see a promising route, extra seconds can be worth it. The goal is not constant speed; it is deliberate speed.",
-		bullets: [
-			"Stay when the structure is becoming clearer.",
-			"Slow down for questions that match your strengths.",
-			"Re-center on accuracy when the payoff is real."
-		]
-	},
-	{
-		title: "Sound is optional",
-		body:
-			"The warning sound is there to help if you want it, and you can change it from the settings menu near your user icon.",
-		bullets: [
-			"Warning sound status updates from your current setting.",
-			"You can replay this tutorial anytime from settings.",
-			"Skip now if you already know the flow."
+			"If the sound is distracting during normal runs, turn it off in Settings near the user icon on the dashboard or full-length configure screen."
 		]
 	}
 ]
 
+const COMBINED_BARS_TUTORIAL_STEP_INDEX = 1
+const PER_QUESTION_TUTORIAL_STEP_INDEX = 2
+
 interface FocusTutorialOverlayProps {
 	stepIndex: number
-	warningSoundEnabled: boolean
+	targetRects: Partial<Record<TutorialTargetKey, TutorialRect>>
 	onBack: () => void
 	onNext: () => void
 	onSkip: () => void
 	onFinish: () => void
 }
 
+function setBoxStyles(
+	node: HTMLDivElement | null,
+	box: { top: number; left: number; width: number; height: number } | null
+): void {
+	if (!node) return
+	if (box === null) {
+		node.style.display = "none"
+		return
+	}
+	node.style.display = "block"
+	node.style.top = `${box.top}px`
+	node.style.left = `${box.left}px`
+	node.style.width = `${box.width}px`
+	node.style.height = `${box.height}px`
+}
+
+function resetOverlayBoxes(refs: ReadonlyArray<HTMLDivElement | null>): void {
+	for (const ref of refs) {
+		setBoxStyles(ref, null)
+	}
+}
+
+function positionTutorialCard(
+	card: HTMLDivElement,
+	spotlight: { top: number; left: number; width: number; height: number },
+	placement: TutorialCardPlacement,
+	viewportWidth: number,
+	viewportHeight: number
+): void {
+	const cardWidth = Math.min(360, viewportWidth - 32)
+	const gap = 18
+	const defaultCardHeight = 300
+	let top = spotlight.top
+	let left = spotlight.left
+	if (placement === "bottom-left") {
+		top = spotlight.top + spotlight.height + gap
+		left = spotlight.left
+	} else if (placement === "bottom-right") {
+		top = spotlight.top + spotlight.height + gap
+		left = spotlight.left + spotlight.width - cardWidth
+	} else if (placement === "top-left") {
+		top = spotlight.top - defaultCardHeight
+		left = spotlight.left
+	} else {
+		top = spotlight.top - defaultCardHeight
+		left = spotlight.left + spotlight.width - cardWidth
+	}
+	card.style.position = "fixed"
+	card.style.width = `${cardWidth}px`
+	card.style.top = `${Math.min(viewportHeight - defaultCardHeight - 16, Math.max(16, top))}px`
+	card.style.left = `${Math.min(viewportWidth - cardWidth - 16, Math.max(16, left))}px`
+}
+
+function positionSpotlightMasks(
+	spotlight: { top: number; left: number; width: number; height: number },
+	viewportWidth: number,
+	viewportHeight: number,
+	topMask: HTMLDivElement | null,
+	leftMask: HTMLDivElement | null,
+	rightMask: HTMLDivElement | null,
+	bottomMask: HTMLDivElement | null,
+	blocker: HTMLDivElement | null,
+	ring: HTMLDivElement | null
+): void {
+	setBoxStyles(topMask, {
+		top: 0,
+		left: 0,
+		width: viewportWidth,
+		height: spotlight.top
+	})
+	setBoxStyles(leftMask, {
+		top: spotlight.top,
+		left: 0,
+		width: spotlight.left,
+		height: spotlight.height
+	})
+	setBoxStyles(rightMask, {
+		top: spotlight.top,
+		left: spotlight.left + spotlight.width,
+		width: Math.max(0, viewportWidth - spotlight.left - spotlight.width),
+		height: spotlight.height
+	})
+	setBoxStyles(bottomMask, {
+		top: spotlight.top + spotlight.height,
+		left: 0,
+		width: viewportWidth,
+		height: Math.max(0, viewportHeight - spotlight.top - spotlight.height)
+	})
+	setBoxStyles(blocker, spotlight)
+	setBoxStyles(ring, spotlight)
+}
+
 function FocusTutorialOverlay(props: FocusTutorialOverlayProps) {
-	const steps = React.useMemo(function buildSteps() {
-		return TUTORIAL_STEPS.map(function resolveStep(step) {
-			if (step.title !== "Sound is optional") return step
-			return {
-				...step,
-				bullets: [
-					props.warningSoundEnabled
-						? "Warning sound is currently on for this session."
-						: "Warning sound is currently off for this session.",
-					"You can replay this tutorial anytime from settings.",
-					"Skip now if you already know the flow."
-				]
-			}
-		})
-	}, [props.warningSoundEnabled])
-	const step = steps[props.stepIndex]
-	const lastIndex = steps.length - 1
+	const topMaskRef = React.useRef<HTMLDivElement | null>(null)
+	const leftMaskRef = React.useRef<HTMLDivElement | null>(null)
+	const rightMaskRef = React.useRef<HTMLDivElement | null>(null)
+	const bottomMaskRef = React.useRef<HTMLDivElement | null>(null)
+	const blockerRef = React.useRef<HTMLDivElement | null>(null)
+	const ringRef = React.useRef<HTMLDivElement | null>(null)
+	const cardRef = React.useRef<HTMLDivElement | null>(null)
+	const fullVeilRef = React.useRef<HTMLDivElement | null>(null)
+
+	const step = FOCUS_TUTORIAL_STEPS[props.stepIndex]
+	const lastIndex = FOCUS_TUTORIAL_STEPS.length - 1
 	const canGoBack = props.stepIndex > 0
 	const isLastStep = props.stepIndex === lastIndex
+	const spotlight = step ? props.targetRects[step.target] : undefined
+	const spotlightPadding = 12
+	const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth
+	const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight
+	const paddedSpotlight = spotlight
+		? {
+				top: Math.max(8, spotlight.top - spotlightPadding),
+				left: Math.max(8, spotlight.left - spotlightPadding),
+				width: spotlight.width + spotlightPadding * 2,
+				height: spotlight.height + spotlightPadding * 2
+			}
+		: null
+
+	React.useLayoutEffect(
+		function positionOverlay() {
+			if (!step) return
+			const veilDisplay = paddedSpotlight ? "none" : "block"
+			if (fullVeilRef.current) {
+				fullVeilRef.current.style.display = veilDisplay
+			}
+			if (paddedSpotlight === null) {
+				resetOverlayBoxes([
+					topMaskRef.current,
+					leftMaskRef.current,
+					rightMaskRef.current,
+					bottomMaskRef.current,
+					blockerRef.current,
+					ringRef.current
+				])
+				if (cardRef.current) {
+					cardRef.current.style.position = "fixed"
+					cardRef.current.style.width = "min(28rem, calc(100vw - 2rem))"
+					cardRef.current.style.top = "1.5rem"
+					cardRef.current.style.left = "1rem"
+				}
+				return
+			}
+			positionSpotlightMasks(
+				paddedSpotlight,
+				viewportWidth,
+				viewportHeight,
+				topMaskRef.current,
+				leftMaskRef.current,
+				rightMaskRef.current,
+				bottomMaskRef.current,
+				blockerRef.current,
+				ringRef.current
+			)
+			if (!cardRef.current) return
+			positionTutorialCard(
+				cardRef.current,
+				paddedSpotlight,
+				step.placement,
+				viewportWidth,
+				viewportHeight
+			)
+		},
+		[paddedSpotlight, step, viewportHeight, viewportWidth]
+	)
+
 	if (step === undefined) return null
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 px-4 py-6 backdrop-blur-sm">
-			<div className="grid w-full max-w-5xl gap-4 rounded-3xl border border-foreground/10 bg-background p-4 shadow-2xl md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-6">
-				<div className="rounded-2xl border border-foreground/10 bg-surface/70 p-4">
-					<p className="text-[11px] text-foreground/55 uppercase tracking-[0.08em]">Question interface</p>
-					<div className="mt-3 space-y-3">
-						<div className="flex items-start justify-between gap-3 rounded-xl border border-foreground/10 bg-background px-3 py-3">
-							<div>
-								<p className="text-foreground/55 text-xs">Session clock</p>
-								<div className="mt-1 h-5 w-24 rounded bg-foreground/8" />
-							</div>
-							<div className="min-w-32 flex-1">
-								<p className="text-foreground/55 text-xs">Progress + pace bars</p>
-								<div className="mt-2 space-y-2">
-									<div className="h-2 rounded-full bg-foreground/8" />
-									<div className="h-2 rounded-full bg-foreground/8" />
-									<div className="h-2 rounded-full bg-foreground/8" />
-								</div>
-							</div>
-						</div>
-						<div className="rounded-xl border border-foreground/10 bg-background px-3 py-4">
-							<p className="text-foreground/55 text-xs">Question prompt</p>
-							<div className="mt-2 h-3 w-11/12 rounded bg-foreground/8" />
-							<div className="mt-2 h-3 w-10/12 rounded bg-foreground/8" />
-							<div className="mt-2 h-3 w-7/12 rounded bg-foreground/8" />
-						</div>
-						<div className="grid gap-2">
-							{[0, 1, 2, 3].map(function renderOption(index) {
-								return (
-									<div key={index} className="rounded-xl border border-foreground/10 bg-background px-3 py-3">
-										<div className="h-3 w-4/5 rounded bg-foreground/8" />
-									</div>
-								)
-							})}
-						</div>
-						<div className="rounded-xl bg-blue-600 px-4 py-3 text-center font-medium text-sm text-white">Submit Answer</div>
-					</div>
-				</div>
+		<div className="fixed inset-0 z-50">
+			<div ref={fullVeilRef} className="fixed inset-0 bg-background/72 backdrop-blur-[1px]" />
+			<div ref={topMaskRef} className="fixed bg-background/72 backdrop-blur-[1px]" />
+			<div ref={leftMaskRef} className="fixed bg-background/72 backdrop-blur-[1px]" />
+			<div ref={rightMaskRef} className="fixed bg-background/72 backdrop-blur-[1px]" />
+			<div ref={bottomMaskRef} className="fixed bg-background/72 backdrop-blur-[1px]" />
+			<div ref={blockerRef} className="fixed bg-transparent" />
+			<div
+				ref={ringRef}
+				className="pointer-events-none fixed rounded-2xl border-2 border-indigo/80 shadow-[0_0_0_1px_rgba(255,255,255,0.2)]"
+			/>
 
-				<div className="flex flex-col rounded-2xl border border-foreground/10 bg-background p-4">
-					<div className="flex items-center justify-between gap-3">
-						<p className="text-[11px] text-foreground/55 uppercase tracking-[0.08em]">Tutorial</p>
-						<p className="text-foreground/60 text-sm">Step {props.stepIndex + 1} of {steps.length}</p>
-					</div>
-					<h2 className="mt-4 font-serif text-3xl text-foreground tracking-[-0.02em]">{step.title}</h2>
-					<p className="mt-3 max-w-[44ch] text-base text-foreground/75 leading-7">{step.body}</p>
-					<ul className="mt-5 space-y-3">
-						{step.bullets.map(function renderBullet(bullet) {
-							return (
-								<li key={bullet} className="flex gap-3 text-foreground/72 text-sm leading-6">
-									<span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-indigo/70" />
-									<span>{bullet}</span>
-								</li>
-							)
-						})}
-					</ul>
-					<div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-foreground/10 border-t pt-4">
+			<div
+				ref={cardRef}
+				className={cn(
+					"fixed z-10 flex max-w-md flex-col rounded-2xl border border-foreground/10 bg-background p-4 shadow-2xl"
+				)}
+			>
+				<div className="flex items-center justify-between gap-3">
+					<p className="text-[11px] text-foreground/55 uppercase tracking-[0.08em]">Guide</p>
+					<p className="text-foreground/60 text-sm">Step {props.stepIndex + 1} of {FOCUS_TUTORIAL_STEPS.length}</p>
+				</div>
+				<h2 className="mt-4 font-serif text-3xl text-foreground tracking-[-0.02em]">{step.title}</h2>
+				<p className="mt-3 text-base text-foreground/75 leading-7">{step.body}</p>
+				<ul className="mt-5 space-y-3">
+					{step.bullets.map(function renderBullet(bullet) {
+						return (
+							<li key={bullet} className="flex gap-3 text-foreground/72 text-sm leading-6">
+								<span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-indigo/70" />
+								<span>{bullet}</span>
+							</li>
+						)
+					})}
+				</ul>
+				<div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-foreground/10 border-t pt-4">
+					<button
+						type="button"
+						onClick={props.onSkip}
+						className="text-foreground/60 text-sm transition-colors hover:text-foreground"
+					>
+						Skip
+					</button>
+					<div className="flex items-center gap-2">
 						<button
 							type="button"
-							onClick={props.onSkip}
-							className="text-foreground/60 text-sm transition-colors hover:text-foreground"
+							onClick={props.onBack}
+							disabled={!canGoBack}
+							className={cn(
+								"rounded-full border border-foreground/12 px-4 py-2 text-foreground text-sm transition-colors",
+								"hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-40"
+							)}
 						>
-							Skip
+							Back
 						</button>
-						<div className="flex items-center gap-2">
-							<button
-								type="button"
-								onClick={props.onBack}
-								disabled={!canGoBack}
-								className={cn(
-									"rounded-full border border-foreground/12 px-4 py-2 text-foreground text-sm transition-colors",
-									"hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-40"
-								)}
-							>
-								Back
-							</button>
-							<button
-								type="button"
-								onClick={isLastStep ? props.onFinish : props.onNext}
-								className="rounded-full bg-indigo px-4 py-2 font-medium text-sm text-white transition-colors hover:brightness-110"
-							>
-								{isLastStep ? "Finish" : "Next"}
-							</button>
-						</div>
+						<button
+							type="button"
+							onClick={isLastStep ? props.onFinish : props.onNext}
+							className="rounded-full bg-indigo px-4 py-2 font-medium text-sm text-white transition-colors hover:brightness-110"
+						>
+							{isLastStep ? "Finish" : "Next"}
+						</button>
 					</div>
 				</div>
 			</div>
@@ -184,4 +310,10 @@ function FocusTutorialOverlay(props: FocusTutorialOverlayProps) {
 	)
 }
 
-export { FocusTutorialOverlay }
+export {
+	COMBINED_BARS_TUTORIAL_STEP_INDEX,
+	FOCUS_TUTORIAL_STEPS,
+	FocusTutorialOverlay,
+	PER_QUESTION_TUTORIAL_STEP_INDEX
+}
+export type { TutorialRect, TutorialTargetKey }

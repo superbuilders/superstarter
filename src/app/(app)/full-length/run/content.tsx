@@ -67,6 +67,7 @@ function FullLengthRunContent(props: FullLengthRunContentProps) {
 			paceTrackVisible
 			initialItem={init.firstItem}
 			strictMode={false}
+			tutorialExitHref="/full-length/configure"
 			onSubmitAttempt={onSubmitAttempt}
 			onEndSession={onEndSession}
 		/>
