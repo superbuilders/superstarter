@@ -194,9 +194,25 @@ No new pins opened at C0.
 - **W-proxy-carve-out-contract-documented — resolved.** The contract is recorded in `src/proxy.ts` (inline comment above the entry) and `AGENTS.md` Project facts (durable cross-round home).
 - **W-offline-url-resolution — pending final confirmation.** This commit applies the fix; the preview redeploy + anonymous re-curl that confirm `/offline-app/*` no longer redirects to `/login` run *after* this commit (results in the C3a.5 stop-and-report). Note the prod-vs-preview auth distinction: preview URLs sit behind Vercel Deployment Protection (SSO) regardless of the app's NextAuth proxy, so anonymous curl against the *preview* may still 401 at the Vercel layer — `vercel curl` is used to bypass Vercel SSO and observe the app proxy's real (post-fix) behavior.
 
-### C3b+ (TBD)
+### C3b — manual cross-browser testing (user-driven, no commit)
 
-To be filled at the corresponding commit.
+- **Type:** manual verification by user. No code changes, no commit of its own; recorded here and folded into the C4 round-close.
+- **Scope tested:** `file://` on **Firefox / Linux only**. Chrome and Safari deferred to a future round per user decision.
+- **All four §0.7 success criteria met on Firefox:** testbank loads via the file picker; a full mini-session completes end-to-end; the summary screen renders with both the per-sub-type and per-tier tables; the Network tab shows **zero requests** during the session.
+- **Specific verifications:** correct-answer rendering (green); incorrect-answer rendering (red + correct option highlighted green); explanation panel display; "Start new session" preserves config (selected sub-types + session length); "View missed questions" disclosure section works; em-dash display for 0/0 tier rows (no `NaN%` bug).
+- **File path observed:** Firefox served from `file:///run/user/1000/doc/a3e1bcc9/index.html` — the Linux Files-app sandboxed mount path. Confirms a genuine `file://` protocol, not a local server.
+- **Deferred:** Chrome / Safari verification; narrow-viewport (400px-width) overflow check. Tracked as R-* pins in §6.
+
+### C4 — C3-close + round-close (this commit)
+
+- **Type:** plan-doc only. No code changes. Round-close commit; the merge to `main` follows it.
+- **Files touched:** `docs/plans/offline-app.md` (this ledger entry + §6 round-close).
+- **Patterns banked this round:**
+  - **§3.17** (1/5) — an audit must cover middleware/proxy layers, not just static-serving conventions. Discriminator from §3.15: §3.15 is *mechanism-wrong-within-the-correct-area*; §3.17 is an *entire-layer-missed*. First occurrence this round: C0 audited `public/` but missed `src/proxy.ts`; C3a discovered the gap; C3a.5 fixed it.
+  - **§3.18** (1/5) — an API/tooling error mid-execution leaves state in an ambiguous place; recovery requires explicit verification before the next action. First occurrence this round: C3a.5 hit an API error after commit+deploy but before push+report; recovery went via a user-driven `git status` check before the redirector drafted the recovery prompt.
+- **Pins:** 8 W-* items retired; 3 R-* items opened (see §6).
+- **Merge:** `offline-app` → `main` with `--no-ff` (merge commit, feature-branch boundary preserved in history) immediately after this commit pushes. Prod auto-deploy verified post-merge.
+- **Round status:** CLOSED.
 
 ---
 
@@ -350,6 +366,60 @@ For a build round, the "hypotheses" are open design decisions. Each carries deci
 
 ---
 
-## §6 Round-close shape (TBD)
+## §6 Round-close
 
-Populated at C4. Will record: final outcome vs §0.7 success criteria, the resolved W-* items, the H1/H2/H3 decisions as built, any new patterns, the identity-mapping durable-home decision, and the merge to `main`.
+Round status: **CLOSED** at C4.
+
+### §6.1 Final outcome vs §0.7 success criteria
+
+All four §0.7 criteria met — verified on **Firefox / Linux / `file://`** (C3b). Chrome, Safari, and narrow-viewport overflow are deferred to a future round per user decision.
+
+1. Testbank JSON generates cleanly from production DB via `scripts/export-testbank.ts` — ✓ (C1, 448 live items, all validations passed).
+2. Offline HTML opens and renders a full session end-to-end — ✓ on Firefox (C3b); Chrome/Safari deferred.
+3. Session completes with correct/incorrect feedback + explanations + per-sub-type summary — ✓ (C3b).
+4. Zero network requests after testbank load — ✓, confirmed in Firefox Network tab (C3b).
+
+### §6.2 Decision register (§4) final state
+
+- **H1 (stack):** chose **vanilla JS** — 790 LOC single file, no build, no runtime CDN. Confirmed working.
+- **H2 (packaging):** chose a **single `testbank.json`** — 481.7 KB. Confirmed working.
+- **H3 (don't-reshow):** chose **within-session-only** via Fisher-Yates shuffle. No `localStorage`. Confirmed working.
+
+### §6.3 W-* resolutions (8 retired)
+
+- **W-stem-content-format** — resolved at C1: 100% text bodies; hard-fail guard in the export script.
+- **W-explanation-coverage** — resolved at C1: 100% coverage, zero nulls in the current bank.
+- **W-per-sub-type-item-count** — resolved at C1: range 9–61; all sub-types have content.
+- **W-per-tier-item-count** — resolved at C1: easy 141 / medium 228 / hard 73 / brutal 6 (brutal thin but acceptable).
+- **W-testbank-json-size** — resolved at C1: 481.7 KB; single-file confirmed appropriate.
+- **W-offline-url-resolution** — resolved at C3a.5: split into anonymous-cohort behavior + Vercel preview protection; both characterized.
+- **W-proxy-carve-out-contract-documented** — resolved at C3a.5: inline comment in `src/proxy.ts` + `AGENTS.md` Project-facts entry.
+- **W-session-composition** — resolved at C2: user-selected sub-types, uniform random within the selected pool, tier-agnostic.
+
+### §6.4 Patterns
+
+**Banked this round (§3 additions):**
+
+- **§3.17** (1/5) — an audit must cover middleware/proxy layers, not just static-serving conventions. Discriminator from §3.15: §3.15 is mechanism-wrong-within-the-correct-area; §3.17 is an entire-layer-missed. First occurrence: C0 audited `public/` but missed `src/proxy.ts`; C3a discovered the gap; C3a.5 fixed it.
+- **§3.18** (1/5) — an API/tooling error mid-execution leaves state in an ambiguous place; recovery requires explicit verification before the next action. First occurrence: C3a.5 API error after commit+deploy but before push+report; recovery via a user-driven `git status` check before the redirector drafted the recovery prompt.
+
+**Applied this round (no new banking):**
+
+- **§3.14** prevention worked across all C-rounds — zero recurrences of executor between-round unauthorized action.
+- **§3.15** informed the C0 audit posture (sample real data, don't trust the schema alone).
+- **§3.16** informed pre-action verification steps (caught the OIDC expiry at C1, caught the proxy gate at C3a, caught the API-error recovery state at C3a.5).
+
+### §6.5 Pins
+
+**Retired:** 8 W-* items, as listed in §6.3.
+
+**Opened (3 R-* items):**
+
+- **R-offline-app-chrome-safari-untested** — cross-browser verification was limited to Firefox/Linux. Acceptable for current cohort distribution; worth re-verifying when the offline app gets active use.
+- **R-offline-app-narrow-viewport-untested** — the 400px-width overflow check was deferred. Long `critical_reasoning` items may overflow on mobile-width viewports.
+- **R-offline-app-future-features** — user noted "more test-like features" planned down the road. Explicit deferred-work tracker.
+
+### §6.6 Carry-forward
+
+- **Identity mapping** (`leonardiwata-2680` ↔ `ryoiwata`) already lives in `AGENTS.md` Project facts — durable across rounds (resolves §0.6 at C1).
+- **Distribution URL:** `https://18seconds.vercel.app/offline-app/` resolves to `index.html` via a 308 from `/offline-app` to `/offline-app/` (confirmed at C3a.5). Testbank at `https://18seconds.vercel.app/offline-app/testbank.json`.
