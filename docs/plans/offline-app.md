@@ -211,8 +211,25 @@ No new pins opened at C0.
   - **§3.17** (1/5) — an audit must cover middleware/proxy layers, not just static-serving conventions. Discriminator from §3.15: §3.15 is *mechanism-wrong-within-the-correct-area*; §3.17 is an *entire-layer-missed*. First occurrence this round: C0 audited `public/` but missed `src/proxy.ts`; C3a discovered the gap; C3a.5 fixed it.
   - **§3.18** (1/5) — an API/tooling error mid-execution leaves state in an ambiguous place; recovery requires explicit verification before the next action. First occurrence this round: C3a.5 hit an API error after commit+deploy but before push+report; recovery went via a user-driven `git status` check before the redirector drafted the recovery prompt.
 - **Pins:** 8 W-* items retired; 3 R-* items opened (see §6).
-- **Merge:** `offline-app` → `main` with `--no-ff` (merge commit, feature-branch boundary preserved in history) immediately after this commit pushes. Prod auto-deploy verified post-merge.
-- **Round status:** CLOSED.
+- **Merge:** `offline-app` → `main` with `--no-ff` (merge commit, feature-branch boundary preserved in history) immediately after this commit pushes. C4 assumed prod would auto-deploy from the merge; that assumption was wrong and was corrected at C4-finalize.
+- **Round status:** claimed CLOSED at C4, but the round was not actually closed until C4-finalize completed the manual prod deploy + verification.
+
+### C4-finalize — manual prod deploy + true round close (this commit)
+
+- **Type:** deploy + docs. No application code changes; production release + durable-doc correction.
+- **Files touched:** `AGENTS.md` (Project facts `Deployment mechanism` subsection), `docs/plans/offline-app.md` (this ledger entry + §6 updates).
+- **Precondition correction:** the C4 brief assumed Vercel would auto-deploy `main` after the merge. That assumption was false. At C4-finalize-open, `main` had advanced to `27cc6fa` after the offline-app merge commit `97ceef6`, but the `18seconds` production alias still pointed at a 6-day-old deployment and `https://18seconds.vercel.app/offline-app/index.html` still returned `302`.
+- **Deploy target handling:** because `main` had moved past `97ceef6`, the manual prod deploy was executed from a temporary worktree pinned to `97ceef6` so the production artifact matched the intended offline-app release rather than the later `.agents/*` docs-only commit.
+- **Manual prod deploy:** `vercel --prod --no-wait` to the explicit `18seconds` Vercel project (`projectId` `prj_3tsohpv4YQRqNRNREHfRSoeDwQc2`, `orgId` `team_URmItSs1LZZ5HsYPD0vdggI3`) produced **`dpl_Es8f2TRo9FDTqgirH1x9p53dxv92`** (`https://18seconds-2voqzajk9-ryo-iwatas-projects.vercel.app`, target `production`). Ready-state poll: Attempt 1 `Building` at 18:32:05Z, Attempt 2 `Building` at 18:32:37Z, Attempt 3 `Ready` at 18:33:09Z. Build duration in `vercel ls --prod`: **1m**.
+- **Post-deploy prod alias:** `vercel ls --prod` now shows `https://18seconds-2voqzajk9-ryo-iwatas-projects.vercel.app` at the top of the production list (`2m`, `● Ready`, `Production`, user `leonardiwata-2680`). The previous top deployment remained the 6-day-old `18seconds-2tsdnmokh…` entry underneath it.
+- **Prod verification (the four checks that failed at C4-open all now pass):**
+  - `/offline-app/index.html` → `status=200 time=0.910008s type=text/html; charset=utf-8 size=28005`
+  - `/offline-app/testbank.json` → `status=200 time=0.680334s type=application/json; charset=utf-8 size=493285`
+  - `/offline-app/` with `-L` → `status=200 time=0.474913s type=text/html; charset=utf-8 size=28005`
+  - `/api/health` → `status=200 time=0.502716s`
+- **Deployment-mechanism finding (durable):** this project has **no GitHub → Vercel auto-deploy integration**. Pushing or merging to `main` updates Git history only; production release still requires a manual Vercel action (`vercel --prod`, `vercel promote`, or dashboard deploy). `AGENTS.md` Project facts now records that mechanism explicitly.
+- **§3.16 occurrence promoted to 2/5:** first occurrence (`end-session-perf` C3) was out-of-band prod deploys; this occurrence is out-of-band deploy mechanism. Same pattern, different surface: the redirector's model of production state went stale because the release path itself was assumed rather than verified.
+- **Outcome:** the offline app is now live at `https://18seconds.vercel.app/offline-app/`, prod health remains green, and the round is actually closed at this commit.
 
 ---
 
@@ -368,7 +385,7 @@ For a build round, the "hypotheses" are open design decisions. Each carries deci
 
 ## §6 Round-close
 
-Round status: **CLOSED** at C4.
+Round status: **CLOSED** at C4-finalize. Plan-doc note: C4 claimed closed prematurely; C4-finalize manually deployed to prod and completed verification, at which point the round was actually closed.
 
 ### §6.1 Final outcome vs §0.7 success criteria
 
@@ -403,11 +420,12 @@ All four §0.7 criteria met — verified on **Firefox / Linux / `file://`** (C3b
 - **§3.17** (1/5) — an audit must cover middleware/proxy layers, not just static-serving conventions. Discriminator from §3.15: §3.15 is mechanism-wrong-within-the-correct-area; §3.17 is an entire-layer-missed. First occurrence: C0 audited `public/` but missed `src/proxy.ts`; C3a discovered the gap; C3a.5 fixed it.
 - **§3.18** (1/5) — an API/tooling error mid-execution leaves state in an ambiguous place; recovery requires explicit verification before the next action. First occurrence: C3a.5 API error after commit+deploy but before push+report; recovery via a user-driven `git status` check before the redirector drafted the recovery prompt.
 
-**Applied this round (no new banking):**
+**Applied this round (counts updated at close):**
 
-- **§3.14** prevention worked across all C-rounds — zero recurrences of executor between-round unauthorized action.
-- **§3.15** informed the C0 audit posture (sample real data, don't trust the schema alone).
-- **§3.16** informed pre-action verification steps (caught the OIDC expiry at C1, caught the proxy gate at C3a, caught the API-error recovery state at C3a.5).
+- **§3.13** remains at **2/5** — rebuild-then-swap on production deploy still held at C4-finalize.
+- **§3.14** remains at **1/5** — prevention worked across all C-rounds; zero recurrences of executor between-round unauthorized action.
+- **§3.15** remains at **1/5** — informed the C0 audit posture (sample real data, don't trust the schema alone).
+- **§3.16** is now **2/5** — informed pre-action verification steps at C1 / C3a / C3a.5 and was directly banked again at C4-finalize when the assumed GitHub→Vercel auto-deploy mechanism turned out not to exist.
 
 ### §6.5 Pins
 
