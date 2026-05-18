@@ -40,11 +40,21 @@
 //   - "/stats"                → stub page (dashboard round commit 4)
 // All five resolve to a 200 by the time this nav renders.
 
-import { LogOutIcon } from "lucide-react"
+import { LogOutIcon, Settings2Icon } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOutAction } from "@/app/(app)/actions"
 import { StreakChip } from "@/components/dashboard/streak-chip"
+import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
+import {
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu"
 
 const NAV: ReadonlyArray<{
 	href: "/" | "/full-length/configure" | "/lessons" | "/review" | "/stats"
@@ -60,6 +70,8 @@ const NAV: ReadonlyArray<{
 const ACTIVE_CLASS = "rounded-md bg-surface-2 px-[10px] py-[6px] font-medium text-[13px] text-text-1"
 const INACTIVE_CLASS =
 	"rounded-md px-[10px] py-[6px] text-[13px] text-text-2 transition-colors hover:bg-lavender"
+const ICON_BUTTON_CLASS =
+	"grid h-7 w-7 place-items-center rounded-full text-text-2 transition-colors duration-150 ease-out hover:bg-lavender hover:text-indigo focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
 
 interface TopNavProps {
 	streakDays: number
@@ -68,6 +80,12 @@ interface TopNavProps {
 
 function TopNav({ streakDays, initials }: TopNavProps) {
 	const pathname = usePathname()
+	const {
+		prefs,
+		setWarningSoundEnabled,
+		markTutorialReplayPending,
+		clearTutorialSessionForLoginReset
+	} = useFocusPrefs()
 	return (
 		<header className="mx-auto mb-2 flex max-w-[1100px] items-center justify-between border-border-soft border-b px-7 pt-[10px] pb-2">
 			<Link
@@ -99,12 +117,46 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 				>
 					{initials}
 				</span>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<button
+							type="button"
+							aria-label="Settings"
+							title="Settings"
+							className={ICON_BUTTON_CLASS}
+						>
+							<Settings2Icon aria-hidden="true" className="h-[14px] w-[14px]" />
+						</button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="w-56">
+						<DropdownMenuLabel>Focus settings</DropdownMenuLabel>
+						<DropdownMenuCheckboxItem
+							checked={prefs.warningSoundEnabled}
+							onCheckedChange={function onCheckedChange(checked) {
+								setWarningSoundEnabled(checked === true)
+							}}
+						>
+							Warning sound
+						</DropdownMenuCheckboxItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem
+							onSelect={function onSelect() {
+								markTutorialReplayPending()
+							}}
+						>
+							Replay question tutorial
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 				<form action={signOutAction}>
 					<button
 						type="submit"
+						onClick={function onClick() {
+							clearTutorialSessionForLoginReset()
+						}}
 						aria-label="Sign out"
 						title="Sign out"
-						className="grid h-7 w-7 place-items-center rounded-full text-text-2 transition-colors duration-150 ease-out hover:bg-lavender hover:text-indigo focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-1"
+						className={ICON_BUTTON_CLASS}
 					>
 						<LogOutIcon aria-hidden="true" className="h-[14px] w-[14px]" />
 					</button>

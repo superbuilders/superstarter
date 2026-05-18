@@ -169,6 +169,7 @@ function PhaseThreeSmokePage() {
 		paceTrackVisible: true,
 		initialItem: firstItem,
 		strictMode: false,
+		tutorialExitHref: "/",
 		onSubmitAttempt,
 		onEndSession
 	}

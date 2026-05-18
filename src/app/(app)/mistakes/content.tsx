@@ -61,6 +61,7 @@ function MistakesRunContent(props: MistakesRunContentProps) {
 			paceTrackVisible
 			initialItem={init.firstItem}
 			strictMode={false}
+			tutorialExitHref="/"
 			onSubmitAttempt={onSubmitAttempt}
 			onEndSession={onEndSession}
 		/>
