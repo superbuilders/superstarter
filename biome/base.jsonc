@@ -42,7 +42,16 @@
 			"!scripts/generate-explanations.ts",
 			"!scripts/import-questions.ts",
 			"!scripts/migrate-opaque-option-ids.ts",
-			"!scripts/regenerate-explanations.ts"
+			"!scripts/regenerate-explanations.ts",
+			// Offline practice app (offline-app round, C2). A standalone
+			// single-file vanilla-JS artifact in the static-assets dir —
+			// intentionally NOT application source. It uses a module IIFE,
+			// forEach, and other patterns the TS-app ruleset bans by design,
+			// and the C2 design brief itself specifies the IIFE module
+			// pattern. Carries the "EXEMPT FROM THE PROJECT RULESET" header
+			// per the contract above. Ships as a static file: no build step,
+			// never imported by the app.
+			"!public/offline-app/index.html"
 		],
 		"maxSize": 5000000
 	},
