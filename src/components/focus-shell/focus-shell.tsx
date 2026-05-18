@@ -547,7 +547,9 @@ function FocusShellRunning(props: FocusShellProps & { startMs: number; warningSo
 						onSelectOption={function selectOption(optionId: string) {
 							// User interaction — unlock audio (idempotent) so any
 							// subsequent tick / dong fires can produce sound.
-							unlockAudio()
+							if (props.warningSoundEnabled) {
+								unlockAudio()
+							}
 							dispatch({ kind: "select", optionId })
 						}}
 						onMounted={function onItemMounted(nowMs: number) {
@@ -563,7 +565,9 @@ function FocusShellRunning(props: FocusShellProps & { startMs: number; warningSo
 							// FocusShell entry where <ItemPrompt> hasn't fired
 							// first, so this is the late-binding unlock for that
 							// flow.
-							unlockAudio()
+							if (props.warningSoundEnabled) {
+								unlockAudio()
+							}
 							dispatch({ kind: "submit", nowMs: performance.now() })
 						}}
 						disabled={submitDisabled}
