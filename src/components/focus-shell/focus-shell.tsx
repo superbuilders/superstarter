@@ -40,8 +40,10 @@ import {
 	stopUrgencyLoop,
 	unlockAudio
 } from "@/components/focus-shell/audio-ticker"
+import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
 import { Heartbeat } from "@/components/focus-shell/heartbeat"
 import { InterQuestionCard } from "@/components/focus-shell/inter-question-card"
+import { FocusTutorialOverlay } from "@/components/focus-shell/focus-tutorial-overlay"
 import { ItemSlot } from "@/components/focus-shell/item-slot"
 import { QuestionProgressionBar } from "@/components/focus-shell/question-progression-bar"
 import { QuestionTimerBarStack } from "@/components/focus-shell/question-timer-bar-stack"
@@ -55,7 +57,7 @@ import type { FocusShellProps, SubmitAttemptInput } from "@/components/focus-she
 import { cn } from "@/lib/utils"
 import { logger } from "@/logger"
 
-function FocusShell(props: FocusShellProps) {
+function FocusShellRunning(props: FocusShellProps & { startMs: number; warningSoundEnabled: boolean }) {
 	const tickCtx: TickContext = React.useMemo(
 		function buildCtx() {
 			return {
@@ -75,7 +77,7 @@ function FocusShell(props: FocusShellProps) {
 		return initShellState({
 			initialItem: props.initialItem,
 			targetQuestionCount: props.targetQuestionCount,
-			startMs: performance.now()
+			startMs: props.startMs
 		})
 	})
 
@@ -199,6 +201,7 @@ function FocusShell(props: FocusShellProps) {
 	// layer doesn't help the SPA-navigation case — that's why layer 2
 	// exists. (BUG 2 commit 1, b02590a.)
 	React.useEffect(function unlockAudioOnMount() {
+		if (!props.warningSoundEnabled) return
 		// Consume the user-activation window preserved by the SPA
 		// navigation from `/diagnostic`. `unlockAudio()` is idempotent
 		// (checks `audioCtx === undefined` before construction; checks
@@ -209,9 +212,10 @@ function FocusShell(props: FocusShellProps) {
 		// the AudioContext lives at module scope in audio-ticker.ts and
 		// outlives any single FocusShell mount.
 		unlockAudio()
-	}, [])
+	}, [props.warningSoundEnabled])
 
 	React.useEffect(function attachAudioUnlockOnFirstInteraction() {
+		if (!props.warningSoundEnabled) return
 		function onFirstInteraction() {
 			unlockAudio()
 			window.removeEventListener("pointerdown", onFirstInteraction)
@@ -223,7 +227,7 @@ function FocusShell(props: FocusShellProps) {
 			window.removeEventListener("pointerdown", onFirstInteraction)
 			window.removeEventListener("keydown", onFirstInteraction)
 		}
-	}, [])
+	}, [props.warningSoundEnabled])
 
 	// Audio: hybrid two-path model (post-overhaul-fixes round commit 2.5,
 	// SPEC §6.12). Two distinct sounds per question:
@@ -270,8 +274,13 @@ function FocusShell(props: FocusShellProps) {
 		},
 		[questionsRemaining]
 	)
+	React.useEffect(function silenceWarningAudioWhenDisabled() {
+		if (props.warningSoundEnabled) return
+		stopUrgencyLoop()
+	}, [props.warningSoundEnabled])
 	React.useEffect(
 		function maybePlayPreTargetTicks() {
+			if (!props.warningSoundEnabled) return
 			const secondsElapsed = Math.floor(state.elapsedQuestionMs / 1000)
 			if (secondsElapsed === prevSecondRef.current) return
 			const targetSec = props.perQuestionTargetMs / 1000
@@ -284,10 +293,11 @@ function FocusShell(props: FocusShellProps) {
 			}
 			prevSecondRef.current = secondsElapsed
 		},
-		[state.elapsedQuestionMs, props.perQuestionTargetMs]
+		[state.elapsedQuestionMs, props.perQuestionTargetMs, props.warningSoundEnabled]
 	)
 	React.useEffect(
 		function maybeStartUrgencyLoop() {
+			if (!props.warningSoundEnabled) return
 			if (state.elapsedQuestionMs < props.perQuestionTargetMs) return
 			if (state.urgencyLoopStartedForCurrentQuestion) return
 			// Per Round 1 §5.9 (Path C) + SPEC §6.12 amendment: the
@@ -299,10 +309,11 @@ function FocusShell(props: FocusShellProps) {
 			startUrgencyLoop()
 			dispatch({ kind: "urgency_loop_started" })
 		},
-		[state.elapsedQuestionMs, state.urgencyLoopStartedForCurrentQuestion, props.perQuestionTargetMs]
+		[state.elapsedQuestionMs, state.urgencyLoopStartedForCurrentQuestion, props.perQuestionTargetMs, props.warningSoundEnabled]
 	)
 	React.useEffect(
 		function maybePlayPostTargetTicks() {
+			if (!props.warningSoundEnabled) return
 			// Round 1 §5.9 (Path C) — sibling to maybePlayPreTargetTicks.
 			// Mirrors that effect's strict-greater-than-target structure:
 			// pre-target fires synth ticks at integer seconds in the
@@ -326,7 +337,7 @@ function FocusShell(props: FocusShellProps) {
 			}
 			prevPostTargetSecondRef.current = secondsElapsed
 		},
-		[state.elapsedQuestionMs, props.perQuestionTargetMs]
+		[state.elapsedQuestionMs, props.perQuestionTargetMs, props.warningSoundEnabled]
 	)
 	React.useEffect(
 		function stopUrgencyLoopOnAdvance() {
@@ -574,6 +585,68 @@ function FocusShell(props: FocusShellProps) {
 			<InterQuestionCard visible={state.interQuestionVisible} />
 			<Heartbeat sessionId={props.sessionId} />
 		</div>
+	)
+}
+
+function FocusShell(props: FocusShellProps) {
+	const { prefs, completeTutorialDismissal } = useFocusPrefs()
+	const tutorialRequired = prefs.tutorialSeen ? prefs.tutorialReplayPending : true
+	const [tutorialStepIndex, setTutorialStepIndex] = React.useState<number>(0)
+	const [shellStartAtMs, setShellStartAtMs] = React.useState<number | null>(function initStartGate() {
+		if (tutorialRequired) return null
+		return performance.now()
+	})
+
+	React.useEffect(
+		function syncStartGateWhenTutorialNotNeeded() {
+			if (shellStartAtMs !== null) return
+			if (tutorialRequired) return
+			setShellStartAtMs(performance.now())
+		},
+		[shellStartAtMs, tutorialRequired]
+	)
+
+	React.useEffect(
+		function resetTutorialStepWhenOpening() {
+			if (shellStartAtMs !== null) return
+			setTutorialStepIndex(0)
+		},
+		[shellStartAtMs]
+	)
+
+	const dismissTutorial = React.useCallback(function dismissTutorial() {
+		completeTutorialDismissal()
+		setShellStartAtMs(performance.now())
+	}, [completeTutorialDismissal])
+
+	if (shellStartAtMs === null) {
+		return (
+			<FocusTutorialOverlay
+				stepIndex={tutorialStepIndex}
+				warningSoundEnabled={prefs.warningSoundEnabled}
+				onBack={function onBack() {
+					setTutorialStepIndex(function previous(step) {
+						return Math.max(0, step - 1)
+					})
+				}}
+				onNext={function onNext() {
+					setTutorialStepIndex(function advance(step) {
+						return step + 1
+					})
+				}}
+				onSkip={dismissTutorial}
+				onFinish={dismissTutorial}
+			/>
+		)
+	}
+
+	return (
+		<FocusShellRunning
+			key={shellStartAtMs}
+			{...props}
+			startMs={shellStartAtMs}
+			warningSoundEnabled={prefs.warningSoundEnabled}
+		/>
 	)
 }
 

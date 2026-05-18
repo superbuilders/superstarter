@@ -1,8 +1,11 @@
 import { afterEach, expect, test } from "bun:test"
 import {
+	clearTutorialReplayPending,
+	completeTutorialDismissal,
 	DEFAULT_FOCUS_PREFS,
 	FOCUS_PREFS_STORAGE_KEY,
 	markTutorialReplayPending,
+	markTutorialSeen,
 	readFocusPrefs,
 	setWarningSoundEnabled,
 	writeFocusPrefs
@@ -104,6 +107,72 @@ test("markTutorialReplayPending persists the replay flag", () => {
 			warningSoundEnabled: false,
 			tutorialSeen: true,
 			tutorialReplayPending: true
+		})
+	)
+})
+
+test("markTutorialSeen persists seen without clearing replay by itself", () => {
+	const storage = installMockWindow(makeMockStorage())
+	writeFocusPrefs({
+		warningSoundEnabled: true,
+		tutorialSeen: false,
+		tutorialReplayPending: true
+	})
+	const next = markTutorialSeen()
+	expect(next).toEqual({
+		warningSoundEnabled: true,
+		tutorialSeen: true,
+		tutorialReplayPending: true
+	})
+	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
+		JSON.stringify({
+			warningSoundEnabled: true,
+			tutorialSeen: true,
+			tutorialReplayPending: true
+		})
+	)
+})
+
+test("clearTutorialReplayPending clears only the replay flag", () => {
+	const storage = installMockWindow(makeMockStorage())
+	writeFocusPrefs({
+		warningSoundEnabled: false,
+		tutorialSeen: true,
+		tutorialReplayPending: true
+	})
+	const next = clearTutorialReplayPending()
+	expect(next).toEqual({
+		warningSoundEnabled: false,
+		tutorialSeen: true,
+		tutorialReplayPending: false
+	})
+	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
+		JSON.stringify({
+			warningSoundEnabled: false,
+			tutorialSeen: true,
+			tutorialReplayPending: false
+		})
+	)
+})
+
+test("completeTutorialDismissal marks seen and clears replay together", () => {
+	const storage = installMockWindow(makeMockStorage())
+	writeFocusPrefs({
+		warningSoundEnabled: true,
+		tutorialSeen: false,
+		tutorialReplayPending: true
+	})
+	const next = completeTutorialDismissal()
+	expect(next).toEqual({
+		warningSoundEnabled: true,
+		tutorialSeen: true,
+		tutorialReplayPending: false
+	})
+	expect(storage.getItem(FOCUS_PREFS_STORAGE_KEY)).toBe(
+		JSON.stringify({
+			warningSoundEnabled: true,
+			tutorialSeen: true,
+			tutorialReplayPending: false
 		})
 	)
 })

@@ -80,8 +80,20 @@ function setWarningSoundEnabled(enabled: boolean): FocusPrefs {
 	return updateFocusPrefs({ warningSoundEnabled: enabled })
 }
 
+function markTutorialSeen(): FocusPrefs {
+	return updateFocusPrefs({ tutorialSeen: true })
+}
+
+function clearTutorialReplayPending(): FocusPrefs {
+	return updateFocusPrefs({ tutorialReplayPending: false })
+}
+
 function markTutorialReplayPending(): FocusPrefs {
 	return updateFocusPrefs({ tutorialReplayPending: true })
+}
+
+function completeTutorialDismissal(): FocusPrefs {
+	return updateFocusPrefs({ tutorialSeen: true, tutorialReplayPending: false })
 }
 
 function useFocusPrefs() {
@@ -100,33 +112,56 @@ function useFocusPrefs() {
 		}
 	}, [])
 
-	const setWarningSoundEnabledPref = React.useCallback(function setWarningSoundEnabledPref(
-		enabled: boolean
-	) {
+	const setWarningSoundEnabledPref = React.useCallback((enabled: boolean) => {
 		setPrefs(function writeNext() {
 			return setWarningSoundEnabled(enabled)
 		})
 	}, [])
 
-	const markTutorialReplayPendingPref = React.useCallback(function markTutorialReplayPendingPref() {
+	const markTutorialSeenPref = React.useCallback(() => {
+		setPrefs(function writeNext() {
+			return markTutorialSeen()
+		})
+	}, [])
+
+	const clearTutorialReplayPendingPref = React.useCallback(() => {
+		setPrefs(function writeNext() {
+			return clearTutorialReplayPending()
+		})
+	}, [])
+
+	const markTutorialReplayPendingPref = React.useCallback(() => {
 		setPrefs(function writeNext() {
 			return markTutorialReplayPending()
+		})
+	}, [])
+
+	const completeTutorialDismissalPref = React.useCallback(() => {
+		setPrefs(function writeNext() {
+			return completeTutorialDismissal()
 		})
 	}, [])
 
 	return {
 		prefs,
 		setWarningSoundEnabled: setWarningSoundEnabledPref,
-		markTutorialReplayPending: markTutorialReplayPendingPref
+		markTutorialSeen: markTutorialSeenPref,
+		clearTutorialReplayPending: clearTutorialReplayPendingPref,
+		markTutorialReplayPending: markTutorialReplayPendingPref,
+		completeTutorialDismissal: completeTutorialDismissalPref
 	}
 }
 
 export {
 	DEFAULT_FOCUS_PREFS,
 	FOCUS_PREFS_STORAGE_KEY,
+	clearTutorialReplayPending,
+	completeTutorialDismissal,
 	markTutorialReplayPending,
+	markTutorialSeen,
 	readFocusPrefs,
 	setWarningSoundEnabled,
 	useFocusPrefs,
 	writeFocusPrefs
 }
+export type { FocusPrefs }
