@@ -4,17 +4,21 @@ import {
 	clearTutorialSessionForLoginReset,
 	completeTutorialDismissal,
 	DEFAULT_FOCUS_PREFS,
+	DEFAULT_FOCUS_TUTORIAL_LOCAL_STATE,
 	DEFAULT_FOCUS_TUTORIAL_SESSION_STATE,
 	FOCUS_PREFS_STORAGE_KEY,
+	FOCUS_TUTORIAL_LOCAL_STORAGE_KEY,
 	FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
 	markTutorialReplayPending,
 	readFocusPrefs,
+	readFocusTutorialLocalState,
 	readFocusTutorialSessionState,
 	setTutorialEnabledForNextRun,
 	setWarningSoundEnabled,
 	shouldShowTutorialOnNextRun,
 	shouldShowTutorialOnNextRunState,
 	writeFocusPrefs,
+	writeFocusTutorialLocalState,
 	writeFocusTutorialSessionState
 } from "@/components/focus-shell/focus-prefs"
 
@@ -66,6 +70,7 @@ test("readFocusPrefs returns defaults when storage is empty", () => {
 test("readFocusTutorialSessionState returns defaults when storage is empty", () => {
 	installMockWindow(makeMockStorage(), makeMockStorage())
 	expect(readFocusTutorialSessionState()).toEqual(DEFAULT_FOCUS_TUTORIAL_SESSION_STATE)
+	expect(readFocusTutorialLocalState()).toEqual(DEFAULT_FOCUS_TUTORIAL_LOCAL_STATE)
 })
 
 test("readFocusPrefs falls back to defaults for malformed JSON", () => {
@@ -86,48 +91,84 @@ test("setWarningSoundEnabled persists the updated value", () => {
 test("markTutorialReplayPending persists the next-run flag in session storage", () => {
 	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
 	const next = markTutorialReplayPending()
-	expect(next).toEqual({ dismissedThisLogin: false, showOnNextRun: true })
+	expect(next).toEqual({ autoShowPendingThisLogin: true, showOnNextRun: true })
 	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
-		JSON.stringify({ dismissedThisLogin: false, showOnNextRun: true })
+		JSON.stringify({ autoShowPendingThisLogin: true, showOnNextRun: true })
 	)
 })
 
-test("completeTutorialDismissal marks dismissed and clears replay", () => {
-	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
-	writeFocusTutorialSessionState({ dismissedThisLogin: false, showOnNextRun: true })
+test("completeTutorialDismissal marks completed locally and clears replay", () => {
+	const { localStorage, sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	writeFocusTutorialSessionState({ autoShowPendingThisLogin: true, showOnNextRun: true })
 	const next = completeTutorialDismissal()
-	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: false })
+	expect(next).toEqual({ autoShowPendingThisLogin: false, showOnNextRun: false })
 	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
-		JSON.stringify({ dismissedThisLogin: true, showOnNextRun: false })
+		JSON.stringify({ autoShowPendingThisLogin: false, showOnNextRun: false })
+	)
+	expect(localStorage.getItem(FOCUS_TUTORIAL_LOCAL_STORAGE_KEY)).toBe(
+		JSON.stringify({ hasCompletedTutorial: true })
 	)
 })
 
 test("clearTutorialReplayPending clears only the next-run flag", () => {
 	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
-	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: true })
+	writeFocusTutorialSessionState({ autoShowPendingThisLogin: false, showOnNextRun: true })
 	const next = clearTutorialReplayPending()
-	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: false })
+	expect(next).toEqual({ autoShowPendingThisLogin: false, showOnNextRun: false })
 	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
-		JSON.stringify({ dismissedThisLogin: true, showOnNextRun: false })
+		JSON.stringify({ autoShowPendingThisLogin: false, showOnNextRun: false })
 	)
 })
 
-test("setTutorialEnabledForNextRun can suppress the first-run tutorial", () => {
+test("setTutorialEnabledForNextRun(false) clears only the manual replay flag", () => {
 	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
 	const next = setTutorialEnabledForNextRun(false)
-	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: false })
+	expect(next).toEqual({ autoShowPendingThisLogin: true, showOnNextRun: false })
 	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
-		JSON.stringify({ dismissedThisLogin: true, showOnNextRun: false })
+		JSON.stringify({ autoShowPendingThisLogin: true, showOnNextRun: false })
 	)
-	expect(shouldShowTutorialOnNextRun()).toBe(false)
+	expect(shouldShowTutorialOnNextRun()).toBe(true)
 })
 
 test("setTutorialEnabledForNextRun can re-enable the tutorial after dismissal", () => {
 	installMockWindow(makeMockStorage(), makeMockStorage())
-	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: false })
+	writeFocusTutorialSessionState({ autoShowPendingThisLogin: false, showOnNextRun: false })
+	writeFocusTutorialLocalState({ hasCompletedTutorial: true })
 	const next = setTutorialEnabledForNextRun(true)
-	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: true })
+	expect(next).toEqual({ autoShowPendingThisLogin: false, showOnNextRun: true })
 	expect(shouldShowTutorialOnNextRun()).toBe(true)
+})
+
+test("tutorial replay toggle stays off by default on a fresh login session", () => {
+	installMockWindow(makeMockStorage(), makeMockStorage())
+	expect(readFocusTutorialSessionState().showOnNextRun).toBe(false)
+	expect(readFocusTutorialLocalState().hasCompletedTutorial).toBe(false)
+	expect(shouldShowTutorialOnNextRun()).toBe(true)
+})
+
+test("returning login keeps manual replay off after tutorial was already completed", () => {
+	const { localStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	localStorage.setItem(FOCUS_TUTORIAL_LOCAL_STORAGE_KEY, JSON.stringify({ hasCompletedTutorial: true }))
+	expect(readFocusTutorialSessionState().showOnNextRun).toBe(false)
+	expect(shouldShowTutorialOnNextRun()).toBe(false)
+})
+
+test("legacy dismissedThisLogin state migrates to autoShowPendingThisLogin=false", () => {
+	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	sessionStorage.setItem(
+		FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
+		JSON.stringify({ dismissedThisLogin: true, showOnNextRun: false })
+	)
+	expect(readFocusTutorialSessionState()).toEqual({
+		autoShowPendingThisLogin: false,
+		showOnNextRun: false
+	})
+})
+
+test("legacy local completed state suppresses first-time auto-show", () => {
+	const { localStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	localStorage.setItem(FOCUS_TUTORIAL_LOCAL_STORAGE_KEY, JSON.stringify({ hasCompletedTutorial: true }))
+	expect(shouldShowTutorialOnNextRun()).toBe(false)
 })
 
 test("shouldShowTutorialOnNextRun is true on first start and false after dismissal", () => {
@@ -138,26 +179,50 @@ test("shouldShowTutorialOnNextRun is true on first start and false after dismiss
 })
 
 test("shouldShowTutorialOnNextRunState matches first-run and replay semantics", () => {
-	expect(shouldShowTutorialOnNextRunState({ dismissedThisLogin: false, showOnNextRun: false })).toBe(true)
-	expect(shouldShowTutorialOnNextRunState({ dismissedThisLogin: true, showOnNextRun: false })).toBe(false)
-	expect(shouldShowTutorialOnNextRunState({ dismissedThisLogin: true, showOnNextRun: true })).toBe(true)
+	expect(
+		shouldShowTutorialOnNextRunState(
+			{ autoShowPendingThisLogin: true, showOnNextRun: false },
+			{ hasCompletedTutorial: false }
+		)
+	).toBe(true)
+	expect(
+		shouldShowTutorialOnNextRunState(
+			{ autoShowPendingThisLogin: false, showOnNextRun: false },
+			{ hasCompletedTutorial: false }
+		)
+	).toBe(false)
+	expect(
+		shouldShowTutorialOnNextRunState(
+			{ autoShowPendingThisLogin: false, showOnNextRun: true },
+			{ hasCompletedTutorial: true }
+		)
+	).toBe(true)
+	expect(
+		shouldShowTutorialOnNextRunState(
+			{ autoShowPendingThisLogin: true, showOnNextRun: false },
+			{ hasCompletedTutorial: true }
+		)
+	).toBe(false)
 })
 
 test("clearTutorialSessionForLoginReset removes the session-scoped tutorial state", () => {
 	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
-	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: true })
+	writeFocusTutorialSessionState({ autoShowPendingThisLogin: false, showOnNextRun: true })
 	clearTutorialSessionForLoginReset()
 	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(null)
 	expect(readFocusTutorialSessionState()).toEqual(DEFAULT_FOCUS_TUTORIAL_SESSION_STATE)
+	expect(readFocusTutorialLocalState()).toEqual({ hasCompletedTutorial: false })
 })
 
 test("prefs and tutorial session storages stay independent", () => {
 	installMockWindow(makeMockStorage(), makeMockStorage())
 	writeFocusPrefs({ warningSoundEnabled: false })
-	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: false })
+	writeFocusTutorialSessionState({ autoShowPendingThisLogin: false, showOnNextRun: false })
+	writeFocusTutorialLocalState({ hasCompletedTutorial: true })
 	expect(readFocusPrefs()).toEqual({ warningSoundEnabled: false })
 	expect(readFocusTutorialSessionState()).toEqual({
-		dismissedThisLogin: true,
+		autoShowPendingThisLogin: false,
 		showOnNextRun: false
 	})
+	expect(readFocusTutorialLocalState()).toEqual({ hasCompletedTutorial: true })
 })
