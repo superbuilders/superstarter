@@ -20,7 +20,7 @@ interface PageNavProps {
 
 function PageNav({ chromePromise }: PageNavProps) {
 	const chrome = React.use(chromePromise)
-	return <TopNav streakDays={chrome.streakDays} initials={chrome.initials} />
+	return <TopNav streakDays={chrome.streakDays} initials={chrome.initials} userKey={chrome.userId} />
 }
 
 export type { PageNavProps }

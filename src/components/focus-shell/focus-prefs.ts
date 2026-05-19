@@ -38,6 +38,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null
 }
 
+function normalizeUserKey(userKey: string | undefined): string | undefined {
+	if (typeof userKey !== "string") return undefined
+	const normalized = userKey.trim()
+	if (normalized.length === 0) return undefined
+	return normalized
+}
+
 function readJsonStorage<T extends object>(
 	storage: Storage | undefined,
 	key: string,
@@ -86,28 +93,59 @@ function readFocusPrefs(): FocusPrefs {
 	}
 }
 
-function readFocusTutorialLocalState(): FocusTutorialLocalState {
+function readCompletedByUserKeyMap(data: Record<string, unknown>): Record<string, boolean> {
+	const raw = data.completedByUserKey
+	if (!isRecord(raw)) return {}
+	const out: Record<string, boolean> = {}
+	for (const [key, value] of Object.entries(raw)) {
+		if (typeof value === "boolean") {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+function readFocusTutorialLocalState(userKey?: string): FocusTutorialLocalState {
 	const data = readJsonStorage<Record<string, unknown>>(
 		getLocalStorage(),
 		FOCUS_TUTORIAL_LOCAL_STORAGE_KEY,
 		{},
 		"focus-tutorial-local"
 	)
-	return {
-		hasCompletedTutorial:
-			typeof data.hasCompletedTutorial === "boolean"
-				? data.hasCompletedTutorial
-				: DEFAULT_FOCUS_TUTORIAL_LOCAL_STATE.hasCompletedTutorial
+	const normalizedUserKey = normalizeUserKey(userKey)
+	if (normalizedUserKey !== undefined) {
+		const completedByUserKey = readCompletedByUserKeyMap(data)
+		return {
+			hasCompletedTutorial: completedByUserKey[normalizedUserKey] === true
+		}
 	}
+	if (typeof data.hasCompletedTutorial === "boolean") {
+		return { hasCompletedTutorial: data.hasCompletedTutorial }
+	}
+	if (typeof data.tutorialSeen === "boolean") {
+		return { hasCompletedTutorial: data.tutorialSeen }
+	}
+	return DEFAULT_FOCUS_TUTORIAL_LOCAL_STATE
 }
 
-function readFocusTutorialSessionState(): FocusTutorialSessionState {
+function readFocusTutorialSessionState(userKey?: string): FocusTutorialSessionState {
 	const data = readJsonStorage<Record<string, unknown>>(
 		getSessionStorage(),
 		FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
 		{},
 		"focus-tutorial-session"
 	)
+	const normalizedUserKey = normalizeUserKey(userKey)
+	const ownerUserKey = normalizeUserKey(
+		typeof data.ownerUserKey === "string" ? data.ownerUserKey : undefined
+	)
+	if (
+		normalizedUserKey !== undefined &&
+		ownerUserKey !== undefined &&
+		ownerUserKey !== normalizedUserKey
+	) {
+		return DEFAULT_FOCUS_TUTORIAL_SESSION_STATE
+	}
 	let autoShowPendingThisLogin = DEFAULT_FOCUS_TUTORIAL_SESSION_STATE.autoShowPendingThisLogin
 	if (typeof data.autoShowPendingThisLogin === "boolean") {
 		autoShowPendingThisLogin = data.autoShowPendingThisLogin
@@ -137,15 +175,45 @@ function writeFocusPrefs(next: FocusPrefs): void {
 	writeStorage(getLocalStorage(), FOCUS_PREFS_STORAGE_KEY, next, "focus-prefs")
 }
 
-function writeFocusTutorialLocalState(next: FocusTutorialLocalState): void {
-	writeStorage(getLocalStorage(), FOCUS_TUTORIAL_LOCAL_STORAGE_KEY, next, "focus-tutorial-local")
+function writeFocusTutorialLocalState(next: FocusTutorialLocalState, userKey?: string): void {
+	const normalizedUserKey = normalizeUserKey(userKey)
+	if (normalizedUserKey === undefined) {
+		writeStorage(getLocalStorage(), FOCUS_TUTORIAL_LOCAL_STORAGE_KEY, next, "focus-tutorial-local")
+		return
+	}
+	const data = readJsonStorage<Record<string, unknown>>(
+		getLocalStorage(),
+		FOCUS_TUTORIAL_LOCAL_STORAGE_KEY,
+		{},
+		"focus-tutorial-local"
+	)
+	const completedByUserKey = readCompletedByUserKeyMap(data)
+	if (next.hasCompletedTutorial) {
+		completedByUserKey[normalizedUserKey] = true
+	} else {
+		delete completedByUserKey[normalizedUserKey]
+	}
+	writeStorage(
+		getLocalStorage(),
+		FOCUS_TUTORIAL_LOCAL_STORAGE_KEY,
+		{ completedByUserKey },
+		"focus-tutorial-local"
+	)
 }
 
-function writeFocusTutorialSessionState(next: FocusTutorialSessionState): void {
+function writeFocusTutorialSessionState(next: FocusTutorialSessionState, userKey?: string): void {
+	const normalizedUserKey = normalizeUserKey(userKey)
+	const payload: Record<string, unknown> = {
+		autoShowPendingThisLogin: next.autoShowPendingThisLogin,
+		showOnNextRun: next.showOnNextRun
+	}
+	if (normalizedUserKey !== undefined) {
+		payload.ownerUserKey = normalizedUserKey
+	}
 	writeStorage(
 		getSessionStorage(),
 		FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
-		next,
+		payload,
 		"focus-tutorial-session"
 	)
 }
@@ -157,18 +225,20 @@ function updateFocusPrefs(patch: Partial<FocusPrefs>): FocusPrefs {
 }
 
 function updateFocusTutorialLocalState(
-	patch: Partial<FocusTutorialLocalState>
+	patch: Partial<FocusTutorialLocalState>,
+	userKey?: string
 ): FocusTutorialLocalState {
-	const next = { ...readFocusTutorialLocalState(), ...patch }
-	writeFocusTutorialLocalState(next)
+	const next = { ...readFocusTutorialLocalState(userKey), ...patch }
+	writeFocusTutorialLocalState(next, userKey)
 	return next
 }
 
 function updateFocusTutorialSessionState(
-	patch: Partial<FocusTutorialSessionState>
+	patch: Partial<FocusTutorialSessionState>,
+	userKey?: string
 ): FocusTutorialSessionState {
-	const next = { ...readFocusTutorialSessionState(), ...patch }
-	writeFocusTutorialSessionState(next)
+	const next = { ...readFocusTutorialSessionState(userKey), ...patch }
+	writeFocusTutorialSessionState(next, userKey)
 	return next
 }
 
@@ -176,27 +246,30 @@ function setWarningSoundEnabled(enabled: boolean): FocusPrefs {
 	return updateFocusPrefs({ warningSoundEnabled: enabled })
 }
 
-function markTutorialReplayPending(): FocusTutorialSessionState {
-	return updateFocusTutorialSessionState({ showOnNextRun: true })
+function markTutorialReplayPending(userKey?: string): FocusTutorialSessionState {
+	return updateFocusTutorialSessionState({ showOnNextRun: true }, userKey)
 }
 
-function clearTutorialReplayPending(): FocusTutorialSessionState {
-	return updateFocusTutorialSessionState({ showOnNextRun: false })
+function clearTutorialReplayPending(userKey?: string): FocusTutorialSessionState {
+	return updateFocusTutorialSessionState({ showOnNextRun: false }, userKey)
 }
 
-function completeTutorialDismissal(): FocusTutorialSessionState {
-	updateFocusTutorialLocalState({ hasCompletedTutorial: true })
-	return updateFocusTutorialSessionState({
-		autoShowPendingThisLogin: false,
-		showOnNextRun: false
-	})
+function completeTutorialDismissal(userKey?: string): FocusTutorialSessionState {
+	updateFocusTutorialLocalState({ hasCompletedTutorial: true }, userKey)
+	return updateFocusTutorialSessionState(
+		{
+			autoShowPendingThisLogin: false,
+			showOnNextRun: false
+		},
+		userKey
+	)
 }
 
-function setTutorialEnabledForNextRun(enabled: boolean): FocusTutorialSessionState {
+function setTutorialEnabledForNextRun(enabled: boolean, userKey?: string): FocusTutorialSessionState {
 	if (enabled) {
-		return updateFocusTutorialSessionState({ showOnNextRun: true })
+		return updateFocusTutorialSessionState({ showOnNextRun: true }, userKey)
 	}
-	return updateFocusTutorialSessionState({ showOnNextRun: false })
+	return updateFocusTutorialSessionState({ showOnNextRun: false }, userKey)
 }
 
 function clearTutorialSessionForLoginReset(): void {
@@ -214,47 +287,59 @@ function shouldShowTutorialOnNextRunState(
 	return sessionState.autoShowPendingThisLogin
 }
 
-function shouldShowTutorialOnNextRun(): boolean {
+function shouldShowTutorialOnNextRun(userKey?: string): boolean {
 	return shouldShowTutorialOnNextRunState(
-		readFocusTutorialSessionState(),
-		readFocusTutorialLocalState()
+		readFocusTutorialSessionState(userKey),
+		readFocusTutorialLocalState(userKey)
 	)
 }
 
-function useFocusPrefs() {
+function useFocusPrefs(userKey?: string) {
+	const normalizedUserKey = normalizeUserKey(userKey)
 	const [prefs, setPrefs] = React.useState<FocusPrefs>(function initPrefs() {
 		return readFocusPrefs()
 	})
 	const [tutorialLocal, setTutorialLocal] = React.useState<FocusTutorialLocalState>(
 		function initTutorialLocal() {
-			return readFocusTutorialLocalState()
+			return readFocusTutorialLocalState(normalizedUserKey)
 		}
 	)
 	const [tutorialSession, setTutorialSession] = React.useState<FocusTutorialSessionState>(
 		function initTutorialSession() {
-			return readFocusTutorialSessionState()
+			return readFocusTutorialSessionState(normalizedUserKey)
 		}
 	)
 
-	React.useEffect(function syncFromStorage() {
-		function onStorage(event: StorageEvent) {
-			if (event.key === FOCUS_PREFS_STORAGE_KEY) {
-				setPrefs(readFocusPrefs())
-				return
+	React.useEffect(
+		function syncScopedState() {
+			setTutorialLocal(readFocusTutorialLocalState(normalizedUserKey))
+			setTutorialSession(readFocusTutorialSessionState(normalizedUserKey))
+		},
+		[normalizedUserKey]
+	)
+
+	React.useEffect(
+		function syncFromStorage() {
+			function onStorage(event: StorageEvent) {
+				if (event.key === FOCUS_PREFS_STORAGE_KEY) {
+					setPrefs(readFocusPrefs())
+					return
+				}
+				if (event.key === FOCUS_TUTORIAL_LOCAL_STORAGE_KEY) {
+					setTutorialLocal(readFocusTutorialLocalState(normalizedUserKey))
+					return
+				}
+				if (event.key === FOCUS_TUTORIAL_SESSION_STORAGE_KEY) {
+					setTutorialSession(readFocusTutorialSessionState(normalizedUserKey))
+				}
 			}
-			if (event.key === FOCUS_TUTORIAL_LOCAL_STORAGE_KEY) {
-				setTutorialLocal(readFocusTutorialLocalState())
-				return
+			window.addEventListener("storage", onStorage)
+			return function cleanup() {
+				window.removeEventListener("storage", onStorage)
 			}
-			if (event.key === FOCUS_TUTORIAL_SESSION_STORAGE_KEY) {
-				setTutorialSession(readFocusTutorialSessionState())
-			}
-		}
-		window.addEventListener("storage", onStorage)
-		return function cleanup() {
-			window.removeEventListener("storage", onStorage)
-		}
-	}, [])
+		},
+		[normalizedUserKey]
+	)
 
 	const setWarningSoundEnabledPref = React.useCallback((enabled: boolean) => {
 		setPrefs(function writeNext() {
@@ -264,33 +349,39 @@ function useFocusPrefs() {
 
 	const markTutorialReplayPendingPref = React.useCallback(() => {
 		setTutorialSession(function writeNext() {
-			return markTutorialReplayPending()
+			return markTutorialReplayPending(normalizedUserKey)
 		})
-	}, [])
+	}, [normalizedUserKey])
 
 	const clearTutorialReplayPendingPref = React.useCallback(() => {
 		setTutorialSession(function writeNext() {
-			return clearTutorialReplayPending()
+			return clearTutorialReplayPending(normalizedUserKey)
 		})
-	}, [])
+	}, [normalizedUserKey])
 
 	const completeTutorialDismissalPref = React.useCallback(() => {
 		setTutorialLocal(function syncLocal() {
-			return updateFocusTutorialLocalState({ hasCompletedTutorial: true })
+			return updateFocusTutorialLocalState({ hasCompletedTutorial: true }, normalizedUserKey)
 		})
 		setTutorialSession(function syncSession() {
-			return updateFocusTutorialSessionState({
-				autoShowPendingThisLogin: false,
-				showOnNextRun: false
-			})
+			return updateFocusTutorialSessionState(
+				{
+					autoShowPendingThisLogin: false,
+					showOnNextRun: false
+				},
+				normalizedUserKey
+			)
 		})
-	}, [])
+	}, [normalizedUserKey])
 
-	const setTutorialEnabledForNextRunPref = React.useCallback((enabled: boolean) => {
-		setTutorialSession(function writeNext() {
-			return setTutorialEnabledForNextRun(enabled)
-		})
-	}, [])
+	const setTutorialEnabledForNextRunPref = React.useCallback(
+		(enabled: boolean) => {
+			setTutorialSession(function writeNext() {
+				return setTutorialEnabledForNextRun(enabled, normalizedUserKey)
+			})
+		},
+		[normalizedUserKey]
+	)
 
 	const clearTutorialSessionForLoginResetPref = React.useCallback(() => {
 		clearTutorialSessionForLoginReset()

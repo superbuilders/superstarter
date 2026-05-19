@@ -120,6 +120,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
 	return {
 		user: {
+			userId,
 			firstName: profile.firstName,
 			initials: profile.initials,
 			streakDays

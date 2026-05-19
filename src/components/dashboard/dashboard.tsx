@@ -64,7 +64,7 @@ function Dashboard({ dataPromise }: DashboardProps) {
 	}
 	return (
 		<div className="min-h-screen bg-bg text-text-1">
-			<TopNav streakDays={data.user.streakDays} initials={data.user.initials} />
+			<TopNav streakDays={data.user.streakDays} initials={data.user.initials} userKey={data.user.userId} />
 			<main className="mx-auto max-w-[1100px] px-7 pb-6">
 				<h1 className="sr-only">Dashboard</h1>
 				<ScoreStrip
