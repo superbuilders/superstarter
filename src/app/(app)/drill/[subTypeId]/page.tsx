@@ -48,16 +48,18 @@ function Page(props: PageProps) {
 	})
 	const primerPromise = loadPrimer(props.params)
 	return (
-		<div className="min-h-screen bg-bg text-text-1">
-			<React.Suspense fallback={null}>
-				<PageNav chromePromise={chromePromise} />
-			</React.Suspense>
-			<main className="mx-auto max-w-[1100px] px-7 pb-12">
+		<FocusTutorialBeforePrimerGate>
+			<div className="min-h-screen bg-bg text-text-1">
 				<React.Suspense fallback={null}>
-					<DrillPrimer primerPromise={primerPromise} />
+					<PageNav chromePromise={chromePromise} />
 				</React.Suspense>
-			</main>
-		</div>
+				<main className="mx-auto max-w-[1100px] px-7 pb-12">
+					<React.Suspense fallback={null}>
+						<DrillPrimer primerPromise={primerPromise} />
+					</React.Suspense>
+				</main>
+			</div>
+		</FocusTutorialBeforePrimerGate>
 	)
 }
 
@@ -77,9 +79,7 @@ async function DrillPrimer(props: {
 					WOOP primer to lock in how you want to handle pressure before you start.
 				</p>
 			</header>
-			<FocusTutorialBeforePrimerGate>
-				<WoopWizard runHref={runHref} startLabel="Start drill" />
-			</FocusTutorialBeforePrimerGate>
+			<WoopWizard runHref={runHref} startLabel="Start drill" />
 		</>
 	)
 }

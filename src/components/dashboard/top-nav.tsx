@@ -10,10 +10,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOutAction } from "@/app/(app)/actions"
 import { StreakChip } from "@/components/dashboard/streak-chip"
-import {
-	shouldShowTutorialOnNextRunState,
-	useFocusPrefs
-} from "@/components/focus-shell/focus-prefs"
+import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -107,7 +104,7 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 						</DropdownMenuCheckboxItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuCheckboxItem
-							checked={shouldShowTutorialOnNextRunState(tutorialSession)}
+							checked={tutorialSession.showOnNextRun}
 							onCheckedChange={function onCheckedChange(checked) {
 								setTutorialEnabledForNextRun(checked === true)
 							}}

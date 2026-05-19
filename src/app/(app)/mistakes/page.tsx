@@ -6,6 +6,7 @@ import { WoopWizard } from "@/components/full-length/woop-wizard"
 import { MistakesEmptyPane } from "@/components/mistakes/mistakes-empty-pane"
 import { PageNav } from "@/components/nav/page-nav"
 import { countMistakes } from "@/server/dashboard/mistakes"
+import type { NavChrome } from "@/server/nav/chrome"
 import { loadNavChrome } from "@/server/nav/chrome"
 
 async function loadUserId(): Promise<string> {
@@ -28,24 +29,47 @@ function Page() {
 	})
 	const mistakesCountPromise = loadMistakesCount()
 	return (
-		<div className="min-h-screen bg-bg text-text-1">
-			<React.Suspense fallback={null}>
-				<PageNav chromePromise={chromePromise} />
-			</React.Suspense>
-			<main className="mx-auto max-w-[1100px] px-7 pb-12">
-				<React.Suspense fallback={null}>
-					<MistakesPrimer mistakesCountPromise={mistakesCountPromise} />
-				</React.Suspense>
-			</main>
-		</div>
+		<React.Suspense fallback={null}>
+			<MistakesPageBody
+				chromePromise={chromePromise}
+				mistakesCountPromise={mistakesCountPromise}
+			/>
+		</React.Suspense>
 	)
 }
 
-async function MistakesPrimer(props: { mistakesCountPromise: Promise<number> }) {
+async function MistakesPageBody(props: {
+	chromePromise: Promise<NavChrome>
+	mistakesCountPromise: Promise<number>
+}) {
 	const mistakesCount = await props.mistakesCountPromise
 	if (mistakesCount === 0) {
-		return <MistakesEmptyPane />
+		return (
+			<div className="min-h-screen bg-bg text-text-1">
+				<React.Suspense fallback={null}>
+					<PageNav chromePromise={props.chromePromise} />
+				</React.Suspense>
+				<main className="mx-auto max-w-[1100px] px-7 pb-12">
+					<MistakesEmptyPane />
+				</main>
+			</div>
+		)
 	}
+	return (
+		<FocusTutorialBeforePrimerGate>
+			<div className="min-h-screen bg-bg text-text-1">
+				<React.Suspense fallback={null}>
+					<PageNav chromePromise={props.chromePromise} />
+				</React.Suspense>
+				<main className="mx-auto max-w-[1100px] px-7 pb-12">
+					<MistakesPrimer />
+				</main>
+			</div>
+		</FocusTutorialBeforePrimerGate>
+	)
+}
+
+function MistakesPrimer() {
 	return (
 		<>
 			<header className="mb-6 flex flex-col gap-1 border-border-soft border-b pt-6 pb-4">
@@ -57,9 +81,7 @@ async function MistakesPrimer(props: { mistakesCountPromise: Promise<number> }) 
 					primer first so you go into the redrill with a clear plan for recovery.
 				</p>
 			</header>
-			<FocusTutorialBeforePrimerGate>
-				<WoopWizard runHref="/mistakes/run" startLabel="Start mistakes review" />
-			</FocusTutorialBeforePrimerGate>
+			<WoopWizard runHref="/mistakes/run" startLabel="Start mistakes review" />
 		</>
 	)
 }

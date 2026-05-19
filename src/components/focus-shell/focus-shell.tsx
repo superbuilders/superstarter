@@ -69,7 +69,7 @@ type FocusShellRunningProps = FocusShellProps & {
 interface TutorialRegionRefs {
 	rootRef: React.RefObject<HTMLDivElement | null>
 	clockRef: React.RefObject<HTMLDivElement | null>
-	questionProgressRef: React.RefObject<HTMLDivElement | null>
+	questionProgressBarRef: React.RefObject<HTMLDivElement | null>
 	overallTimeRef: React.RefObject<HTMLDivElement | null>
 	questionTimeRef: React.RefObject<HTMLDivElement | null>
 	submitButtonRef: React.RefObject<HTMLButtonElement | null>
@@ -212,7 +212,7 @@ function isTimerDemoTutorialStep(stepIndex: number | null): boolean {
 }
 
 function maybePrimeTutorialDemoAudio(stepIndex: number): void {
-	if (!isPerQuestionTutorialStep(stepIndex)) return
+	if (!isTimerDemoTutorialStep(stepIndex)) return
 	unlockAudio()
 }
 
@@ -252,14 +252,14 @@ function tutorialRectsEqual(left: TutorialRects, right: TutorialRects): boolean 
 
 function useTutorialRects(enabled: boolean, refs: TutorialRegionRefs): TutorialRects {
 	const [tutorialRects, setTutorialRects] = React.useState<TutorialRects>({})
-	const { rootRef, clockRef, questionProgressRef, overallTimeRef, questionTimeRef, submitButtonRef } = refs
+	const { rootRef, clockRef, questionProgressBarRef, overallTimeRef, questionTimeRef, submitButtonRef } = refs
 
 	React.useLayoutEffect(
 		function syncTutorialRects() {
 			if (!enabled) return
 			function measureTutorialRects(): TutorialRects {
 				const root = rootRef.current
-				const questionProgressRect = readRect(questionProgressRef.current)
+				const questionProgressRect = readRect(questionProgressBarRef.current)
 				const overallTimeRect = readRect(overallTimeRef.current)
 				return {
 					"session-clock": readRect(clockRef.current),
@@ -288,7 +288,7 @@ function useTutorialRects(enabled: boolean, refs: TutorialRegionRefs): TutorialR
 			const refNodes: ReadonlyArray<HTMLElement | null> = [
 				rootRef.current,
 				clockRef.current,
-				questionProgressRef.current,
+				questionProgressBarRef.current,
 				overallTimeRef.current,
 				questionTimeRef.current,
 				submitButtonRef.current
@@ -314,7 +314,7 @@ function useTutorialRects(enabled: boolean, refs: TutorialRegionRefs): TutorialR
 			clockRef,
 			enabled,
 			overallTimeRef,
-			questionProgressRef,
+			questionProgressBarRef,
 			questionTimeRef,
 			rootRef,
 			submitButtonRef
@@ -476,6 +476,40 @@ function useTutorialSessionBarDemo(
 	)
 
 	return { sessionBarDemoBehindPace, sessionBarDemoCycle }
+}
+
+function useTutorialSessionClockDemo(
+	tutorialOverlayOpen: boolean,
+	timerDemoActive: boolean,
+	tutorialDemoCycle: number,
+	sessionDurationMs: number | null
+): number | null {
+	const [elapsedMs, setElapsedMs] = React.useState<number | null>(null)
+
+	React.useEffect(
+		function runTutorialSessionClockDemo() {
+			void tutorialDemoCycle
+			if (!tutorialOverlayOpen || !timerDemoActive || sessionDurationMs === null) {
+				setElapsedMs(null)
+				return
+			}
+			const durationMs = sessionDurationMs
+			const startedAtMs = performance.now()
+			let rafId = 0
+			function tick() {
+				const nextElapsedMs = Math.min(durationMs, performance.now() - startedAtMs)
+				setElapsedMs(nextElapsedMs)
+				rafId = requestAnimationFrame(tick)
+			}
+			tick()
+			return function cleanup() {
+				cancelAnimationFrame(rafId)
+			}
+		},
+		[sessionDurationMs, timerDemoActive, tutorialDemoCycle, tutorialOverlayOpen]
+	)
+
+	return elapsedMs
 }
 
 function useShellStateRef(state: FocusShellState): React.RefObject<FocusShellState> {
@@ -716,7 +750,8 @@ function buildFocusShellChromeState(
 	tutorialOverlayOpen: boolean,
 	timerDemoActive: boolean,
 	sessionBarDemoBehindPace: boolean,
-	sessionBarDemoCycle: number
+	sessionBarDemoCycle: number,
+	tutorialSessionClockElapsedMs: number | null
 ): FocusShellChromeState {
 	const sessionDurationMs = props.sessionDurationMs
 	const sessionBarDemoActive = tutorialOverlayOpen && timerDemoActive
@@ -733,7 +768,11 @@ function buildFocusShellChromeState(
 	let chronometerNode: React.ReactNode = null
 	let sessionBarNode: React.ReactNode = null
 	if (sessionDurationMs !== null) {
-		const readout = formatRemaining(sessionDurationMs, state.elapsedSessionMs)
+		const sessionElapsedMs =
+			tutorialSessionClockElapsedMs === null
+				? state.elapsedSessionMs
+				: tutorialSessionClockElapsedMs
+		const readout = formatRemaining(sessionDurationMs, sessionElapsedMs)
 		const sessionBarSessionId = sessionBarDemoActive
 			? `tutorial-session-${sessionBarDemoCycle}`
 			: props.sessionId
@@ -831,18 +870,24 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 	)
 	const tutorialOverlayOpen = activeTutorialStepIndex !== null
 	const timerDemoActive = isTimerDemoTutorialStep(activeTutorialStepIndex)
-	const perQuestionAudioDemoActive = isPerQuestionTutorialStep(activeTutorialStepIndex)
+	const perQuestionAudioDemoActive = isTimerDemoTutorialStep(activeTutorialStepIndex)
 	const tutorialDemoCycle = useTutorialStepDemoCycle(activeTutorialStepIndex, tutorialOverlayOpen)
+	const tutorialSessionClockElapsedMs = useTutorialSessionClockDemo(
+		tutorialOverlayOpen,
+		timerDemoActive,
+		tutorialDemoCycle,
+		props.sessionDurationMs
+	)
 	const rootRef = React.useRef<HTMLDivElement | null>(null)
 	const clockRef = React.useRef<HTMLDivElement | null>(null)
-	const questionProgressRef = React.useRef<HTMLDivElement | null>(null)
+	const questionProgressBarRef = React.useRef<HTMLDivElement | null>(null)
 	const overallTimeRef = React.useRef<HTMLDivElement | null>(null)
 	const questionTimeRef = React.useRef<HTMLDivElement | null>(null)
 	const submitButtonRef = React.useRef<HTMLButtonElement | null>(null)
 	const tutorialRects = useTutorialRects(tutorialOverlayOpen, {
 		rootRef,
 		clockRef,
-		questionProgressRef,
+		questionProgressBarRef,
 		overallTimeRef,
 		questionTimeRef,
 		submitButtonRef
@@ -920,13 +965,16 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 		tutorialOverlayOpen,
 		timerDemoActive,
 		sessionBarDemoBehindPace,
-		sessionBarDemoCycle
+		sessionBarDemoCycle,
+		tutorialSessionClockElapsedMs
 	)
 	const progressionBarNode = (
-		<QuestionProgressionBar
-			totalQuestions={props.targetQuestionCount}
-			questionsRemaining={state.questionsRemaining}
-		/>
+		<div ref={questionProgressBarRef}>
+			<QuestionProgressionBar
+				totalQuestions={props.targetQuestionCount}
+				questionsRemaining={state.questionsRemaining}
+			/>
+		</div>
 	)
 	const questionTimerNode = (
 		<QuestionTimerBarStack
@@ -945,6 +993,7 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 		replayTutorial,
 		props
 	)
+	const tutorialClockAlwaysVisible = tutorialOverlayOpen && timerDemoActive
 
 	return (
 		<div
@@ -967,13 +1016,17 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 								Guide
 							</button>
 						) : null}
-						<div ref={clockRef} className="flex justify-end" data-focus-tutorial-region="session-clock">
+						<div
+							ref={clockRef}
+							className={cn("flex justify-end", tutorialClockAlwaysVisible && "relative z-[60]")}
+							data-focus-tutorial-region="session-clock"
+						>
 							{chromeState.chronometerNode}
 						</div>
 					</div>
 				) : null}
 				<div data-focus-tutorial-region="timing-overview">
-					<div ref={questionProgressRef} data-focus-tutorial-region="question-progress">
+					<div data-focus-tutorial-region="question-progress">
 						{progressionBarNode}
 						<div className="mt-2 text-foreground/70 text-sm">
 							Question <strong className="text-foreground">{chromeState.questionNumber}</strong>
@@ -1076,9 +1129,9 @@ function FocusTutorialPreview(props: FocusTutorialPreviewProps) {
 			sessionId="tutorial-preview"
 			sessionType="drill"
 			subTypeId="numerical.percentage"
-			sessionDurationMs={90_000}
+			sessionDurationMs={900_000}
 			perQuestionTargetMs={18_000}
-			targetQuestionCount={5}
+			targetQuestionCount={50}
 			paceTrackVisible
 			initialItem={TUTORIAL_PREVIEW_ITEM}
 			strictMode={false}
@@ -1105,8 +1158,8 @@ interface FocusTutorialBeforePrimerGateProps {
 }
 
 function FocusTutorialBeforePrimerGate(props: FocusTutorialBeforePrimerGateProps) {
-	const { tutorialSession, completeTutorialDismissal } = useFocusPrefs()
-	if (shouldShowTutorialOnNextRunState(tutorialSession)) {
+	const { tutorialLocal, tutorialSession, completeTutorialDismissal } = useFocusPrefs()
+	if (shouldShowTutorialOnNextRunState(tutorialSession, tutorialLocal)) {
 		return (
 			<FocusTutorialPreview
 				onFinish={completeTutorialDismissal}

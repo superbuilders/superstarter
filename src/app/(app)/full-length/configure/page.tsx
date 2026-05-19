@@ -37,25 +37,25 @@ function Page() {
 		return loadNavChrome(userId)
 	})
 	return (
-		<div className="min-h-screen bg-bg text-text-1">
-			<React.Suspense fallback={null}>
-				<PageNav chromePromise={chromePromise} />
-			</React.Suspense>
-			<main className="mx-auto max-w-[1100px] px-7 pb-12">
-				<header className="mb-6 flex flex-col gap-1 border-border-soft border-b pt-6 pb-4">
-					<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">
-						Full-length test
-					</h1>
-					<p className="max-w-[60ch] text-sm text-text-2">
-						50 questions in 15 minutes. Real-test difficulty mix, randomized across verbal and
-						numerical sub-types. Lands on the post-session review on completion or timeout.
-					</p>
-				</header>
-				<FocusTutorialBeforePrimerGate>
+		<FocusTutorialBeforePrimerGate>
+			<div className="min-h-screen bg-bg text-text-1">
+				<React.Suspense fallback={null}>
+					<PageNav chromePromise={chromePromise} />
+				</React.Suspense>
+				<main className="mx-auto max-w-[1100px] px-7 pb-12">
+					<header className="mb-6 flex flex-col gap-1 border-border-soft border-b pt-6 pb-4">
+						<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">
+							Full-length test
+						</h1>
+						<p className="max-w-[60ch] text-sm text-text-2">
+							50 questions in 15 minutes. Real-test difficulty mix, randomized across verbal and
+							numerical sub-types. Lands on the post-session review on completion or timeout.
+						</p>
+					</header>
 					<WoopWizard runHref="/full-length/run" startLabel="Start full-length test" />
-				</FocusTutorialBeforePrimerGate>
-			</main>
-		</div>
+				</main>
+			</div>
+		</FocusTutorialBeforePrimerGate>
 	)
 }
 
