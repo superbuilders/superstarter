@@ -19,7 +19,7 @@ function row(input: {
 		belt: input.belt,
 		lastAttemptedAtMs: input.lastAttemptedAtMs,
 		atRisk: false,
-		href: `/drill/${input.id}/run`
+		href: `/drill/${input.id}`
 	}
 }
 
@@ -181,7 +181,7 @@ test("buildTodaysMission: incomplete state shows progress copy + Today's mission
 	expect(m.practiceTestsToday).toBe(0)
 	expect(m.practiceTestsTarget).toBe(1)
 	expect(m.alternateLabel).toBe("Antonyms")
-	expect(m.alternateHref).toBe("/drill/verbal.antonyms/run")
+	expect(m.alternateHref).toBe("/drill/verbal.antonyms")
 	expect(m.primaryHref).toBe("/full-length/configure")
 	expect(m.primaryLabel).toBe("Start full sim")
 })
@@ -224,5 +224,5 @@ test("buildTodaysMission: alternate CTA url-encodes the sub-type id", () => {
 		drillsToday: 0,
 		practiceTestsToday: 0
 	})
-	expect(m.alternateHref).toBe("/drill/verbal.sentence_completion/run")
+	expect(m.alternateHref).toBe("/drill/verbal.sentence_completion")
 })

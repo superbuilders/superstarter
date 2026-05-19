@@ -19,6 +19,7 @@
 import { redirect } from "next/navigation"
 import * as React from "react"
 import { auth } from "@/auth"
+import { FocusTutorialBeforePrimerGate } from "@/components/focus-shell/focus-shell"
 import { WoopWizard } from "@/components/full-length/woop-wizard"
 import { PageNav } from "@/components/nav/page-nav"
 import { loadNavChrome } from "@/server/nav/chrome"
@@ -50,7 +51,9 @@ function Page() {
 						numerical sub-types. Lands on the post-session review on completion or timeout.
 					</p>
 				</header>
-				<WoopWizard />
+				<FocusTutorialBeforePrimerGate>
+					<WoopWizard runHref="/full-length/run" startLabel="Start full-length test" />
+				</FocusTutorialBeforePrimerGate>
 			</main>
 		</div>
 	)

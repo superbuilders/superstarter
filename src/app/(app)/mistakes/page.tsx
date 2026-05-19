@@ -1,62 +1,66 @@
-// /mistakes — picks 5 random items the user has gotten wrong (and not
-// since gotten right) and drills them. After completion, the user
-// lands on the post-session review surface (same shape as a drill).
-
-import * as errors from "@superbuilders/errors"
 import { redirect } from "next/navigation"
 import * as React from "react"
 import { auth } from "@/auth"
-import { MistakesRunContent, type MistakesRunInit } from "@/app/(app)/mistakes/content"
+import { FocusTutorialBeforePrimerGate } from "@/components/focus-shell/focus-shell"
+import { WoopWizard } from "@/components/full-length/woop-wizard"
 import { MistakesEmptyPane } from "@/components/mistakes/mistakes-empty-pane"
-import { logger } from "@/logger"
-import { startMistakesSession, type MistakesSessionInit } from "@/server/mistakes/start"
+import { PageNav } from "@/components/nav/page-nav"
+import { countMistakes } from "@/server/dashboard/mistakes"
+import { loadNavChrome } from "@/server/nav/chrome"
 
-const ErrEmptyPickedItems = errors.new(
-	"mistakes session ready but picked items list is empty"
-)
-
-async function loadInit(): Promise<MistakesSessionInit> {
+async function loadUserId(): Promise<string> {
 	const session = await auth()
 	if (!session?.user?.id) {
-		logger.debug({}, "/mistakes: no auth, redirect /login")
 		redirect("/login")
 	}
-	return startMistakesSession(session.user.id)
+	return session.user.id
+}
+
+async function loadMistakesCount(): Promise<number> {
+	const userId = await loadUserId()
+	return countMistakes(userId)
 }
 
 function Page() {
-	const initPromise = loadInit()
+	const userIdPromise = loadUserId()
+	const chromePromise = userIdPromise.then(function load(userId) {
+		return loadNavChrome(userId)
+	})
+	const mistakesCountPromise = loadMistakesCount()
 	return (
-		<React.Suspense fallback={<MistakesSkeleton />}>
-			<MistakesGate initPromise={initPromise} />
-		</React.Suspense>
+		<div className="min-h-screen bg-bg text-text-1">
+			<React.Suspense fallback={null}>
+				<PageNav chromePromise={chromePromise} />
+			</React.Suspense>
+			<main className="mx-auto max-w-[1100px] px-7 pb-12">
+				<React.Suspense fallback={null}>
+					<MistakesPrimer mistakesCountPromise={mistakesCountPromise} />
+				</React.Suspense>
+			</main>
+		</div>
 	)
 }
 
-async function MistakesGate(props: { initPromise: Promise<MistakesSessionInit> }) {
-	const init = await props.initPromise
-	if (init.kind === "empty") {
+async function MistakesPrimer(props: { mistakesCountPromise: Promise<number> }) {
+	const mistakesCount = await props.mistakesCountPromise
+	if (mistakesCount === 0) {
 		return <MistakesEmptyPane />
 	}
-	const firstItem = init.items[0]
-	if (firstItem === undefined) {
-		logger.error({ sessionId: init.sessionId }, "/mistakes: ready init has empty items")
-		throw errors.wrap(ErrEmptyPickedItems, `session id '${init.sessionId}'`)
-	}
-	const readyPromise: Promise<MistakesRunInit> = Promise.resolve({
-		sessionId: init.sessionId,
-		firstItem,
-		remaining: init.items.slice(1),
-		totalCount: init.items.length
-	})
-	return <MistakesRunContent initPromise={readyPromise} />
-}
-
-function MistakesSkeleton() {
 	return (
-		<main className="mx-auto flex min-h-dvh max-w-xl items-center justify-center px-6">
-			<p className="text-muted-foreground text-sm">Picking your mistakes…</p>
-		</main>
+		<>
+			<header className="mb-6 flex flex-col gap-1 border-border-soft border-b pt-6 pb-4">
+				<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">
+					Mistakes review
+				</h1>
+				<p className="max-w-[60ch] text-sm text-text-2">
+					Review unresolved misses with the standard 18-second pacing target. Use the WOOP
+					primer first so you go into the redrill with a clear plan for recovery.
+				</p>
+			</header>
+			<FocusTutorialBeforePrimerGate>
+				<WoopWizard runHref="/mistakes/run" startLabel="Start mistakes review" />
+			</FocusTutorialBeforePrimerGate>
+		</>
 	)
 }
 

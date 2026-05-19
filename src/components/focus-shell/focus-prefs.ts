@@ -152,16 +152,29 @@ function completeTutorialDismissal(): FocusTutorialSessionState {
 	})
 }
 
+function setTutorialEnabledForNextRun(enabled: boolean): FocusTutorialSessionState {
+	if (enabled) {
+		return updateFocusTutorialSessionState({ showOnNextRun: true })
+	}
+	return updateFocusTutorialSessionState({
+		dismissedThisLogin: true,
+		showOnNextRun: false
+	})
+}
+
 function clearTutorialSessionForLoginReset(): void {
 	const storage = getSessionStorage()
 	if (!storage) return
 	storage.removeItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)
 }
 
-function shouldShowTutorialOnNextRun(): boolean {
-	const state = readFocusTutorialSessionState()
+function shouldShowTutorialOnNextRunState(state: FocusTutorialSessionState): boolean {
 	if (state.showOnNextRun) return true
 	return !state.dismissedThisLogin
+}
+
+function shouldShowTutorialOnNextRun(): boolean {
+	return shouldShowTutorialOnNextRunState(readFocusTutorialSessionState())
 }
 
 function useFocusPrefs() {
@@ -214,6 +227,12 @@ function useFocusPrefs() {
 		})
 	}, [])
 
+	const setTutorialEnabledForNextRunPref = React.useCallback((enabled: boolean) => {
+		setTutorialSession(function writeNext() {
+			return setTutorialEnabledForNextRun(enabled)
+		})
+	}, [])
+
 	const clearTutorialSessionForLoginResetPref = React.useCallback(() => {
 		clearTutorialSessionForLoginReset()
 		setTutorialSession(DEFAULT_FOCUS_TUTORIAL_SESSION_STATE)
@@ -225,6 +244,7 @@ function useFocusPrefs() {
 		setWarningSoundEnabled: setWarningSoundEnabledPref,
 		markTutorialReplayPending: markTutorialReplayPendingPref,
 		clearTutorialReplayPending: clearTutorialReplayPendingPref,
+		setTutorialEnabledForNextRun: setTutorialEnabledForNextRunPref,
 		completeTutorialDismissal: completeTutorialDismissalPref,
 		clearTutorialSessionForLoginReset: clearTutorialSessionForLoginResetPref
 	}
@@ -241,8 +261,10 @@ export {
 	markTutorialReplayPending,
 	readFocusPrefs,
 	readFocusTutorialSessionState,
+	setTutorialEnabledForNextRun,
 	setWarningSoundEnabled,
 	shouldShowTutorialOnNextRun,
+	shouldShowTutorialOnNextRunState,
 	useFocusPrefs,
 	writeFocusPrefs,
 	writeFocusTutorialSessionState

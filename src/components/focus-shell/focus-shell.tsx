@@ -17,7 +17,10 @@ import {
 	type TutorialRect,
 	type TutorialTargetKey
 } from "@/components/focus-shell/focus-tutorial-overlay"
-import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
+import {
+	shouldShowTutorialOnNextRunState,
+	useFocusPrefs
+} from "@/components/focus-shell/focus-prefs"
 import { Heartbeat } from "@/components/focus-shell/heartbeat"
 import { InterQuestionCard } from "@/components/focus-shell/inter-question-card"
 import { ItemSlot } from "@/components/focus-shell/item-slot"
@@ -30,7 +33,7 @@ import {
 	type ShellAction,
 	type TickContext
 } from "@/components/focus-shell/shell-reducer"
-import type { FocusShellProps, SubmitAttemptInput } from "@/components/focus-shell/types"
+import type { FocusShellProps, ItemForRender, SubmitAttemptInput } from "@/components/focus-shell/types"
 import { cn } from "@/lib/utils"
 import { logger } from "@/logger"
 
@@ -114,6 +117,18 @@ interface FocusShellChromeState {
 interface TutorialAudioEvent {
 	kind: "tick" | "warning"
 	atMs: number
+}
+
+const TUTORIAL_PREVIEW_ITEM: ItemForRender = {
+	id: "tutorial-preview-item",
+	body: { kind: "text", text: "What is 30% of 200?" },
+	options: [
+		{ id: "tutorial-a", text: "30" },
+		{ id: "tutorial-b", text: "40" },
+		{ id: "tutorial-c", text: "60" },
+		{ id: "tutorial-d", text: "90" }
+	],
+	selection: { servedAtTier: "easy", fallbackLevel: "fresh" }
 }
 
 function readRect(node: Element | null): TutorialRect | undefined {
@@ -1033,59 +1048,80 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 	)
 }
 
-function FocusShell(props: FocusShellProps) {
-	const router = useRouter()
-	const { prefs, tutorialSession, completeTutorialDismissal } = useFocusPrefs()
-	const tutorialRequired = tutorialSession.showOnNextRun ? true : !tutorialSession.dismissedThisLogin
+interface FocusTutorialPreviewProps {
+	onFinish: () => void
+	onSkip: () => void
+}
+
+function FocusTutorialPreview(props: FocusTutorialPreviewProps) {
+	const { prefs } = useFocusPrefs()
 	const [tutorialStepIndex, setTutorialStepIndex] = React.useState<number>(0)
-	const [shellStartAtMs] = React.useState<number>(function initStart() {
-		return performance.now()
-	})
 
-	React.useEffect(
-		function resetTutorialStepWhenOpening() {
-			if (!tutorialRequired) return
-			setTutorialStepIndex(0)
-		},
-		[tutorialRequired]
+	const goToTutorialStep = React.useCallback(function goToTutorialStep(nextStepIndex: number) {
+		maybePrimeTutorialDemoAudio(nextStepIndex)
+		setTutorialStepIndex(nextStepIndex)
+	}, [])
+
+	const onSubmitAttempt = React.useCallback(async function onSubmitAttempt() {
+		return {}
+	}, [])
+
+	const onEndSession = React.useCallback(async function onEndSession(): Promise<void> {
+		return undefined
+	}, [])
+
+	return (
+		<FocusShellRunning
+			key="tutorial-preview"
+			sessionId="tutorial-preview"
+			sessionType="drill"
+			subTypeId="numerical.percentage"
+			sessionDurationMs={90_000}
+			perQuestionTargetMs={18_000}
+			targetQuestionCount={5}
+			paceTrackVisible
+			initialItem={TUTORIAL_PREVIEW_ITEM}
+			strictMode={false}
+			startMs={0}
+			warningSoundEnabled={prefs.warningSoundEnabled}
+			previewMode
+			tutorialStepIndex={tutorialStepIndex}
+			onTutorialBack={function onBack() {
+				goToTutorialStep(Math.max(0, tutorialStepIndex - 1))
+			}}
+			onTutorialNext={function onNext() {
+				goToTutorialStep(Math.min(tutorialStepIndex + 1, FOCUS_TUTORIAL_STEPS.length - 1))
+			}}
+			onTutorialSkip={props.onSkip}
+			onTutorialFinish={props.onFinish}
+			onSubmitAttempt={onSubmitAttempt}
+			onEndSession={onEndSession}
+		/>
 	)
+}
 
-	const goToTutorialStep = React.useCallback(
-		function goToTutorialStep(nextStepIndex: number) {
-			maybePrimeTutorialDemoAudio(nextStepIndex)
-			setTutorialStepIndex(nextStepIndex)
-		},
-		[]
-	)
+interface FocusTutorialBeforePrimerGateProps {
+	children: React.ReactNode
+}
 
-	const exitTutorialToPrimer = React.useCallback(
-		function exitTutorialToPrimer() {
-			completeTutorialDismissal()
-			router.replace(props.tutorialExitHref)
-		},
-		[completeTutorialDismissal, props.tutorialExitHref, router]
-	)
-
-	if (tutorialRequired) {
+function FocusTutorialBeforePrimerGate(props: FocusTutorialBeforePrimerGateProps) {
+	const { tutorialSession, completeTutorialDismissal } = useFocusPrefs()
+	if (shouldShowTutorialOnNextRunState(tutorialSession)) {
 		return (
-			<FocusShellRunning
-				key="tutorial-preview"
-				{...props}
-				startMs={0}
-				previewMode
-				tutorialStepIndex={tutorialStepIndex}
-				warningSoundEnabled={prefs.warningSoundEnabled}
-				onTutorialBack={function onBack() {
-					goToTutorialStep(Math.max(0, tutorialStepIndex - 1))
-				}}
-				onTutorialNext={function onNext() {
-					goToTutorialStep(Math.min(tutorialStepIndex + 1, FOCUS_TUTORIAL_STEPS.length - 1))
-				}}
-				onTutorialSkip={exitTutorialToPrimer}
-				onTutorialFinish={exitTutorialToPrimer}
+			<FocusTutorialPreview
+				onFinish={completeTutorialDismissal}
+				onSkip={completeTutorialDismissal}
 			/>
 		)
 	}
+	return <>{props.children}</>
+}
+
+function FocusShell(props: FocusShellProps) {
+	const { prefs } = useFocusPrefs()
+	const [shellStartAtMs] = React.useState<number>(function initStart() {
+		return performance.now()
+	})
 
 	return (
 		<FocusShellRunning
@@ -1102,5 +1138,7 @@ export {
 	buildTimingOverviewRect,
 	buildTutorialPerQuestionAudioSchedule,
 	combineTutorialRects,
-	FocusShell
+	FocusShell,
+	FocusTutorialBeforePrimerGate,
+	FocusTutorialPreview
 }

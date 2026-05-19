@@ -121,7 +121,7 @@ async function loadAllBelts(
 				belt,
 				lastAttemptedAtMs,
 				atRisk: false,
-				href: `/drill/${encodeURIComponent(s.id)}/run`
+				href: `/drill/${encodeURIComponent(s.id)}`
 			}
 		})
 }
