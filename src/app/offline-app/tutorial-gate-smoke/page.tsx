@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation"
 import {
 	FOCUS_PREFS_STORAGE_KEY,
 	FOCUS_TUTORIAL_LOCAL_STORAGE_KEY,
-	FOCUS_TUTORIAL_SESSION_STORAGE_KEY,
 	shouldShowTutorialOnNextRunState,
 	useFocusPrefs
 } from "@/components/focus-shell/focus-prefs"
@@ -23,14 +22,12 @@ function TutorialGateSmokeClientPage() {
 		}
 	}
 	const {
-		tutorialLocal,
-		tutorialSession,
+		tutorialPrefs,
 		setTutorialEnabledForNextRun,
-		completeTutorialDismissal,
-		clearTutorialSessionForLoginReset
+		completeTutorialDismissal
 	} = useFocusPrefs(userKey)
 
-	const gateOpen = shouldShowTutorialOnNextRunState(tutorialSession, tutorialLocal)
+	const gateOpen = shouldShowTutorialOnNextRunState(tutorialPrefs)
 
 	React.useEffect(function markMounted() {
 		setMounted(true)
@@ -55,7 +52,7 @@ function TutorialGateSmokeClientPage() {
 						<input
 							data-testid="manual-toggle"
 							type="checkbox"
-							checked={tutorialSession.showOnNextRun}
+							checked={gateOpen}
 							onChange={function onChange(event) {
 								setTutorialEnabledForNextRun(event.currentTarget.checked)
 							}}
@@ -70,14 +67,6 @@ function TutorialGateSmokeClientPage() {
 					>
 						Mark tutorial completed
 					</button>
-					<button
-						type="button"
-						data-testid="reset-login"
-						onClick={clearTutorialSessionForLoginReset}
-						className="rounded-md border border-foreground/15 px-3 py-1.5 text-sm"
-					>
-						Reset login session
-					</button>
 				</div>
 
 				<pre
@@ -90,11 +79,9 @@ function TutorialGateSmokeClientPage() {
 									userKey,
 									storageKeys: {
 										focusPrefs: FOCUS_PREFS_STORAGE_KEY,
-										tutorialLocal: FOCUS_TUTORIAL_LOCAL_STORAGE_KEY,
-										tutorialSession: FOCUS_TUTORIAL_SESSION_STORAGE_KEY
+										tutorialLocal: FOCUS_TUTORIAL_LOCAL_STORAGE_KEY
 									},
-									tutorialLocal,
-									tutorialSession,
+									tutorialPrefs,
 									gateOpen
 								},
 								null,
