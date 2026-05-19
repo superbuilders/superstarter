@@ -15,7 +15,7 @@ function row(
 		belt,
 		lastAttemptedAtMs,
 		atRisk: false,
-		href: `/drill/${id}/run`
+		href: `/drill/${id}`
 	}
 }
 

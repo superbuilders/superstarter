@@ -3,54 +3,21 @@
 // <TopNav> — three-column header for the dashboard. Brand wordmark
 // on the left, primary nav in the middle, streak chip + avatar on
 // the right. Dashboard PRD §10.11 + `docs/plans/dashboard.md` §5
-// commit 9 + `docs/plans/practice-round.md` §5 commit 1 (NAV rename
-// "Practice" → "Practice Test", relink `/drill` → `/full-length/
-// configure` per ask 1; the Mastery Map picker at /drill was deleted
-// in this same commit because the dashboard's dojo cards are now
-// the picker).
-//
-// "use client" because of usePathname() — active-route highlighting
-// is the only client-side concern here. Next.js 16's usePathname
-// .d.ts signature claims `string`, but at SSR the runtime returns
-// `null` (the route segment isn't associated yet on the server tick
-// before client hydration). Audit-against-actual-artifact at
-// dashboard round commit 9 (per SPEC §6.14.18 + §6.14.23 — runtime
-// verification, not static-trace) caught a TypeError on
-// `pathname.startsWith` when the throwaway streaming render hit the
-// server-side null path. Optional-chain `pathname?.startsWith(...)
-// === true` tolerates the SSR-null case without fighting the .d.ts
-// type. The active-class for "/" uses `pathname === "/"`; comparing
-// null !== "/" yields false (correct inactive default during SSR).
-//
-// All five nav hrefs are static literals; <Link> works under
-// next.config.ts's `typedRoutes: true` without the dynamic-href <a>
-// reconciliation that dashboard round commits 7+8 applied for
-// runtime-derived hrefs. The five routes resolve as:
-//   - "/"                     → dashboard (commit 10 of the dashboard
-//                                round mounted it; this round's commit 1
-//                                deleted the /drill picker so the
-//                                dashboard's dojo cards are the picker)
-//   - "/full-length/configure" → full-length practice test configure
-//                                (Phase 5 sub-phase 3); ask 1's relink
-//                                target. "Practice Test" highlight
-//                                applies on `/full-length/*` routes
-//                                via `pathname?.startsWith("/full-length")`
-//   - "/lessons"              → stub page (dashboard round commit 4)
-//   - "/review"               → stub page (dashboard round commit 4)
-//   - "/stats"                → stub page (dashboard round commit 4)
-// All five resolve to a 200 by the time this nav renders.
+// commit 9 + `docs/plans/practice-round.md` §5 commit 1.
 
 import { LogOutIcon, Settings2Icon } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOutAction } from "@/app/(app)/actions"
 import { StreakChip } from "@/components/dashboard/streak-chip"
-import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
+import {
+	shouldShowTutorialOnNextRunState,
+	useFocusPrefs
+} from "@/components/focus-shell/focus-prefs"
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
 	DropdownMenuContent,
-	DropdownMenuItem,
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger
@@ -82,10 +49,12 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 	const pathname = usePathname()
 	const {
 		prefs,
+		tutorialSession,
+		setTutorialEnabledForNextRun,
 		setWarningSoundEnabled,
-		markTutorialReplayPending,
 		clearTutorialSessionForLoginReset
 	} = useFocusPrefs()
+
 	return (
 		<header className="mx-auto mb-2 flex max-w-[1100px] items-center justify-between border-border-soft border-b px-7 pt-[10px] pb-2">
 			<Link
@@ -97,9 +66,7 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 			<nav className="flex gap-[2px]">
 				{NAV.map(function renderNavItem(item) {
 					const isHome = item.href === "/"
-					const isActive = isHome
-						? pathname === "/"
-						: pathname?.startsWith(item.href) === true
+					const isActive = isHome ? pathname === "/" : pathname?.startsWith(item.href) === true
 					const className = isActive ? ACTIVE_CLASS : INACTIVE_CLASS
 					return (
 						<Link key={item.href} href={item.href} className={className}>
@@ -139,13 +106,14 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 							Warning sound
 						</DropdownMenuCheckboxItem>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem
-							onSelect={function onSelect() {
-								markTutorialReplayPending()
+						<DropdownMenuCheckboxItem
+							checked={shouldShowTutorialOnNextRunState(tutorialSession)}
+							onCheckedChange={function onCheckedChange(checked) {
+								setTutorialEnabledForNextRun(checked === true)
 							}}
 						>
-							Replay question tutorial
-						</DropdownMenuItem>
+							Show tutorial on next run
+						</DropdownMenuCheckboxItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
 				<form action={signOutAction}>

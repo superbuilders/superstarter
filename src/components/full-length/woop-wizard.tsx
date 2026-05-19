@@ -3,22 +3,12 @@
 // <WoopWizard> — pre-test "mental primer".
 //
 // Four steps (Wish, Outcome, Obstacle, Plan) that run the learner
-// through the WOOP / MCII protocol before they hit the 15-minute
-// full-length test. The wizard is purely declarative — there are no
-// inputs. Each step poses a question and shows worked examples; the
-// research effect is in the *thinking*, not the writing (Oettingen
-// 2014). The user reads, reflects, and clicks Next.
-//
-// Step 4's examples are full "If [obstacle], then I will [action]"
-// sentences so the implementation-intentions construction is concrete.
-// The primary CTA on step 4 flips from "Next" to "Start full-length
-// test" and posts a navigation to /full-length/run. Skip primer is
-// always available.
+// through the WOOP / MCII protocol before they hit the active session.
+// The wizard is purely declarative — there are no inputs. Each step
+// poses a question and shows worked examples; the research effect is in
+// the thinking, not the writing.
 
-import { useRouter } from "next/navigation"
 import * as React from "react"
-
-const RUN_ROUTE = "/full-length/run"
 
 interface StepDef {
 	eyebrow: string
@@ -28,27 +18,32 @@ interface StepDef {
 	examples: ReadonlyArray<string>
 }
 
+interface WoopWizardProps {
+	runHref: string
+	startLabel: string
+}
+
 const STEPS: ReadonlyArray<StepDef> = [
 	{
 		eyebrow: "Step 1 · Wish",
-		title: "What is your goal for this 15-minute session?",
+		title: "What is your goal for this session?",
 		prompt: "One specific outcome — not 'do well', but a thing you can verify.",
 		examplesLabel: "For example, your wish could be",
 		examples: [
-			"Finish all 50 questions",
-			"Get 80% on verbal",
-			"Beat my last score by 5 points"
+			"Finish all questions",
+			"Hold my pace through the middle",
+			"Stay calm when I hit a hard item"
 		]
 	},
 	{
 		eyebrow: "Step 2 · Outcome",
 		title: "How will you feel once that's done?",
-		prompt: "Picture the moment after the timer ends. The feeling is the fuel.",
+		prompt: "Picture the moment after the session ends. The feeling is the fuel.",
 		examplesLabel: "For example, the outcome could feel like",
 		examples: [
 			"Confident going into the real test",
-			"Relieved that I finished",
-			"Proud I held my pace"
+			"Relieved that I held my pace",
+			"Proud I followed through"
 		]
 	},
 	{
@@ -57,9 +52,9 @@ const STEPS: ReadonlyArray<StepDef> = [
 		prompt: "Be specific — name the move your brain pulls when it wants to escape.",
 		examplesLabel: "Common obstacles",
 		examples: [
-			"Perfectionism — re-reading questions until I'm sure",
+			"Perfectionism — re-reading until I'm sure",
 			"Rushing — guessing without checking",
-			"Sunk cost fallacy — continuing to stay on a problem"
+			"Sunk cost fallacy — staying too long on one problem"
 		]
 	},
 	{
@@ -78,10 +73,9 @@ const STEPS: ReadonlyArray<StepDef> = [
 
 const TOTAL_STEPS = STEPS.length
 
-function WoopWizard() {
+function WoopWizard({ runHref, startLabel }: WoopWizardProps) {
 	const [stepIndex, setStepIndex] = React.useState(0)
 	const [submitting, setSubmitting] = React.useState(false)
-	const router = useRouter()
 
 	const isLast = stepIndex === TOTAL_STEPS - 1
 	const step = STEPS[stepIndex]
@@ -90,7 +84,8 @@ function WoopWizard() {
 	function startTest() {
 		if (submitting) return
 		setSubmitting(true)
-		router.push(RUN_ROUTE)
+		if (typeof window === "undefined") return
+		window.location.assign(runHref)
 	}
 	function next() {
 		if (isLast) {
@@ -108,7 +103,7 @@ function WoopWizard() {
 	}
 
 	let primaryLabel = "Next"
-	if (isLast) primaryLabel = "Start full-length test →"
+	if (isLast) primaryLabel = `${startLabel} →`
 	if (submitting) primaryLabel = "Starting…"
 
 	let backDisabled = stepIndex === 0
@@ -258,72 +253,17 @@ function ExamplesPanel({ label, examples, emphasized }: ExamplesPanelProps) {
 const WOOP_RESOURCE_URL = "https://woopmylife.org"
 
 function ScienceTooltip() {
-	const [open, setOpen] = React.useState(false)
-	const wrapperRef = React.useRef<HTMLDivElement>(null)
-	React.useEffect(
-		function clickAway() {
-			if (!open) return
-			function onDocClick(e: MouseEvent) {
-				const wrapper = wrapperRef.current
-				if (!wrapper) return
-				const target = e.target
-				if (!(target instanceof Node)) return
-				if (wrapper.contains(target)) return
-				setOpen(false)
-			}
-			document.addEventListener("mousedown", onDocClick)
-			return function cleanup() {
-				document.removeEventListener("mousedown", onDocClick)
-			}
-		},
-		[open]
-	)
 	return (
-		<div ref={wrapperRef} className="relative">
-			<button
-				type="button"
-				aria-expanded={open}
-				aria-controls="woop-science-popover"
-				onClick={function toggle() {
-					setOpen(function flip(o) {
-						return !o
-					})
-				}}
-				className="rounded-full border border-border-strong bg-bg px-2.5 py-0.5 font-semibold text-[10px] text-text-2 uppercase tracking-[0.08em] transition-colors hover:border-cobalt hover:text-cobalt focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
-			>
-				Dive deeper
-			</button>
-			{open ? (
-				<div
-					id="woop-science-popover"
-					role="tooltip"
-					className="fade-in absolute right-0 z-10 mt-2 w-[340px] animate-in rounded-md border border-border-soft bg-surface p-4 text-left shadow-lg duration-150"
-				>
-					<p className="font-semibold text-[10px] text-text-3 uppercase tracking-[0.08em]">
-						The MCII edge
-					</p>
-					<p className="mt-1 text-[12px] text-text-2 leading-relaxed">
-						18seconds uses the WOOP framework — Mental Contrasting with
-						Implementation Intentions. Pre-deciding your response to the moment
-						you'd normally falter automates the bypass.
-					</p>
-					<p className="mt-2 text-[12px] text-text-2 leading-relaxed">
-						WOOP was developed by Dr. Gabriele Oettingen at NYU. You can find
-						more resources and the official practice tool at{" "}
-						<a
-							href={WOOP_RESOURCE_URL}
-							target="_blank"
-							rel="noreferrer noopener"
-							className="font-medium text-cobalt underline-offset-2 hover:underline"
-						>
-							woopmylife.org
-						</a>
-						.
-					</p>
-				</div>
-			) : null}
-		</div>
+		<a
+			href={WOOP_RESOURCE_URL}
+			target="_blank"
+			rel="noreferrer"
+			className="rounded-full border border-border-soft px-2 py-1 text-[11px] text-text-3 transition-colors hover:bg-lavender hover:text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+		>
+			Why this works
+		</a>
 	)
 }
 
+export type { WoopWizardProps }
 export { WoopWizard }

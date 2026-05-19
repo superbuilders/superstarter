@@ -100,7 +100,7 @@ function buildTodaysMission(input: BuildTodaysMissionInput): DashboardData["miss
 		return {
 			id: row.id,
 			name: row.name,
-			href: `/drill/${encodeURIComponent(row.id)}/run`
+			href: `/drill/${encodeURIComponent(row.id)}`
 		}
 	})
 	const isComplete =
@@ -130,7 +130,7 @@ function buildTodaysMission(input: BuildTodaysMissionInput): DashboardData["miss
 		title,
 		primaryHref: "/full-length/configure",
 		primaryLabel: "Start full sim",
-		alternateHref: `/drill/${encodeURIComponent(chosen.id)}/run`,
+		alternateHref: `/drill/${encodeURIComponent(chosen.id)}`,
 		alternateLabel: chosen.name,
 		drillsToday,
 		drillsTarget: DRILLS_TARGET,

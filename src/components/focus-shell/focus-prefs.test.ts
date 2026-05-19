@@ -10,8 +10,10 @@ import {
 	markTutorialReplayPending,
 	readFocusPrefs,
 	readFocusTutorialSessionState,
+	setTutorialEnabledForNextRun,
 	setWarningSoundEnabled,
 	shouldShowTutorialOnNextRun,
+	shouldShowTutorialOnNextRunState,
 	writeFocusPrefs,
 	writeFocusTutorialSessionState
 } from "@/components/focus-shell/focus-prefs"
@@ -110,11 +112,35 @@ test("clearTutorialReplayPending clears only the next-run flag", () => {
 	)
 })
 
+test("setTutorialEnabledForNextRun can suppress the first-run tutorial", () => {
+	const { sessionStorage } = installMockWindow(makeMockStorage(), makeMockStorage())
+	const next = setTutorialEnabledForNextRun(false)
+	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: false })
+	expect(sessionStorage.getItem(FOCUS_TUTORIAL_SESSION_STORAGE_KEY)).toBe(
+		JSON.stringify({ dismissedThisLogin: true, showOnNextRun: false })
+	)
+	expect(shouldShowTutorialOnNextRun()).toBe(false)
+})
+
+test("setTutorialEnabledForNextRun can re-enable the tutorial after dismissal", () => {
+	installMockWindow(makeMockStorage(), makeMockStorage())
+	writeFocusTutorialSessionState({ dismissedThisLogin: true, showOnNextRun: false })
+	const next = setTutorialEnabledForNextRun(true)
+	expect(next).toEqual({ dismissedThisLogin: true, showOnNextRun: true })
+	expect(shouldShowTutorialOnNextRun()).toBe(true)
+})
+
 test("shouldShowTutorialOnNextRun is true on first start and false after dismissal", () => {
 	installMockWindow(makeMockStorage(), makeMockStorage())
 	expect(shouldShowTutorialOnNextRun()).toBe(true)
 	completeTutorialDismissal()
 	expect(shouldShowTutorialOnNextRun()).toBe(false)
+})
+
+test("shouldShowTutorialOnNextRunState matches first-run and replay semantics", () => {
+	expect(shouldShowTutorialOnNextRunState({ dismissedThisLogin: false, showOnNextRun: false })).toBe(true)
+	expect(shouldShowTutorialOnNextRunState({ dismissedThisLogin: true, showOnNextRun: false })).toBe(false)
+	expect(shouldShowTutorialOnNextRunState({ dismissedThisLogin: true, showOnNextRun: true })).toBe(true)
 })
 
 test("clearTutorialSessionForLoginReset removes the session-scoped tutorial state", () => {
