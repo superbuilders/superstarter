@@ -8,7 +8,10 @@
 // poses a question and shows worked examples; the research effect is in
 // the thinking, not the writing.
 
+import Link from "next/link"
 import * as React from "react"
+import { unlockAudio } from "@/components/focus-shell/audio-ticker"
+import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
 
 interface StepDef {
 	eyebrow: string
@@ -74,6 +77,7 @@ const STEPS: ReadonlyArray<StepDef> = [
 const TOTAL_STEPS = STEPS.length
 
 function WoopWizard({ runHref, startLabel }: WoopWizardProps) {
+	const { prefs } = useFocusPrefs()
 	const [stepIndex, setStepIndex] = React.useState(0)
 	const [submitting, setSubmitting] = React.useState(false)
 
@@ -81,17 +85,24 @@ function WoopWizard({ runHref, startLabel }: WoopWizardProps) {
 	const step = STEPS[stepIndex]
 	if (!step) return null
 
-	function startTest() {
+	function primeAudioForStart() {
 		if (submitting) return
 		setSubmitting(true)
-		if (typeof window === "undefined") return
-		window.location.assign(runHref)
+		if (prefs.tickingSoundEnabled || prefs.warningSoundEnabled) {
+			unlockAudio()
+		}
 	}
-	function next() {
-		if (isLast) {
-			startTest()
+
+	function handleStartNavigation(event: React.MouseEvent<HTMLAnchorElement>) {
+		if (submitting) {
+			event.preventDefault()
 			return
 		}
+		primeAudioForStart()
+	}
+
+	function next() {
+		if (isLast) return
 		setStepIndex(function inc(i) {
 			return Math.min(i + 1, TOTAL_STEPS - 1)
 		})
@@ -164,23 +175,34 @@ function WoopWizard({ runHref, startLabel }: WoopWizardProps) {
 					>
 						← Back
 					</button>
-					<button
-						type="button"
-						onClick={startTest}
-						disabled={submitting}
-						className="rounded-md px-3 py-1.5 font-medium text-[13px] text-text-3 transition-colors hover:text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2"
+					<Link
+						href={{ pathname: runHref }}
+						onClick={handleStartNavigation}
+						aria-disabled={submitting}
+						className="rounded-md px-3 py-1.5 font-medium text-[13px] text-text-3 transition-colors hover:text-text-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 aria-disabled:pointer-events-none aria-disabled:opacity-50"
 					>
 						Skip primer
-					</button>
+					</Link>
 				</div>
-				<button
-					type="button"
-					onClick={next}
-					disabled={submitting}
-					className="rounded-md border border-text-1 bg-text-1 px-5 py-2 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:opacity-50"
-				>
-					{primaryLabel}
-				</button>
+				{isLast ? (
+					<Link
+						href={{ pathname: runHref }}
+						onClick={handleStartNavigation}
+						aria-disabled={submitting}
+						className="rounded-md border border-text-1 bg-text-1 px-5 py-2 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 aria-disabled:pointer-events-none aria-disabled:opacity-50"
+					>
+						{primaryLabel}
+					</Link>
+				) : (
+					<button
+						type="button"
+						onClick={next}
+						disabled={submitting}
+						className="rounded-md border border-text-1 bg-text-1 px-5 py-2 font-medium text-[14px] text-bg transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cobalt focus-visible:outline-offset-2 disabled:opacity-50"
+					>
+						{primaryLabel}
+					</button>
+				)}
 			</footer>
 		</section>
 	)

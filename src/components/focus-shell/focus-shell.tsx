@@ -57,6 +57,7 @@ const TUTORIAL_TARGET_KEYS = [
 
 type FocusShellRunningProps = FocusShellProps & {
 	startMs: number
+	tickingSoundEnabled: boolean
 	warningSoundEnabled: boolean
 	previewMode?: boolean
 	tutorialStepIndex?: number
@@ -100,6 +101,7 @@ interface FocusShellRuntimeEffectsArgs {
 	state: FocusShellState
 	stateRef: React.RefObject<FocusShellState>
 	tutorialOverlayOpen: boolean
+	tickingSoundEnabled: boolean
 	warningSoundEnabled: boolean
 	perQuestionTargetMs: number
 	onEndSession: () => Promise<void>
@@ -328,7 +330,9 @@ function useTutorialDemoAudio(
 	tutorialOverlayOpen: boolean,
 	perQuestionAudioDemoActive: boolean,
 	tutorialDemoCycle: number,
-	perQuestionTargetMs: number
+	perQuestionTargetMs: number,
+	tickingSoundEnabled: boolean,
+	warningSoundEnabled: boolean
 ): void {
 	const postTargetIntervalRef = React.useRef<number | null>(null)
 
@@ -338,25 +342,33 @@ function useTutorialDemoAudio(
 			if (!tutorialOverlayOpen) return
 			if (!perQuestionAudioDemoActive) return
 			stopUrgencyLoop()
+			if (!tickingSoundEnabled && !warningSoundEnabled) return
 			unlockAudio()
 			const schedule = buildTutorialPerQuestionAudioSchedule(perQuestionTargetMs)
-			const eventTimeouts = schedule.map(function scheduleEvent(event) {
+			const eventTimeouts = schedule.flatMap(function scheduleEvent(event) {
 				if (event.kind === "tick") {
-					return window.setTimeout(playTick, event.atMs)
+					if (!tickingSoundEnabled) return []
+					return [window.setTimeout(playTick, event.atMs)]
 				}
-				return window.setTimeout(startUrgencyLoop, event.atMs)
+				if (!warningSoundEnabled) return []
+				return [window.setTimeout(startUrgencyLoop, event.atMs)]
 			})
 			const postTargetStartMs = (Math.floor(perQuestionTargetMs / 1000) + 1) * 1000
-			const postTargetStartTimeout = window.setTimeout(function startPostTargetTicks() {
-				playTick()
-				const intervalId = window.setInterval(playTick, 1000)
-				postTargetIntervalRef.current = intervalId
-			}, postTargetStartMs)
+			const postTargetStartTimeout =
+				tickingSoundEnabled
+					? window.setTimeout(function startPostTargetTicks() {
+						playTick()
+						const intervalId = window.setInterval(playTick, 1000)
+						postTargetIntervalRef.current = intervalId
+					}, postTargetStartMs)
+					: null
 			return function cleanup() {
 				for (const timeoutId of eventTimeouts) {
 					window.clearTimeout(timeoutId)
 				}
-				window.clearTimeout(postTargetStartTimeout)
+				if (postTargetStartTimeout !== null) {
+					window.clearTimeout(postTargetStartTimeout)
+				}
 				const postTargetIntervalId = postTargetIntervalRef.current
 				if (postTargetIntervalId !== null) {
 					window.clearInterval(postTargetIntervalId)
@@ -365,7 +377,14 @@ function useTutorialDemoAudio(
 				stopUrgencyLoop()
 			}
 		},
-		[tutorialOverlayOpen, perQuestionAudioDemoActive, tutorialDemoCycle, perQuestionTargetMs]
+		[
+			perQuestionAudioDemoActive,
+			perQuestionTargetMs,
+			tickingSoundEnabled,
+			tutorialDemoCycle,
+			tutorialOverlayOpen,
+			warningSoundEnabled
+		]
 	)
 }
 
@@ -576,16 +595,16 @@ function useFocusShellRuntimeEffects(args: FocusShellRuntimeEffectsArgs): void {
 	React.useEffect(
 		function unlockAudioOnMount() {
 			if (args.previewMode) return
-			if (!args.warningSoundEnabled) return
+			if (!args.tickingSoundEnabled && !args.warningSoundEnabled) return
 			unlockAudio()
 		},
-		[args.previewMode, args.warningSoundEnabled]
+		[args.previewMode, args.tickingSoundEnabled, args.warningSoundEnabled]
 	)
 
 	React.useEffect(
 		function attachAudioUnlockOnFirstInteraction() {
 			if (args.previewMode) return
-			if (!args.warningSoundEnabled) return
+			if (!args.tickingSoundEnabled && !args.warningSoundEnabled) return
 			function onFirstInteraction() {
 				unlockAudio()
 				window.removeEventListener("pointerdown", onFirstInteraction)
@@ -598,7 +617,7 @@ function useFocusShellRuntimeEffects(args: FocusShellRuntimeEffectsArgs): void {
 				window.removeEventListener("keydown", onFirstInteraction)
 			}
 		},
-		[args.previewMode, args.warningSoundEnabled]
+		[args.previewMode, args.tickingSoundEnabled, args.warningSoundEnabled]
 	)
 
 	React.useEffect(
@@ -625,7 +644,7 @@ function useFocusShellRuntimeEffects(args: FocusShellRuntimeEffectsArgs): void {
 	React.useEffect(
 		function maybePlayPreTargetTicks() {
 			if (args.previewMode || args.tutorialOverlayOpen) return
-			if (!args.warningSoundEnabled) return
+			if (!args.tickingSoundEnabled) return
 			const secondsElapsed = Math.floor(args.state.elapsedQuestionMs / 1000)
 			if (secondsElapsed === prevSecondRef.current) return
 			const targetSec = args.perQuestionTargetMs / 1000
@@ -643,7 +662,7 @@ function useFocusShellRuntimeEffects(args: FocusShellRuntimeEffectsArgs): void {
 			args.previewMode,
 			args.state.elapsedQuestionMs,
 			args.tutorialOverlayOpen,
-			args.warningSoundEnabled
+			args.tickingSoundEnabled
 		]
 	)
 
@@ -670,7 +689,7 @@ function useFocusShellRuntimeEffects(args: FocusShellRuntimeEffectsArgs): void {
 	React.useEffect(
 		function maybePlayPostTargetTicks() {
 			if (args.previewMode || args.tutorialOverlayOpen) return
-			if (!args.warningSoundEnabled) return
+			if (!args.tickingSoundEnabled) return
 			if (args.state.elapsedQuestionMs < args.perQuestionTargetMs) return
 			const secondsElapsed = Math.floor(args.state.elapsedQuestionMs / 1000)
 			if (secondsElapsed === prevPostTargetSecondRef.current) return
@@ -686,7 +705,7 @@ function useFocusShellRuntimeEffects(args: FocusShellRuntimeEffectsArgs): void {
 			args.previewMode,
 			args.state.elapsedQuestionMs,
 			args.tutorialOverlayOpen,
-			args.warningSoundEnabled
+			args.tickingSoundEnabled
 		]
 	)
 
@@ -896,7 +915,9 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 		tutorialOverlayOpen,
 		perQuestionAudioDemoActive,
 		tutorialDemoCycle,
-		props.perQuestionTargetMs
+		props.perQuestionTargetMs,
+		props.tickingSoundEnabled,
+		props.warningSoundEnabled
 	)
 
 	const performSubmit = React.useCallback(
@@ -949,6 +970,7 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 		state,
 		stateRef,
 		tutorialOverlayOpen,
+		tickingSoundEnabled: props.tickingSoundEnabled,
 		warningSoundEnabled: props.warningSoundEnabled,
 		perQuestionTargetMs: props.perQuestionTargetMs,
 		onEndSession: props.onEndSession
@@ -1007,15 +1029,6 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 			<main className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
 				{chromeState.chronometerNode !== null ? (
 					<div className="mb-4 flex items-center justify-end gap-3">
-						{!props.previewMode ? (
-							<button
-								type="button"
-								onClick={replayTutorial.openReplayTutorial}
-								className="rounded-full border border-foreground/12 px-3 py-1.5 text-foreground/72 text-sm transition-colors hover:bg-foreground/5 hover:text-foreground"
-							>
-								Guide
-							</button>
-						) : null}
 						<div
 							ref={clockRef}
 							className={cn("flex justify-end", tutorialClockAlwaysVisible && "relative z-[60]")}
@@ -1053,7 +1066,7 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 						selectedOptionId={state.selectedOptionId}
 						onSelectOption={function selectOption(optionId: string) {
 							if (props.previewMode || tutorialOverlayOpen) return
-							if (props.warningSoundEnabled) {
+							if (props.tickingSoundEnabled || props.warningSoundEnabled) {
 								unlockAudio()
 							}
 							dispatch({ kind: "select", optionId })
@@ -1069,7 +1082,7 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 						onClick={function clickSubmit() {
 							if (props.previewMode || tutorialOverlayOpen) return
 							if (state.submitPending) return
-							if (props.warningSoundEnabled) {
+							if (props.tickingSoundEnabled || props.warningSoundEnabled) {
 								unlockAudio()
 							}
 							dispatch({ kind: "submit", nowMs: performance.now() })
@@ -1136,6 +1149,7 @@ function FocusTutorialPreview(props: FocusTutorialPreviewProps) {
 			initialItem={TUTORIAL_PREVIEW_ITEM}
 			strictMode={false}
 			startMs={0}
+			tickingSoundEnabled={prefs.tickingSoundEnabled}
 			warningSoundEnabled={prefs.warningSoundEnabled}
 			previewMode
 			tutorialStepIndex={tutorialStepIndex}
@@ -1159,8 +1173,8 @@ interface FocusTutorialBeforePrimerGateProps {
 }
 
 function FocusTutorialBeforePrimerGate(props: FocusTutorialBeforePrimerGateProps) {
-	const { tutorialLocal, tutorialSession, completeTutorialDismissal } = useFocusPrefs(props.userKey)
-	if (shouldShowTutorialOnNextRunState(tutorialSession, tutorialLocal)) {
+	const { tutorialPrefs, completeTutorialDismissal } = useFocusPrefs(props.userKey)
+	if (shouldShowTutorialOnNextRunState(tutorialPrefs)) {
 		return (
 			<FocusTutorialPreview
 				onFinish={completeTutorialDismissal}
@@ -1182,6 +1196,7 @@ function FocusShell(props: FocusShellProps) {
 			key={shellStartAtMs}
 			{...props}
 			startMs={shellStartAtMs}
+			tickingSoundEnabled={prefs.tickingSoundEnabled}
 			warningSoundEnabled={prefs.warningSoundEnabled}
 		/>
 	)

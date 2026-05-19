@@ -10,7 +10,10 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { signOutAction } from "@/app/(app)/actions"
 import { StreakChip } from "@/components/dashboard/streak-chip"
-import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
+import {
+	shouldShowTutorialOnNextRunState,
+	useFocusPrefs
+} from "@/components/focus-shell/focus-prefs"
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -47,11 +50,12 @@ function TopNav({ streakDays, initials, userKey }: TopNavProps) {
 	const pathname = usePathname()
 	const {
 		prefs,
-		tutorialSession,
+		tutorialPrefs,
+		setTickingSoundEnabled,
 		setTutorialEnabledForNextRun,
-		setWarningSoundEnabled,
-		clearTutorialSessionForLoginReset
+		setWarningSoundEnabled
 	} = useFocusPrefs(userKey)
+	const tutorialWillShow = shouldShowTutorialOnNextRunState(tutorialPrefs)
 
 	return (
 		<header className="mx-auto mb-2 flex max-w-[1100px] items-center justify-between border-border-soft border-b px-7 pt-[10px] pb-2">
@@ -96,6 +100,14 @@ function TopNav({ streakDays, initials, userKey }: TopNavProps) {
 					<DropdownMenuContent align="end" className="w-56">
 						<DropdownMenuLabel>Focus settings</DropdownMenuLabel>
 						<DropdownMenuCheckboxItem
+							checked={prefs.tickingSoundEnabled}
+							onCheckedChange={function onCheckedChange(checked) {
+								setTickingSoundEnabled(checked === true)
+							}}
+						>
+							Ticking sound
+						</DropdownMenuCheckboxItem>
+						<DropdownMenuCheckboxItem
 							checked={prefs.warningSoundEnabled}
 							onCheckedChange={function onCheckedChange(checked) {
 								setWarningSoundEnabled(checked === true)
@@ -105,7 +117,7 @@ function TopNav({ streakDays, initials, userKey }: TopNavProps) {
 						</DropdownMenuCheckboxItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuCheckboxItem
-							checked={tutorialSession.showOnNextRun}
+							checked={tutorialWillShow}
 							onCheckedChange={function onCheckedChange(checked) {
 								setTutorialEnabledForNextRun(checked === true)
 							}}
@@ -117,9 +129,6 @@ function TopNav({ streakDays, initials, userKey }: TopNavProps) {
 				<form action={signOutAction}>
 					<button
 						type="submit"
-						onClick={function onClick() {
-							clearTutorialSessionForLoginReset()
-						}}
 						aria-label="Sign out"
 						title="Sign out"
 						className={ICON_BUTTON_CLASS}
