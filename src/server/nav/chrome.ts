@@ -19,6 +19,7 @@ import { logger } from "@/logger"
 import { computeStreak } from "@/server/dashboard/streak"
 
 interface NavChrome {
+	userId: string
 	initials: string
 	streakDays: number
 }
@@ -64,7 +65,7 @@ function initialsFor(name: string): string {
 
 async function loadNavChrome(userId: string): Promise<NavChrome> {
 	const [initials, streakDays] = await Promise.all([loadInitials(userId), computeStreak(userId)])
-	return { initials, streakDays }
+	return { userId, initials, streakDays }
 }
 
 export type { NavChrome }

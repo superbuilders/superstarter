@@ -35,7 +35,7 @@ function ReviewView({ dataPromise }: ReviewViewProps) {
 	const drillsMeta = pluralizeSessions(data.drills.length)
 	return (
 		<div className="min-h-screen bg-bg text-text-1">
-			<TopNav streakDays={data.user.streakDays} initials={data.user.initials} />
+			<TopNav streakDays={data.user.streakDays} initials={data.user.initials} userKey={data.user.userId} />
 			<main className="mx-auto max-w-[1100px] px-7 pb-6">
 				<h1 className="sr-only">Review</h1>
 				<header className="mb-3 flex flex-col gap-1 border-border-soft border-b pb-3">

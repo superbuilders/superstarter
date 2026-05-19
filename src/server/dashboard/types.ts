@@ -44,6 +44,7 @@ interface SubtypeRow {
 
 interface DashboardData {
 	user: {
+		userId: string
 		firstName: string
 		initials: string
 		streakDays: number

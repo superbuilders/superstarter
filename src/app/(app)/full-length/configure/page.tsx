@@ -22,6 +22,7 @@ import { auth } from "@/auth"
 import { FocusTutorialBeforePrimerGate } from "@/components/focus-shell/focus-shell"
 import { WoopWizard } from "@/components/full-length/woop-wizard"
 import { PageNav } from "@/components/nav/page-nav"
+import type { NavChrome } from "@/server/nav/chrome"
 import { loadNavChrome } from "@/server/nav/chrome"
 
 async function loadUserId(): Promise<string> {
@@ -33,14 +34,27 @@ async function loadUserId(): Promise<string> {
 }
 
 function Page() {
-	const chromePromise = loadUserId().then(function load(userId) {
+	const userIdPromise = loadUserId()
+	const chromePromise = userIdPromise.then(function load(userId) {
 		return loadNavChrome(userId)
 	})
 	return (
-		<FocusTutorialBeforePrimerGate>
+		<React.Suspense fallback={null}>
+			<ConfiguredPageBody chromePromise={chromePromise} userIdPromise={userIdPromise} />
+		</React.Suspense>
+		)
+}
+
+async function ConfiguredPageBody(props: {
+	chromePromise: Promise<NavChrome>
+	userIdPromise: Promise<string>
+}) {
+	const userId = await props.userIdPromise
+	return (
+		<FocusTutorialBeforePrimerGate userKey={userId}>
 			<div className="min-h-screen bg-bg text-text-1">
 				<React.Suspense fallback={null}>
-					<PageNav chromePromise={chromePromise} />
+					<PageNav chromePromise={props.chromePromise} />
 				</React.Suspense>
 				<main className="mx-auto max-w-[1100px] px-7 pb-12">
 					<header className="mb-6 flex flex-col gap-1 border-border-soft border-b pt-6 pb-4">

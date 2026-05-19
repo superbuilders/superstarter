@@ -17,8 +17,8 @@ async function loadUserId(): Promise<string> {
 	return session.user.id
 }
 
-async function loadMistakesCount(): Promise<number> {
-	const userId = await loadUserId()
+async function loadMistakesCount(userIdPromise: Promise<string>): Promise<number> {
+	const userId = await userIdPromise
 	return countMistakes(userId)
 }
 
@@ -27,12 +27,13 @@ function Page() {
 	const chromePromise = userIdPromise.then(function load(userId) {
 		return loadNavChrome(userId)
 	})
-	const mistakesCountPromise = loadMistakesCount()
+	const mistakesCountPromise = loadMistakesCount(userIdPromise)
 	return (
 		<React.Suspense fallback={null}>
 			<MistakesPageBody
 				chromePromise={chromePromise}
 				mistakesCountPromise={mistakesCountPromise}
+				userIdPromise={userIdPromise}
 			/>
 		</React.Suspense>
 	)
@@ -41,8 +42,12 @@ function Page() {
 async function MistakesPageBody(props: {
 	chromePromise: Promise<NavChrome>
 	mistakesCountPromise: Promise<number>
+	userIdPromise: Promise<string>
 }) {
-	const mistakesCount = await props.mistakesCountPromise
+	const [mistakesCount, userId] = await Promise.all([
+		props.mistakesCountPromise,
+		props.userIdPromise
+	])
 	if (mistakesCount === 0) {
 		return (
 			<div className="min-h-screen bg-bg text-text-1">
@@ -56,7 +61,7 @@ async function MistakesPageBody(props: {
 		)
 	}
 	return (
-		<FocusTutorialBeforePrimerGate>
+		<FocusTutorialBeforePrimerGate userKey={userId}>
 			<div className="min-h-screen bg-bg text-text-1">
 				<React.Suspense fallback={null}>
 					<PageNav chromePromise={props.chromePromise} />

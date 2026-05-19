@@ -1155,10 +1155,11 @@ function FocusTutorialPreview(props: FocusTutorialPreviewProps) {
 
 interface FocusTutorialBeforePrimerGateProps {
 	children: React.ReactNode
+	userKey?: string
 }
 
 function FocusTutorialBeforePrimerGate(props: FocusTutorialBeforePrimerGateProps) {
-	const { tutorialLocal, tutorialSession, completeTutorialDismissal } = useFocusPrefs()
+	const { tutorialLocal, tutorialSession, completeTutorialDismissal } = useFocusPrefs(props.userKey)
 	if (shouldShowTutorialOnNextRunState(tutorialSession, tutorialLocal)) {
 		return (
 			<FocusTutorialPreview

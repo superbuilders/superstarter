@@ -48,6 +48,7 @@ interface ReviewSession {
 
 interface ReviewPageData {
 	user: {
+		userId: string
 		initials: string
 		streakDays: number
 	}
@@ -140,7 +141,7 @@ async function getReviewPageData(userId: string): Promise<ReviewPageData> {
 		"review data assembled"
 	)
 	return {
-		user: { initials: chrome.initials, streakDays: chrome.streakDays },
+		user: { userId: chrome.userId, initials: chrome.initials, streakDays: chrome.streakDays },
 		practiceTests,
 		drills
 	}

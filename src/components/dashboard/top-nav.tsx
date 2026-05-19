@@ -40,9 +40,10 @@ const ICON_BUTTON_CLASS =
 interface TopNavProps {
 	streakDays: number
 	initials: string
+	userKey: string
 }
 
-function TopNav({ streakDays, initials }: TopNavProps) {
+function TopNav({ streakDays, initials, userKey }: TopNavProps) {
 	const pathname = usePathname()
 	const {
 		prefs,
@@ -50,7 +51,7 @@ function TopNav({ streakDays, initials }: TopNavProps) {
 		setTutorialEnabledForNextRun,
 		setWarningSoundEnabled,
 		clearTutorialSessionForLoginReset
-	} = useFocusPrefs()
+	} = useFocusPrefs(userKey)
 
 	return (
 		<header className="mx-auto mb-2 flex max-w-[1100px] items-center justify-between border-border-soft border-b px-7 pt-[10px] pb-2">
