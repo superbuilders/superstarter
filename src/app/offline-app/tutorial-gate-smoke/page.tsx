@@ -11,7 +11,7 @@ import {
 } from "@/components/focus-shell/focus-prefs"
 import { FocusTutorialBeforePrimerGate } from "@/components/focus-shell/focus-shell"
 
-function TutorialGateSmokePage() {
+function TutorialGateSmokeClientPage() {
 	const searchParams = useSearchParams()
 	const [mounted, setMounted] = React.useState(false)
 	const rawUserKey = searchParams.get("user")
@@ -118,6 +118,14 @@ function TutorialGateSmokePage() {
 				</FocusTutorialBeforePrimerGate>
 			</section>
 		</main>
+	)
+}
+
+function TutorialGateSmokePage() {
+	return (
+		<React.Suspense fallback={null}>
+			<TutorialGateSmokeClientPage />
+		</React.Suspense>
 	)
 }
 
