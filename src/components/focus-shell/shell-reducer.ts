@@ -97,7 +97,7 @@ function initShellState(args: InitArgs): ShellState {
 
 interface TickContext {
 	perQuestionTargetMs: number
-	sessionType: "diagnostic" | "drill" | "full_length" | "simulation"
+	sessionType: "diagnostic" | "drill" | "full_length" | "practice_test" | "simulation"
 }
 
 function reduceTick(state: ShellState, nowMs: number, ctx: TickContext): ShellState {

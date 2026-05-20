@@ -9,7 +9,7 @@
 
 import type { ItemBody } from "@/server/items/body-schema"
 
-type SessionType = "diagnostic" | "drill" | "full_length" | "simulation"
+type SessionType = "diagnostic" | "drill" | "full_length" | "practice_test" | "simulation"
 
 type Difficulty = "easy" | "medium" | "hard" | "brutal"
 type FallbackLevel = "fresh" | "session-soft" | "recency-soft" | "tier-degraded"

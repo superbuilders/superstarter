@@ -68,6 +68,30 @@ async function endExperimentalDrillSessionAction(sessionId: string): Promise<voi
 	revalidatePath(`/experimental/review/${sessionId}`)
 }
 
+async function submitExperimentalPracticeTestAttempt(
+	input: SubmitAttemptInput
+): Promise<SubmitAttemptResult> {
+	const parsed = submitAttemptInputSchema.safeParse(input)
+	if (!parsed.success) {
+		logger.error(
+			{ issues: parsed.error.issues },
+			"submitExperimentalPracticeTestAttempt: input invalid"
+		)
+		throw errors.wrap(ErrInvalidActionInput, "submitExperimentalPracticeTestAttempt input")
+	}
+	const userId = await requireExperimentalUserId()
+	await assertExperimentalSessionOwnedBy(parsed.data.sessionId, userId)
+	return submitExperimentalAttempt(parsed.data)
+}
+
+async function endExperimentalPracticeTestSessionAction(sessionId: string): Promise<void> {
+	const userId = await requireExperimentalUserId()
+	await assertExperimentalSessionOwnedBy(sessionId, userId)
+	await endExperimentalSession(sessionId)
+	revalidatePath("/experimental/review")
+	revalidatePath(`/experimental/review/${sessionId}`)
+}
+
 async function submitExperimentalItemAuditAction(
 	input: SubmitExperimentalItemAuditInput
 ) {
@@ -88,7 +112,9 @@ async function submitExperimentalItemProposalAction(
 
 export {
 	endExperimentalDrillSessionAction,
+	endExperimentalPracticeTestSessionAction,
 	submitExperimentalDrillAttempt,
 	submitExperimentalItemAuditAction,
-	submitExperimentalItemProposalAction
+	submitExperimentalItemProposalAction,
+	submitExperimentalPracticeTestAttempt
 }
