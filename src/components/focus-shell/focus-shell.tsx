@@ -105,6 +105,7 @@ interface FocusShellRuntimeEffectsArgs {
 	warningSoundEnabled: boolean
 	perQuestionTargetMs: number
 	onEndSession: () => Promise<void>
+	completionHref?: string
 }
 
 interface FocusShellChromeState {
@@ -739,11 +740,16 @@ function useFocusShellRuntimeEffects(args: FocusShellRuntimeEffectsArgs): void {
 						"focus-shell: auto-end onEndSession threw — proceeding to navigation anyway"
 					)
 				}
-				args.router.push(`/post-session/${args.sessionId}`)
+				if (args.completionHref === undefined) {
+					args.router.push(`/post-session/${args.sessionId}`)
+					return
+				}
+				window.location.assign(args.completionHref)
 			}
 			void runAutoEnd()
 		},
 		[
+			args.completionHref,
 			args.dispatch,
 			args.onEndSession,
 			args.previewMode,
@@ -973,7 +979,8 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 		tickingSoundEnabled: props.tickingSoundEnabled,
 		warningSoundEnabled: props.warningSoundEnabled,
 		perQuestionTargetMs: props.perQuestionTargetMs,
-		onEndSession: props.onEndSession
+		onEndSession: props.onEndSession,
+		completionHref: props.completionHref
 	})
 
 	const { sessionBarDemoBehindPace, sessionBarDemoCycle } = useTutorialSessionBarDemo(
@@ -1099,7 +1106,7 @@ function FocusShellRunning(props: FocusShellRunningProps) {
 				</div>
 			</main>
 			<InterQuestionCard visible={state.interQuestionVisible} />
-			<Heartbeat sessionId={props.sessionId} />
+			<Heartbeat sessionId={props.sessionId} href={props.heartbeatHref} />
 			{tutorialOverlayOpen && overlayControls ? (
 				<FocusTutorialOverlay
 					stepIndex={activeTutorialStepIndex}

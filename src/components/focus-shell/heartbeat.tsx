@@ -20,15 +20,17 @@ const HEARTBEAT_INTERVAL_MS = 30_000
 
 interface HeartbeatProps {
 	sessionId: string
+	href?: string
 }
 
-function urlFor(sessionId: string): string {
+function urlFor(sessionId: string, href?: string): string {
+	if (href !== undefined) return href
 	return `/api/sessions/${sessionId}/heartbeat`
 }
 
-function fireBeacon(sessionId: string): void {
+function fireBeacon(sessionId: string, href?: string): void {
 	if (typeof navigator === "undefined") return
-	const url = urlFor(sessionId)
+	const url = urlFor(sessionId, href)
 	// sendBeacon body is unused — sessionId is in the path. An empty Blob
 	// is fine; the browser still issues the POST.
 	const blob = new Blob([""], { type: "text/plain" })
@@ -37,6 +39,7 @@ function fireBeacon(sessionId: string): void {
 
 function Heartbeat(props: HeartbeatProps) {
 	const sessionId = props.sessionId
+	const href = props.href
 	React.useEffect(
 		function attachHeartbeat() {
 			let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -44,7 +47,7 @@ function Heartbeat(props: HeartbeatProps) {
 
 			function schedule() {
 				timeoutId = setTimeout(function scheduledBeacon() {
-					fireBeacon(sessionId)
+					fireBeacon(sessionId, href)
 					schedule()
 				}, HEARTBEAT_INTERVAL_MS)
 			}
@@ -53,7 +56,7 @@ function Heartbeat(props: HeartbeatProps) {
 			window.addEventListener(
 				"pagehide",
 				function pageHideListener() {
-					fireBeacon(sessionId)
+					fireBeacon(sessionId, href)
 				},
 				{ signal: controller.signal }
 			)
@@ -65,7 +68,7 @@ function Heartbeat(props: HeartbeatProps) {
 				controller.abort()
 			}
 		},
-		[sessionId]
+		[sessionId, href]
 	)
 	return null
 }

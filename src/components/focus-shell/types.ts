@@ -60,6 +60,8 @@ interface FocusShellProps {
 	targetQuestionCount: number
 	paceTrackVisible: boolean
 	initialItem: ItemForRender
+	heartbeatHref?: string
+	completionHref?: string
 	// `true` for simulation only (Phase 5). Disables any pause UI etc.
 	// Phase 3 callers pass `false`.
 	strictMode: boolean
