@@ -9,6 +9,12 @@ import * as catalogItemUserReportsSchema from "@/db/schemas/catalog/item-user-re
 import * as catalogItemsSchema from "@/db/schemas/catalog/items"
 import * as catalogStrategiesSchema from "@/db/schemas/catalog/strategies"
 import * as catalogSubTypesSchema from "@/db/schemas/catalog/sub-types"
+import * as experimentalExperimentalAttemptsSchema from "@/db/schemas/experimental/experimental-attempts"
+import * as experimentalExperimentalItemsSchema from "@/db/schemas/experimental/experimental-items"
+import * as experimentalExperimentalSessionsSchema from "@/db/schemas/experimental/experimental-sessions"
+import * as experimentalItemAuditsSchema from "@/db/schemas/experimental/item-audits"
+import * as experimentalItemEditProposalsSchema from "@/db/schemas/experimental/item-edit-proposals"
+import * as experimentalItemRevisionDecisionsSchema from "@/db/schemas/experimental/item-revision-decisions"
 import * as opsCandidatePromotionLogSchema from "@/db/schemas/ops/candidate-promotion-log"
 import * as practiceAttemptsSchema from "@/db/schemas/practice/attempts"
 import * as practiceMasteryStateSchema from "@/db/schemas/practice/mastery-state"
@@ -24,6 +30,12 @@ const dbSchema = {
 	...catalogStrategiesSchema,
 	...catalogItemsSchema,
 	...catalogItemAdminActionsSchema,
+	...experimentalExperimentalItemsSchema,
+	...experimentalExperimentalSessionsSchema,
+	...experimentalExperimentalAttemptsSchema,
+	...experimentalItemAuditsSchema,
+	...experimentalItemEditProposalsSchema,
+	...experimentalItemRevisionDecisionsSchema,
 	...catalogItemUserReportsSchema,
 	...practicePracticeSessionsSchema,
 	...practiceAttemptsSchema,
