@@ -24,14 +24,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const NAV: ReadonlyArray<{
-	href: "/" | "/full-length/configure" | "/lessons" | "/review" | "/stats"
+	href: "/" | "/full-length/configure" | "/lessons" | "/review" | "/stats" | "/experimental"
 	label: string
 }> = [
 	{ href: "/", label: "Dashboard" },
 	{ href: "/full-length/configure", label: "Practice Test" },
 	{ href: "/lessons", label: "Lessons" },
 	{ href: "/review", label: "Review" },
-	{ href: "/stats", label: "Stats" }
+	{ href: "/stats", label: "Stats" },
+	{ href: "/experimental", label: "Experimental" }
 ]
 
 const ACTIVE_CLASS = "rounded-md bg-surface-2 px-[10px] py-[6px] font-medium text-[13px] text-text-1"
@@ -71,7 +72,7 @@ function TopNav({ streakDays, initials, userKey }: TopNavProps) {
 					const isActive = isHome ? pathname === "/" : pathname?.startsWith(item.href) === true
 					const className = isActive ? ACTIVE_CLASS : INACTIVE_CLASS
 					return (
-						<Link key={item.href} href={item.href} className={className}>
+						<Link key={item.href} href={{ pathname: item.href }} className={className}>
 							{item.label}
 						</Link>
 					)
