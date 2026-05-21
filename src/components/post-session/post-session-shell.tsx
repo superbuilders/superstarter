@@ -258,7 +258,7 @@ function PostSessionShell(props: PostSessionShellProps) {
 	let resultSoundFx: React.ReactNode = null
 	if (props.sessionType === "full_length" || props.sessionType === "simulation") {
 		const totalCorrect = props.performance.reduce(sumCorrectAttempts, 0)
-		resultSoundFx = <ResultSoundFx score={totalCorrect} />
+		resultSoundFx = <ResultSoundFx sessionId={props.sessionId} score={totalCorrect} />
 	}
 
 	let filtersToggleNode: React.ReactNode = null

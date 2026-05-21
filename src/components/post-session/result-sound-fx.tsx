@@ -1,24 +1,14 @@
 "use client"
 
-// <ResultSoundFx> — plays a single result-tier sound on mount when the
-// post-session shell renders for a full_length / simulation session.
-//
-// Score-tier mapping (raw correct count out of 50):
-//   - 0..29  → FAILURE_SOUND_URLS
-//   - 30..39 → ALMOST_SOUND_URLS
-//   - 40..50 → SUCCESS_SOUND_URLS
-//
-// One URL from the matched bank is picked uniformly at random; an empty
-// bank logs a warning and renders silently. Playback is via
-// HTMLAudioElement (NOT the focus-shell's AudioContext) — the mount
-// follows a user navigation gesture, so autoplay is generally allowed,
-// but a rejected play() promise is logged and ignored.
-//
-// `tierForScore`, `bankFor`, and `pickRandomUrl` are pure helpers
-// exposed for unit testing the boundary thresholds + bank routing.
+// <ResultSoundFx> — plays a single result-tier sound on a fresh
+// post-session landing for a full_length / simulation session. Refresh
+// and deep-link revisits stay silent; the one-shot landing marker is
+// consumed on the first eligible mount per session.
 
 import * as errors from "@superbuilders/errors"
 import * as React from "react"
+import { consumeFreshPracticeTestLandingEffect } from "@/components/post-session/fresh-practice-landing"
+import { useFocusPrefs } from "@/components/focus-shell/focus-prefs"
 import { ALMOST_SOUND_URLS, FAILURE_SOUND_URLS, SUCCESS_SOUND_URLS } from "@/config/sound-bank"
 import { logger } from "@/logger"
 
@@ -42,14 +32,26 @@ function pickRandomUrl(urls: ReadonlyArray<string>): string | undefined {
 	return urls[idx]
 }
 
+function soundsEnabledFromPrefs(args: {
+	tickingSoundEnabled: boolean
+	warningSoundEnabled: boolean
+}): boolean {
+	return args.tickingSoundEnabled || args.warningSoundEnabled
+}
+
 interface ResultSoundFxProps {
+	sessionId: string
 	score: number
 }
 
-function ResultSoundFx({ score }: ResultSoundFxProps) {
+function ResultSoundFx({ sessionId, score }: ResultSoundFxProps) {
+	const { prefs } = useFocusPrefs()
+
 	React.useEffect(
 		function playResultSound() {
 			if (typeof window === "undefined") return
+			if (soundsEnabledFromPrefs(prefs) === false) return
+			if (!consumeFreshPracticeTestLandingEffect(sessionId, "result_sound")) return
 			const tier = tierForScore(score)
 			const bank = bankFor(tier)
 			const url = pickRandomUrl(bank)
@@ -63,23 +65,21 @@ function ResultSoundFx({ score }: ResultSoundFxProps) {
 				const result = await errors.try(audio.play())
 				if (result.error) {
 					logger.warn(
-						{ error: result.error, url, score, tier },
-						"ResultSoundFx: play() rejected (likely autoplay blocked)"
+						{ error: result.error, url, score, sessionId, tier },
+						"ResultSoundFx: play() rejected after fresh landing"
 					)
 				}
 			}
-			attemptPlay()
+			void attemptPlay()
 			return function cleanup() {
-				// Pause + drop src so the element can be GC'd if the user
-				// navigates away mid-clip.
 				audio.pause()
 				audio.src = ""
 			}
 		},
-		[score]
+		[prefs, score, sessionId]
 	)
 	return null
 }
 
 export type { ResultSoundFxProps, ResultTier }
-export { bankFor, pickRandomUrl, ResultSoundFx, tierForScore }
+export { bankFor, pickRandomUrl, ResultSoundFx, soundsEnabledFromPrefs, tierForScore }

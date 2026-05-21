@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import * as React from "react"
 import {
 	endExperimentalPracticeTestSessionAction,
@@ -7,6 +8,7 @@ import {
 } from "@/app/(app)/experimental/actions"
 import { FocusShell } from "@/components/focus-shell/focus-shell"
 import type { SubmitAttemptInput } from "@/components/focus-shell/types"
+import { markFreshPracticeTestLanding } from "@/components/post-session/fresh-practice-landing"
 import type { ExperimentalPracticeTestRunInit } from "@/server/experimental/practice-test-session"
 
 const EXPERIMENTAL_PRACTICE_TEST_DURATION_MS = 360_000
@@ -18,7 +20,7 @@ interface ExperimentalPracticeTestRunContentProps {
 
 function ExperimentalPracticeTestRunContent(props: ExperimentalPracticeTestRunContentProps) {
 	const init = React.use(props.initPromise)
-	const completionHref = `/experimental/review/${init.sessionId}`
+	const router = useRouter()
 
 	const onSubmitAttempt = React.useCallback(function onSubmitAttempt(input: SubmitAttemptInput) {
 		return submitExperimentalPracticeTestAttempt(input)
@@ -27,9 +29,16 @@ function ExperimentalPracticeTestRunContent(props: ExperimentalPracticeTestRunCo
 	const onEndSession = React.useCallback(
 		async function onEndSession() {
 			await endExperimentalPracticeTestSessionAction(init.sessionId)
-			window.location.assign(completionHref)
+			markFreshPracticeTestLanding(init.sessionId)
 		},
-		[completionHref, init.sessionId]
+		[init.sessionId]
+	)
+
+	const afterEndSessionNavigate = React.useCallback(
+		function afterEndSessionNavigate() {
+			router.push(`/experimental/review/${init.sessionId}`)
+		},
+		[init.sessionId, router]
 	)
 
 	return (
@@ -42,7 +51,7 @@ function ExperimentalPracticeTestRunContent(props: ExperimentalPracticeTestRunCo
 			paceTrackVisible
 			initialItem={init.firstItem}
 			heartbeatHref={`/api/experimental/sessions/${init.sessionId}/heartbeat`}
-			completionHref={completionHref}
+			afterEndSessionNavigate={afterEndSessionNavigate}
 			strictMode={false}
 			onSubmitAttempt={onSubmitAttempt}
 			onEndSession={onEndSession}

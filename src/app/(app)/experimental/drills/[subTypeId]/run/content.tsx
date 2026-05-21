@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import * as React from "react"
 import { FocusShell } from "@/components/focus-shell/focus-shell"
 import { endExperimentalDrillSessionAction, submitExperimentalDrillAttempt } from "@/app/(app)/experimental/actions"
@@ -12,7 +13,7 @@ interface ExperimentalDrillRunContentProps {
 
 function ExperimentalDrillRunContent(props: ExperimentalDrillRunContentProps) {
 	const init = React.use(props.initPromise)
-	const completionHref = `/experimental/review/${init.sessionId}`
+	const router = useRouter()
 
 	const onSubmitAttempt = React.useCallback(function onSubmitAttempt(input: SubmitAttemptInput) {
 		return submitExperimentalDrillAttempt(input)
@@ -21,9 +22,15 @@ function ExperimentalDrillRunContent(props: ExperimentalDrillRunContentProps) {
 	const onEndSession = React.useCallback(
 		async function onEndSession() {
 			await endExperimentalDrillSessionAction(init.sessionId)
-			window.location.assign(completionHref)
 		},
-		[completionHref, init.sessionId]
+		[init.sessionId]
+	)
+
+	const afterEndSessionNavigate = React.useCallback(
+		function afterEndSessionNavigate() {
+			router.push(`/experimental/review/${init.sessionId}`)
+		},
+		[init.sessionId, router]
 	)
 
 	return (
@@ -37,7 +44,7 @@ function ExperimentalDrillRunContent(props: ExperimentalDrillRunContentProps) {
 			paceTrackVisible
 			initialItem={init.firstItem}
 			heartbeatHref={`/api/experimental/sessions/${init.sessionId}/heartbeat`}
-			completionHref={completionHref}
+			afterEndSessionNavigate={afterEndSessionNavigate}
 			strictMode={false}
 			onSubmitAttempt={onSubmitAttempt}
 			onEndSession={onEndSession}

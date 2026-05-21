@@ -20,7 +20,7 @@
 import confetti from "canvas-confetti"
 import * as errors from "@superbuilders/errors"
 import * as React from "react"
-import { consumeFreshPracticeTestLanding } from "@/components/post-session/fresh-practice-landing"
+import { consumeFreshPracticeTestLandingEffect } from "@/components/post-session/fresh-practice-landing"
 import { logger } from "@/logger"
 
 const PRACTICE_CONFETTI_THRESHOLD = 40
@@ -72,7 +72,7 @@ function PracticeScoreConfetti(props: PracticeScoreConfettiProps) {
 			if (typeof window === "undefined") return
 			if (sessionType !== "full_length" && sessionType !== "simulation") return
 			if (score < PRACTICE_CONFETTI_THRESHOLD) return
-			if (!consumeFreshPracticeTestLanding(sessionId)) return
+			if (!consumeFreshPracticeTestLandingEffect(sessionId, "confetti")) return
 			const el = originRef.current
 			let originX = 0.5
 			let originY = 0.3

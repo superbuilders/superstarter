@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { bankFor, pickRandomUrl, tierForScore } from "@/components/post-session/result-sound-fx"
+import { bankFor, pickRandomUrl, soundsEnabledFromPrefs, tierForScore } from "@/components/post-session/result-sound-fx"
 import { ALMOST_SOUND_URLS, FAILURE_SOUND_URLS, SUCCESS_SOUND_URLS } from "@/config/sound-bank"
 
 // ---------- tierForScore ----------
@@ -54,6 +54,20 @@ test("bankFor: success routes to SUCCESS_SOUND_URLS", () => {
 	expect(bankFor("success")).toBe(SUCCESS_SOUND_URLS)
 })
 
+// ---------- soundsEnabledFromPrefs ----------
+
+test("soundsEnabledFromPrefs: false only when both focus-sound prefs are off", () => {
+	expect(
+		soundsEnabledFromPrefs({ tickingSoundEnabled: false, warningSoundEnabled: false })
+	).toBe(false)
+	expect(
+		soundsEnabledFromPrefs({ tickingSoundEnabled: true, warningSoundEnabled: false })
+	).toBe(true)
+	expect(
+		soundsEnabledFromPrefs({ tickingSoundEnabled: false, warningSoundEnabled: true })
+	).toBe(true)
+})
+
 // ---------- pickRandomUrl ----------
 
 test("pickRandomUrl: empty bank returns undefined", () => {
@@ -80,9 +94,6 @@ test("pickRandomUrl: multi-entry bank returns one of the entries", () => {
 })
 
 // ---------- bank smoke checks ----------
-// The script regenerates these arrays from data/sounds/<category>/.
-// Asserting non-empty here guards against an accidental empty-folder
-// regression silently breaking the result sound.
 
 test("FAILURE_SOUND_URLS is non-empty", () => {
 	expect(FAILURE_SOUND_URLS.length).toBeGreaterThan(0)
