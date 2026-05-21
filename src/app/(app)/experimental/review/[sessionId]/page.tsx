@@ -1,10 +1,10 @@
 import * as React from "react"
+import { redirect } from "next/navigation"
 import { loadNavChrome } from "@/server/nav/chrome"
 import { loadExperimentalUserId } from "@/server/experimental/auth"
-import { loadExperimentalReviewSessionDetail } from "@/server/experimental/review-data"
-import { ExperimentalPageFrame } from "@/components/experimental/experimental-page-frame"
-import { ExperimentalReviewSessionDetailView } from "@/components/experimental/experimental-review-session-detail"
-import type { NavChrome } from "@/server/nav/chrome"
+import { loadExperimentalPostSessionInfo } from "@/server/experimental/review-shell-data"
+import { PageNav } from "@/components/nav/page-nav"
+import { PostSessionShell } from "@/components/post-session/post-session-shell"
 
 interface PageProps {
 	params: Promise<{ sessionId: string }>
@@ -15,40 +15,49 @@ function Page(props: PageProps) {
 	const chromePromise = userIdPromise.then(function load(userId) {
 		return loadNavChrome(userId)
 	})
-	const detailPromise = Promise.all([userIdPromise, props.params]).then(function load([userId, params]) {
-		return loadExperimentalReviewSessionDetail(userId, params.sessionId)
+	const sessionPromise = Promise.all([userIdPromise, props.params]).then(function load([
+		userId,
+		params
+	]) {
+		return loadExperimentalPostSessionInfo(userId, params.sessionId)
 	})
 	return (
-		<React.Suspense fallback={<ExperimentalReviewDetailSkeleton />}>
-			<ReviewDetailPageBody chromePromise={chromePromise} detailPromise={detailPromise} />
-		</React.Suspense>
+		<div className="min-h-screen bg-bg text-text-1">
+			<React.Suspense fallback={null}>
+				<PageNav chromePromise={chromePromise} />
+			</React.Suspense>
+			<React.Suspense fallback={<ExperimentalReviewDetailSkeleton />}>
+				<ReviewDetailPageBody sessionPromise={sessionPromise} />
+			</React.Suspense>
+		</div>
 	)
 }
 
 async function ReviewDetailPageBody(props: {
-	chromePromise: Promise<NavChrome>
-	detailPromise: Promise<Awaited<ReturnType<typeof loadExperimentalReviewSessionDetail>>>
+	sessionPromise: Promise<Awaited<ReturnType<typeof loadExperimentalPostSessionInfo>>>
 }) {
-	const detail = await props.detailPromise
+	const session = await props.sessionPromise
+	if (session === null) {
+		redirect("/experimental/review")
+	}
 	return (
-		<ExperimentalPageFrame
-			chromePromise={props.chromePromise}
-			eyebrow="Optional audit detail"
-			title="Experimental Review Detail"
-			description="This route is the session-detail half of the MVP Experimental Review flow. It shows completed experimental session history and optional item-level audit submission only: no edit proposals or admin actions yet."
-		>
-			<ExperimentalReviewSessionDetailView detail={detail} />
-		</ExperimentalPageFrame>
+		<PostSessionShell
+			sessionId={session.sessionId}
+			sessionType={session.sessionType}
+			pacingMinutes={session.pacingMinutes}
+			performance={session.performance}
+			wrongItems={session.wrongItems}
+			surfacedStrategies={session.surfacedStrategies}
+			endSessionTier={session.endSessionTier}
+		/>
 	)
 }
 
 function ExperimentalReviewDetailSkeleton() {
 	return (
-		<div className="min-h-screen bg-bg text-text-1">
-			<main className="mx-auto max-w-[1100px] px-7 pt-12">
-				<p className="text-sm text-text-3">Loading…</p>
-			</main>
-		</div>
+		<main className="mx-auto flex min-h-dvh max-w-xl items-center justify-center px-6">
+			<p className="text-muted-foreground text-sm">Loading session…</p>
+		</main>
 	)
 }
 

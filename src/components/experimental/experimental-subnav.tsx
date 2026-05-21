@@ -3,9 +3,13 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-const ITEMS: ReadonlyArray<{ href: "/experimental/practice-test" | "/experimental/drills" | "/experimental/review"; label: string }> = [
+const ITEMS: ReadonlyArray<{
+	href: "/experimental/practice-test" | "/experimental/drills" | "/experimental/audit" | "/experimental/review"
+	label: string
+}> = [
 	{ href: "/experimental/practice-test", label: "Practice Test" },
 	{ href: "/experimental/drills", label: "Drills" },
+	{ href: "/experimental/audit", label: "Audit" },
 	{ href: "/experimental/review", label: "Review" }
 ]
 

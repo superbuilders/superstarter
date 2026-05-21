@@ -11,9 +11,6 @@ import type { SubmitAttemptInput } from "@/components/focus-shell/types"
 import { markFreshPracticeTestLanding } from "@/components/post-session/fresh-practice-landing"
 import type { ExperimentalPracticeTestRunInit } from "@/server/experimental/practice-test-session"
 
-const EXPERIMENTAL_PRACTICE_TEST_DURATION_MS = 360_000
-const EXPERIMENTAL_PRACTICE_TEST_PER_QUESTION_TARGET_MS = 18_000
-
 interface ExperimentalPracticeTestRunContentProps {
 	initPromise: Promise<ExperimentalPracticeTestRunInit>
 }
@@ -21,6 +18,11 @@ interface ExperimentalPracticeTestRunContentProps {
 function ExperimentalPracticeTestRunContent(props: ExperimentalPracticeTestRunContentProps) {
 	const init = React.use(props.initPromise)
 	const router = useRouter()
+	const sessionDurationMs = init.durationMinutes * 60_000
+	const perQuestionTargetMs = Math.max(
+		1,
+		Math.round(sessionDurationMs / Math.max(init.targetQuestionCount, 1))
+	)
 
 	const onSubmitAttempt = React.useCallback(function onSubmitAttempt(input: SubmitAttemptInput) {
 		return submitExperimentalPracticeTestAttempt(input)
@@ -45,8 +47,8 @@ function ExperimentalPracticeTestRunContent(props: ExperimentalPracticeTestRunCo
 		<FocusShell
 			sessionId={init.sessionId}
 			sessionType="practice_test"
-			sessionDurationMs={EXPERIMENTAL_PRACTICE_TEST_DURATION_MS}
-			perQuestionTargetMs={EXPERIMENTAL_PRACTICE_TEST_PER_QUESTION_TARGET_MS}
+			sessionDurationMs={sessionDurationMs}
+			perQuestionTargetMs={perQuestionTargetMs}
 			targetQuestionCount={init.targetQuestionCount}
 			paceTrackVisible
 			initialItem={init.firstItem}

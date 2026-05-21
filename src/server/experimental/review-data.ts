@@ -1,5 +1,5 @@
 import * as errors from "@superbuilders/errors"
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "@/db"
 import { itemAudits } from "@/db/schemas/experimental/item-audits"
@@ -34,6 +34,7 @@ interface ExperimentalReviewSession {
 	endedAtMs: number
 	completionReason?: ExperimentalReviewCompletionReason
 	targetQuestionCount: number
+	durationMinutes?: number
 	totalAttempts: number
 	correctAttempts: number
 	skippedAttempts: number
@@ -98,6 +99,7 @@ type ReviewSessionRow = {
 	endedAtMs: number | null
 	completionReason: ExperimentalReviewCompletionReason | null
 	targetQuestionCount: number
+	metadataJson: unknown
 	totalAttempts: number
 	correctAttempts: number
 	skippedAttempts: number
@@ -143,6 +145,12 @@ type ReviewProposalRow = {
 	submittedAtMs: number
 }
 
+const experimentalSessionMetadataSchema = z
+	.object({
+		durationMinutes: z.number().int().positive().optional()
+	})
+	.passthrough()
+
 function maybeUndefined<T>(value: T | null): T | undefined {
 	if (value === null) return undefined
 	return value
@@ -150,6 +158,7 @@ function maybeUndefined<T>(value: T | null): T | undefined {
 
 function mapReviewSessionRow(row: ReviewSessionRow): ExperimentalReviewSession | null {
 	if (row.endedAtMs === null) return null
+	const metadata = experimentalSessionMetadataSchema.safeParse(row.metadataJson)
 	return {
 		id: row.id,
 		type: row.type,
@@ -158,6 +167,7 @@ function mapReviewSessionRow(row: ReviewSessionRow): ExperimentalReviewSession |
 		endedAtMs: row.endedAtMs,
 		completionReason: maybeUndefined(row.completionReason),
 		targetQuestionCount: row.targetQuestionCount,
+		durationMinutes: metadata.success ? metadata.data.durationMinutes : undefined,
 		totalAttempts: row.totalAttempts,
 		correctAttempts: row.correctAttempts,
 		skippedAttempts: row.skippedAttempts
@@ -294,6 +304,7 @@ async function loadExperimentalReviewSessions(
 				endedAtMs: experimentalSessions.endedAtMs,
 				completionReason: experimentalSessions.completionReason,
 				targetQuestionCount: experimentalSessions.targetQuestionCount,
+				metadataJson: experimentalSessions.metadataJson,
 				totalAttempts: sql<number>`COUNT(${experimentalAttempts.id})::int`,
 				correctAttempts: sql<number>`COALESCE(SUM(CASE WHEN ${experimentalAttempts.correct} THEN 1 ELSE 0 END), 0)::int`,
 				skippedAttempts: sql<number>`COALESCE(SUM(CASE WHEN ${experimentalAttempts.id} IS NOT NULL AND ${experimentalAttempts.selectedAnswer} IS NULL THEN 1 ELSE 0 END), 0)::int`
@@ -340,6 +351,7 @@ async function loadReviewSessionRow(
 				endedAtMs: experimentalSessions.endedAtMs,
 				completionReason: experimentalSessions.completionReason,
 				targetQuestionCount: experimentalSessions.targetQuestionCount,
+				metadataJson: experimentalSessions.metadataJson,
 				totalAttempts: sql<number>`COUNT(${experimentalAttempts.id})::int`,
 				correctAttempts: sql<number>`COALESCE(SUM(CASE WHEN ${experimentalAttempts.correct} THEN 1 ELSE 0 END), 0)::int`,
 				skippedAttempts: sql<number>`COALESCE(SUM(CASE WHEN ${experimentalAttempts.id} IS NOT NULL AND ${experimentalAttempts.selectedAnswer} IS NULL THEN 1 ELSE 0 END), 0)::int`
@@ -462,7 +474,7 @@ async function loadReviewProposalMap(
 			})
 			.from(itemEditProposals)
 			.where(
-				and(eq(itemEditProposals.userId, userId), sql`${itemEditProposals.experimentalItemId} = ANY(${itemIds})`)
+				and(eq(itemEditProposals.userId, userId), inArray(itemEditProposals.experimentalItemId, [...itemIds]))
 			)
 			.orderBy(desc(itemEditProposals.submittedAtMs), desc(itemEditProposals.id))
 	)
@@ -506,6 +518,19 @@ async function loadExperimentalReviewSessionDetail(
 	return { session, items }
 }
 
+async function loadExperimentalAuditPageData(
+	userId: string
+): Promise<ExperimentalReviewPageData> {
+	return loadExperimentalReviewPageData(userId)
+}
+
+async function loadExperimentalAuditSessionDetail(
+	userId: string,
+	sessionId: string
+): Promise<ExperimentalReviewSessionDetail | null> {
+	return loadExperimentalReviewSessionDetail(userId, sessionId)
+}
+
 export type {
 	ExperimentalReviewItem,
 	ExperimentalReviewItemAudit,
@@ -515,4 +540,9 @@ export type {
 	ExperimentalReviewSessionDetail,
 	ExperimentalReviewSessionType
 }
-export { loadExperimentalReviewPageData, loadExperimentalReviewSessionDetail }
+export {
+	loadExperimentalAuditPageData,
+	loadExperimentalAuditSessionDetail,
+	loadExperimentalReviewPageData,
+	loadExperimentalReviewSessionDetail
+}

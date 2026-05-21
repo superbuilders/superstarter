@@ -1,5 +1,5 @@
 import * as errors from "@superbuilders/errors"
-import { and, desc, eq, isNotNull, isNull, notInArray, sql } from "drizzle-orm"
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm"
 import { z } from "zod"
 import type { ItemForRender } from "@/components/focus-shell/types"
 import { db } from "@/db"
@@ -9,12 +9,20 @@ import { experimentalSessions } from "@/db/schemas/experimental/experimental-ses
 import { logger } from "@/logger"
 import { itemBody } from "@/server/items/body-schema"
 import {
-	EXPERIMENTAL_PRACTICE_TEST_QUESTIONS,
-	EXPERIMENTAL_PRACTICE_TEST_SUBTYPE_MINIMUM
+	allocateExperimentalPracticeTestQueue,
+	type ExperimentalPracticeTestPoolRow
+} from "@/server/experimental/practice-test-mix"
+import {
+	EXPERIMENTAL_PRACTICE_TEST_SUBTYPE_MINIMUM,
+	loadExperimentalPracticeTestPrimerData,
+	parseExperimentalPracticeTestConfig
 } from "@/server/experimental/practice-test-data"
 
 const ErrExperimentalPracticeTestPoolTooSmall = errors.new(
 	"experimental practice-test pool too small"
+)
+const ErrExperimentalPracticeTestConfigInvalid = errors.new(
+	"experimental practice-test config invalid"
 )
 const ErrExperimentalPracticeTestItemBodyInvalid = errors.new(
 	"experimental practice-test item body invalid"
@@ -38,24 +46,23 @@ const optionsJsonSchema = z
 
 type ExperimentalPracticeTestDifficulty = "easy" | "medium" | "hard" | "brutal"
 
-type ExperimentalMixedItemRow = {
-	id: string
-	subTypeId: string
+type ExperimentalMixedItemRow = ExperimentalPracticeTestPoolRow & {
 	body: unknown
 	optionsJson: unknown
-	difficulty: ExperimentalPracticeTestDifficulty
 	correctAnswer: string
 }
 
 interface StartExperimentalPracticeTestSessionInput {
 	userId: string
 	targetQuestionCount?: number
+	durationMinutes?: number
 }
 
 interface ExperimentalPracticeTestRunInit {
 	sessionId: string
 	firstItem: ItemForRender
 	targetQuestionCount: number
+	durationMinutes: number
 }
 
 async function loadRecentExperimentalPracticeTestItemIds(
@@ -94,17 +101,7 @@ async function loadRecentExperimentalPracticeTestItemIds(
 	return ordered
 }
 
-async function selectRandomExperimentalMixedItems(input: {
-	limit: number
-	excludeIds?: ReadonlyArray<string>
-}): Promise<ReadonlyArray<ExperimentalMixedItemRow>> {
-	const conditions = [
-		eq(experimentalItems.auditStatus, "unaudited"),
-		isNull(experimentalItems.hiddenAtMs)
-	]
-	if (input.excludeIds !== undefined && input.excludeIds.length > 0) {
-		conditions.push(notInArray(experimentalItems.id, [...input.excludeIds]))
-	}
+async function loadEligibleExperimentalPracticeTestRows(): Promise<ReadonlyArray<ExperimentalMixedItemRow>> {
 	const result = await errors.try(
 		db
 			.select({
@@ -116,40 +113,21 @@ async function selectRandomExperimentalMixedItems(input: {
 				correctAnswer: experimentalItems.correctAnswer
 			})
 			.from(experimentalItems)
-			.where(and(...conditions))
-			.orderBy(sql`random()`)
-			.limit(input.limit)
-	)
-	if (result.error) {
-		logger.error(
-			{ error: result.error, limit: input.limit },
-			"selectRandomExperimentalMixedItems: query failed"
-		)
-		throw errors.wrap(result.error, "selectRandomExperimentalMixedItems")
-	}
-	return result.data
-}
-
-async function loadEligibleExperimentalSubTypeIds(): Promise<ReadonlyArray<string>> {
-	const result = await errors.try(
-		db
-			.select({ subTypeId: experimentalItems.subTypeId })
-			.from(experimentalItems)
 			.where(
 				and(
 					eq(experimentalItems.auditStatus, "unaudited"),
 					isNull(experimentalItems.hiddenAtMs)
 				)
 			)
-			.groupBy(experimentalItems.subTypeId)
 	)
 	if (result.error) {
-		logger.error({ error: result.error }, "loadEligibleExperimentalSubTypeIds: query failed")
-		throw errors.wrap(result.error, "loadEligibleExperimentalSubTypeIds")
+		logger.error(
+			{ error: result.error },
+			"loadEligibleExperimentalPracticeTestRows: query failed"
+		)
+		throw errors.wrap(result.error, "loadEligibleExperimentalPracticeTestRows")
 	}
-	return result.data.map(function mapRow(row) {
-		return row.subTypeId
-	})
+	return result.data
 }
 
 function mapExperimentalPracticeTestItemForRender(row: ExperimentalMixedItemRow): ItemForRender {
@@ -180,72 +158,41 @@ function mapExperimentalPracticeTestItemForRender(row: ExperimentalMixedItemRow)
 	}
 }
 
-function groupPracticeTestRowsBySubType(
-	rows: ReadonlyArray<ExperimentalMixedItemRow>
-): Map<string, ExperimentalMixedItemRow[]> {
-	const grouped = new Map<string, ExperimentalMixedItemRow[]>()
-	for (const row of rows) {
-		const existing = grouped.get(row.subTypeId)
-		if (existing === undefined) {
-			grouped.set(row.subTypeId, [row])
-			continue
-		}
-		existing.push(row)
-	}
-	return grouped
-}
-
-function takePracticeTestRoundRobinQueue(input: {
-	grouped: Map<string, ExperimentalMixedItemRow[]>
-	targetQuestionCount: number
-}): ReadonlyArray<ExperimentalMixedItemRow> {
-	const subTypeIds = [...input.grouped.keys()]
-	const queue: ExperimentalMixedItemRow[] = []
-	while (queue.length < input.targetQuestionCount) {
-		let insertedThisRound = false
-		for (const subTypeId of subTypeIds) {
-			const bucket = input.grouped.get(subTypeId)
-			const next = bucket?.shift()
-			if (next === undefined) continue
-			queue.push(next)
-			insertedThisRound = true
-			if (queue.length >= input.targetQuestionCount) break
-		}
-		if (!insertedThisRound) break
-	}
-	return queue
-}
-
-function buildPracticeTestQueue(input: {
-	baseRows: ReadonlyArray<ExperimentalMixedItemRow>
-	fallbackRows: ReadonlyArray<ExperimentalMixedItemRow>
-	targetQuestionCount: number
-}): ReadonlyArray<ExperimentalMixedItemRow> {
-	const grouped = groupPracticeTestRowsBySubType([
-		...input.baseRows,
-		...input.fallbackRows
-	])
-	return takePracticeTestRoundRobinQueue({
-		grouped,
-		targetQuestionCount: input.targetQuestionCount
-	})
+function countDistinctSubTypes(rows: ReadonlyArray<{ subTypeId: string }>): number {
+	return new Set(
+		rows.map(function mapRow(row) {
+			return row.subTypeId
+		})
+	).size
 }
 
 async function startExperimentalPracticeTestSession(
 	input: StartExperimentalPracticeTestSessionInput
 ): Promise<ExperimentalPracticeTestRunInit> {
-	const targetQuestionCount =
-		input.targetQuestionCount === undefined
-			? EXPERIMENTAL_PRACTICE_TEST_QUESTIONS
-			: input.targetQuestionCount
+	const primer = await loadExperimentalPracticeTestPrimerData()
+	const configResult = parseExperimentalPracticeTestConfig({
+		questionCount: input.targetQuestionCount,
+		durationMinutes: input.durationMinutes,
+		primer
+	})
+	if (!configResult.ok) {
+		logger.warn(
+			{ userId: input.userId, reason: configResult.reason },
+			"startExperimentalPracticeTestSession: invalid config"
+		)
+		throw errors.wrap(ErrExperimentalPracticeTestConfigInvalid, configResult.reason)
+	}
+	const targetQuestionCount = configResult.config.questionCount
+	const durationMinutes = configResult.config.durationMinutes
 	const recencyExcludedItemIds = await loadRecentExperimentalPracticeTestItemIds(
 		input.userId,
 		targetQuestionCount * 3
 	)
-	const eligibleSubTypeIds = await loadEligibleExperimentalSubTypeIds()
-	if (eligibleSubTypeIds.length < EXPERIMENTAL_PRACTICE_TEST_SUBTYPE_MINIMUM) {
+	const eligibleRows = await loadEligibleExperimentalPracticeTestRows()
+	const eligibleSubTypeCount = countDistinctSubTypes(eligibleRows)
+	if (eligibleSubTypeCount < EXPERIMENTAL_PRACTICE_TEST_SUBTYPE_MINIMUM) {
 		logger.warn(
-			{ userId: input.userId, eligibleSubTypeCount: eligibleSubTypeIds.length },
+			{ userId: input.userId, eligibleSubTypeCount },
 			"startExperimentalPracticeTestSession: not enough experimental subtypes"
 		)
 		throw errors.wrap(
@@ -253,56 +200,53 @@ async function startExperimentalPracticeTestSession(
 			"eligible experimental subtype count"
 		)
 	}
-	const baseRows = await selectRandomExperimentalMixedItems({
-		limit: targetQuestionCount,
-		excludeIds: recencyExcludedItemIds
+	const nowMs = Date.now()
+	const allocation = allocateExperimentalPracticeTestQueue({
+		sessionId: `experimental-practice-test:${input.userId}:${nowMs}`,
+		questionCount: targetQuestionCount,
+		rows: eligibleRows,
+		recencyExcludedIds: recencyExcludedItemIds
 	})
-	const selectedIds = new Set(
-		baseRows.map(function mapRow(row) {
-			return row.id
-		})
-	)
-	const fallbackRows =
-		baseRows.length >= targetQuestionCount
-			? []
-			: await selectRandomExperimentalMixedItems({
-					limit: targetQuestionCount,
-					excludeIds: [...selectedIds]
-				})
-	const queueRows = buildPracticeTestQueue({
-		baseRows,
-		fallbackRows,
-		targetQuestionCount
-	})
+	const queueRows = allocation.queue
 	if (queueRows.length < targetQuestionCount) {
 		logger.warn(
 			{
 				userId: input.userId,
 				targetQuestionCount,
-				selectedCount: queueRows.length
+				selectedCount: queueRows.length,
+				remainingEligibleCount: eligibleRows.length,
+				diagnostics: allocation.diagnostics
 			},
 			"startExperimentalPracticeTestSession: experimental pool too small"
 		)
 		throw errors.wrap(ErrExperimentalPracticeTestPoolTooSmall, "experimental item count")
 	}
-	const queueSubTypeIds = new Set(
-		queueRows.map(function mapRow(row) {
-			return row.subTypeId
-		})
-	)
-	if (queueSubTypeIds.size < EXPERIMENTAL_PRACTICE_TEST_SUBTYPE_MINIMUM) {
+	const queueSubTypeCount = countDistinctSubTypes(queueRows)
+	if (queueSubTypeCount < EXPERIMENTAL_PRACTICE_TEST_SUBTYPE_MINIMUM) {
 		logger.warn(
-			{ userId: input.userId, queueSubTypeCount: queueSubTypeIds.size },
+			{ userId: input.userId, queueSubTypeCount, diagnostics: allocation.diagnostics },
 			"startExperimentalPracticeTestSession: queue not mixed enough"
 		)
 		throw errors.wrap(ErrExperimentalPracticeTestPoolTooSmall, "mixed subtype queue")
 	}
+	logger.info(
+		{
+			userId: input.userId,
+			requestedQuestionCount: targetQuestionCount,
+			targetSubTypeDistribution: allocation.diagnostics.targetDistribution.subType,
+			targetDifficultyDistribution: allocation.diagnostics.targetDistribution.difficulty,
+			actualSubTypeDistribution: allocation.diagnostics.actualDistribution.subType,
+			actualDifficultyDistribution: allocation.diagnostics.actualDistribution.difficulty,
+			fallbackRedistributionUsed: allocation.diagnostics.fallbackRedistributionUsed,
+			recencyFallbackUsed: allocation.diagnostics.recencyFallbackUsed
+		},
+		"startExperimentalPracticeTestSession: queue composition"
+	)
 	const firstRow = queueRows[0]
 	if (firstRow === undefined) {
 		logger.error({ userId: input.userId }, "startExperimentalPracticeTestSession: first row missing")
 		throw errors.wrap(ErrExperimentalPracticeTestPoolTooSmall, "first queue item missing")
 	}
-	const nowMs = Date.now()
 	const insertResult = await errors.try(
 		db
 			.insert(experimentalSessions)
@@ -317,7 +261,8 @@ async function startExperimentalPracticeTestSession(
 					queueItemIds: queueRows.map(function mapRow(row) {
 						return row.id
 					}),
-					selectionStrategy: "preselected_random_v1"
+					selectionStrategy: "preselected_random_v1",
+					durationMinutes
 				}
 			})
 			.returning({ id: experimentalSessions.id })
@@ -340,12 +285,15 @@ async function startExperimentalPracticeTestSession(
 	return {
 		sessionId: sessionRow.id,
 		firstItem: mapExperimentalPracticeTestItemForRender(firstRow),
-		targetQuestionCount
+		targetQuestionCount,
+		durationMinutes
 	}
 }
 
 export type {
 	ExperimentalPracticeTestRunInit,
-	StartExperimentalPracticeTestSessionInput
+	StartExperimentalPracticeTestSessionInput,
+	ExperimentalPracticeTestDifficulty,
+	ExperimentalMixedItemRow
 }
 export { startExperimentalPracticeTestSession }

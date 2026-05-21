@@ -3,7 +3,7 @@ import { loadNavChrome } from "@/server/nav/chrome"
 import { loadExperimentalUserId } from "@/server/experimental/auth"
 import { loadExperimentalReviewPageData } from "@/server/experimental/review-data"
 import { ExperimentalPageFrame } from "@/components/experimental/experimental-page-frame"
-import { ExperimentalReviewList } from "@/components/experimental/experimental-review-list"
+import { ExperimentalReviewHistory } from "@/components/experimental/experimental-review-history"
 import type { NavChrome } from "@/server/nav/chrome"
 
 function Page() {
@@ -29,11 +29,11 @@ async function ReviewPageBody(props: {
 	return (
 		<ExperimentalPageFrame
 			chromePromise={props.chromePromise}
-			eyebrow="Session review list"
+			eyebrow="Session history"
 			title="Experimental Review"
-			description="MVP review shape is now in place: a list of completed experimental sessions at this route, with a linked session-detail page for each session. Optional item-level audits are submitted on that detail page."
+			description="Completed Experimental practice tests and drills, organized as a read-only history surface. Open any session to revisit answers, outcomes, and explanations without entering the audit workflow."
 		>
-			<ExperimentalReviewList sessions={data.sessions} />
+			<ExperimentalReviewHistory sessions={data.sessions} />
 		</ExperimentalPageFrame>
 	)
 }

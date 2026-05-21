@@ -1,24 +1,54 @@
+import * as errors from "@superbuilders/errors"
 import * as React from "react"
 import { ExperimentalPracticeTestRunContent } from "@/app/(app)/experimental/practice-test/run/content"
 import { ExperimentalDrillEmptyPane } from "@/components/experimental/experimental-drill-empty-pane"
 import { ExperimentalPageFrame } from "@/components/experimental/experimental-page-frame"
 import { loadExperimentalUserId } from "@/server/experimental/auth"
-import { loadExperimentalPracticeTestPrimerData } from "@/server/experimental/practice-test-data"
+import {
+	loadExperimentalPracticeTestPrimerData,
+	parseExperimentalPracticeTestConfig
+} from "@/server/experimental/practice-test-data"
 import { startExperimentalPracticeTestSession } from "@/server/experimental/practice-test-session"
 import { loadNavChrome } from "@/server/nav/chrome"
 
-async function loadRunState() {
-	const userId = await loadExperimentalUserId()
-	const primer = await loadExperimentalPracticeTestPrimerData()
-	if (!primer.readyToStart) {
-		return { kind: "empty" as const, primer, userId }
-	}
-	const init = await startExperimentalPracticeTestSession({ userId })
-	return { kind: "ready" as const, init, userId }
+interface PageProps {
+	searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-function Page() {
-	const runStatePromise = loadRunState()
+function firstValue(value: string | string[] | undefined): string | undefined {
+	if (Array.isArray(value)) return value[0]
+	return value
+}
+
+async function loadRunState(searchParamsPromise: Promise<Record<string, string | string[] | undefined>>) {
+	const [userId, primer, searchParams] = await Promise.all([
+		loadExperimentalUserId(),
+		loadExperimentalPracticeTestPrimerData(),
+		searchParamsPromise
+	])
+	const configResult = parseExperimentalPracticeTestConfig({
+		questionCount: firstValue(searchParams.questionCount),
+		durationMinutes: firstValue(searchParams.durationMinutes),
+		primer
+	})
+	if (!configResult.ok) {
+		return { kind: "empty" as const, primer, userId, reason: configResult.reason }
+	}
+	const initResult = await errors.try(
+		startExperimentalPracticeTestSession({
+			userId,
+			targetQuestionCount: configResult.config.questionCount,
+			durationMinutes: configResult.config.durationMinutes
+		})
+	)
+	if (initResult.error) {
+		return { kind: "empty" as const, primer, userId, reason: "The requested Experimental practice test could not be started with the current pool. Lower the question count or try again after refreshing the pool." }
+	}
+	return { kind: "ready" as const, init: initResult.data, userId }
+}
+
+function Page(props: PageProps) {
+	const runStatePromise = loadRunState(props.searchParams)
 	return (
 		<React.Suspense fallback={<RunSkeleton />}>
 			<ExperimentalPracticeTestRunGate runStatePromise={runStatePromise} />
@@ -37,11 +67,11 @@ async function ExperimentalPracticeTestRunGate(props: {
 				chromePromise={Promise.resolve(chrome)}
 				eyebrow="Experimental run unavailable"
 				title="Experimental Practice Test"
-				description="This mixed experimental route is live, but the experimental pool is still below the MVP threshold required to start a realistic practice-test session."
+				description="The requested Experimental run could not be started with the current pool. Adjust the requested settings on the primer page and try again."
 			>
 				<ExperimentalDrillEmptyPane
-					title="No Experimental practice test available yet"
-					body={`The current experimental pool has ${runState.primer.availableCount} eligible items across ${runState.primer.availableSubTypeCount} subtypes. The MVP mixed run needs at least ${runState.primer.minimumReadyCount} items across ${runState.primer.minimumSubTypeCount} subtypes before it can start.`}
+					title="No Experimental practice test available for this configuration"
+					body={runState.reason}
 				/>
 			</ExperimentalPageFrame>
 		)

@@ -66,6 +66,8 @@ async function endExperimentalDrillSessionAction(sessionId: string): Promise<voi
 	await endExperimentalSession(sessionId)
 	revalidatePath("/experimental/review")
 	revalidatePath(`/experimental/review/${sessionId}`)
+	revalidatePath("/experimental/audit")
+	revalidatePath(`/experimental/audit/${sessionId}`)
 }
 
 async function submitExperimentalPracticeTestAttempt(
@@ -90,6 +92,8 @@ async function endExperimentalPracticeTestSessionAction(sessionId: string): Prom
 	await endExperimentalSession(sessionId)
 	revalidatePath("/experimental/review")
 	revalidatePath(`/experimental/review/${sessionId}`)
+	revalidatePath("/experimental/audit")
+	revalidatePath(`/experimental/audit/${sessionId}`)
 }
 
 async function submitExperimentalItemAuditAction(
@@ -97,7 +101,8 @@ async function submitExperimentalItemAuditAction(
 ) {
 	const userId = await requireExperimentalUserId()
 	const savedAudit = await submitExperimentalItemAudit({ userId, audit: input })
-	revalidatePath(`/experimental/review/${input.experimentalSessionId}`)
+	revalidatePath("/experimental/audit")
+	revalidatePath(`/experimental/audit/${input.experimentalSessionId}`)
 	return savedAudit
 }
 
@@ -106,7 +111,8 @@ async function submitExperimentalItemProposalAction(
 ) {
 	const userId = await requireExperimentalUserId()
 	const savedProposal = await submitExperimentalItemProposal({ userId, proposal: input })
-	revalidatePath(`/experimental/review/${input.experimentalSessionId}`)
+	revalidatePath("/experimental/audit")
+	revalidatePath(`/experimental/audit/${input.experimentalSessionId}`)
 	return savedProposal
 }
 

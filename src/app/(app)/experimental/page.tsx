@@ -3,21 +3,30 @@ import { loadNavChrome } from "@/server/nav/chrome"
 import { loadExperimentalUserId } from "@/server/experimental/auth"
 import { ExperimentalPageFrame } from "@/components/experimental/experimental-page-frame"
 
-const CARDS: ReadonlyArray<{ href: "/experimental/practice-test" | "/experimental/drills" | "/experimental/review"; title: string; body: string }> = [
+const CARDS: ReadonlyArray<{
+	href: "/experimental/practice-test" | "/experimental/drills" | "/experimental/audit" | "/experimental/review"
+	title: string
+	body: string
+}> = [
 	{
 		href: "/experimental/practice-test",
 		title: "Experimental Practice Test",
-		body: "Read-only shell in this slice. Session start and run behavior land later."
+		body: "Configure question count and test length, then run a mixed experimental session that writes only to the Experimental tables."
 	},
 	{
 		href: "/experimental/drills",
 		title: "Experimental Drills",
-		body: "Read-only shell for the future subtype drill surface. No run paths are enabled yet."
+		body: "Subtype-specific drill runs stay isolated from canonical mastery and canonical practice-session history."
+	},
+	{
+		href: "/experimental/audit",
+		title: "Experimental Audit",
+		body: "Audit completed experimental sessions, submit structured feedback, and record edit proposals without mutating canonical practice data."
 	},
 	{
 		href: "/experimental/review",
 		title: "Experimental Review",
-		body: "Session-list and session-detail review shells are live and read-only. Audit writes come later."
+		body: "Browse experimental session history and open a read-only post-session review that mirrors the normal review/history flow."
 	}
 ]
 
@@ -31,9 +40,9 @@ function Page() {
 			chromePromise={chromePromise}
 			eyebrow="Parallel item pool"
 			title="Experimental"
-			description="A separate surface for unaudited questions. This slice adds the authenticated read-only shell only: no session start, no audit submission, and no admin moderation yet."
+			description="A separate authenticated surface for generated-question practice, review, and auditing. Experimental sessions stay isolated from canonical practice-session writes and canonical mastery."
 		>
-			<div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+			<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
 				{CARDS.map(function renderCard(card) {
 					return (
 						<Link
