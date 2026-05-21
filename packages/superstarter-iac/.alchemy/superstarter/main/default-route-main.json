@@ -1,0 +1,35 @@
+{
+  "kind": "AWS::EC2::Route",
+  "id": "default-route-main",
+  "fqn": "superstarter/main/default-route-main",
+  "seq": 6,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::Route",
+    "Symbol(alchemy::ResourceID)": "default-route-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/default-route-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 6,
+    "typeName": "AWS::EC2::Route",
+    "desiredState": {
+      "RouteTableId": "rtb-074d21cfdafdc2b93",
+      "DestinationCidrBlock": "0.0.0.0/0",
+      "GatewayId": "igw-07c290d531e1b96b3"
+    },
+    "id": "rtb-074d21cfdafdc2b93|0.0.0.0/0",
+    "createdAt": 1778539113426,
+    "RouteTableId": "rtb-074d21cfdafdc2b93",
+    "CidrBlock": "0.0.0.0/0",
+    "DestinationCidrBlock": "0.0.0.0/0",
+    "GatewayId": "igw-07c290d531e1b96b3",
+    "VpcEndpointId": "igw-07c290d531e1b96b3"
+  },
+  "props": {
+    "RouteTableId": "rtb-074d21cfdafdc2b93",
+    "DestinationCidrBlock": "0.0.0.0/0",
+    "GatewayId": "igw-07c290d531e1b96b3"
+  }
+}

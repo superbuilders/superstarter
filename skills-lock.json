@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "skills": {
+    "adapt": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/adapt/SKILL.md",
+      "computedHash": "c5a718ae83c813ce3eeeea22f9b8f7b16a727e8b866d890c36684fd3ef936a90"
+    },
+    "alpha-style": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/alpha-style/SKILL.md",
+      "computedHash": "b7bbd1f275d4899034f64500316850cfa4602b8caedcaacd0444092fc7084856"
+    },
+    "animate": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/animate/SKILL.md",
+      "computedHash": "54dacc0812e50a84e682db76caf9f20b79c0a774c503155e6b6b86ed593cfa73"
+    },
+    "arrange": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/arrange/SKILL.md",
+      "computedHash": "cae2e3374977455bd085104ae6b0e6f1c97ad554fe9ae6ac7ed9685b1a6f3030"
+    },
+    "audit": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/audit/SKILL.md",
+      "computedHash": "5882c723d5bb31a68f142896acd79c556d321bbdaf6096e84d8eeb2d390f06bc"
+    },
+    "bolder": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/bolder/SKILL.md",
+      "computedHash": "fbba5d67540fe6e4b19a8e25562ed5cfe152afb8c8cb004ab2ceb7669871c407"
+    },
+    "clarify": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/clarify/SKILL.md",
+      "computedHash": "4b456ce044a509bd8454801dd66fb5b679294b9827a143764851beba81a58b60"
+    },
+    "colorize": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/colorize/SKILL.md",
+      "computedHash": "fcd9cf8c64927e68f879568bca6c1810452eb2588269715a12483e5d1aef818e"
+    },
+    "critique": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/critique/SKILL.md",
+      "computedHash": "f3856614158fbaac47fbe3cc11f02d5f89543374f859e3a946dcc91e6f4be102"
+    },
+    "delight": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/delight/SKILL.md",
+      "computedHash": "8eab8ea5c653703fdb2413e93f535923dc9990e8ae33e357d0c7004cdcfa24ae"
+    },
+    "deploy-to-vercel": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/deploy-to-vercel/SKILL.md",
+      "computedHash": "03e0eaaa9bf13ba1e7ffa387f5893de6f324c0868c627001f179395a8feaa7c9"
+    },
+    "distill": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/distill/SKILL.md",
+      "computedHash": "7fa0cde760eb429a7eacaa6830468ca8aeb34d6d5ebd97e003bf671d6b455adb"
+    },
+    "extract": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/extract/SKILL.md",
+      "computedHash": "1bbe30b5be73a86971f6bccb37daae84aaafceaa6d23429d6a3a0442378ac4ec"
+    },
+    "harden": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/harden/SKILL.md",
+      "computedHash": "f8ce420b3c78b90707704122264da76514c793ac0e12fb9540ace68d257c231c"
+    },
+    "nextjs": {
+      "source": "vercel-labs/vercel-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/nextjs/SKILL.md",
+      "computedHash": "d3a48eada4dbae95856d643a0c9c54a38974ee7896a4d34f93aead13d26c343a"
+    },
+    "normalize": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/normalize/SKILL.md",
+      "computedHash": "d0587a64abb649a901dfb80f285f56fb8752c2b64aa4b49e01987c050bebb49e"
+    },
+    "onboard": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/onboard/SKILL.md",
+      "computedHash": "83aa8405edd013514d1b0e7e0c24e7e184641fb4ee4ab20a977f819556e2ff47"
+    },
+    "optimize": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/optimize/SKILL.md",
+      "computedHash": "f7adc2a2e540a590978b567d82985062bfada83385f5ad5d50b13a127cdc96d6"
+    },
+    "overdrive": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/overdrive/SKILL.md",
+      "computedHash": "6e33292703a499ad40cecbf7a4a4cffa7db8b2c07cb0b955636e8ed65974a5fb"
+    },
+    "polish": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/polish/SKILL.md",
+      "computedHash": "ed98ac98df846476312f9d1f932c20af672898307101c38e6b4cc62e6b8fd1ce"
+    },
+    "postgresql-code-review": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/postgresql-code-review/SKILL.md",
+      "computedHash": "1167ec9449aa866e16bc7449e05ab4d391cdce95a0b0c5e1155b793160471eb5"
+    },
+    "postgresql-optimization": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/postgresql-optimization/SKILL.md",
+      "computedHash": "8022448de70ba9a485e3b5bce34c5bbc644f93eb39b68431c9f7dabcf03aeb09"
+    },
+    "postgresql-table-design": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/database-design/skills/postgresql/SKILL.md",
+      "computedHash": "dcace78e5cef7d8dce8ffef7ebee146e6c83a438aa4cf80bf502730e870c02d4"
+    },
+    "quieter": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/quieter/SKILL.md",
+      "computedHash": "422ea8f50b594768a335d85eee743a9e373dbb40476a24254ce3e28d39fa5385"
+    },
+    "teach-alpha-style": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/teach-alpha-style/SKILL.md",
+      "computedHash": "cc19a22254c8076af395a58874d268a4d47046a534ee51f87ad0f44e8b06af09"
+    },
+    "typeset": {
+      "source": "PSkinnerTech/alpha-style",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/typeset/SKILL.md",
+      "computedHash": "9ad36a35e3e49515edb2b9f0b8b6ffefe7c7a8947d431271960372e606a8974e"
+    },
+    "vercel-cli-with-tokens": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/vercel-cli-with-tokens/SKILL.md",
+      "computedHash": "eb16b20dcbe6ce51e0372083d624e0847af1b09487ec99249227d5a8eddebfc0"
+    },
+    "vercel-composition-patterns": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/composition-patterns/SKILL.md",
+      "computedHash": "575757e3e25761c8c562d6e395d29f0b76c98b1273c0bd72d88e6ab1bc9c7d42"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212"
+    },
+    "vercel-react-native-skills": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-native-skills/SKILL.md",
+      "computedHash": "41d24eafa7c3d82e270439808f7cfbc4d51aeb2d14f2809a2267c16275784d06"
+    },
+    "vercel-react-view-transitions": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-view-transitions/SKILL.md",
+      "computedHash": "c8952fc9127fa0564d0cb71dccb4215a5608ac933b5831104f09173a97a46f85"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    }
+  }
+}

@@ -1,0 +1,76 @@
+// /full-length/configure — full-length test configure pane.
+// docs/plans/phase5-full-length-test.md §5 + Q12.6.
+//
+// Server component, NOT async per rules/rsc-data-fetching-patterns.md.
+// Bare primer pane (no length-picker, no sub-type-picker — v1 ships
+// fixed at 50 questions × 15 minutes cross-sub-type-interleaved per
+// PRD §4.5). The page is a thin commitment-confirmation layer: the
+// user clicks a CTA, lands here, reads the test framing, then
+// explicitly chooses to start.
+//
+// Carries the dashboard-style <TopNav> chrome above the configure
+// content so the surface reads as a peer of the dashboard / review /
+// lessons / stats routes.
+//
+// Inherits the (app) layout's auth + diagnostic-completed gate; full-
+// length is post-onboarding by definition (cannot be reached before
+// the diagnostic completes).
+
+import { redirect } from "next/navigation"
+import * as React from "react"
+import { auth } from "@/auth"
+import { FocusTutorialBeforePrimerGate } from "@/components/focus-shell/focus-shell"
+import { WoopWizard } from "@/components/full-length/woop-wizard"
+import { PageNav } from "@/components/nav/page-nav"
+import type { NavChrome } from "@/server/nav/chrome"
+import { loadNavChrome } from "@/server/nav/chrome"
+
+async function loadUserId(): Promise<string> {
+	const session = await auth()
+	if (!session?.user?.id) {
+		redirect("/login")
+	}
+	return session.user.id
+}
+
+function Page() {
+	const userIdPromise = loadUserId()
+	const chromePromise = userIdPromise.then(function load(userId) {
+		return loadNavChrome(userId)
+	})
+	return (
+		<React.Suspense fallback={null}>
+			<ConfiguredPageBody chromePromise={chromePromise} userIdPromise={userIdPromise} />
+		</React.Suspense>
+		)
+}
+
+async function ConfiguredPageBody(props: {
+	chromePromise: Promise<NavChrome>
+	userIdPromise: Promise<string>
+}) {
+	const userId = await props.userIdPromise
+	return (
+		<FocusTutorialBeforePrimerGate userKey={userId}>
+			<div className="min-h-screen bg-bg text-text-1">
+				<React.Suspense fallback={null}>
+					<PageNav chromePromise={props.chromePromise} />
+				</React.Suspense>
+				<main className="mx-auto max-w-[1100px] px-7 pb-12">
+					<header className="mb-6 flex flex-col gap-1 border-border-soft border-b pt-6 pb-4">
+						<h1 className="font-medium font-serif text-2xl text-text-1 tracking-tight">
+							Full-length test
+						</h1>
+						<p className="max-w-[60ch] text-sm text-text-2">
+							50 questions in 15 minutes. Real-test difficulty mix, randomized across verbal and
+							numerical sub-types. Lands on the post-session review on completion or timeout.
+						</p>
+					</header>
+					<WoopWizard runHref="/full-length/run" startLabel="Start full-length test" />
+				</main>
+			</div>
+		</FocusTutorialBeforePrimerGate>
+	)
+}
+
+export default Page

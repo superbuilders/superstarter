@@ -1,9 +1,22 @@
 pre-commit:
   parallel: false
   commands:
-    format:
-      run: bun run format
-      stage_fixed: true
+    # Format step intentionally NOT in pre-commit. Two issues with the
+    # current config make it unsafe to run on every commit:
+    # 1. fmt.ts --strip-comments has a parser bug that mangles
+    #    identifiers adjacent to stripped comments — the `_exhaustive`
+    #    suffix gets joined to closing braces of `else { ... }` blocks
+    #    in if/else-if/else chains with `never` exhaustiveness patterns.
+    #    Concrete evidence + a tracking artifact at
+    #    scripts/dev/fmt-bug-repro.ts.
+    # 2. The format step's scope is unbounded. `bun run format` invokes
+    #    `scripts/dev/fmt.ts` which uses `getFilesToCheck()` (entire
+    #    tsconfig include set) instead of `{staged_files}`. Combined
+    #    with `stage_fixed: true`, every commit would auto-stage ~96
+    #    unrelated files.
+    # Both issues are pre-existing on `main`, not introduced by this
+    # commit. Re-enable when both are addressed; tracked for Phase 4 prep.
+    # `bun run format` remains available as a manual command.
     lint:
       run: bun run lint
     typecheck:

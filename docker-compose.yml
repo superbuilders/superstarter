@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: 18seconds-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      # pg18+ uses major-versioned subdirs, so mount at /var/lib/postgresql
+      # rather than /var/lib/postgresql/data (the old pg≤17 convention).
+      - 18seconds_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  18seconds_pgdata:

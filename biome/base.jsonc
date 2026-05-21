@@ -1,0 +1,167 @@
+{
+	"$schema": "../node_modules/@biomejs/biome/configuration_schema.json",
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"files": {
+		"ignoreUnknown": false,
+		"includes": [
+			"**",
+			"!**/src/components/ui",
+			"!!node_modules",
+			"!!.next",
+			"!!.vercel",
+			"!!out",
+			// Plugin-emitted by @workflow/next, regenerates on `bun run dev`,
+			// gitignored. Mirrors .gitignore — lint scope follows ownership scope.
+			// Phase 4's added workflow stages will emit additional files into this
+			// path; the wildcard covers them.
+			"!src/app/.well-known/workflow/**",
+			// Claude Code harness writes tracking dashboards / token logs here,
+			// gitignored. Plugin-owned, regenerates on each session — same
+			// rationale as the workflow ignore above.
+			"!.claude/tracking/**",
+			// Self-declared EXEMPT files (header: "EXEMPT FROM THE PROJECT RULESET").
+			// These files predate the current ruleset and are CI-irrelevant one-shot
+			// OCR pipeline tooling. The EXEMPT header is the contract; this list
+			// mirrors it exactly. New files in scripts/_lib/ written under the
+			// current ruleset are NOT auto-exempt — they must be added to this list
+			// explicitly to be ignored, AND must carry the EXEMPT header. The two
+			// requirements have to match: header without ignore = lint failure;
+			// ignore without header = drift.
+			"!scripts/_lib/anthropic.ts",
+			"!scripts/_lib/explain.ts",
+			"!scripts/_lib/extract.ts",
+			"!scripts/_lib/logs.ts",
+			"!scripts/_lib/sample.ts",
+			"!scripts/_lib/solve-verify.ts",
+			"!scripts/backfill-missing-embeddings.ts",
+			"!scripts/copy-sounds-to-public.ts",
+			"!scripts/generate-explanations.ts",
+			"!scripts/import-questions.ts",
+			"!scripts/migrate-opaque-option-ids.ts",
+			"!scripts/regenerate-explanations.ts",
+			// Offline practice app (offline-app round, C2). A standalone
+			// single-file vanilla-JS artifact in the static-assets dir —
+			// intentionally NOT application source. It uses a module IIFE,
+			// forEach, and other patterns the TS-app ruleset bans by design,
+			// and the C2 design brief itself specifies the IIFE module
+			// pattern. Carries the "EXEMPT FROM THE PROJECT RULESET" header
+			// per the contract above. Ships as a static file: no build step,
+			// never imported by the app.
+			"!public/offline-app/index.html"
+		],
+		"maxSize": 5000000
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab",
+		"indentWidth": 2,
+		"lineWidth": 100
+	},
+	"assist": { "actions": { "source": { "organizeImports": "on" } } },
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"suspicious": {
+				"noConsole": {
+					"level": "error",
+					"fix": "unsafe"
+				},
+				"noArrayIndexKey": "off",
+				"noExplicitAny": "error",
+				"noEvolvingTypes": "error",
+				"noReactForwardRef": "error"
+			},
+			"complexity": {
+				"noForEach": {
+					"level": "error"
+				},
+				"noExcessiveCognitiveComplexity": {
+					"level": "error",
+					"options": {
+						"maxAllowedComplexity": 15
+					}
+				},
+				"useOptionalChain": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"useLiteralKeys": {
+					"level": "error",
+					"fix": "safe"
+				}
+			},
+			"recommended": true,
+			"correctness": {
+				"noUnusedImports": "error",
+				"noUnusedFunctionParameters": "error"
+			},
+			"nursery": {
+				"useSortedClasses": {
+					"level": "error",
+					"fix": "safe"
+				}
+			},
+			"style": {
+				"useThrowOnlyError": "error",
+				"useExportsLast": "error",
+				"useExplicitLengthCheck": {
+					"level": "error",
+					"fix": "unsafe"
+				},
+				"noProcessEnv": "error",
+				"noNonNullAssertion": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"useConst": "off",
+				"noUnusedTemplateLiteral": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"useTemplate": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"noUselessElse": {
+					"level": "error",
+					"fix": "safe"
+				},
+				"noParameterAssign": "error",
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSelfClosingElements": "error",
+				"useSingleVarDeclarator": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"useNodejsImportProtocol": {
+					"level": "error",
+					"fix": "safe"
+				}
+			},
+			"a11y": {
+				"useKeyWithClickEvents": "off"
+			},
+			"performance": {
+				"noBarrelFile": "error",
+				"noImgElement": "error"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double",
+			"semicolons": "asNeeded",
+			"trailingCommas": "none"
+		}
+	},
+	"json": {
+		"formatter": {
+			"trailingCommas": "none"
+		}
+	}
+}

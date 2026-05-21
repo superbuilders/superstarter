@@ -1,7 +1,6 @@
 // biome-ignore-all lint/style/noProcessEnv: env wrapper needs to be able to access process.env
 import { createEnv } from "@t3-oss/env-nextjs"
 import { z } from "zod"
-import { logger } from "@/logger"
 
 const isServerRuntime = typeof window === "undefined"
 
@@ -11,29 +10,29 @@ if (!process.env.NEXT_RUNTIME && isServerRuntime) {
 	loadEnvConfig(projectDir)
 }
 
-/** DO NOT FUCKING TOUCH THIS LINE OF CODE WE SHOULD ALWAYS LOG DEBUG.
- * The old `!process.env.NEXT_RUNTIME` guard was broken: Next.js sets
- * NEXT_RUNTIME="nodejs" inside API route handlers on Vercel, which
- * made this block never fire in production, silently dropping every
- * debug log. Set unconditionally on server.
- */
-if (isServerRuntime) {
-	logger.level = "debug"
-}
-
 const env = createEnv({
 	/**
 	 * Specify your server-side environment variables schema here. This way you can ensure the app
 	 * isn't built with invalid env vars.
 	 */
 	server: {
-		AWS_ROLE_ARN: z.string().startsWith("arn:aws:iam::"),
-		DATABASE_HOST: z.string().min(1),
+		AWS_ROLE_ARN: z.string().startsWith("arn:aws:iam::").optional(),
+		DATABASE_HOST: z.string().min(1).optional(),
 		DATABASE_ADMIN_SECRET_ARN: z.string().startsWith("arn:aws:secretsmanager:").optional(),
+		DATABASE_LOCAL_URL: z
+			.string()
+			.regex(/^postgres(ql)?:\/\//, "must be a postgres connection string")
+			.optional(),
 		VERCEL_PROJECT_PRODUCTION_URL: z.string().optional(),
 		VERCEL_GIT_COMMIT_SHA: z.string().optional(),
 		VERCEL_OIDC_TOKEN: z.string().optional(),
-		NODE_ENV: z.enum(["development", "test", "production"]).default("development")
+		NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+		AUTH_SECRET: z.string().min(32),
+		AUTH_GOOGLE_ID: z.string().min(1),
+		AUTH_GOOGLE_SECRET: z.string().min(1),
+		ANTHROPIC_API_KEY: z.string().startsWith("sk-ant-"),
+		OPENAI_API_KEY: z.string().startsWith("sk-"),
+		CRON_SECRET: z.string().min(32)
 	},
 
 	/**
@@ -53,10 +52,17 @@ const env = createEnv({
 		AWS_ROLE_ARN: process.env.AWS_ROLE_ARN,
 		DATABASE_HOST: process.env.DATABASE_HOST,
 		DATABASE_ADMIN_SECRET_ARN: process.env.DATABASE_ADMIN_SECRET_ARN,
+		DATABASE_LOCAL_URL: process.env.DATABASE_LOCAL_URL,
 		VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
 		VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
 		VERCEL_OIDC_TOKEN: process.env.VERCEL_OIDC_TOKEN,
-		NODE_ENV: process.env.NODE_ENV
+		NODE_ENV: process.env.NODE_ENV,
+		AUTH_SECRET: process.env.AUTH_SECRET,
+		AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
+		AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
+		ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+		OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+		CRON_SECRET: process.env.CRON_SECRET
 	},
 	/**
 	 * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

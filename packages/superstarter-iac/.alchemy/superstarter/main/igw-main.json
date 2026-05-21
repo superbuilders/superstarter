@@ -1,0 +1,55 @@
+{
+  "kind": "AWS::EC2::InternetGateway",
+  "id": "igw-main",
+  "fqn": "superstarter/main/igw-main",
+  "seq": 3,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::EC2::InternetGateway",
+    "Symbol(alchemy::ResourceID)": "igw-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/igw-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 3,
+    "typeName": "AWS::EC2::InternetGateway",
+    "desiredState": {
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "igw-07c290d531e1b96b3",
+    "createdAt": 1778539098736,
+    "InternetGatewayId": "igw-07c290d531e1b96b3",
+    "Tags": [
+      {
+        "Value": "main",
+        "Key": "Stage"
+      },
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      }
+    ]
+  },
+  "props": {
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

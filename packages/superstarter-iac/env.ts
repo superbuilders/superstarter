@@ -1,5 +1,4 @@
 // biome-ignore-all lint/style/noProcessEnv: iac env wrapper needs direct process.env access
-
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import * as errors from "@superbuilders/errors"
@@ -18,6 +17,7 @@ const REQUIRED_IN_ENV_LOCAL = ["ALCHEMY_PASSWORD", "VERCEL_TEAM_SLUG"] as const
 
 if (!process.env.SKIP_ENV_VALIDATION) {
 	const envLocalPath = join(process.cwd(), ".env.local")
+
 	if (!existsSync(envLocalPath)) {
 		logger.error({ path: envLocalPath }, ".env.local missing — refusing to run")
 		throw errors.new(
@@ -47,7 +47,15 @@ const EnvSchema = z.object({
 	AWS_REGION: z.literal("us-east-1").default("us-east-1"),
 	VERCEL_TEAM_SLUG: z.string().min(1),
 	VERCEL_PROJECT_NAME: z.string().min(1).default("superstarter"),
-	ALCHEMY_PASSWORD: z.string().min(32)
+	ALCHEMY_PASSWORD: z.string().min(32),
+	// Optional override: when set, identity module skips the alchemy
+	// CloudControl-based OIDC provider creation (currently broken with
+	// "InternalFailure" for AWS::IAM::OIDCProvider in us-east-1) and uses
+	// this pre-existing ARN. Create via:
+	//   aws iam create-open-id-connect-provider --url ... --client-id-list ... --thumbprint-list ...
+	// Drop this var (and delete the manual provider via aws iam delete-open-id-connect-provider)
+	// once CloudControl is fixed to revert to alchemy-managed OIDC.
+	EXISTING_OIDC_PROVIDER_ARN: z.string().startsWith("arn:aws:iam::").optional()
 })
 
 const parseResult = EnvSchema.safeParse(process.env)

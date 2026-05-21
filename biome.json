@@ -1,6 +1,6 @@
 {
 	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-	"extends": ["./biome/base.json"],
+	"extends": ["./biome/base.jsonc"],
 	"root": true,
 	"plugins": [
 		"./gritql/no-as-type-assertion.grit",

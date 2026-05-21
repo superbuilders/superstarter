@@ -5,7 +5,6 @@ import "@/env"
 const config = {
 	reactStrictMode: true,
 	typedRoutes: true,
-	cacheComponents: true,
 	serverExternalPackages: ["pg", "pino", "pino-pretty"],
 	images: {
 		remotePatterns: [

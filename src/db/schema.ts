@@ -1,9 +1,47 @@
 import type { ExtractTablesWithRelations } from "drizzle-orm"
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core"
-import * as coreTodosSchema from "@/db/schemas/core/todos"
+import * as authAccountsSchema from "@/db/schemas/auth/accounts"
+import * as authSessionsSchema from "@/db/schemas/auth/sessions"
+import * as authUsersSchema from "@/db/schemas/auth/users"
+import * as authVerificationTokensSchema from "@/db/schemas/auth/verification_tokens"
+import * as catalogItemAdminActionsSchema from "@/db/schemas/catalog/item-admin-actions"
+import * as catalogItemUserReportsSchema from "@/db/schemas/catalog/item-user-reports"
+import * as catalogItemsSchema from "@/db/schemas/catalog/items"
+import * as catalogStrategiesSchema from "@/db/schemas/catalog/strategies"
+import * as catalogSubTypesSchema from "@/db/schemas/catalog/sub-types"
+import * as experimentalExperimentalAttemptsSchema from "@/db/schemas/experimental/experimental-attempts"
+import * as experimentalExperimentalItemsSchema from "@/db/schemas/experimental/experimental-items"
+import * as experimentalExperimentalSessionsSchema from "@/db/schemas/experimental/experimental-sessions"
+import * as experimentalItemAuditsSchema from "@/db/schemas/experimental/item-audits"
+import * as experimentalItemEditProposalsSchema from "@/db/schemas/experimental/item-edit-proposals"
+import * as experimentalItemRevisionDecisionsSchema from "@/db/schemas/experimental/item-revision-decisions"
+import * as opsCandidatePromotionLogSchema from "@/db/schemas/ops/candidate-promotion-log"
+import * as practiceAttemptsSchema from "@/db/schemas/practice/attempts"
+import * as practiceMasteryStateSchema from "@/db/schemas/practice/mastery-state"
+import * as practicePracticeSessionsSchema from "@/db/schemas/practice/practice-sessions"
+import * as practiceUserSubTypeBeltsSchema from "@/db/schemas/practice/user-sub-type-belts"
 
 const dbSchema = {
-	...coreTodosSchema
+	...authUsersSchema,
+	...authAccountsSchema,
+	...authSessionsSchema,
+	...authVerificationTokensSchema,
+	...catalogSubTypesSchema,
+	...catalogStrategiesSchema,
+	...catalogItemsSchema,
+	...catalogItemAdminActionsSchema,
+	...experimentalExperimentalItemsSchema,
+	...experimentalExperimentalSessionsSchema,
+	...experimentalExperimentalAttemptsSchema,
+	...experimentalItemAuditsSchema,
+	...experimentalItemEditProposalsSchema,
+	...experimentalItemRevisionDecisionsSchema,
+	...catalogItemUserReportsSchema,
+	...practicePracticeSessionsSchema,
+	...practiceAttemptsSchema,
+	...practiceMasteryStateSchema,
+	...practiceUserSubTypeBeltsSchema,
+	...opsCandidatePromotionLogSchema
 }
 
 type DbSchema = typeof dbSchema

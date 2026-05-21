@@ -41,6 +41,26 @@ function isTypeScriptFile(f: string): boolean {
 	return false
 }
 
+// Self-declared EXEMPT files (header: "EXEMPT FROM THE PROJECT RULESET").
+// MUST be kept in sync with biome/base.jsonc's includes ignore block.
+// Both biome and super-lint enforce the same exemption contract: the file
+// must (a) carry the EXEMPT header and (b) appear in this list AND in the
+// biome ignore. New files in scripts/_lib/ written under the current
+// ruleset are NOT auto-exempt — they must be added here explicitly.
+const EXEMPT_PATHS: ReadonlyArray<string> = [
+	"scripts/_lib/anthropic.ts",
+	"scripts/_lib/explain.ts",
+	"scripts/_lib/extract.ts",
+	"scripts/_lib/logs.ts",
+	"scripts/_lib/sample.ts",
+	"scripts/_lib/solve-verify.ts",
+	"scripts/backfill-missing-embeddings.ts",
+	"scripts/generate-explanations.ts",
+	"scripts/import-questions.ts",
+	"scripts/migrate-opaque-option-ids.ts",
+	"scripts/regenerate-explanations.ts"
+]
+
 function isSkippedPath(fileName: string): boolean {
 	if (fileName.includes("node_modules")) {
 		return true
@@ -50,6 +70,11 @@ function isSkippedPath(fileName: string): boolean {
 	}
 	if (fileName.includes("src/components/ui")) {
 		return true
+	}
+	for (const exempt of EXEMPT_PATHS) {
+		if (fileName.endsWith(`/${exempt}`)) {
+			return true
+		}
 	}
 	return false
 }

@@ -104,3 +104,33 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## Project facts
+
+Stable cross-round metadata. Add new entries here when they emerge.
+
+### Identity mapping
+
+- Vercel username: `leonardiwata-2680`
+- GitHub username: `ryoiwata`
+- These are the same person.
+- Banked at end-session-perf C4 housekeeping (commit `79dee59`), promoted to durable cross-round home at offline-app C1.
+
+### Public route carve-outs
+
+`src/proxy.ts` `PUBLIC_PREFIXES` exempts these paths from the NextAuth proxy redirect:
+- `/api/auth`, `/login` — auth machinery.
+- `/api/health`, `/api/cron`, `/api/admin` — operational endpoints.
+- `/offline-app` — cohort-distribution path for the standalone offline practice app. Intentionally public; nothing sensitive belongs under this prefix.
+
+### Deployment mechanism
+
+This project has **no GitHub → Vercel auto-deploy integration**. Pushing to `main` on GitHub does **not** trigger a Vercel deployment. Production deploys are manual:
+
+- From the repo: `vercel --prod` (or `vercel --prod --no-wait` for non-blocking)
+- Promote a preview to prod: `vercel promote <deployment-id> --yes`
+- Via Vercel dashboard
+
+All deployments in project history are authored by `leonardiwata-2680` via CLI or dashboard. Plan accordingly: a merge to `main` is not a prod release until a manual deploy follows.
+
+Banked at offline-app C4-finalize (this commit) after C4's assumed auto-deploy did not fire.

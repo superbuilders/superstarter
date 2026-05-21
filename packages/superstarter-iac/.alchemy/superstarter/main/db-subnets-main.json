@@ -1,0 +1,72 @@
+{
+  "kind": "AWS::RDS::DBSubnetGroup",
+  "id": "db-subnets-main",
+  "fqn": "superstarter/main/db-subnets-main",
+  "seq": 11,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::RDS::DBSubnetGroup",
+    "Symbol(alchemy::ResourceID)": "db-subnets-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/db-subnets-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 11,
+    "typeName": "AWS::RDS::DBSubnetGroup",
+    "desiredState": {
+      "DBSubnetGroupName": "superstarter-main-db-subnets",
+      "DBSubnetGroupDescription": "superstarter-main postgres subnet group",
+      "SubnetIds": [
+        "subnet-081f91ebd7150735f",
+        "subnet-00b5fc0534d209e31"
+      ],
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "superstarter-main-db-subnets",
+    "createdAt": 1778541613068,
+    "DBSubnetGroupName": "superstarter-main-db-subnets",
+    "DBSubnetGroupDescription": "superstarter-main postgres subnet group",
+    "SubnetIds": [
+      "subnet-081f91ebd7150735f",
+      "subnet-00b5fc0534d209e31"
+    ],
+    "Tags": [
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      },
+      {
+        "Value": "main",
+        "Key": "Stage"
+      }
+    ]
+  },
+  "props": {
+    "DBSubnetGroupName": "superstarter-main-db-subnets",
+    "DBSubnetGroupDescription": "superstarter-main postgres subnet group",
+    "SubnetIds": [
+      "subnet-081f91ebd7150735f",
+      "subnet-00b5fc0534d209e31"
+    ],
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

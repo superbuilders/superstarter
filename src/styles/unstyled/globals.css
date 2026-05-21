@@ -5,72 +5,205 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.145 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.145 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.97 0 0);
-	--secondary-foreground: oklch(0.205 0 0);
-	--muted: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
+	/*
+	 * Layer-A foundation tokens — Alpha-tinted retrofit (Round 2 commit 2,
+	 * 2026-05-09). Hue 270, chroma 0.005-0.012 per ALPHA_DESIGN.md §3
+	 * tinted-neutrals canon and SPEC §13 Token architecture (the Layer-A
+	 * retrofit subset). Foreground/background pair lifts to ~19:1; muted-
+	 * foreground retrofit pairs the chroma bump with a lightness drop
+	 * (0.556 → 0.45) so contrast against `--background` reaches ~7.2:1
+	 * and against `--muted` reaches ~6.8:1, both AAA-grade — closes the
+	 * Round-1 §8 residual #10 (system-level sub-AA on `text-muted-
+	 * foreground` consumers per audit doc §B.1). Chart tokens (--chart-1..5
+	 * at lines 103-107) are NOT retrofitted; they're shadcn's blue-chart
+	 * palette and already chromatic. `--destructive` stays chromatic red
+	 * (button/border-grade per latency-summary.tsx:178-181 + audit doc §A.3).
+	 */
+	--background: oklch(0.99 0.005 270);
+	--foreground: oklch(0.145 0.012 270);
+	--card: oklch(0.99 0.005 270);
+	--card-foreground: oklch(0.145 0.012 270);
+	--popover: oklch(0.99 0.005 270);
+	--popover-foreground: oklch(0.145 0.012 270);
+	--primary: oklch(0.205 0.012 270);
+	--primary-foreground: oklch(0.985 0.005 270);
+	--secondary: oklch(0.97 0.008 270);
+	--secondary-foreground: oklch(0.205 0.012 270);
+	--muted: oklch(0.97 0.008 270);
+	--muted-foreground: oklch(0.45 0.012 270);
+	--accent: oklch(0.97 0.008 270);
+	--accent-foreground: oklch(0.205 0.012 270);
 	--destructive: oklch(0.58 0.22 27);
-	--border: oklch(0.922 0 0);
-	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
+	--border: oklch(0.92 0.008 270);
+	--input: oklch(0.92 0.008 270);
+	--ring: oklch(0.708 0.012 270);
+	/*
+	 * Belt-indicator color tokens (Phase 5 sub-phase 5 commit 3).
+	 * Used only by <BeltIndicator> for the medium / hard belt
+	 * colors. White / black belts reuse existing tokens (--card,
+	 * --foreground). Per plan §6.3 the brown token was the only
+	 * originally-anticipated addition; the audit-against-actual-
+	 * artifact pattern (SPEC §6.14.18) surfaced that the
+	 * "established Alpha Style accent blue" referenced by plan
+	 * §5.2 does not exist as a structural token (closest blue is
+	 * --chart-2, which is chart-namespaced and would leak chart
+	 * semantics into the belt domain). Belt-namespaced tokens
+	 * make the indicator's color domain explicit. Both stay
+	 * single-occurrence (used only in <BeltIndicator>); below the
+	 * .alpha-style.md "below-3 systemic-token" threshold.
+	 */
+	--belt-blue: oklch(0.55 0.16 245);
+	--belt-brown: oklch(0.4 0.07 50);
+	/*
+	 * Dashboard tokens (Dashboard PRD §8). Additive layer on top of the
+	 * existing shadcn neutrals + sub-phase-5 belt tokens. The shadcn
+	 * neutrals (--background, --foreground, --card, --border, --muted,
+	 * --accent, --primary, etc.) are NOT touched — the dashboard
+	 * components reference these new --bg, --surface, --text-1, etc.
+	 * tokens directly, leaving the existing surfaces (post-session
+	 * shell, focus shell, full-length flow) on the shadcn tokens
+	 * unchanged (Round 2 §0.11 SF-B + §5.15 cleanup retired the prior
+	 * "mastery map" reference — that surface was absorbed into
+	 * src/components/dashboard/ during the dashboard-PRD redesign and
+	 * now consumes Layer-B tokens). See `docs/plans/dashboard.md` §2.9 + §4 for the
+	 * audit trail; `--belt-blue` / `--belt-brown` are intentionally
+	 * NOT redeclared (see `docs/plans/DASHBOARD_PRD.md` §8 audit note).
+	 */
+	--bg: oklch(98% 0.005 270);
+	--surface: oklch(100% 0 0);
+	--surface-2: oklch(96% 0.008 270);
+	--border-soft: oklch(91% 0.012 270);
+	--border-strong: oklch(82% 0.018 270);
+	--text-1: oklch(20% 0.020 270);
+	--text-2: oklch(45% 0.020 270);
+	--text-3: oklch(62% 0.015 270);
+	--cobalt: #1e00ff;
+	--indigo: #0d0050;
+	--indigo-deep: #110068;
+	--alpha-accent: #4f46e5;
+	--pale: #a5b4fc;
+	--lavender: #f5f4fb;
+	--lavender-line: #e5e3f5;
+	--belt-white: oklch(94% 0.005 270);
+	--belt-white-line: oklch(82% 0.012 270);
+	--belt-black: oklch(22% 0.020 270);
+	/* BJJ canonical black-belt red tip (#DC2626 equivalent). Consumed
+	 * only by <BeltGraphic> for the dashboard <BeltStripe>; below the
+	 * .alpha-style.md "below-3 systemic-token" threshold. */
+	--belt-tip-red: oklch(57.5% 0.21 27);
+	--pace-on: oklch(55% 0.180 240);
+	--pace-warn: oklch(70% 0.160 70);
+	--pace-over: oklch(58% 0.200 25);
+	--good: oklch(58% 0.160 145);
+	--font-sans: var(--font-sans-loaded), "Plus Jakarta Sans", "Onest", system-ui, sans-serif;
+	--font-serif: var(--font-serif-loaded), "Newsreader", "Fraunces", Georgia, serif;
+	--t-xs: 0.75rem;
+	--t-sm: 0.875rem;
+	--t-base: 1rem;
+	--t-lg: 1.25rem;
+	--t-xl: 1.563rem;
+	--t-display: clamp(1.75rem, 1.4rem + 1.5vw, 2.5rem);
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 12px;
+	--sp-4: 16px;
+	--sp-6: 24px;
+	--sp-8: 32px;
+	--sp-12: 48px;
+	--r-sm: 6px;
+	--r-md: 10px;
+	--r-lg: 14px;
+	--ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+	--d-fast: 120ms;
+	--d-base: 240ms;
+	--d-slow: 380ms;
 	--chart-1: oklch(0.809 0.105 251.813);
 	--chart-2: oklch(0.623 0.214 259.815);
 	--chart-3: oklch(0.546 0.245 262.881);
 	--chart-4: oklch(0.488 0.243 264.376);
 	--chart-5: oklch(0.424 0.199 265.638);
 	--radius: 0.625rem;
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: oklch(0.205 0 0);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.97 0 0);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
-	--sidebar-border: oklch(0.922 0 0);
-	--sidebar-ring: oklch(0.708 0 0);
+	/* Layer-A sidebar palette — Alpha-tinted retrofit (Round 2 commit 2);
+	 * see foundation-tokens block above for rationale + SPEC §13. */
+	--sidebar: oklch(0.985 0.005 270);
+	--sidebar-foreground: oklch(0.145 0.012 270);
+	--sidebar-primary: oklch(0.205 0.012 270);
+	--sidebar-primary-foreground: oklch(0.985 0.005 270);
+	--sidebar-accent: oklch(0.97 0.008 270);
+	--sidebar-accent-foreground: oklch(0.205 0.012 270);
+	--sidebar-border: oklch(0.92 0.008 270);
+	--sidebar-ring: oklch(0.708 0.012 270);
 }
 
 .dark {
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.205 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.205 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.87 0 0);
-	--primary-foreground: oklch(0.205 0 0);
-	--secondary: oklch(0.269 0 0);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.269 0 0);
-	--muted-foreground: oklch(0.708 0 0);
-	--accent: oklch(0.371 0 0);
-	--accent-foreground: oklch(0.985 0 0);
+	/*
+	 * Layer-A foundation dark-mode counterparts — Alpha-tinted retrofit
+	 * (Round 2 commit 2, 2026-05-09). Mirrors the :root retrofit shape:
+	 * lightness preserved per shadcn dark-mode convention; chroma 0.005-
+	 * 0.012 hue 270 added. `--muted-foreground` STAYS at lightness 0.708
+	 * (chroma-only retrofit) — pre-retrofit dark-mode contrast is already
+	 * AAA (7.63:1 vs background; 5.83:1 vs muted), no lightness change
+	 * needed. `--border` / `--input` keep their alpha-channel form;
+	 * base color tinted from `oklch(1 0 0)` to `oklch(1 0.005 270)`.
+	 */
+	--background: oklch(0.145 0.012 270);
+	--foreground: oklch(0.985 0.005 270);
+	--card: oklch(0.205 0.012 270);
+	--card-foreground: oklch(0.985 0.005 270);
+	--popover: oklch(0.205 0.012 270);
+	--popover-foreground: oklch(0.985 0.005 270);
+	--primary: oklch(0.87 0.012 270);
+	--primary-foreground: oklch(0.205 0.012 270);
+	--secondary: oklch(0.269 0.012 270);
+	--secondary-foreground: oklch(0.985 0.005 270);
+	--muted: oklch(0.269 0.012 270);
+	--muted-foreground: oklch(0.708 0.012 270);
+	--accent: oklch(0.371 0.012 270);
+	--accent-foreground: oklch(0.985 0.005 270);
 	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
+	--border: oklch(1 0.005 270 / 10%);
+	--input: oklch(1 0.005 270 / 15%);
+	--ring: oklch(0.556 0.012 270);
+	/* Belt-indicator dark-mode counterparts; see :root for rationale. */
+	--belt-blue: oklch(0.65 0.18 245);
+	--belt-brown: oklch(0.55 0.09 50);
+	/*
+	 * Dashboard dark-mode tokens (Dashboard PRD §8). Mirrors the :root
+	 * additions; only surface/text/border tokens flip (depth via lighter
+	 * surfaces per ALPHA §3, not via shadows). Brand, pace, sizing,
+	 * motion, type-scale, and spacing tokens are mode-agnostic and are
+	 * inherited from :root. `--belt-blue` / `--belt-brown` are
+	 * intentionally NOT redeclared.
+	 */
+	--bg: oklch(15% 0.015 270);
+	--surface: oklch(18% 0.018 270);
+	--surface-2: oklch(22% 0.018 270);
+	--border-soft: oklch(28% 0.018 270);
+	--border-strong: oklch(36% 0.018 270);
+	--text-1: oklch(95% 0.005 270);
+	--text-2: oklch(72% 0.012 270);
+	--text-3: oklch(55% 0.012 270);
+	--belt-white: oklch(68% 0.012 270);
+	--belt-black: oklch(78% 0.012 270);
+	/* Desaturated red tip per ALPHA_DESIGN.md §3 dark-mode rule. */
+	--belt-tip-red: oklch(65% 0.18 27);
 	--chart-1: oklch(0.809 0.105 251.813);
 	--chart-2: oklch(0.623 0.214 259.815);
 	--chart-3: oklch(0.546 0.245 262.881);
 	--chart-4: oklch(0.488 0.243 264.376);
 	--chart-5: oklch(0.424 0.199 265.638);
-	--sidebar: oklch(0.205 0 0);
-	--sidebar-foreground: oklch(0.985 0 0);
+	/* Layer-A sidebar dark-mode counterparts — Alpha-tinted retrofit
+	 * (Round 2 commit 2). `--sidebar-primary` stays at the existing
+	 * heavily-chromatic blue (0.488 0.243 264.376; not Layer-A-grayscale,
+	 * not retrofit territory). */
+	--sidebar: oklch(0.205 0.012 270);
+	--sidebar-foreground: oklch(0.985 0.005 270);
 	--sidebar-primary: oklch(0.488 0.243 264.376);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.269 0 0);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.556 0 0);
+	--sidebar-primary-foreground: oklch(0.985 0.005 270);
+	--sidebar-accent: oklch(0.269 0.012 270);
+	--sidebar-accent-foreground: oklch(0.985 0.005 270);
+	--sidebar-border: oklch(1 0.005 270 / 10%);
+	--sidebar-ring: oklch(0.556 0.012 270);
 }
 
 @theme inline {
@@ -92,6 +225,41 @@
 	--color-input: var(--input);
 	--color-border: var(--border);
 	--color-destructive: var(--destructive);
+	--color-belt-blue: var(--belt-blue);
+	--color-belt-brown: var(--belt-brown);
+	/*
+	 * Dashboard color tokens (Dashboard PRD §9). Surfaced after the
+	 * existing entries, never interleaved. Each entry maps a Tailwind
+	 * v4 color-token name to its underlying CSS variable from :root /
+	 * .dark. This is what makes utilities like `bg-bg`, `text-text-1`,
+	 * `border-border-soft` resolve at JIT time. `--font-sans` is NOT
+	 * duplicated here — the existing `--font-sans: var(--font-sans);`
+	 * mapping above already covers it.
+	 */
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-border-soft: var(--border-soft);
+	--color-border-strong: var(--border-strong);
+	--color-text-1: var(--text-1);
+	--color-text-2: var(--text-2);
+	--color-text-3: var(--text-3);
+	--color-cobalt: var(--cobalt);
+	--color-indigo: var(--indigo);
+	--color-indigo-deep: var(--indigo-deep);
+	--color-alpha-accent: var(--alpha-accent);
+	--color-pale: var(--pale);
+	--color-lavender: var(--lavender);
+	--color-lavender-line: var(--lavender-line);
+	--color-belt-white: var(--belt-white);
+	--color-belt-white-line: var(--belt-white-line);
+	--color-belt-black: var(--belt-black);
+	--color-belt-tip-red: var(--belt-tip-red);
+	--color-pace-on: var(--pace-on);
+	--color-pace-warn: var(--pace-warn);
+	--color-pace-over: var(--pace-over);
+	--color-good: var(--good);
+	--font-serif: var(--font-serif);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-accent: var(--accent);
 	--color-muted-foreground: var(--muted-foreground);
@@ -121,5 +289,193 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+	}
+}
+
+/*
+ * Reduced-motion preference. WCAG 2.3.3 + ALPHA §6 ("Reduced Motion
+ * (mandatory)"). Squashes both `animation-duration` and
+ * `transition-duration` to a near-zero value when the user has
+ * `prefers-reduced-motion: reduce` set at the OS or browser level.
+ *
+ * Audit-surfaced at dashboard round commit 1: Dashboard PRD §8 prose
+ * claimed this rule already lived in globals.css, but git history
+ * shows it never did. Lands at commit 11 (Alpha Style audit + polish)
+ * to satisfy PRD §15's "prefers-reduced-motion: reduce honored"
+ * acceptance criterion.
+ *
+ * Scope: blanket. Affects every transition + animation in the tree,
+ * including the focus-shell's timer-bar depletion animation. The
+ * focus-shell's animations are functional (they show time remaining
+ * during a session), but WCAG 2.3.3 prioritizes user vestibular-
+ * sensitivity preference over feature-functional UX. If the
+ * focus-shell needs an exemption later, scoping requires a stable
+ * class anchor on <FocusShell>'s root that doesn't exist today; that
+ * refactor is a follow-up.
+ *
+ * Per ALPHA §6 the standard form also resets `animation-iteration-
+ * count` to 1 (so infinite loops stop) and `scroll-behavior` to auto
+ * (so smooth scroll is suppressed).
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override component-level animation/transition durations; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override component-level iteration counts; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		animation-iteration-count: 1 !important;
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override component-level transition durations; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		transition-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: reduced-motion squash must override scroll-behavior; !important is canonical per WCAG 2.3.3 + ALPHA §6 */
+		scroll-behavior: auto !important;
+	}
+}
+
+@theme {
+	/*
+	 * Focus-shell timer-bar depletion animation. Bar starts at scaleX=1
+	 * and shrinks toward its right edge as time elapses; transform-origin
+	 * is set on the element via Tailwind's `origin-right`. Per-element
+	 * `animation-duration` is set via Tailwind arbitrary-value classes
+	 * `[animation-duration:NNNNNms]` from a small enumerated set:
+	 * 18000ms (per-question target), 90000ms / 180000ms / 360000ms
+	 * (5/10/20-question drill sessions), 900000ms (full-length — Phase 5).
+	 * See src/components/focus-shell/timer-bar.tsx.
+	 */
+	@keyframes shrink-bar {
+		from {
+			transform: scaleX(1);
+		}
+		to {
+			transform: scaleX(0);
+		}
+	}
+	--animate-shrink-bar: shrink-bar linear forwards;
+
+	/*
+	 * fill-bar: counterpart to shrink-bar that grows left-to-right across
+	 * the session. Used by the restyled <SessionTimerBar> in the
+	 * Phase 3 polish layout — the reference screenshots show a session-
+	 * PROGRESS bar that fills as time elapses (instead of a depleting
+	 * bar). origin-left + scaleX(0)→scaleX(1) gives the same kind of
+	 * pure-CSS animation, restartable via React `key` change.
+	 */
+	@keyframes fill-bar {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
+		}
+	}
+	--animate-fill-bar: fill-bar linear forwards;
+
+	/*
+	 * Discrete opacity flip at half-duration. Used by the dual-layer
+	 * <QuestionTimerBarPrimary> (post-overhaul-fixes commit 3) so the
+	 * blue layer's fill is visible during the first half of
+	 * `perQuestionTargetMs` and the red layer's fill is visible during
+	 * the second half. The 49.99% / 50% pair is load-bearing — CSS
+	 * animation interpolation at exactly 50% is undefined cross-browser;
+	 * the 0.01% gap forces a discrete jump rather than a tweened
+	 * cross-fade. Don't widen the gap: a wider gap makes the transition
+	 * gradient-y, which contradicts SPEC §6.6's "discrete flip, not a
+	 * gradient" requirement.
+	 */
+	@keyframes opacity-visible-then-hidden {
+		0% {
+			opacity: 1;
+		}
+		49.99% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0;
+		}
+		100% {
+			opacity: 0;
+		}
+	}
+	@keyframes opacity-hidden-then-visible {
+		0% {
+			opacity: 0;
+		}
+		49.99% {
+			opacity: 0;
+		}
+		50% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 1;
+		}
+	}
+
+	/*
+	 * Combined utilities that run BOTH the transform animation
+	 * (fill-bar, scaleX 0→1) and one of the opacity-flip animations on
+	 * the same element. CSS's `animation` shorthand supports a
+	 * comma-separated list of animations sharing a single
+	 * `animation-duration`. We need a single utility per layer because
+	 * Tailwind utilities each set the full `animation` property —
+	 * stacking `animate-fill-bar animate-opacity-visible-then-hidden`
+	 * would have the later one clobber the former. Combined utilities
+	 * sidestep that.
+	 */
+	--animate-fill-bar-with-opacity-vth:
+		fill-bar linear forwards,
+		opacity-visible-then-hidden linear forwards;
+	--animate-fill-bar-with-opacity-htv:
+		fill-bar linear forwards,
+		opacity-hidden-then-visible linear forwards;
+
+	/*
+	 * Overflow per-question bar (post-overhaul-fixes commit 3). Same
+	 * `fill-bar` keyframe as the primary, but with an explicit
+	 * `animation-delay` baked into the utility (the second time-value
+	 * in the `animation` shorthand, after the duration). Required
+	 * because Tailwind v4's bare arbitrary-property class
+	 * `[animation-delay:18000ms]` silently expands into two `animation`
+	 * shorthand declarations (enter + exit) that reset the
+	 * `animation-delay` sub-property — observed in the generated CSS:
+	 *
+	 *   .[animation-delay\:18000ms] {
+	 *     animation-delay: 18s;
+	 *     animation: enter ...;     <-- resets delay
+	 *     animation: exit ...;      <-- resets delay
+	 *   }
+	 *
+	 * Embedding the delay in our own combined utility sidesteps that
+	 * collision. The duration is supplied separately via the
+	 * existing `[animation-duration:NNNNNms]` Tailwind arbitrary class
+	 * (which is in DURATION_CLASS_BY_MS) — animation-duration on its
+	 * own does NOT reset other animation sub-properties.
+	 */
+	/*
+	 * Note `both` (NOT `forwards`) for the fill-mode. With `forwards`,
+	 * the FROM keyframe (scaleX(0)) is NOT applied during the
+	 * `animation-delay` window — the element falls back to its default
+	 * "no transform" state (visually equivalent to scaleX(1) for a
+	 * full-width div), which would render the overflow bar at 100%
+	 * width during the first 18 seconds. `both` applies the FROM
+	 * keyframe during the delay AND holds the TO keyframe after the
+	 * animation ends.
+	 */
+	--animate-fill-bar-after-target: fill-bar 18000ms linear 18000ms both;
+}
+
+/*
+ * Dashboard utilities (Dashboard PRD §8). `.tabular` opts into
+ * `font-variant-numeric: tabular-nums` so numeric values in the
+ * ScoreStrip / PaceMetric / MistakesTile / LastSimTile align column-
+ * style across rows (e.g. estimated score | goal | days-to-test all
+ * occupy the same per-glyph width regardless of digit). Plus Jakarta
+ * Sans and Newsreader both ship `tnum` OpenType features; the utility
+ * is a feature flip, not a font swap.
+ */
+@layer utilities {
+	.tabular {
+		font-variant-numeric: tabular-nums;
 	}
 }

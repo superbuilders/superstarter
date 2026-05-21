@@ -18,6 +18,10 @@ async function fetchAdminSecret(): Promise<AdminSecret> {
 		logger.error("DATABASE_ADMIN_SECRET_ARN is not set")
 		throw errors.new("DATABASE_ADMIN_SECRET_ARN required for admin operations")
 	}
+	if (!env.AWS_ROLE_ARN) {
+		logger.error("AWS_ROLE_ARN is not set")
+		throw errors.new("AWS_ROLE_ARN required for admin operations")
+	}
 
 	const client = new SecretsManagerClient({
 		region: AWS_REGION,

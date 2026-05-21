@@ -1,0 +1,162 @@
+{
+  "kind": "AWS::RDS::DBInstance",
+  "id": "db-instance-main",
+  "fqn": "superstarter/main/db-instance-main",
+  "seq": 13,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::RDS::DBInstance",
+    "Symbol(alchemy::ResourceID)": "db-instance-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/db-instance-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 13,
+    "typeName": "AWS::RDS::DBInstance",
+    "desiredState": {
+      "DBInstanceIdentifier": "superstarter-main-db",
+      "Engine": "postgres",
+      "EngineVersion": "18.3",
+      "DBInstanceClass": "db.t4g.micro",
+      "AllocatedStorage": "20",
+      "StorageType": "gp3",
+      "StorageEncrypted": true,
+      "MasterUsername": "postgres",
+      "ManageMasterUserPassword": true,
+      "EnableIAMDatabaseAuthentication": true,
+      "MultiAZ": false,
+      "PubliclyAccessible": true,
+      "DBSubnetGroupName": "superstarter-main-db-subnets",
+      "VPCSecurityGroups": [
+        "sg-0411b3a0df8e0ed17"
+      ],
+      "DBParameterGroupName": "superstarter-main-pg18",
+      "Port": "5432",
+      "DeletionProtection": false,
+      "BackupRetentionPeriod": 0,
+      "CopyTagsToSnapshot": true,
+      "AutoMinorVersionUpgrade": true,
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "superstarter-main-db",
+    "createdAt": 1778541986643,
+    "DatabaseInsightsMode": "standard",
+    "StorageEncrypted": true,
+    "StatusInfos": [],
+    "CertificateDetails": {
+      "ValidTill": "2027-05-11T23:22:41Z",
+      "CAIdentifier": "rds-ca-rsa2048-g1"
+    },
+    "Port": "5432",
+    "AdditionalStorageVolumes": [],
+    "StorageThroughput": 125,
+    "DbiResourceId": "db-DQYBEMSOZ2H7PPKU36QLLU43SY",
+    "ReadReplicaDBClusterIdentifiers": [],
+    "MonitoringInterval": 0,
+    "DBParameterGroupName": "superstarter-main-pg18",
+    "DBInstanceArn": "arn:aws:rds:us-east-1:496780244141:db:superstarter-main-db",
+    "Endpoint": {
+      "Address": "superstarter-main-db.cyhk02a6cfpn.us-east-1.rds.amazonaws.com",
+      "Port": "5432",
+      "HostedZoneId": "Z2R2ITUGPM61AM"
+    },
+    "MultiAZ": false,
+    "Engine": "postgres",
+    "Tags": [
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      },
+      {
+        "Value": "main",
+        "Key": "Stage"
+      }
+    ],
+    "IsStorageConfigUpgradeAvailable": false,
+    "EngineVersion": "18.3",
+    "StorageType": "gp3",
+    "DBInstanceStatus": "available",
+    "KmsKeyId": "arn:aws:kms:us-east-1:496780244141:key/bd5a0469-77a5-4a8b-8b91-3b805083903b",
+    "DBInstanceClass": "db.t4g.micro",
+    "AvailabilityZone": "us-east-1a",
+    "OptionGroupName": "default:postgres-18",
+    "EnablePerformanceInsights": false,
+    "ReadReplicaDBInstanceIdentifiers": [],
+    "AutoMinorVersionUpgrade": true,
+    "DBSubnetGroupName": "superstarter-main-db-subnets",
+    "DeletionProtection": false,
+    "DBInstanceIdentifier": "superstarter-main-db",
+    "AllocatedStorage": "20",
+    "MasterUserSecret": {
+      "SecretArn": "arn:aws:secretsmanager:us-east-1:496780244141:secret:rds!db-cdcdd9e3-3f74-43fa-9e11-42292f4fd2ed-HMVNfo",
+      "KmsKeyId": "arn:aws:kms:us-east-1:496780244141:key/438d4030-5b05-4dd2-9f00-021995e271bc"
+    },
+    "DBSecurityGroups": [],
+    "MasterUsername": "postgres",
+    "PubliclyAccessible": true,
+    "AssociatedRoles": [],
+    "InstanceCreateTime": "2026-05-11T23:24:27.511Z",
+    "ProcessorFeatures": [],
+    "PreferredBackupWindow": "07:42-08:12",
+    "NetworkType": "IPV4",
+    "DedicatedLogVolume": false,
+    "CopyTagsToSnapshot": true,
+    "EngineLifecycleSupport": "open-source-rds-extended-support",
+    "LicenseModel": "postgresql-license",
+    "PreferredMaintenanceWindow": "fri:03:41-fri:04:11",
+    "Iops": 3000,
+    "BackupTarget": "region",
+    "CACertificateIdentifier": "rds-ca-rsa2048-g1",
+    "ManageMasterUserPassword": true,
+    "VPCSecurityGroups": [
+      "sg-0411b3a0df8e0ed17"
+    ],
+    "EnableIAMDatabaseAuthentication": true,
+    "BackupRetentionPeriod": 0,
+    "EnableCloudwatchLogsExports": []
+  },
+  "props": {
+    "DBInstanceIdentifier": "superstarter-main-db",
+    "Engine": "postgres",
+    "EngineVersion": "18.3",
+    "DBInstanceClass": "db.t4g.micro",
+    "AllocatedStorage": "20",
+    "StorageType": "gp3",
+    "StorageEncrypted": true,
+    "MasterUsername": "postgres",
+    "ManageMasterUserPassword": true,
+    "EnableIAMDatabaseAuthentication": true,
+    "MultiAZ": false,
+    "PubliclyAccessible": true,
+    "DBSubnetGroupName": "superstarter-main-db-subnets",
+    "VPCSecurityGroups": [
+      "sg-0411b3a0df8e0ed17"
+    ],
+    "DBParameterGroupName": "superstarter-main-pg18",
+    "Port": "5432",
+    "DeletionProtection": false,
+    "BackupRetentionPeriod": 0,
+    "CopyTagsToSnapshot": true,
+    "AutoMinorVersionUpgrade": true,
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

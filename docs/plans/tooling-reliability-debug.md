@@ -1,0 +1,446 @@
+# Plan — Tooling-Reliability Debug Round
+
+> **Status: round opened 2026-05-09 against `main` at HEAD `b6e180d`** (Score-Based Target Goals Sidecar close commit). Sidecar-shape envelope; sequential §1 (bun-test flake) → §2 (drizzle-kit CLI opaque failure). Both targets are **investigation-shaped**, not implementation-shaped — branch outcomes are NOT pre-decided at commit 0; §1 and §2 bodies enumerate hypothesis space + decision branches, with the empirical work that selects among them deferred to commit 1+. Forward-pin: post-round, Option 1 (diagnostic-timing sidecar) opens.
+>
+> **Round shape commentary:** this is the second consecutive sidecar-shape round (the first being the score-goals sidecar, 585 lines / 5 commits, closed at `b6e180d`). If a third consecutive sidecar lands afterward (the planned diagnostic-timing sidecar), that hits the SPEC §6.14 promotion threshold (~3 occurrences) for a candidate pattern around "sidecar-as-default-narrow-scope-envelope." Tracked but not pre-promoted at this commit — single-instance reinforcement only.
+
+---
+
+## §0 — Commit-0 audit findings
+
+Eight audit steps per the round-opening redline. Each finding ends with a positional conclusion (scope flag, decision-branch hint, or open question). All file paths are anchored to the repo root.
+
+### §0.1 Round-anchor verify (audit step (a))
+
+`git rev-parse HEAD` → `b6e180d8689483f1458bac81c4fe5f6829753a8a` ✓ matches handoff. `git log --oneline -6` confirms the last six commits match the score-goals sidecar ledger verbatim:
+
+```
+b6e180d docs(plan): close score-based target goals sidecar
+0b4aee5 refactor(post-session,dashboard): retire dead percentile references (sidecar §3)
+822a674 feat(db): drop users.target_percentile column (sidecar §2)
+7ee5db9 docs(plan): author sidecar body sections + §5.1 commit-1 ledger entry
+729a08e feat(post-session,actions): replace percentile target with score target (sidecar §1)
+8ba0780 docs(plan,logs): close Round 2 logs + open score-based-target-goals sidecar
+```
+
+**Working-tree finding (deviation from handoff assumption):** tree is **NOT** clean. Nine modified dashboard files (`src/components/dashboard/*.tsx`, `src/server/dashboard/{mission,types}.ts`) + one untracked session log (`docs/claude_logs/session_2026-05-09_18-58_score-based-goals-sidecar.md`). The dashboard WIP appears orthogonal to this round's tooling-reliability scope — the modified file set is a distinct subsystem from drizzle-kit CLI or test-runner concerns. **Decision:** commit 0 will only stage the new plan-doc; the WIP and session log are NOT touched. Open question for redirector at stop-and-report: confirm WIP is intentional carry-forward or needs separate handling.
+
+### §0.2 Residual #10 (bun-test flake) re-read against current state (audit step (b))
+
+Both prior occurrences cited from project history:
+
+- **Round 2 commit 14 (`69ea647`)** — 127/1 → 128/0 on rerun (per Round 2 plan-doc).
+- **Score-goals sidecar commit 1 (`729a08e`)** — same shape: a single failure on first invocation, clean pass on rerun, no observable difference between the runs.
+
+Single-run baseline at HEAD `b6e180d`:
+
+```
+128 pass / 0 fail / 645 expect() calls / 17 files / 2.09s
+```
+
+Matches handoff §10 expected baseline exactly. **No flake on this single audit-step invocation** — but per the established pattern, single-run cleanliness is not evidence of absence; the flake is an intermittent that surfaces on ~10-30% of invocations historically. The 20-30 iteration rerun loop is **deferred to §1 commit 1** per audit-step framework; commit 0 baseline is single-run only.
+
+**Two occurrences = pattern threshold reached.** §1 investigation justified.
+
+### §0.3 Residual #12 (drizzle-kit migrate CLI failure) re-read against current state (audit step (c))
+
+Drizzle journal verified at `drizzle/meta/_journal.json` — last entry is idx=5, tag `0005_amusing_microchip`, timestamp `1778372218819`. Migration file present at `drizzle/0005_amusing_microchip.sql`, single line:
+
+```sql
+ALTER TABLE "users" DROP COLUMN "target_percentile";
+```
+
+**Manual-apply workaround artifact probe:** `find scripts -name "apply-0005*"` → empty. `scripts/_logs/` listing inspected; no apply-0005-manual artifact present. `git status --ignored scripts/` clean. **Conclusion: the workaround is ABSENT from disk** (not gitignored, not stashed — gone, consistent with handoff §11's "authored as one-shot, NOT committed" claim). If §2 lands on a branch that requires reproducing the manual-apply pattern (Branch 3 in §2.4), the workaround must be reconstructed; it is not recoverable from the working tree.
+
+**`db:migrate` script captured verbatim from `package.json`:**
+
+```
+"db:migrate": "bun --bun run src/db/scripts/drizzle-kit-shim.ts migrate && bun run db:push:programs"
+```
+
+The migrate path goes through a **shim layer** at `src/db/scripts/drizzle-kit-shim.ts` (61 lines). The shim:
+
+- Loads DATABASE_URL (local docker via `DATABASE_LOCAL_URL` or RDS via `fetchAdminSecret()`)
+- Writes RDS CA bundle to a temp file for `NODE_EXTRA_CA_CERTS`
+- Spawns `drizzle-kit ${args}` via `Bun.spawn` with `stdio: ["inherit", "inherit", "inherit"]`
+- Forwards exit code to parent on non-zero exit (no swallowing)
+
+**Empirical finding for §2 hypothesis space:** the shim does NOT swallow stderr/stdout — drizzle-kit's stdio is inherited end-to-end. The opaque silence observed at sidecar commit 2 came from **drizzle-kit itself** (or its child pg client), NOT the shim wrapper. This narrows §2.2 hypothesis space — the shim is not a candidate for the silence source.
+
+### §0.4 drizzle-kit / drizzle-orm version capture (audit step (d))
+
+`bun pm ls` filtered for drizzle:
+
+```
+drizzle-kit@0.31.10
+drizzle-orm@0.45.2
+@auth/drizzle-adapter@1.11.2
+```
+
+§2 investigation will use these versions for upstream issue search (Branch 2 + Branch 4 in §2.4). Versions locked at HEAD `b6e180d`; any §2 fix that requires a version bump must be gated carefully (destructive-operation framing per SPEC §6.14.31).
+
+### §0.5 Pre-existing investigation tooling probe (audit step (e))
+
+`scripts/dev/` exists. Current contents:
+
+```
+fmt, fmt-bug-repro.ts, fmt.ts, lint, lint.ts, retag-items.ts,
+shared, smoke, style, style.ts, wipe-practice-data.ts
+```
+
+The directory is the established home for one-off + reusable dev-side tooling. If §2 selects Branch 3b ("build a reusable manual-migrate tool"), the natural landing path is `scripts/dev/manual-migrate.ts` — directory exists; no creation overhead.
+
+### §0.6 §6.14 reinforcement-or-promotion candidates from setup (audit step (f))
+
+- **§6.14.34 (mid-round narrow-scope sub-round insertion)** — this round itself is a §6.14.34 instance (narrow-scope insertion between sidecar close and Round 3 open). **Reinforcement only**, not promotion (already established-use per handoff §8).
+- **§6.14.31 (destructive-operation gate template)** — applies if §2 selects Branch 3b (reusable manual-migrate tool, which writes journal rows + raw SQL = destructive). **Conditional reinforcement candidate**; reinforces only if that branch selects.
+- **§6.14.42 (audit-step grep-verify-consumers)** — applies if §2 modifies the `db:migrate` script or replaces drizzle-kit's role in the migrate path. **Conditional candidate**; reinforces only if Branch 1 or Branch 4 lands a project-side fix that touches the shim or script wiring.
+- **§6.14.40 (redirector-vs-empirical-state divergence)** — none surfaced at audit step. Both targets remain residual at HEAD; neither was already silently addressed by intervening commits. Tracked.
+
+### §0.7 Test-count baseline for round-close comparison (audit step (g))
+
+128 pass / 0 fail / 17 files / 645 expect() calls. Round-close §3 ledger will compare delta — expectation is **no change** unless §1 commit 1 isolates a specific test and adds a deterministic instrumentation/replacement (Branch 1 in §1.4) or §2 commit 1 adds tests around any project-side fix.
+
+### §0.8 §6.14.40 retraction-context watch (audit step (h))
+
+Both targets verified residual at HEAD (§0.2 + §0.3); no §6.14.40 retraction at audit step. **Forward watch:** if §1's rerun-loop investigation surfaces that the flake was *already* root-caused in some commit between residual authoring and HEAD (e.g., a prior dependency bump quietly fixed it but the residual list wasn't updated), that IS a §6.14.40 instance and should be promoted at round-close. Same applies to §2 if drizzle-kit's behavior at HEAD turns out to be silently corrected vs. the residual's authoring state.
+
+### §0.9 Round-open reconciliation event (commit-1 amendment)
+
+**Reinforces SPEC §6.14.40 (redirector-vs-empirical-state divergence) + §6.14.18/21/22 (audit-first checkpoint discipline at fresh-session re-execution).**
+
+Appended additively at commit 1 — NOT a §6.14.20 wholesale-replacement-with-quote-preservation operation, since §0 is mid-round open-work and §0.1-§0.8 remain authoritative as of commit 0 (`9d59922`). §0.9 layers reconciliation context for the round's re-anchored working HEAD.
+
+**Sequence of the divergence event:**
+
+1. Commit 0 (`9d59922`) was authored 2026-05-09 21:00 against HEAD `b6e180d`. Plan-doc framing, audit (a)-(h) findings, §1 + §2 hypothesis spaces all anchored to that HEAD.
+2. Between `9d59922` and round-resume, **three ad-hoc UI/styling commits landed on `main` outside any round envelope**:
+   - `92a33ed feat(dashboard)` — dashboard component padding/margin/accessibility tweaks (10 files, +141/-41).
+   - `808dbb2 style(focus-shell)` — FocusShell typography (5 files, +75/-7).
+   - `78136b7 fix(text-body)` — class name reordering (1 file, +1/-1).
+3. Fresh-session redirect re-issued the commit-0 spec at HEAD `78136b7`. Pre-authoring audit-first discipline (SPEC §6.14.18/21/22) detected the divergence: existing plan-doc on disk (235 lines), existing commit `9d59922` matching the spec's subject + framing + length, HEAD 4 commits ahead of the spec's claimed `b6e180d`. **Refusal to author a duplicate commit 0 is the discipline paying off** — silent overwrite would have destroyed the earlier session's work and created a divergent ledger.
+
+**Redirector judgment (recorded for round-close referencing):**
+
+- The 3 intervening commits are **intentional ad-hoc UI/styling work landed on main outside any round envelope**. Not reverted. Not retroactively classified into this round. Not added to scope.
+- Round working HEAD **re-anchors from `b6e180d` (commit 0's anchor, retained as historical artifact in §0.1) to `78136b7` (current empirical HEAD)**. Going forward, all §1 + §2 audit-step (a) "round-anchor verify" sub-steps verify against the current working HEAD, NOT `b6e180d`.
+- §0.1's open question — "confirm WIP is intentional carry-forward or needs separate handling" — is **answered: intentional carry-forward**, since absorbed into the 3 intervening commits and a session log file (`docs/claude_logs/_session_2026-05-09_18-58_score-based-goals-sidecar.md` + `_2026-05-09_19-30_question-page-typography-tweaks.md`).
+
+**Hypothesis-space invalidation probe (commit-1 audit step (iv)):**
+
+`git diff 9d59922..HEAD --` against tooling-reliability paths produces empty output for: `bunfig.toml`, `drizzle/`, `drizzle.config.ts`, `src/db/scripts/`, `package.json`, `src/test`, `src/test-utils`. Full `--stat` confirms all 15 changed files are in `src/components/{dashboard,focus-shell,item}/` or `src/server/dashboard/` plus 2 session logs in `docs/claude_logs/`. **§1 + §2 hypothesis spaces are uncontaminated by the intervening commits** — neither bun-test infrastructure nor drizzle-kit / migration / journal / `db:migrate` paths were touched. The §0.3 finding (shim does not swallow stdio) and §0.4 version capture (`drizzle-kit@0.31.10`, `drizzle-orm@0.45.2`) remain valid at `78136b7`.
+
+**Bun-test verification-line non-load-bearing note (per redirector):**
+
+Each of the 3 intervening commits carries a "Verification: bun test passed" (or equivalent) line in its message body. These are **NOT load-bearing evidence** for residual #10 (bun-test flake)'s absence — they are 3 single-runs by other authors, each subject to the flake's own intermittent rate. §1.1 pattern history will **NOT** cite them as flake-absence evidence; §1 commit 1's rerun-loop investigation remains the authoritative source for flake characterization.
+
+**Re-baseline bun test at new HEAD (commit-1 audit step (v)):**
+
+```
+128 pass / 0 fail / 644 expect() calls / 17 files / 2.70s
+```
+
+vs §0.7 baseline at `b6e180d`: pass count + file count unchanged (128/17). expect()-call count is **644 vs 645** — a -1 delta consistent with a single expect removal in one of the intervening commits (untriaged; out-of-scope to investigate further at this gate). Single-run cleanliness at `78136b7` does **NOT** count as §1 rerun-loop data — it is round-open re-baseline only, subject to the same single-run-non-evidence reasoning as the 3 intervening commits' verification lines. The flake's intermittent character means single-run non-failure is mute.
+
+**Forward-pin to round-close §5:**
+
+Round-close §5 will record TWO §6.14 reinforcement instances from this reconciliation:
+- **§6.14.40 reinforcement** — redirector-vs-empirical-state divergence detected and reconciled non-destructively (existing commit preserved, working HEAD re-anchored, intervening commits accepted as out-of-scope-on-main without revert).
+- **§6.14.18/21/22 reinforcement** — audit-first discipline at fresh-session re-execution prevented duplicate-commit-0 destruction. Note: this is the discipline's first cross-session save in the project's history (prior reinforcements have been within-session); if a second cross-session save lands in a future round, the cross-session subset becomes a candidate for its own §6.14 entry.
+
+---
+
+## §1 — Target 1: bun-test flake (residual #10)
+
+### §1.1 Pattern history
+
+Two occurrences:
+
+- **Round 2 commit 14 (`69ea647`)** — 127/1 on first invocation, 128/0 on rerun.
+- **Score-goals sidecar commit 1 (`729a08e`)** — same shape.
+
+Both: rerun produced clean pass with no source change between runs. The intermittent's identity (which test, which assertion, which timing window) was not captured in either prior occurrence's ledger entry. **§1 commit 1's first job: capture that identity empirically before any fix attempt.**
+
+### §1.2 Hypothesis space
+
+Investigation must distinguish among (non-exhaustive):
+
+1. **Timing-sensitive test** — race in setup/teardown across test files, async cleanup leak, or shared-resource contention.
+2. **Port conflict** — test DB / dev server overlap; tests assume a port is free that occasionally isn't.
+3. **Snapshot ordering non-determinism** — a test that depends on Map/Set/object-key iteration order, or floating-point comparison sensitivity.
+4. **Shared mutable state** — module-level state that bleeds between test files (especially given the codebase's preference for ESM modules over classes per SPEC, with module-level state).
+5. **Bun test runner version-specific issue** — runner-side bug producing the spurious failure under specific scheduling conditions.
+6. **Filesystem race** — temp file / fixture write-then-read race in a hot path.
+
+### §1.3 Investigation shape — DO NOT pre-decide outcome
+
+Audit-step-framed investigation across 1-N sub-commits:
+
+- **Step A — rerun-loop capture:** invoke `bun test` 20-30 times consecutively in a tee'd loop (per SPEC §6.14.38 long-running command capture pattern), recording each run's pass/fail count, failed test name (if any), and elapsed time. Goal: estimate flake rate + identify whether a single test is responsible or the failure rotates across tests.
+- **Step B — isolation:** if a specific test surfaces from Step A, run that test file in isolation across N invocations. If it still flakes in isolation, the cause is intra-file (timing inside the test or its setup). If it does NOT flake in isolation, the cause is cross-file (state bleed or shared resource).
+- **Step C — instrument:** depending on Step B's narrowing, add targeted instrumentation (timing logs, resource handles, ordering assertions) to the suspect surface — without yet fixing.
+- **Step D — branch decision:** Step A-C findings select among §1.4 branches.
+
+### §1.4 Decision branches — enumerated, not selected at commit 0
+
+- **Branch 1 — specific test isolated, deterministic root cause:** §1 commit 1 = focused fix to the test or the code-under-test (whichever owns the race / ordering / state issue). Audit framework per §1.5. Test count delta: typically 0 (fix changes assertion semantics, not test count) or +1 (regression test added).
+- **Branch 2 — diffuse, not reproducibly isolatable in 20-30 iterations:** §1 commit 1 = README documentation of the rerun-loop empirical evidence + flake characterization, surfaced as a known-issue with mitigation guidance ("rerun before treating as regression"). No source change. Test count delta: 0.
+- **Branch 3 — bun runner upstream issue:** §1 commit 1 = README docs + linked upstream Bun GitHub issue (or new issue file with reproduction). Possibly `package.json` engines pin if a specific Bun version stabilizes. Test count delta: 0.
+- **Branch 4 — empirical evidence of silent prior fix:** if Step A produces 30/30 clean runs with no flake at all, that is a §6.14.40 retraction instance — residual #10 was silently resolved by some intervening commit. §1 commit 1 = round-close note + residual list update; no source change.
+
+Branches are NOT mutually exclusive at the framing level — Step A's empirical data may select two (e.g., Branch 1 + Branch 4 for partial silent resolution).
+
+### §1.5 Audit-step framework for §1 commit 1
+
+- **(a) Round-anchor verify** — `git rev-parse HEAD` against §1's working anchor (`b6e180d` if §1 commit 1 is the first §1 commit; otherwise prior §1 commit hash).
+- **(b) Rerun-loop output sanity** — re-confirm Step A's flake characterization is reproducible; capture which test (if any), how often, with what timing.
+- **(c) Test-count delta** — should be 0 or +1 (regression test); any other delta requires explicit justification at commit message.
+- **(d) Lefthook gate** — full lint/format/type-check passes before commit; per project's standing convention, no `--no-verify` shortcuts.
+
+### §1.6 Empirical results — bun-test rerun loop (Branch 1 ∩ Branch 4 forward-pinned to selection-engine sidecar)
+
+**Loop summary:** 25/25 iterations completed, 3 failures, **12% flake rate** (Wilson 95% CI ~ [4.2%, 30.0%]; n=25 small-sample). Loop wall time ~55s (~2.4s mean per iteration). Full empirical data: [`scripts/_logs/bun-test-flake-rerun.summary.md`](../../scripts/_logs/bun-test-flake-rerun.summary.md). Raw 5.2MB / 109,785-line log preserved locally at `scripts/_logs/bun-test-flake-rerun.log`, gitignored per `.gitignore` line 108 (`scripts/_logs/*.log`) per Path Y of redirector decision.
+
+**Single test owns 100% of failures:**
+
+- Test: `fullLengthNoReServe` — `src/server/items/selection.test.ts:677-685` (line numbers pre-mitigation; comment block adds 18 lines above so the test now sits at `:695-703`)
+- Assertion: `expect(distinct.size).toBe(50)`
+- Received values: 48 (iter 7), 49 (iter 16), 48 (iter 22) — duplication count non-deterministic, indicating multiple collision paths per session not a single deterministic failure point
+
+**Bug location citation (audit step (d) — seed for upcoming sidecar's commit-0 audit):**
+
+- Production entrypoint: `pickWithFallback` at `src/server/items/selection.ts:279-338`
+- Failing branch: Pass 4 "session-soft" last-resort fallback at lines 322-336 — explicitly drops session-uniqueness (`excludedIds: []`) and re-serves a previously-attempted item
+- Comment at lines 274-278 claims "with the 55-item seed bank this is unreachable" — empirically falsified at 12% rate
+- Underlying mechanism: full-length sessions' 50-slot per-decile generator (`generateFullLengthSlots` at `src/config/difficulty-curves.ts`) can request more items at a given (sub-type × tier) cell than the cell holds. After tier-degraded fallback walks through all `tiers = tiersDownFrom(requestedTier)` to `easy` without finding a session-fresh item, Pass 4 fires. Bank-size assumption is unencoded in code (only in comment), making this drift-prone as the bank evolves.
+
+**Reframing (§6.14.41 candidate):** residual #10's "flake" framing was a citation from two single-incident prior observations (Round 2 commit `69ea647`, score-goals sidecar commit `729a08e`). The 25-iteration empirical loop falsified the "flake" framing — the test catches a stochastic real correctness defect at the bug's natural rate, not a runner-side intermittent.
+
+**Branch selection:** §1.4 Branch 1 ∩ Branch 4. Empirical reasoning detailed in summary `.md` (avoiding duplication here).
+
+- Single-test isolation → not Branch 2 (diffuse).
+- Project selection-engine bug, not Bun runner → not Branch 3.
+- 3 > 0 failures → not Branch 5 (rerun-loop-redirect's conditional amendment candidate; not triggered).
+
+**Interim mitigation:** comment block at `src/server/items/selection.test.ts` immediately above the failing `test(...)` declaration (per audit step (f)). Test stays running. Coverage of the no-re-serve invariant remains active. NO `.skip()`, NO `.fails()`, NO neutering. NO source-code changes to the selection engine.
+
+**Forward-pin:** selection-engine sidecar opens after this round's close (after §1 round-close + §2 round-close). Plan-doc path will be `docs/plans/selection-engine-session-attempted-ids-sidecar.md` (created at sidecar open, not now). Sidecar's commit-0 audit will re-investigate fix shape (one-liner Pass-4-removal vs bank-size runtime encoding vs distribution-aware slot generator vs other) before scoping. §6.14.30 awareness (additive-feature-cascade-undercount) flagged.
+
+**Heads-up watch confirmation:**
+
+- **Timing-drift hypothesis (rerun-loop redirect heads-up #2):** **downweighted.** Range 2.22-3.12s, no upward drift across 25 iterations (iter 1 = 2.51s; iter 25 = 2.53s). Resource-accumulation mechanism unlikely.
+- **Expect-count drift (rerun-loop redirect heads-up #1):** **confirmed.** Range 641-649, mean 645.72, 9 distinct values across 25 iterations. Diagnosis (recorded in summary `.md`): stochastic assertion counts in passing tests, likely sampling-driven conditional `expect()` calls in `selection.test.ts` itself (the within-cell-determinism + 20-salt-variation tests sample probabilistically). NOT inter-iteration state leakage (each iteration is a fresh `bun test` process). Forward-pinned to round-close commentary, not §1 investigation scope.
+
+**Round-close §6.14 reinforcement candidates added by this gate:**
+
+- **§6.14.41 (cite-without-verify):** residual #10's "flake" framing was a citation; empirical work falsified it. **First reinforcement instance for this entry from this round.**
+- **§6.14.18/21/22 (audit-first checkpoint discipline):** redirector's §1 commit-1 spec listed `scripts/_logs/...log` as the artifact path without checking project gitignore precedent (`.gitignore` line 108). Executor caught at audit-step boundary, surfaced for redirector decision; Path Y selected. **Second reinforcement instance for this round's audit-first cohort** (first was §0.9's reconciliation event at commit `bc0fe17`).
+- **Test-suite-determinism observation (NEW):** stochastic expect-counts in passing tests; single-instance from this gate; forward-pin only. Not promoted to a §6.14 entry. Watch for re-occurrence in future rounds.
+
+### §1.7 §1 round-close
+
+**Status:** §1 closes at this gate. §2 (drizzle-kit CLI investigation) opens fresh at the next gate against the post-§1-close HEAD.
+
+**Empirical resolution:** the 25-iteration rerun loop (§1.6) demonstrated that residual #10's "flake" framing was empirically falsified. The failure is a stochastic correctness defect in the selection engine's Pass 4 session-soft fallback, not a tooling-layer flake. Reframing recorded in §1.6.
+
+**Selection-engine sidecar forward-anchor stub authored** at [`docs/plans/selection-engine-session-attempted-ids-sidecar.md`](selection-engine-session-attempted-ids-sidecar.md). Stub resolves the dead-reference state of the interim mitigation comment in `src/server/items/selection.test.ts`. Sidecar opens after this round fully closes (§2 still pending).
+
+#### §6.14 reinforcement candidates surfaced in §1
+
+- **§6.14.41 reinforcement (cite-without-verify reframing):** residual #10's "bun test flake" citation was empirically falsified by the 25-iteration rerun loop. The investigation shape (rerun loop = literal verification of the cited pattern) is the §6.14.41 anti-pattern's positive complement. Round-close commentary in §5.
+- **§6.14.18/21/22 reinforcement at redirector→executor boundary:** two redirector-spec errors caught at audit-step in §1:
+  - §1 commit 1's spec listed `scripts/_logs/...log` path without checking gitignore precedent (executor surfaced at gate; Path Y distillation resolved).
+  - §1 commit 1's interim mitigation comment referenced a plan-doc path that did not yet exist (this stub's authoring resolves; redirector caught at the same gate's planning, not at executor-stop).
+  Cross-session subset noted at commit 1's reconciliation gate (§0.9) — single-instance forward-watch.
+- **Test-suite-determinism observation (single instance, forward-pin only):** expect-count distribution 641-649 (range 9, mean 645.72) across 25 iterations indicates stochastic assertion counts in passing tests — likely sampling-driven conditional `expect()` calls in `selection.test.ts` family. Distinct from residual #10's bug. Single instance; not promoted; tracked for future-round watch.
+- **Forward-anchor stub pattern (single instance, forward-watch):** this gate authors a stub for a downstream sidecar's anchor. Pattern of "stub at round-close to resolve forward-references" surfacing across rounds; if a fourth instance lands, §6.14 promotion candidate. No promotion this round.
+
+#### Summary-target observation (non-promotion commentary)
+
+`scripts/_logs/bun-test-flake-rerun.summary.md` landed at 174 lines vs the spec's 200-400 target. Executor judgment: density appropriate; padding would dilute signal. Redirector concurs. Round-close note: the 200-400 target was guidance, not requirement; under-target with good signal density is preferable to padded-to-target. No discipline amendment.
+
+---
+
+## §2 — Target 2: drizzle-kit migrate CLI opaque failure (residual #12)
+
+> **Sequenced AFTER §1 fully resolves**, per round-opening directive. §2 investigation does NOT begin while §1 commits are unresolved.
+
+### §2.1 Pattern history
+
+Single occurrence at sidecar commit 2 (`822a674`):
+
+- `bun db:migrate` exited with code 1 attempting to apply migration `0005_amusing_microchip.sql`.
+- Stdio inherited (per §0.3); no SQL trace, no Drizzle parse error, no pg error message reached the user terminal.
+- Workaround applied inline: `db.execute(sql\`ALTER TABLE ...\`)` directly + manual journal row insert with SHA-256 hash matching the migration file. Workaround artifact NOT committed (confirmed absent at audit §0.3).
+
+One occurrence — **single-instance investigation**. Pattern threshold not yet reached, but Leo's directive treats the opacity itself as the residual (regardless of recurrence frequency).
+
+### §2.2 Hypothesis space
+
+- **drizzle-kit version-specific bug** — `drizzle-kit@0.31.10` may have a known opaque-failure mode for `ALTER TABLE DROP COLUMN` migrations, or a child-process error-handling regression.
+- **Drizzle config / connection issue** — config loading or pg client construction fails before the SQL phase, surfacing only as exit-1 with no stderr.
+- **Migration SQL parser interaction** — drizzle-kit's internal parser rejects or mishandles the migration SQL silently.
+- **Underlying error swallowed by drizzle-kit's error handling** — drizzle-kit catches pg errors but logs only at a level not reaching stdio, OR routes them to a pino-style sink that's not configured.
+- **Environment / RDS auth surface** — `NODE_EXTRA_CA_CERTS` path is correct (per shim), but a TLS handshake or auth failure exits without reaching the migration log path.
+
+The shim itself is **NOT** a candidate (per §0.3 — stdio is inherited end-to-end, exit code is forwarded directly).
+
+### §2.3 Investigation shape — DO NOT pre-decide outcome
+
+- **Step A — verbose-flag retry:** invoke `bun db:migrate` with `DRIZZLE_DEBUG=1`, `NODE_DEBUG=*`, `DEBUG=*`, and any drizzle-kit verbose flag in current scope, individually and in combination. Capture full output. Goal: surface the swallowed error if it exists.
+- **Step B — upstream issue search:** search `drizzle-team/drizzle-orm` GitHub issues for `0.31.10` opaque failures, `ALTER TABLE DROP COLUMN` regressions, and child-process exit-1 reports. Capture issue URLs and reproduction notes.
+- **Step C — reproducibility probe:** the failing migration (0005) is **already applied** at HEAD. Reproducing the original failure requires either (i) rolling back via raw SQL on a scratch DB and re-running migrate, or (ii) authoring a no-op test migration (e.g., `ALTER TABLE x ADD COLUMN test_col_$pid; ALTER TABLE x DROP COLUMN test_col_$pid;`) and observing whether the same opacity surfaces. **Repro effort is non-trivial and gated on availability of a scratch DB or local docker reset.** If repro is infeasible in-round, Branch 3 selects.
+- **Step D — branch decision:** Steps A-C findings select among §2.4 branches.
+
+### §2.4 Decision branches — enumerated, not selected at commit 0
+
+- **Branch 1 — verbose flags surface real error:** §2 commit 1 = upstream issue file with reproduction case (or PR if scoped to an obvious project-side misconfiguration). May involve a config or shim adjustment to surface the error in normal-mode. Test count delta: 0 typically.
+- **Branch 2 — known upstream bug:** §2 commit 1 = README docs section ("Known issue: drizzle-kit migrate exits silently on X") + linked upstream issue + workaround pattern. Possibly version pin in `package.json` if a specific drizzle-kit version is known-good. Test count delta: 0.
+- **Branch 3 — not reproducible without fresh DB / out-of-round repro effort:**
+  - **Branch 3a:** §2 commit 1 = README docs of the manual-apply pattern observed at sidecar commit 2 (capturing the workaround mechanically: `db.execute(sql\`...\`)` + journal row construction with SHA-256 hash). No reusable tool. Test count delta: 0.
+  - **Branch 3b:** §2 commit 1 = `scripts/dev/manual-migrate.ts` reusable tool that: (i) reads a target migration file, (ii) applies its SQL via `db.execute`, (iii) inserts the journal row with computed hash. Selected only if the pattern is judged likely to recur (≥2 occurrences anticipated). §6.14.31 destructive-operation-gate template applies — tool writes journal rows + raw SQL = destructive. §2 commit 1's audit-step framework MUST include destructive-gate (see §2.5).
+- **Branch 4 — project-side fix surfaces:** §2 commit 1 = focused fix (config, shim adjustment, env var, version bump) that restores normal-mode visibility. No README needed (residual closes via fix). Test count delta: 0 or +1 (regression test for the fixed surface).
+
+Branches are NOT mutually exclusive — Branch 3a + Branch 4 may both land if a partial fix surfaces but doesn't cover all originally-opaque cases.
+
+### §2.5 Audit-step framework for §2 commit(s)
+
+- **(a) Round-anchor verify** — `git rev-parse HEAD` against §2's working anchor (post-§1-close hash).
+- **(b) drizzle-kit / drizzle-orm version verify** — confirm `0.31.10` / `0.45.2` unchanged. If Branch 4 bumps version, the bump is a destructive operation requiring §6.14.31 gate.
+- **(c) §6.14.31 destructive-operation gate IF Branch 3b selects** — tool writes journal rows; reusable form means it can be invoked accidentally. Gate: explicit `--apply` flag default-off, dry-run default, journal-row preview before write, hash verification before journal insert.
+- **(d) §6.14.42 grep-verify-consumers IF `db:migrate` script or shim modified** — confirm no other script or doc references the prior wiring shape. CI scripts, README, deployment docs all in scope.
+- **(e) Lefthook gate** — full pass before commit; no `--no-verify`.
+
+### §2.6 Empirical results — drizzle-kit migrate CLI no-op reproduction probe
+
+**Reproduction path:** no-op migration per redirector Option II — author `drizzle/0006_test_noop.sql` containing `SELECT 1;`, run `bun db:migrate`, observe behavior, revert cleanly within the same gate envelope.
+
+**Outcome:** **NOT reproduced.** Plain `bun db:migrate` exited 0 against the no-op, but the probe surfaced a methodology finding that explains the non-reproduction: drizzle-kit migrate is **journal-driven, not file-system-driven** — it reads `drizzle/meta/_journal.json` to determine work, ignoring loose `.sql` files entirely. The redirector spec's expectation (audit step (f) note "drizzle-kit will (try to) update [`_journal.json`] during migrate") is empirically false; `migrate` only READS the journal, journal-writes are `generate`'s responsibility. Full detail: [`scripts/_logs/drizzle-kit-investigation.summary.md`](../../scripts/_logs/drizzle-kit-investigation.summary.md).
+
+**Branch selection candidate:** **Branch 3a ∩ Branch 5 (intersection — narrower than either alone, with explicit methodology caveat).**
+
+- **Branch 3a (not reproducible without specific conditions; doc-only):** the journal-driven discovery path means the original `822a674` failure can only be reproduced from a DB state with unapplied journal entries. Loose-SQL probe at HEAD cannot engage the failing path.
+- **Branch 5 (no-op succeeds; original failure conditions-specific):** technically true (exit 0 observed) with caveat that the probe didn't exercise drizzle-kit's SQL-application engine against a new migration.
+- **Branch 1 / 2 / 3b / 4 ruled out:** no verbose flags exposed by drizzle-kit (`migrate --help` lists only `--config`); no upstream issue search executed (next-step gating); no second occurrence to justify Branch 3b reusable tool per Option Y; no project-side error to fix (shim is clean per §0.3 — stdio inherited, exit code forwarded).
+
+**Verbose-flag landscape (audit step (e)):** drizzle-kit exposes NO `--verbose` or `--debug` flag at any subcommand. `migrate --help` lists only `--config` + global `--help/--version`. Future investigation into the `822a674` failure mode cannot rely on flag-only invocation; sidecar-level fix would need env-var probes (`NODE_DEBUG`, `DRIZZLE_LOGGER`), pg-side query log, or source-level instrumentation of drizzle-kit itself.
+
+**Journal integrity (§6.14.31 destructive-operation-gate cycle, second instance):**
+
+| Phase | Hash |
+|-------|------|
+| Pre-probe | `5385521d609b6ad76a78a3460e3ccfe6ef9cba3af5236541099547b3707e53f3` |
+| Post-probe (after `bun db:migrate`) | `5385521d609b6ad76a78a3460e3ccfe6ef9cba3af5236541099547b3707e53f3` |
+| Post-cleanup (after `0006_test_noop.sql` removed) | `5385521d609b6ad76a78a3460e3ccfe6ef9cba3af5236541099547b3707e53f3` |
+
+**Match: yes (all three identical).** Rollback Case **B variant** — drizzle-kit didn't modify journal at all (success-but-no-engagement counterpart of Case B's "failed, unmodified"). No `0006_snapshot.json` auto-generated. `git diff HEAD -- drizzle/meta/_journal.json` empty post-cleanup. Template followed cleanly; pattern advances across two instances (this gate + sidecar `822a674`).
+
+**Forward-pin:** **§2 round-close** at the next gate. Branch 3a ∩ 5 selects a doc-only outcome; no §2 commit 1 fix-shape work. Round-close commentary will record the branch selection + the methodology finding as the load-bearing empirical contribution.
+
+**§6.14 reinforcement candidates added by this gate (round-close):**
+
+- **§6.14.31 destructive-operation-gate (second instance):** template advances; details in summary `.md`.
+- **§6.14.18/21/22 reinforcement at redirector→executor boundary (fourth round-instance):** redirector spec's "drizzle-kit will (try to) update [`_journal.json`]" empirically false; executor surfaced at probe-result inspection. Cohort now: §0.9 reconciliation, §1 commit 1 gitignore catch, §1 commit 1 dead-reference catch, §2.6 drizzle-kit-write-behavior catch.
+- **NEW observation — "methodology-as-primary-finding" (single instance, forward-watch):** when a reproduction probe doesn't reproduce the target bug, the probe's methodological learning becomes the finding. Single-instance from this gate; no promotion; track for re-occurrence in future rounds.
+
+### §2.7 §2 round-close
+
+**Status:** §2 closes at this gate. §2 commit 0 (`e6ffb51`) was the only §2 commit; no §2 commit 1 because Branch 3a ∩ Branch 5 is doc-only.
+
+**Empirical resolution:** drizzle-kit migrate's verbose-flag surface is minimal (`--config` / `--help` / `--version` only). drizzle-kit migrate is journal-driven, not file-system-driven — loose `.sql` files outside the journal are silently ignored. Original `822a674` failure un-reproducible by loose-file probe path; reproducibility likely requires drizzle-kit `generate` workflow (deferred per Option α scope-bounding).
+
+**§6.14.31 destructive-operation-gate template** executed end-to-end with hash-verify across the probe lifecycle (pre-probe / post-probe / post-cleanup, all three identical at `5385521d…707e53f3`). This is the second instance of §6.14.31 application in project history (first: sidecar `822a674` manual-apply); template advances from first-explicit-application to multi-instance.
+
+**Manual-apply workaround procedure** documented in `README.md` (this gate) for any future drizzle-kit migrate opaque failure. The procedure is the operational artifact for residual #12's resolution-as-documented.
+
+**Methodology correction surfaced:** redirector-spec at audit step (f) of §2 commit 0 was empirically falsified by the executor (drizzle-kit migrate is journal-driven, not file-system-driven). This is the third redirector-spec error caught at executor audit-step boundary in this round (after gitignore-path error at §1 commit 1 and sidecar dead-reference at §1 commit 1). Surfaced for §5 promotion-candidate consideration.
+
+---
+
+## §3 — Commit ledger
+
+Populated as commits land. Anticipated shape: 0-2 implementation commits across §1 + §2 + 1 docs/round-close commit. May collapse to a single docs-only commit if both targets resolve to README-only branches (§1 Branch 2/3 + §2 Branch 2/3a). May expand to 4+ commits if both targets land project-side fixes (§1 Branch 1 + §2 Branch 4) plus docs.
+
+| # | Hash | Subject | Target | Branch |
+|---|------|---------|--------|--------|
+| 0 | `9d59922` | docs(plan): open tooling-reliability debug round | — | — |
+| 1 | `bc0fe17` | docs(plan): reconcile round HEAD re-anchor; amend §0 with §6.14.40 | — | reconciliation |
+| 2 | `cf2d147` | docs(plan,logs,test): §1 commit 1 — bun-test rerun loop empirical data + interim mitigation | §1 | Branch 1 ∩ 4 forward-pinned |
+| 3 | `df4df7c` | docs(plan): §1 round-close; selection-engine sidecar stub | §1 | round-close |
+| 4 | `e6ffb51` | docs(plan,logs): §2 commit 0 — drizzle-kit no-op reproduction probe + branch-selection candidate | §2 | Branch 3a ∩ 5 forward-pinned to round-close |
+| 5 | `<this commit>` | docs(plan,readme): close tooling-reliability-debug round; close §2; document drizzle-kit manual-apply procedure | §2 + round-close | Branch 3a ∩ 5 (doc-only) |
+
+---
+
+## §4 — Round-close residuals (forward-pinned to next round)
+
+### §4.1 Resolved this round
+
+- **Residual #10 (bun-test flake): RESOLVED-AS-REFRAMED.** Empirically a stochastic correctness defect in selection engine's Pass 4 session-soft fallback, not a tooling-layer flake. Forward-pinned to selection-engine sidecar (stub at [`docs/plans/selection-engine-session-attempted-ids-sidecar.md`](selection-engine-session-attempted-ids-sidecar.md)). Test stays running with interim mitigation comment block above the failing `test(...)` declaration; coverage of the no-re-serve invariant remains active.
+- **Residual #12 (drizzle-kit CLI opaque failure): RESOLVED-AS-DOCUMENTED.** Manual-apply workaround procedure in `README.md`. Single-occurrence pattern; not reproducible by loose-file probe; future occurrence has documented recovery path. If a third instance lands (after `822a674` + this documentation), upstream drizzle-orm GitHub issue with reproduction is the next escalation step.
+
+### §4.2 Forward-pinned to next round-cycle (in order of intended precedence)
+
+1. **SELECTION-ENGINE SIDECAR (NEW — opens immediately after this round closes).** Stub at [`docs/plans/selection-engine-session-attempted-ids-sidecar.md`](selection-engine-session-attempted-ids-sidecar.md). Bug seed in tooling-reliability-debug §1.6. SPEC §9.2 implication captured. Three fix-shape branches (α / β / γ) enumerated; sidecar commit-0 audit selects.
+2. **DIAGNOSTIC-TIMING SIDECAR (Option 1 from prior handoff).** Pushed to slot AFTER selection-engine sidecar per the §1 round-close Option-II decision.
+3. **ROUND 3 — REVIEW-SECTION ARCHITECTURE.** Opens after both sidecars close.
+
+### §4.3 New residuals surfaced this round
+
+- **TEST-SUITE EXPECT-COUNT DETERMINISM (forward-watch).** 25-iteration rerun loop showed expect()-count distribution 641-649 across passing iterations (range 9, mean 645.72, 9 distinct values). Likely sampling-driven conditional `expect()` calls in `selection.test.ts` family (within-cell-determinism + 20-salt-variation tests sample probabilistically). Single observation; forward-pin only; no promotion. Track for future-round surfacings.
+- **DRIZZLE-KIT VERBOSE-FLAG SURFACE CONSTRAINT (forward-watch).** drizzle-kit migrate exposes only `--config`/`--help`/`--version`; no diagnostic flag. Future drizzle-kit failure investigation is structurally constrained — env-var probes (`NODE_DEBUG`, `DRIZZLE_LOGGER`) or pg-side query log are the available signal sources. May warrant upstream drizzle-kit issue at some future occurrence.
+- **HANDOFF-DOC IMPRECISION (one-time fix-forward, not residual).** Handoff §10 cited journal hash `d7103ad6…adab0c4`; that hash is NOT in `_journal.json`'s format (no per-entry content-hash field). Empirical hash format is `sha256sum` of the full file: `5385521d6…707e53f3`. Next handoff doc captures the actual format.
+
+### §4.4 Inherited residuals from prior rounds (carried forward unchanged)
+
+All 12 forward-pinned residuals from sidecar §8 / handoff §9 stay open. The two this round addressed (#10 + #12) are reframed/resolved per §4.1; the other ten carry forward unchanged into the next round-cycle.
+
+---
+
+## §5 — §6.14 promotion / reinforcement candidates
+
+### §5.1 Reinforcements (no new SPEC entry; existing canon advances)
+
+- **§6.14.41 (cite-without-verify; reframing):** residual #10's "bun test flake" citation falsified empirically by the 25-iteration rerun loop (§1.6). Positive-complement instance: rerun-loop investigation = literal verification of the cited pattern. Round-anchor for future §6.14.41 references.
+- **§6.14.31 (destructive-operation-gate template):** SECOND instance of explicit application in project history (first: sidecar `822a674` manual-apply). Template now multi-instance. Pre-state hash → apply/probe → rollback → post-state hash verify cycle followed end-to-end at §2 commit 0 (`e6ffb51`). Pattern advances from first-explicit-application to multi-instance.
+- **§6.14.18/21/22 (audit-first checkpoint per-commit):** heavily reinforced this round (cohort: §0.9 reconciliation, §1 commit 1 gitignore catch, §1 commit 1 dead-reference catch, §2.6 drizzle-kit-write-behavior catch). See PROMOTION CANDIDATE 1 below for the sub-pattern that may warrant separate SPEC entry.
+- **§6.14.34 (mid-round narrow-scope sub-round insertion):** this round itself is a §6.14.34 instance. Reinforcement only; no new SPEC entry.
+- **§6.14.40 (redirector-vs-empirical-state divergence):** reinforced at §0.9 reconciliation (existing commit `9d59922` preserved + working HEAD re-anchored from `b6e180d` to `78136b7`).
+
+### §5.2 PROMOTION CANDIDATES (formally surfaced for redirector decision)
+
+#### PROMOTION CANDIDATE 1 — Redirector-spec error caught at executor audit-step boundary as a §6.14 sub-pattern
+
+**Three instances within this round:**
+
+- **(a) §1 commit 1 (`cf2d147`):** redirector spec authored `scripts/_logs/...log` path without checking gitignore precedent (`.gitignore` line 108); executor surfaced at audit-step. Path Y distillation resolved.
+- **(b) §1 commit 1 (planning, not executor-stop):** interim mitigation comment referenced `docs/plans/selection-engine-...-sidecar.md` path that did not yet exist; redirector caught at gate planning before authoring (resolved by stub authoring at §1 round-close, commit `df4df7c`). **Borderline instance** — caught at redirector self-review, not executor stop. May or may not count toward the same sub-pattern.
+- **(c) §2 commit 0 (`e6ffb51`):** redirector spec at audit step (f) said "drizzle-kit will (try to) update `_journal.json` during migrate"; empirically false (drizzle-kit migrate is journal-driven, not file-system-driven). Executor surfaced at probe-execution.
+
+**Reading:** 3 instances within ONE round, 2 unambiguous (a, c). The discipline pattern is "executor audit-first verifies redirector specs and surfaces empirical contradictions." Sub-pattern of §6.14.18/21/22 + §6.14.40 + §6.14.41; arguably deserves its own number for clarity of citation in future rounds.
+
+**Counter-reading:** the existing trio (§6.14.18/21/22 + §6.14.40 + §6.14.41) already covers the surface conceptually. Promotion adds nominal granularity but may not improve discipline-operation fidelity. Defer promotion until the pattern surfaces across multiple rounds.
+
+**Redirector decision required:** PROMOTE (assigns next §6.14.NN number, requires SPEC.md edit in selection-engine sidecar or a follow-up housekeeping commit) or DEFER (continue to track as reinforcement; revisit at next round if pattern surfaces again).
+
+#### PROMOTION CANDIDATE 2 — Sidecar-as-default-narrow-scope-envelope
+
+**Three consecutive sidecar-shape rounds in project history:**
+
+- **(a) Score-Based Goals Sidecar** (closed `b6e180d`, 2026-05-09).
+- **(b) Tooling-Reliability Debug** (this round).
+- **(c) Selection-Engine Session-Attempted-IDs Sidecar** (opens after this round closes).
+
+Plus the diagnostic-timing sidecar (Option 1) is also planned as sidecar-shape for the round after that. Four-in-a-row is the projected near-future state.
+
+**Reading:** when bounded narrow-scope work surfaces, the project defaults to sidecar-shape envelope (smaller plan-doc, ~3-6 commits, audit-step framework template, single sequential focus area). Pattern is genuinely multi-instance.
+
+**Counter-reading:** 3 samples is small; the recency of all three may be coincidence of recent scope shapes; the round-shape decision space (full-round vs sidecar) was always available and Leo's been picking sidecar for narrow scopes — that's taste, not pattern emergence.
+
+**Redirector decision required:** PROMOTE (codifies "sidecar-shape is the default envelope for narrow-scope work" as a §6.14 entry, with criteria for choosing sidecar over full-round) or DEFER (3 samples isn't enough; revisit at next round-shape decision).
+
+### §5.3 Forward-watch (not promoted, single instance, tracked for future rounds)
+
+- **Test-suite expect-count determinism** — one §2-commit-0 observation; expect-count distribution 641-649 across 25 iterations of `bun test`. Forward-pin only.
+- **Forward-anchor stub pattern** — one §1-round-close instance (`docs/plans/selection-engine-session-attempted-ids-sidecar.md` stub authored to resolve dead-reference state). Watch for re-occurrence; if a fourth instance lands, §6.14 promotion candidate.
+- **Methodology-as-primary-finding** — one §2.6 instance (probe didn't reproduce target bug; methodological learning became the finding). Watch for re-occurrence.

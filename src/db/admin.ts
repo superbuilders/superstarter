@@ -12,12 +12,22 @@ interface AdminDb extends AsyncDisposable {
 	readonly db: Db
 }
 
-async function createAdminDb(): Promise<AdminDb> {
-	await using stack = new AsyncDisposableStack()
+async function createAdminPool(): Promise<Pool> {
+	if (env.DATABASE_LOCAL_URL) {
+		logger.info("creating local docker admin pool")
+		return new Pool({
+			connectionString: env.DATABASE_LOCAL_URL,
+			max: 10
+		})
+	}
+
+	if (!env.DATABASE_HOST) {
+		logger.error("admin pool: DATABASE_HOST required when DATABASE_LOCAL_URL is unset")
+		throw errors.new("admin pool: DATABASE_HOST required when DATABASE_LOCAL_URL is unset")
+	}
 
 	const secret = await fetchAdminSecret()
-
-	const pool = new Pool({
+	return new Pool({
 		host: env.DATABASE_HOST,
 		port: 5432,
 		user: secret.username,
@@ -26,6 +36,12 @@ async function createAdminDb(): Promise<AdminDb> {
 		ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
 		max: 10
 	})
+}
+
+async function createAdminDb(): Promise<AdminDb> {
+	await using stack = new AsyncDisposableStack()
+
+	const pool = await createAdminPool()
 	stack.defer(async function disposePool() {
 		const result = await errors.try(pool.end())
 		if (result.error) {

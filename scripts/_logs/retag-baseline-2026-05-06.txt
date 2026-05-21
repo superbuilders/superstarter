@@ -1,0 +1,162 @@
+Tagger-improvement round — pre-fix audit baseline
+==================================================
+
+Captured: 2026-05-06
+Branch:   main
+HEAD:     58b2b10  (docs(spec+plan): reframe SPEC §9.2 verification clarification post-uniform_band-removal; close phase5-adaptive-walker)
+DB:       postgres://postgres:postgres@localhost:54320/postgres
+
+This file captures the empirical state the plan was drafted against, per
+docs/plans/tagger-improvement.md §2(a), §2(b), §2(f). It is the baseline
+against which commit 3's post-re-tag state will be compared. The before/after
+delta is the round's primary verification artifact.
+
+------------------------------------------------------------------------
+Section 1 — §2(f) per-topic-folder classification distribution
+------------------------------------------------------------------------
+
+Query:
+  SELECT source_folder, sub_type_id, count(*) FROM items
+  WHERE source_folder LIKE '12min_%'
+    AND source_folder NOT LIKE '12min_prep_practice%'
+  GROUP BY source_folder, sub_type_id
+  ORDER BY source_folder, count(*) DESC;
+
+Output (29 rows):
+
+            source_folder            |          sub_type_id          | count
+-------------------------------------+-------------------------------+-------
+ 12min_advanced_topics               | numerical.word_problems       |     5
+ 12min_advanced_topics               | numerical.percentages         |     2
+ 12min_advanced_topics               | numerical.fractions           |     2
+ 12min_analogies                     | verbal.analogies              |    13
+ 12min_assumptions_and_conclusions_1 | verbal.critical_reasoning     |     9
+ 12min_assumptions_and_conclusions_2 | verbal.critical_reasoning     |    12
+ 12min_averages                      | numerical.averages            |    10
+ 12min_general_arithmetic            | numerical.word_problems       |     9
+ 12min_general_arithmetic            | numerical.fractions           |     1
+ 12min_lowest_value                  | numerical.lowest_values       |    12
+ 12min_number_series                 | numerical.number_series       |    12
+ 12min_numerical_summary             | numerical.lowest_values       |     3
+ 12min_numerical_summary             | numerical.number_series       |     2
+ 12min_numerical_summary             | numerical.ratios              |     2
+ 12min_numerical_summary             | numerical.speed_distance_time |     2
+ 12min_numerical_summary             | numerical.percentages         |     2
+ 12min_numerical_summary             | numerical.averages            |     1
+ 12min_numerical_summary             | verbal.letter_series          |     1
+ 12min_numerical_summary             | numerical.word_problems       |     1
+ 12min_percentages                   | numerical.percentages         |    12
+ 12min_ratios                        | numerical.word_problems       |     6
+ 12min_ratios                        | numerical.ratios              |     5
+ 12min_seating_arrangement           | verbal.critical_reasoning     |    15
+ 12min_sentence_completion_1         | verbal.sentence_completion    |     8
+ 12min_sentence_completion_2         | verbal.sentence_completion    |    20
+ 12min_speed_distance                | numerical.speed_distance_time |    10
+ 12min_speed_distance                | numerical.word_problems       |     1
+ 12min_workrate                      | numerical.workrate            |     6
+ 12min_workrate                      | numerical.ratios              |     1
+
+Per-folder correctness against the testbank-re-extraction round's 80% threshold
+(14 ground-truth-mappable folders; `12min_advanced_topics` and
+`12min_numerical_summary` excluded per testbank-re-extraction §2(d)):
+
+| Folder                                   | Total | Correct | %     | ≥80%? |
+|------------------------------------------|-------|---------|-------|-------|
+| 12min_analogies → verbal.analogies       |   13  |   13    | 100%  |  ✓    |
+| 12min_assumptions_and_conclusions_1      |    9  |    9    | 100%  |  ✓    |
+| 12min_assumptions_and_conclusions_2      |   12  |   12    | 100%  |  ✓    |
+| 12min_averages → numerical.averages      |   10  |   10    | 100%  |  ✓    |
+| 12min_general_arithmetic → word_problems |   10  |    9    |  90%  |  ✓    |
+| 12min_lowest_value → lowest_values       |   12  |   12    | 100%  |  ✓    |
+| 12min_number_series → number_series      |   12  |   12    | 100%  |  ✓    |
+| 12min_percentages → percentages          |   12  |   12    | 100%  |  ✓    |
+| 12min_ratios → ratios                    |   11  |    5    |  45%  |  ✗    |  ← finding (a)
+| 12min_seating_arrangement → critical_reasoning | 15 | 15  | 100%  |  ✓    |
+| 12min_sentence_completion_1              |    8  |    8    | 100%  |  ✓    |
+| 12min_sentence_completion_2              |   20  |   20    | 100%  |  ✓    |
+| 12min_speed_distance → speed_distance_time |  11 |   10    |  91%  |  ✓    |
+| 12min_workrate → workrate                |    7  |    6    |  86%  |  ✓    |
+
+Bank-wide tagger correctness across the 14 ground-truth folders: 155/162 = 95.7%.
+Single failing folder: `12min_ratios` at 45%.
+
+------------------------------------------------------------------------
+Section 2 — §2(a) `12min_ratios` classification distribution
+------------------------------------------------------------------------
+
+Query:
+  SELECT sub_type_id, count(*) FROM items
+  WHERE source_folder = '12min_ratios'
+  GROUP BY sub_type_id
+  ORDER BY count(*) DESC;
+
+Output:
+
+       sub_type_id       | count
+-------------------------+-------
+ numerical.word_problems |     6
+ numerical.ratios        |     5
+
+11 items in folder; 5 correctly classified as `numerical.ratios`, 6 misclassified
+as `numerical.word_problems` → 45.5% folder correctness. Reproduces the
+testbank-re-extraction round-close finding (a) exactly.
+
+Per the plan §2(c) sample inspection, the 6 misclassified items are prose-form
+proportional/unit-rate problems (e.g., "Six batteries weigh 72 grams. How much
+does one battery weigh?", "80 yoga classes cost $480. How much for 16?"). The 5
+correct classifications include 2 with explicit a:b notation (q04, q06) and 3
+prose proportional-split items the classifier picked up by lexical signal (q03,
+q07, q11). Items q09 and q10 are equalization problems and arguably correct as
+`word_problems`; the achievable folder ceiling is ~9 of 11 = 82%.
+
+------------------------------------------------------------------------
+Section 3 — §2(b) non-brutal zero cells (workrate, lowest_values)
+------------------------------------------------------------------------
+
+Query:
+  SELECT sub_type_id, difficulty, count(*) FROM items
+  WHERE status = 'live'
+    AND sub_type_id IN ('numerical.workrate', 'numerical.lowest_values')
+  GROUP BY sub_type_id, difficulty
+  ORDER BY sub_type_id, difficulty;
+
+Output:
+
+       sub_type_id       | difficulty | count
+-------------------------+------------+-------
+ numerical.lowest_values | easy       |    21
+ numerical.lowest_values | medium     |    12
+ numerical.workrate      | medium     |     8
+ numerical.workrate      | hard       |     3
+
+Zero-cells (absent rows):
+  numerical.workrate.easy       = 0
+  numerical.lowest_values.hard  = 0
+
+These are the only non-brutal zero cells in the 56-cell grid (the other 10 zero
+cells are all at the brutal tier — bank-not-yet-seeded across most sub-types,
+out of scope for this round per the plan §7). Reproduces the 56-cell snapshot
+in commit 88335b5's commit body.
+
+------------------------------------------------------------------------
+Section 4 — Bank totals
+------------------------------------------------------------------------
+
+Query:
+  SELECT 'items_total='||count(*) FROM items WHERE status='live'
+  UNION ALL SELECT 'items_null_source_folder='||count(*) FROM items WHERE status='live' AND source_folder IS NULL
+  UNION ALL SELECT 'items_with_source_folder='||count(*) FROM items WHERE status='live' AND source_folder IS NOT NULL;
+
+Output:
+
+  items_total=439
+  items_null_source_folder=50
+  items_with_source_folder=389
+
+The 50 NULL-provenance items are pre-round seed items from
+`src/db/seeds/items/data/` (hand-curated under the 14-sub-type taxonomy by the
+taxonomy-restructure round); they have no `source_folder` because they were
+not ingested via the OCR pipeline. The 389 with-provenance items are the
+testbank-re-extraction round's ingest output. Per the plan §4 (full-bank scope
+decision), commit 3's re-tag covers all 439 items uniformly to avoid
+classification-version skew within the bank.

@@ -1,0 +1,140 @@
+{
+  "kind": "AWS::IAM::Role",
+  "id": "vercel-role-main",
+  "fqn": "superstarter/main/vercel-role-main",
+  "seq": 9,
+  "data": {},
+  "status": "created",
+  "output": {
+    "Symbol(alchemy::ResourceKind)": "AWS::IAM::Role",
+    "Symbol(alchemy::ResourceID)": "vercel-role-main",
+    "Symbol(alchemy::ResourceFQN)": "superstarter/main/vercel-role-main",
+    "Symbol(alchemy::ResourceScope)": {
+      "@scope": null
+    },
+    "Symbol(alchemy::ResourceSeq)": 9,
+    "typeName": "AWS::IAM::Role",
+    "desiredState": {
+      "RoleName": "superstarter-main-vercel",
+      "Path": "/",
+      "Description": "superstarter-main vercel oidc application role",
+      "MaxSessionDuration": 3600,
+      "AssumeRolePolicyDocument": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Federated": "arn:aws:iam::496780244141:oidc-provider/oidc.vercel.com/ryo-iwatas-projects"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+              "StringEquals": {
+                "oidc.vercel.com/ryo-iwatas-projects:aud": "https://vercel.com/ryo-iwatas-projects"
+              },
+              "StringLike": {
+                "oidc.vercel.com/ryo-iwatas-projects:sub": [
+                  "owner:ryo-iwatas-projects:project:18seconds:environment:production",
+                  "owner:ryo-iwatas-projects:project:18seconds:environment:preview",
+                  "owner:ryo-iwatas-projects:project:18seconds:environment:development"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "Tags": [
+        {
+          "Key": "Project",
+          "Value": "superstarter"
+        },
+        {
+          "Key": "Stage",
+          "Value": "main"
+        }
+      ]
+    },
+    "id": "superstarter-main-vercel",
+    "createdAt": 1778541601665,
+    "Path": "/",
+    "MaxSessionDuration": 3600,
+    "RoleName": "superstarter-main-vercel",
+    "Description": "superstarter-main vercel oidc application role",
+    "AssumeRolePolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Condition": {
+            "StringEquals": {
+              "oidc.vercel.com/ryo-iwatas-projects:aud": "https://vercel.com/ryo-iwatas-projects"
+            },
+            "StringLike": {
+              "oidc.vercel.com/ryo-iwatas-projects:sub": [
+                "owner:ryo-iwatas-projects:project:18seconds:environment:production",
+                "owner:ryo-iwatas-projects:project:18seconds:environment:preview",
+                "owner:ryo-iwatas-projects:project:18seconds:environment:development"
+              ]
+            }
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "arn:aws:iam::496780244141:oidc-provider/oidc.vercel.com/ryo-iwatas-projects"
+          }
+        }
+      ]
+    },
+    "Arn": "arn:aws:iam::496780244141:role/superstarter-main-vercel",
+    "RoleId": "AROAXHKTI6SW3IQ6LXNSU",
+    "Tags": [
+      {
+        "Value": "superstarter",
+        "Key": "Project"
+      },
+      {
+        "Value": "main",
+        "Key": "Stage"
+      }
+    ]
+  },
+  "props": {
+    "RoleName": "superstarter-main-vercel",
+    "Path": "/",
+    "Description": "superstarter-main vercel oidc application role",
+    "MaxSessionDuration": 3600,
+    "AssumeRolePolicyDocument": {
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {
+            "Federated": "arn:aws:iam::496780244141:oidc-provider/oidc.vercel.com/ryo-iwatas-projects"
+          },
+          "Action": "sts:AssumeRoleWithWebIdentity",
+          "Condition": {
+            "StringEquals": {
+              "oidc.vercel.com/ryo-iwatas-projects:aud": "https://vercel.com/ryo-iwatas-projects"
+            },
+            "StringLike": {
+              "oidc.vercel.com/ryo-iwatas-projects:sub": [
+                "owner:ryo-iwatas-projects:project:18seconds:environment:production",
+                "owner:ryo-iwatas-projects:project:18seconds:environment:preview",
+                "owner:ryo-iwatas-projects:project:18seconds:environment:development"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Tags": [
+      {
+        "Key": "Project",
+        "Value": "superstarter"
+      },
+      {
+        "Key": "Stage",
+        "Value": "main"
+      }
+    ]
+  }
+}

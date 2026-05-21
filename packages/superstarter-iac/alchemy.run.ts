@@ -21,7 +21,6 @@ logger.info(
 )
 
 const accountId = await resolveAccountId(REGION)
-
 const oidcThumbprint = await computeOidcThumbprint(OIDC_HOST)
 
 const app = await alchemy("superstarter", {
@@ -50,7 +49,8 @@ const identity = await provisionIdentity({
 	oidcHost: OIDC_HOST,
 	oidcThumbprint,
 	teamSlug: iacEnv.VERCEL_TEAM_SLUG,
-	projectName: iacEnv.VERCEL_PROJECT_NAME
+	projectName: iacEnv.VERCEL_PROJECT_NAME,
+	existingOidcProviderArn: iacEnv.EXISTING_OIDC_PROVIDER_ARN
 })
 
 const database = await provisionDatabase({

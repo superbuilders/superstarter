@@ -12,30 +12,43 @@ import { logger } from "@/logger"
 
 const forwardedArgs = process.argv.slice(2)
 
-logger.info(
-	{ args: forwardedArgs, host: env.DATABASE_HOST, database: DATABASE_NAME },
-	"drizzle-kit-shim starting"
-)
+if (env.DATABASE_LOCAL_URL) {
+	logger.info(
+		{ args: forwardedArgs },
+		"drizzle-kit-shim starting (local docker, DATABASE_LOCAL_URL set)"
+	)
+	process.env.DATABASE_URL = env.DATABASE_LOCAL_URL
+} else {
+	if (!env.DATABASE_HOST) {
+		logger.error("DATABASE_HOST required when DATABASE_LOCAL_URL is unset")
+		throw errors.new("drizzle-kit-shim: DATABASE_HOST required when DATABASE_LOCAL_URL is unset")
+	}
 
-const secret = await fetchAdminSecret()
+	logger.info(
+		{ args: forwardedArgs, host: env.DATABASE_HOST, database: DATABASE_NAME },
+		"drizzle-kit-shim starting (rds)"
+	)
 
-const url = `postgresql://${encodeURIComponent(secret.username)}:${encodeURIComponent(secret.password)}@${env.DATABASE_HOST}:5432/${DATABASE_NAME}?sslmode=verify-full`
-process.env.DATABASE_URL = url
+	const secret = await fetchAdminSecret()
 
-// drizzle-kit spawns its own pg client from the connection string, so we
-// can't inject the RDS CA as a Buffer the way src/db/index.ts does. Write
-// the bundled CA to a temp file and point Node at it via NODE_EXTRA_CA_CERTS.
-const caPath = join(tmpdir(), `superstarter-rds-ca-${process.pid}.pem`)
-const writeCaResult = errors.trySync(function writeCa() {
-	writeFileSync(caPath, RDS_CA_BUNDLE)
-})
-if (writeCaResult.error) {
-	logger.error({ error: writeCaResult.error, path: caPath }, "rds ca bundle write failed")
-	throw errors.wrap(writeCaResult.error, "rds ca bundle write")
+	const url = `postgresql://${encodeURIComponent(secret.username)}:${encodeURIComponent(secret.password)}@${env.DATABASE_HOST}:5432/${DATABASE_NAME}?sslmode=verify-full`
+	process.env.DATABASE_URL = url
+
+	// drizzle-kit spawns its own pg client from the connection string, so we
+	// can't inject the RDS CA as a Buffer the way src/db/index.ts does. Write
+	// the bundled CA to a temp file and point Node at it via NODE_EXTRA_CA_CERTS.
+	const caPath = join(tmpdir(), `superstarter-rds-ca-${process.pid}.pem`)
+	const writeCaResult = errors.trySync(function writeCa() {
+		writeFileSync(caPath, RDS_CA_BUNDLE)
+	})
+	if (writeCaResult.error) {
+		logger.error({ error: writeCaResult.error, path: caPath }, "rds ca bundle write failed")
+		throw errors.wrap(writeCaResult.error, "rds ca bundle write")
+	}
+	process.env.NODE_EXTRA_CA_CERTS = caPath
+
+	logger.info({ args: forwardedArgs, caPath }, "drizzle-kit-shim invoking drizzle-kit")
 }
-process.env.NODE_EXTRA_CA_CERTS = caPath
-
-logger.info({ args: forwardedArgs, caPath }, "drizzle-kit-shim invoking drizzle-kit")
 
 const child = Bun.spawn(["bun", "--bun", "drizzle-kit", ...forwardedArgs], {
 	stdio: ["inherit", "inherit", "inherit"],
