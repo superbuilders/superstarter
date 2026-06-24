@@ -1,19 +1,49 @@
-import { drizzle } from "drizzle-orm/postgres-js"
-import postgres from "postgres"
-
+import { Signer } from "@aws-sdk/rds-signer"
+import * as errors from "@superbuilders/errors"
+import { attachDatabasePool } from "@vercel/functions"
+import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider"
+import { drizzle } from "drizzle-orm/node-postgres"
+import { Pool } from "pg"
+import { AWS_REGION, DATABASE_NAME, DATABASE_USER } from "@/db/constants"
+import { RDS_CA_BUNDLE } from "@/db/rds-ca-bundle"
+import { type Db, dbSchema } from "@/db/schema"
 import { env } from "@/env"
-import * as schema from "./schemas"
+import { logger } from "@/logger"
 
-/**
- * Cache the database connection in development. This avoids creating a new connection on every HMR
- * update.
- */
-// biome-ignore lint: Per user instruction, this file is not to be modified. The assertion is used for connection caching in development.
-const globalForDb = globalThis as unknown as {
-	conn: postgres.Sql | undefined
+const credentials = awsCredentialsProvider({ roleArn: env.AWS_ROLE_ARN })
+
+const signer = new Signer({
+	region: AWS_REGION,
+	hostname: env.DATABASE_HOST,
+	port: 5432,
+	username: DATABASE_USER,
+	credentials
+})
+
+async function getDbPassword(): Promise<string> {
+	const result = await errors.try(signer.getAuthToken())
+	if (result.error) {
+		logger.error(
+			{ error: result.error, host: env.DATABASE_HOST, user: DATABASE_USER },
+			"rds iam auth token fetch failed"
+		)
+		throw errors.wrap(result.error, "rds iam auth token")
+	}
+	return result.data
 }
 
-const conn = globalForDb.conn ?? postgres(env.DATABASE_URL)
-if (env.NODE_ENV !== "production") globalForDb.conn = conn
+const pool = new Pool({
+	host: env.DATABASE_HOST,
+	port: 5432,
+	user: DATABASE_USER,
+	database: DATABASE_NAME,
+	ssl: { ca: RDS_CA_BUNDLE, rejectUnauthorized: true },
+	max: 10,
+	password: getDbPassword
+})
+attachDatabasePool(pool)
 
-export const db = drizzle(conn, { schema })
+const db: Db = drizzle({ client: pool, schema: dbSchema })
+
+export type { Db }
+export { db }

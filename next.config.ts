@@ -1,0 +1,20 @@
+import type { NextConfig } from "next"
+import { withWorkflow } from "workflow/next"
+import "@/env"
+
+const config = {
+	reactStrictMode: true,
+	typedRoutes: true,
+	cacheComponents: true,
+	serverExternalPackages: ["pg", "pino", "pino-pretty"],
+	images: {
+		remotePatterns: [
+			{
+				protocol: "https",
+				hostname: "images.unsplash.com"
+			}
+		]
+	}
+} satisfies NextConfig
+
+export default withWorkflow(config)

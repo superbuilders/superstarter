@@ -1,35 +1,49 @@
 {
 	"compilerOptions": {
-		/* Base Options: */
+		"types": ["bun", "node"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"lib": ["dom", "dom.iterable", "ESNext"],
+		"target": "esnext",
 		"esModuleInterop": true,
 		"skipLibCheck": true,
-		"target": "ESNext",
-		"allowJs": true,
-		"resolveJsonModule": true,
+		"allowJs": false,
 		"moduleDetection": "force",
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true,
-
-		/* Strictness */
 		"strict": true,
-		"noUncheckedIndexedAccess": true,
-		"checkJs": true,
-
-		/* Bundled projects */
-		"lib": ["dom", "dom.iterable", "ESNext"],
 		"noEmit": true,
-		"module": "ESNext",
-		"moduleResolution": "Bundler",
-		"jsx": "preserve",
-		"plugins": [{ "name": "next" }],
+		"jsx": "react-jsx",
+		"plugins": [
+			{
+				"name": "next"
+			},
+			{
+				"name": "workflow"
+			}
+		],
 		"incremental": true,
-
-		/* Path Aliases */
-		"baseUrl": ".",
 		"paths": {
-			"@/*": ["./src/*"]
-		}
+			"@/*": ["./src/*"],
+			"@scripts/*": ["./scripts/*"]
+		},
+		"resolveJsonModule": true,
+		"resolvePackageJsonImports": true,
+		"resolvePackageJsonExports": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true
 	},
-	"include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.cjs", "**/*.js", ".next/types/**/*.ts"],
-	"exclude": ["node_modules"]
+	"include": [
+		"next-env.d.ts",
+		"**/*.ts",
+		"**/*.tsx",
+		"**/*.cjs",
+		"**/*.js",
+		".next/types/**/*.ts",
+		".next/dev/types/**/*.ts"
+	],
+	"exclude": ["node_modules", "generated", "packages"]
 }

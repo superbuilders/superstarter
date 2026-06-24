@@ -1,123 +1,19 @@
 {
 	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"extends": ["./biome/base.json"],
+	"root": true,
 	"plugins": [
-		"./gritql/logger-structured-args.grit",
 		"./gritql/no-as-type-assertion.grit",
-		"./gritql/no-db-in-step-run.grit",
+		"./gritql/no-iife.grit",
+		"./gritql/no-nullish-coalescing.grit",
 		"./gritql/no-new-error.grit",
-		"./gritql/no-slog-in-client-components.grit",
+		"./gritql/no-relative-imports.grit",
 		"./gritql/no-try.grit",
-		"./gritql/no-implicit-select-all.grit"
-	],
-	"vcs": {
-		"enabled": false,
-		"clientKind": "git",
-		"useIgnoreFile": false
-	},
-	"files": {
-		"ignoreUnknown": false,
-		"includes": [
-			"**",
-			"!**/node_modules",
-			"!**/.next",
-			"!**/.expo",
-			"!**/dist",
-			"!**/out",
-			"!**/src/components/ui/**/*.tsx",
-			"!**/src/db/index.ts",
-			"!**/src/hooks"
-		],
-		"maxSize": 5000000
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "tab",
-		"indentWidth": 2,
-		"lineWidth": 120
-	},
-	"assist": { "actions": { "source": { "organizeImports": "on" } } },
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"suspicious": {
-				"noConsole": {
-					"level": "error",
-					"fix": "unsafe"
-				},
-				"noArrayIndexKey": "off"
-			},
-			"complexity": {
-				"noForEach": {
-					"level": "error"
-				},
-				"useOptionalChain": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"useLiteralKeys": {
-					"level": "error",
-					"fix": "safe"
-				}
-			},
-			"recommended": true,
-			"correctness": {
-				"noUnusedImports": "error",
-				"noUnusedVariables": "error",
-				"noUnusedFunctionParameters": "error"
-			},
-			"nursery": {
-				"useUniqueElementIds": "off"
-			},
-			"style": {
-				"noNonNullAssertion": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"useConst": "off",
-				"noUnusedTemplateLiteral": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"useTemplate": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"noUselessElse": {
-					"level": "error",
-					"fix": "safe"
-				},
-				"noParameterAssign": "error",
-				"useAsConstAssertion": "error",
-				"useDefaultParameterLast": "error",
-				"useEnumInitializers": "error",
-				"useSelfClosingElements": "error",
-				"useSingleVarDeclarator": "error",
-				"useNumberNamespace": "error",
-				"noInferrableTypes": "error",
-				"noNestedTernary": "error",
-				"useNodejsImportProtocol": {
-					"level": "error",
-					"fix": "safe"
-				}
-			},
-			"a11y": {
-				"useKeyWithClickEvents": "off"
-			},
-			"performance": {
-				"noImgElement": "error"
-			}
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "double",
-			"semicolons": "asNeeded",
-			"trailingCommas": "none"
-		}
-	},
-	"json": {
-		"formatter": {
-			"trailingCommas": "none"
-		}
-	}
+		"./gritql/require-logger-before-throw.grit",
+		"./gritql/no-implicit-select-all.grit",
+		"./gritql/no-inline-ternary.grit",
+		"./gritql/no-inline-style.grit",
+		"./gritql/no-extends-error.grit",
+		"./gritql/no-instanceof-error.grit"
+	]
 }

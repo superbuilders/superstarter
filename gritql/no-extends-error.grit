@@ -1,0 +1,10 @@
+language js
+
+or {
+	`class $name extends Error { $body }` as $class_decl where {
+		register_diagnostic(span=$class_decl, message="Extending Error is banned. Use errors.new() sentinel pattern instead. See `rules/no-extends-error.md`.", severity="error")
+	},
+	`class extends Error { $body }` as $class_expr where {
+		register_diagnostic(span=$class_expr, message="Extending Error is banned. Use errors.new() sentinel pattern instead. See `rules/no-extends-error.md`.", severity="error")
+	}
+}

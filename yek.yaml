@@ -1,19 +1,12 @@
 ignore_patterns:
   - "yek.yaml"
-  - "biome.jsonc"
-  - "tsconfig.json"
-  - "components.json"
-  - "next.config.js"
-  - "postcss.config.js"
-  - "prd.md"
-  - "README.md"
   - "patches/*"
+  - "scripts/*"
   - "bun.lock"
-  - "package.json"
   - "public/**"
   - "src/components/ui/**"
 priority_rules:
   - score: 99
     pattern: "^rules/"
   - score: 100
-    pattern: "^prompt/"
+    pattern: "^gritql/"

@@ -1,0 +1,29 @@
+{
+	"compilerOptions": {
+		"types": ["bun"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"lib": ["ESNext"],
+		"target": "esnext",
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"moduleDetection": "force",
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
+		"strict": true,
+		"noEmit": true,
+		"resolveJsonModule": true,
+		"resolvePackageJsonImports": true,
+		"resolvePackageJsonExports": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"paths": {
+			"@/*": ["./*"]
+		}
+	},
+	"include": ["**/*.ts"],
+	"exclude": ["node_modules", ".alchemy"]
+}

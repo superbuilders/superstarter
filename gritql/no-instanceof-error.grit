@@ -1,0 +1,5 @@
+language js
+
+`$_ instanceof Error` as $check where {
+	register_diagnostic(span=$check, message="instanceof Error is unnecessary. useThrowOnlyError guarantees all thrown values are Error objects. Use errors.is() for sentinel checking. See `rules/no-instanceof-error.md`.", severity="error")
+}
