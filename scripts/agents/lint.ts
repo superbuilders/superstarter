@@ -14,8 +14,8 @@ import { readdir, readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { query } from "@anthropic-ai/claude-agent-sdk"
 import * as errors from "@superbuilders/errors"
+import * as validate from "@superbuilders/validate"
 import pino from "pino"
-import { z } from "zod"
 
 const logger = pino({
 	level: "debug",
@@ -339,27 +339,55 @@ ${mdcContent}
 	return prompt
 }
 
-const BiomeDiagnosticSchema = z.object({
-	category: z.string(),
-	severity: z.string(),
-	description: z.string(),
-	location: z.object({
-		path: z.object({
-			file: z.string()
-		}),
-		span: z.tuple([z.number(), z.number()]),
-		sourceCode: z.string().optional()
-	})
-})
+const biomeDiagnosticSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["category", "severity", "description", "location"],
+	properties: {
+		category: { type: "string" },
+		severity: { type: "string" },
+		description: { type: "string" },
+		location: {
+			type: "object",
+			additionalProperties: false,
+			required: ["path", "span"],
+			properties: {
+				path: {
+					type: "object",
+					additionalProperties: false,
+					required: ["file"],
+					properties: {
+						file: { type: "string" }
+					}
+				},
+				span: {
+					type: "array",
+					items: { type: "number" },
+					minItems: 2,
+					maxItems: 2
+				},
+				sourceCode: { type: "string" }
+			}
+		}
+	}
+} as const
 
-const BiomeOutputSchema = z.object({
-	summary: z.record(z.string(), z.unknown()),
-	diagnostics: z.array(BiomeDiagnosticSchema),
-	command: z.string()
-})
+const BiomeDiagnosticSchema = validate.compile(biomeDiagnosticSchema)
+type BiomeDiagnostic = validate.Infer<typeof BiomeDiagnosticSchema>
+
+const BiomeOutputSchema = validate.compile({
+	type: "object",
+	additionalProperties: false,
+	required: ["summary", "diagnostics", "command"],
+	properties: {
+		summary: { type: "object", additionalProperties: true },
+		diagnostics: { type: "array", items: biomeDiagnosticSchema },
+		command: { type: "string" }
+	}
+} as const)
 
 type Violation = {
-	span: [number, number]
+	span: readonly number[]
 }
 
 type ViolationCategory = "plugin" | "biome" | "super-lint"
@@ -530,7 +558,7 @@ async function collectViolations(): Promise<GroupedOutput> {
 		throw errors.wrap(parseResult.error, "parse biome output")
 	}
 
-	const validationResult = BiomeOutputSchema.safeParse(parseResult.data)
+	const validationResult = BiomeOutputSchema.parse(parseResult.data)
 	if (!validationResult.success) {
 		logger.error({ error: validationResult.error }, "validate biome output")
 		throw errors.wrap(validationResult.error, "validate biome output")
@@ -541,10 +569,10 @@ async function collectViolations(): Promise<GroupedOutput> {
 
 	logger.info({ count: diagnostics.length }, "parsed diagnostics")
 
-	function isPluginDiagnostic(d: z.infer<typeof BiomeDiagnosticSchema>) {
+	function isPluginDiagnostic(d: BiomeDiagnostic) {
 		return d.category === "plugin"
 	}
-	function isNonPluginDiagnostic(d: z.infer<typeof BiomeDiagnosticSchema>) {
+	function isNonPluginDiagnostic(d: BiomeDiagnostic) {
 		return d.category !== "plugin"
 	}
 	const pluginDiagnostics = diagnostics.filter(isPluginDiagnostic)

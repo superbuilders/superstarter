@@ -1,17 +1,22 @@
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager"
 import * as errors from "@superbuilders/errors"
+import * as validate from "@superbuilders/validate"
 import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider"
-import { z } from "zod"
 import { AWS_REGION } from "@/db/constants"
 import { env } from "@/env"
 import { logger } from "@/logger"
 
-const AdminSecretSchema = z.object({
-	username: z.string().min(1),
-	password: z.string().min(1)
-})
+const AdminSecretSchema = validate.compile({
+	type: "object",
+	additionalProperties: false,
+	required: ["username", "password"],
+	properties: {
+		username: { type: "string", minLength: 1 },
+		password: { type: "string", minLength: 1 }
+	}
+} as const)
 
-type AdminSecret = z.infer<typeof AdminSecretSchema>
+type AdminSecret = validate.Infer<typeof AdminSecretSchema>
 
 async function fetchAdminSecret(): Promise<AdminSecret> {
 	if (!env.DATABASE_ADMIN_SECRET_ARN) {
@@ -47,7 +52,7 @@ async function fetchAdminSecret(): Promise<AdminSecret> {
 		throw errors.wrap(parsedJson.error, "admin secret json")
 	}
 
-	const result = AdminSecretSchema.safeParse(parsedJson.data)
+	const result = AdminSecretSchema.parse(parsedJson.data)
 	if (!result.success) {
 		logger.error({ error: result.error }, "admin secret shape invalid")
 		throw errors.wrap(result.error, "admin secret schema")
@@ -56,5 +61,4 @@ async function fetchAdminSecret(): Promise<AdminSecret> {
 	return result.data
 }
 
-export type { AdminSecret }
 export { fetchAdminSecret }

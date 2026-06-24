@@ -45,5 +45,4 @@ attachDatabasePool(pool)
 
 const db: Db = drizzle({ client: pool, schema: dbSchema })
 
-export type { Db }
 export { db }

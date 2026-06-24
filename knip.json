@@ -1,0 +1,45 @@
+{
+	"$schema": "https://unpkg.com/knip@5/schema.json",
+	"rules": {
+		"files": "error",
+		"dependencies": "error",
+		"devDependencies": "error",
+		"unlisted": "error",
+		"binaries": "error",
+		"exports": "error",
+		"types": "error",
+		"nsExports": "error",
+		"nsTypes": "error",
+		"enumMembers": "error",
+		"duplicates": "error"
+	},
+	"ignoreExportsUsedInFile": false,
+	"ignore": ["src/components/ui/**", "src/db/lib/uuid-time.ts", "src/workflows/example.ts"],
+	"ignoreDependencies": [
+		"tw-animate-css",
+		"pino-pretty",
+		"@biomejs/biome",
+		"shadcn",
+		"@base-ui/react",
+		"@typescript/native-preview",
+		"@superbuilders/tracing",
+		"@superbuilders/limiter"
+	],
+	"drizzle": false,
+	"workspaces": {
+		".": {
+			"entry": [
+				"scripts/dev/**/*.ts",
+				"scripts/agents/**/*.ts",
+				"src/db/scripts/**/*.ts",
+				"src/db/programs/**/*.ts",
+				"drizzle.config.ts"
+			],
+			"project": ["scripts/**/*.{ts,tsx,js}", "src/**/*.{ts,tsx}"]
+		},
+		"packages/*": {
+			"entry": ["*.ts", "lib/**/*.ts", "modules/**/*.ts", "scripts/**/*.ts"],
+			"project": ["*.ts", "lib/**/*.ts", "modules/**/*.ts", "scripts/**/*.ts"]
+		}
+	}
+}

@@ -10,6 +10,9 @@ type RuleId =
 	| "no-arrow-functions"
 	| "no-object-module"
 	| "no-pointless-indirection"
+	| "no-pointless-type-alias"
+	| "no-unused-params"
+	| "tracing-options-last"
 	| "no-timestamp-columns"
 	| "no-uuid-default-random"
 

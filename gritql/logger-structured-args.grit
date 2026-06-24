@@ -1,0 +1,46 @@
+language js // Applies to JavaScript and TypeScript
+
+// Enforce Pino object-first structured logging:
+//   logger.info("message")
+//   logger.info({ context }, "message")
+// See `rules/logger-structured-args.md` and `rules/structured-logging.md`.
+
+or {
+	// 3+ arguments are never allowed.
+	`logger.$method($arg1, $arg2, $arg3, $...)` as $logger_call where {
+		$method <: or {
+			"error",
+			"debug",
+			"warn",
+			"info",
+			"fatal",
+			"trace"
+		},
+		register_diagnostic(span=$logger_call, message="Logger method calls must have at most 2 arguments: optional context object and message string. See `rules/logger-structured-args.md`.", severity="error")
+	},
+	// Old slog order is banned. Pino is object-first.
+	`logger.$method($msg, $ctx)` as $logger_call where {
+		$method <: or {
+			"error",
+			"debug",
+			"warn",
+			"info",
+			"fatal",
+			"trace"
+		},
+		$msg <: `"$_"`,
+		register_diagnostic(span=$logger_call, message="Logger calls use Pino object-first order: logger.info({ ctx }, \"message\"), not logger.info(\"message\", { ctx }). See `rules/logger-structured-args.md`.", severity="error")
+	},
+	// No concatenated message expressions.
+	`logger.$method($left + $right, $...)` as $logger_call where {
+		$method <: or {
+			"error",
+			"debug",
+			"warn",
+			"info",
+			"fatal",
+			"trace"
+		},
+		register_diagnostic(span=$logger_call, message="Logger messages must be simple literals with data in context attributes. See `rules/logger-structured-args.md`.", severity="error")
+	}
+}

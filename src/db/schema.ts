@@ -9,5 +9,5 @@ const dbSchema = {
 type DbSchema = typeof dbSchema
 type Db = PgDatabase<PgQueryResultHKT, DbSchema, ExtractTablesWithRelations<DbSchema>>
 
-export type { Db, DbSchema }
+export type { Db }
 export { dbSchema }

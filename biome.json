@@ -2,7 +2,36 @@
 	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
 	"extends": ["./biome/base.json"],
 	"root": true,
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"linter": {
+		"rules": {
+			"a11y": {
+				"noStaticElementInteractions": "off",
+				"useKeyWithMouseEvents": "off"
+			},
+			"security": {
+				"noDangerouslySetInnerHtml": "off"
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["packages/**"],
+			"linter": {
+				"rules": {
+					"performance": {
+						"noBarrelFile": "off"
+					}
+				}
+			}
+		}
+	],
 	"plugins": [
+		"./gritql/logger-structured-args.grit",
 		"./gritql/no-as-type-assertion.grit",
 		"./gritql/no-iife.grit",
 		"./gritql/no-nullish-coalescing.grit",
@@ -14,6 +43,8 @@
 		"./gritql/no-inline-ternary.grit",
 		"./gritql/no-inline-style.grit",
 		"./gritql/no-extends-error.grit",
-		"./gritql/no-instanceof-error.grit"
+		"./gritql/no-instanceof-error.grit",
+		"./gritql/no-crypto-random-uuid.grit",
+		"./gritql/no-zod-import.grit"
 	]
 }

@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import * as errors from "@superbuilders/errors"
-import { z } from "zod"
+import * as validate from "@superbuilders/validate"
 import { logger } from "@/logger"
 
 // .env.local is the ONLY supported way to supply IaC secrets. Setting them
@@ -43,14 +43,32 @@ if (!process.env.SKIP_ENV_VALIDATION) {
 	}
 }
 
-const EnvSchema = z.object({
-	AWS_REGION: z.literal("us-east-1").default("us-east-1"),
-	VERCEL_TEAM_SLUG: z.string().min(1),
-	VERCEL_PROJECT_NAME: z.string().min(1).default("superstarter"),
-	ALCHEMY_PASSWORD: z.string().min(32)
-})
+// AJV runs with useDefaults:false, so defaults are applied here (not in the
+// schema) before strict validation of the assembled candidate object.
+const awsRegion = process.env.AWS_REGION === undefined ? "us-east-1" : process.env.AWS_REGION
+const vercelProjectName =
+	process.env.VERCEL_PROJECT_NAME === undefined ? "superstarter" : process.env.VERCEL_PROJECT_NAME
 
-const parseResult = EnvSchema.safeParse(process.env)
+const candidate = {
+	AWS_REGION: awsRegion,
+	VERCEL_TEAM_SLUG: process.env.VERCEL_TEAM_SLUG,
+	VERCEL_PROJECT_NAME: vercelProjectName,
+	ALCHEMY_PASSWORD: process.env.ALCHEMY_PASSWORD
+}
+
+const EnvSchema = validate.compile({
+	type: "object",
+	additionalProperties: false,
+	required: ["AWS_REGION", "VERCEL_TEAM_SLUG", "VERCEL_PROJECT_NAME", "ALCHEMY_PASSWORD"],
+	properties: {
+		AWS_REGION: { type: "string", const: "us-east-1" },
+		VERCEL_TEAM_SLUG: { type: "string", minLength: 1 },
+		VERCEL_PROJECT_NAME: { type: "string", minLength: 1 },
+		ALCHEMY_PASSWORD: { type: "string", minLength: 32 }
+	}
+} as const)
+
+const parseResult = EnvSchema.parse(candidate)
 if (!parseResult.success) {
 	logger.error({ error: parseResult.error }, "iac env validation failed")
 	throw errors.wrap(parseResult.error, "iac env validation")

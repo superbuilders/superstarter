@@ -1,6 +1,5 @@
 import type { NextConfig } from "next"
 import { withWorkflow } from "workflow/next"
-import "@/env"
 
 const config = {
 	reactStrictMode: true,

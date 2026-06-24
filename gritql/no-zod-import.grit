@@ -1,0 +1,5 @@
+language js
+
+`import $_ from "zod"` as $import_stmt where {
+	register_diagnostic(span=$import_stmt, message="Zod imports are banned. Author JSON Schema directly, infer types with json-schema-to-ts, and validate with AJV. See `rules/json-schema-ajv.md`.", severity="error")
+}

@@ -1,0 +1,8 @@
+language js
+
+// This rule bans `crypto.randomUUID()` in favor of `Bun.randomUUIDv7()`.
+// crypto.randomUUID() generates UUIDv4 which is not time-sortable.
+
+`crypto.randomUUID()` as $call where {
+	register_diagnostic(span=$call, message="Usage of 'crypto.randomUUID()' is disallowed. It generates UUIDv4, which is not time-sortable. Use `Bun.randomUUIDv7()` instead. See `rules/no-crypto-random-uuid.md`.", severity="error")
+}

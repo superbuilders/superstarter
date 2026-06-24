@@ -44,5 +44,4 @@ async function createAdminDb(): Promise<AdminDb> {
 	}
 }
 
-export type { AdminDb }
 export { createAdminDb }

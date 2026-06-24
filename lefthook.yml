@@ -1,10 +1,16 @@
 pre-commit:
   parallel: false
-  commands:
-    format:
+  jobs:
+    - name: format
       run: bun run format
       stage_fixed: true
-    lint:
-      run: bun run lint
-    typecheck:
-      run: bun run typecheck
+    - name: checks
+      group:
+        parallel: true
+        jobs:
+          - name: lint
+            run: bun run lint
+          - name: typecheck
+            run: bun run typecheck
+          - name: knip
+            run: bun run knip

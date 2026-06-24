@@ -50,7 +50,7 @@ function Content({ todosPromise }: { todosPromise: Promise<Todo[]> }) {
 			applyOptimistic({
 				kind: "create",
 				todo: {
-					id: crypto.randomUUID(),
+					id: Bun.randomUUIDv7(),
 					title: trimmed,
 					completed: false
 				}

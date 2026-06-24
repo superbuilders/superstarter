@@ -3,17 +3,22 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
 import * as errors from "@superbuilders/errors"
-import { z } from "zod"
+import * as validate from "@superbuilders/validate"
 import { logger } from "@/logger"
 
-const DevfactoryCredentialsSchema = z.object({
-	accessKeyId: z.string().min(1),
-	secretAccessKey: z.string().min(1),
-	sessionToken: z.string().min(1),
-	expiration: z.iso.datetime()
-})
+const DevfactoryCredentialsSchema = validate.compile({
+	type: "object",
+	additionalProperties: false,
+	required: ["accessKeyId", "secretAccessKey", "sessionToken", "expiration"],
+	properties: {
+		accessKeyId: { type: "string", minLength: 1 },
+		secretAccessKey: { type: "string", minLength: 1 },
+		sessionToken: { type: "string", minLength: 1 },
+		expiration: { type: "string", minLength: 1 }
+	}
+} as const)
 
-type DevfactoryCredentials = z.infer<typeof DevfactoryCredentialsSchema>
+type DevfactoryCredentials = validate.Infer<typeof DevfactoryCredentialsSchema>
 
 const defaultPath = join(homedir(), "Downloads", "credentials.json")
 const overridePath = process.env.DEVFACTORY_CREDS_PATH
@@ -37,7 +42,7 @@ if (rawJson.error) {
 	throw errors.wrap(rawJson.error, "credentials.json parse")
 }
 
-const parsed = DevfactoryCredentialsSchema.safeParse(rawJson.data)
+const parsed = DevfactoryCredentialsSchema.parse(rawJson.data)
 if (!parsed.success) {
 	logger.error({ path: credsPath, error: parsed.error }, "devfactory credentials shape invalid")
 	throw errors.wrap(parsed.error, "credentials.json schema")
@@ -46,6 +51,10 @@ if (!parsed.success) {
 const creds: DevfactoryCredentials = parsed.data
 
 const expiresAtMs = new Date(creds.expiration).getTime()
+if (!Number.isFinite(expiresAtMs)) {
+	logger.error({ path: credsPath, expiration: creds.expiration }, "devfactory expiration not a valid datetime")
+	throw errors.new(`devfactory credentials expiration '${creds.expiration}' is not a valid datetime`)
+}
 const nowMs = Date.now()
 const msUntilExpiry = expiresAtMs - nowMs
 const MIN_HEADROOM_MS = 60_000

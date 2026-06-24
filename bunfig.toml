@@ -1,0 +1,6 @@
+[test]
+# bun test discovers test files by filesystem scan and does not respect
+# .gitignore; positional args are substring filters, so nested checkouts
+# (e.g. worktrees under _worktrees/) double-match and get swept into every
+# run. Mirror the repo's ignore conventions.
+pathIgnorePatterns = ["_*/**", "worktrees/**"]

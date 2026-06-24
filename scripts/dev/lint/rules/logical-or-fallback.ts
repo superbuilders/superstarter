@@ -66,7 +66,7 @@ function isInAllowedPosition(node: ts.Node): boolean {
 	return false
 }
 
-function check(sourceFile: ts.SourceFile, _checker: ts.TypeChecker): Violation[] {
+function check(sourceFile: ts.SourceFile): Violation[] {
 	const violations: Violation[] = []
 
 	function walk(node: ts.Node): void {
