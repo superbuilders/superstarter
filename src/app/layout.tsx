@@ -1,3 +1,4 @@
+import { ClerkProvider } from "@clerk/nextjs"
 import type { Metadata } from "next"
 import { Geist, Inter } from "next/font/google"
 import type * as React from "react"
@@ -19,9 +20,11 @@ const geist = Geist({
 
 function RootLayout({ children }: { readonly children: React.ReactNode }) {
 	return (
-		<html lang="en" className={cn(geist.variable, inter.variable)}>
-			<body>{children}</body>
-		</html>
+		<ClerkProvider>
+			<html lang="en" className={cn(geist.variable, inter.variable)}>
+				<body>{children}</body>
+			</html>
+		</ClerkProvider>
 	)
 }
 

@@ -13,6 +13,7 @@ The philosophy of this starter is simple: **prevent entire classes of bugs at th
 *   **Runtime**: [Bun](https://bun.sh/)
 *   **ORM**: [Drizzle ORM](https://orm.drizzle.team/) (with PostgreSQL)
 *   **Async Workflows**: [Vercel Workflows](https://useworkflow.dev/) (`"use workflow"` / `"use step"` directives)
+*   **Authentication**: [Clerk](https://clerk.com/) (plug-and-play auth)
 *   **Infrastructure**: AWS via [Alchemy](https://alchemy.run) — see [`packages/superstarter-iac`](packages/superstarter-iac/README.md)
 *   **Auth model**: Vercel ↔ AWS OIDC federation; runtime mints per-connection RDS IAM auth tokens (no DB password in env)
 *   **Linting & Formatting**: [Biome](https://biomejs.dev/)
@@ -48,9 +49,13 @@ The philosophy of this starter is simple: **prevent entire classes of bugs at th
     ```
     The deploy logs print the env vars to paste into Vercel and your local `.env`. See [`packages/superstarter-iac/README.md`](packages/superstarter-iac/README.md) for the full team workflow.
 
-3.  **Set up environment variables:** Copy `.env.example` to `.env` and fill in the values from the IaC deploy output:
+3.  **Set up environment variables:** Copy `.env.example` to `.env` and fill in the values from the IaC deploy output, plus your Clerk keys from [dashboard.clerk.com](https://dashboard.clerk.com):
     ```bash
     cp .env.example .env
+    ```
+    ```.env
+    CLERK_SECRET_KEY="sk_test_..."
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_test_..."
     ```
 
 4.  **Bootstrap the database:**
@@ -65,6 +70,80 @@ The philosophy of this starter is simple: **prevent entire classes of bugs at th
     ```
 
 Your application should now be running at `http://localhost:3000`.
+
+## Authentication with Clerk
+
+This starter includes [Clerk](https://clerk.com/) authentication pre-configured and ready to use. Clerk provides a complete user management solution with minimal setup required.
+
+### What's Included
+
+*   **Authentication Pages**: Pre-built `/login` and `/sso-callback` routes
+*   **Middleware Setup**: Clerk middleware initialized (no protected routes by default)
+*   **Type-Safe Metadata**: Extensible schema for storing custom user data
+*   **Zero Configuration**: Works out of the box with just API keys
+
+### Setting Up Clerk
+
+1.  **Create a Clerk Application**: Sign up at [dashboard.clerk.com](https://dashboard.clerk.com) and create a new application
+2.  **Copy Your API Keys**: Find them in your Clerk dashboard under "API Keys"
+3.  **Enable Authentication Methods**: In your Clerk dashboard, configure:
+    *   Social providers (Google, GitHub, etc.)
+    *   Email/password authentication
+    *   Any other methods you need
+
+### Customizing User Metadata
+
+The starter includes a flexible metadata schema at `src/lib/metadata/clerk.ts`. You can extend it to store custom user data:
+
+```typescript
+// Example: Adding custom fields to the metadata schema
+export const ClerkUserPublicMetadataSchema = z.object({
+    role: z.enum(["user", "admin"]).default("user"),
+    onboardingCompleted: z.boolean().default(false),
+    preferences: z.object({
+        theme: z.enum(["light", "dark"]).default("light"),
+        language: z.string().default("en")
+    }).default({})
+})
+```
+
+### Protecting Routes
+
+By default, all routes are public. To protect specific routes, update the middleware:
+
+```typescript
+// src/middleware.ts
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+
+const isProtectedRoute = createRouteMatcher([
+    "/dashboard(.*)",
+    "/api/protected(.*)"
+])
+
+export default clerkMiddleware((auth, req) => {
+    if (isProtectedRoute(req)) {
+        auth.protect()
+    }
+})
+```
+
+### Accessing User Data
+
+In Server Components:
+```typescript
+import { currentUser } from "@clerk/nextjs/server"
+
+const user = await currentUser()
+// Access built-in fields: user?.firstName, user?.lastName, user?.emailAddresses
+```
+
+In Client Components:
+```typescript
+"use client"
+import { useUser } from "@clerk/nextjs"
+
+const { user, isLoaded, isSignedIn } = useUser()
+```
 
 ## The Superbuilder Ruleset: Enforced Best Practices
 
@@ -271,10 +350,12 @@ Beyond the custom GritQL rules, this template uses a strict Biome configuration 
 ├── rules/                             # Markdown documentation for custom rules
 └── src/
     ├── app/                           # Next.js App Router
+    │   ├── login/                     # Clerk sign-in page
+    │   ├── sso-callback/              # Clerk SSO callback handler
     │   ├── page.tsx                   # Home page (server component)
     │   ├── content.tsx                # Client component (useOptimistic todos)
     │   ├── actions.ts                 # Server actions (revalidatePath after mutations)
-    │   └── layout.tsx                 # Root layout
+    │   └── layout.tsx                 # Root layout (ClerkProvider)
     ├── components/ui/                 # shadcn/ui components
     ├── db/                            # Drizzle ORM
     │   ├── schemas/<domain>/<table>.ts  # One table per file
@@ -283,9 +364,13 @@ Beyond the custom GritQL rules, this template uses a strict Biome configuration 
     │   ├── admin.ts                   # Admin pool (Secrets Manager) for scripts
     │   ├── programs/                  # SQL programs (app_user role, grants, pgcrypto)
     │   └── scripts/                   # drizzle-kit shim, push-programs, drop-schema
+    ├── lib/                           # Shared utilities
+    │   ├── metadata/                  # Clerk metadata schema
+    │   └── utils.ts                   # cn() helper
     ├── workflows/                     # Vercel Workflow definitions ("use workflow")
     ├── styles/                        # Global styles
     ├── env.ts                         # Environment variable validation (T3 Env)
+    ├── middleware.ts                  # Clerk middleware for auth
     └── logger.ts                      # Pino logger
 ```
 

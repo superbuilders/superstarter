@@ -26,6 +26,7 @@
 		"@aws-sdk/client-secrets-manager": "^3.1037.0",
 		"@aws-sdk/rds-signer": "^3.1037.0",
 		"@base-ui/react": "^1.4.1",
+		"@clerk/nextjs": "^6.28.0",
 		"@superbuilders/errors": "^3.0.2",
 		"@t3-oss/env-nextjs": "^0.13.11",
 		"@vercel/functions": "^3.4.4",
