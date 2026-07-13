@@ -7,8 +7,8 @@ import { logger } from "@/logger"
  * The root config excludes `packages/`, so without this fan-out a package can
  * ship a type error while every gate stays green.
  *
- * Runs on tsgo (TypeScript 7 native compiler) with NO tsc fallback, and every
- * gate runs CONCURRENTLY — tsgo parallelizes checking within each gate and
+ * Runs on tsc (TypeScript 7 native compiler) with NO tsc fallback, and every
+ * gate runs CONCURRENTLY — tsc parallelizes checking within each gate and
  * Promise.all parallelizes across gates, so wall time is the slowest single
  * gate, not the sum.
  */
@@ -34,7 +34,7 @@ function countErrors(output: string): number {
 
 async function runGate(gate: Gate): Promise<string[]> {
 	const result = await errors.try(
-		$`tsgo --noEmit -p ${gate.project}`.cwd(gate.cwd).quiet().nothrow()
+		$`tsc --noEmit -p ${gate.project}`.cwd(gate.cwd).quiet().nothrow()
 	)
 	if (result.error) {
 		logger.error({ error: result.error, gate: gate.label }, "typecheck gate spawn failed")

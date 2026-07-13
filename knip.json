@@ -21,7 +21,6 @@
 		"@biomejs/biome",
 		"shadcn",
 		"@base-ui/react",
-		"@typescript/native-preview",
 		"@superbuilders/tracing",
 		"@superbuilders/limiter"
 	],

@@ -20,7 +20,7 @@ The philosophy of this starter is simple: **prevent entire classes of bugs at th
 *   **Environment Variables**: [T3 Env](https://env.t3.gg/)
 *   **Error Handling**: A custom, robust error handling library (`@superbuilders/errors`)
 *   **Logging**: [Pino](https://getpino.io/) via a centralised `@/logger`
-*   **TypeScript**: [TypeScript 7.0 Beta](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0-beta/) via `tsgo` (with `@typescript/typescript6` aliased as `typescript` for tools that need the legacy peer)
+*   **TypeScript**: [TypeScript 7.0](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) via `tsc` (`@typescript/native` alias; `typescript` stays on 6.x for tools that need the legacy API)
 
 ## Getting Started
 
@@ -296,7 +296,7 @@ Beyond the custom GritQL rules, this template uses a strict Biome configuration 
 | `bun dev`                  | Starts the Next.js development server.                                     |
 | `bun build`                | Builds the application for production.                                     |
 | `bun start`                | Starts the production server.                                              |
-| `bun typecheck`            | Runs TypeScript 7 type checking via `tsgo`.                                |
+| `bun typecheck`            | Runs TypeScript 7 type checking via `tsc`.                                 |
 | `bun lint`                 | Runs Biome and the custom super-lint on staged files.                      |
 | `bun lint:all`             | Runs Biome and super-lint across the whole repo.                           |
 | `bun format`               | Strips comments and applies Biome formatting.                              |
