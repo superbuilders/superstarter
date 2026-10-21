@@ -1,173 +1,148 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S node
+
+import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { Array as Arr, Console, Effect, FileSystem, Path, Schema, String as Str } from "effect"
+import { DevtoolFailure, exitWith, reportFailure } from "#scripts/dev/devtool-failure.ts"
+import { invocationOf } from "#scripts/dev/shared/arguments.ts"
+import { jsonEncoder } from "#scripts/dev/shared/json.ts"
+import { configFileNames, nativeSession } from "#scripts/dev/shared/native-api.ts"
+import { parseSyntax, type SyntaxSource } from "#scripts/dev/shared/native-syntax.ts"
+import { appRoot, covers, isGeneratedPath, repositoryPath } from "#scripts/dev/shared/repository.ts"
+import { extractClasses } from "#scripts/dev/style/class-extractor.ts"
+import { ComponentsConfig, loadDesignSystem } from "#scripts/dev/style/design-system.ts"
+import { noArbitraryRadius } from "#scripts/dev/style/rules/no-arbitrary-radius.ts"
+import { noArbitraryShadow } from "#scripts/dev/style/rules/no-arbitrary-shadow.ts"
+import { noArbitrarySpacing } from "#scripts/dev/style/rules/no-arbitrary-spacing.ts"
+import { noDuplicateDataSlot } from "#scripts/dev/style/rules/no-duplicate-data-slot.ts"
+import { noInvalidColor } from "#scripts/dev/style/rules/no-invalid-color.ts"
+import { noUnresolvedClass } from "#scripts/dev/style/rules/no-unresolved-class.ts"
+import { requireDataSlot } from "#scripts/dev/style/rules/require-data-slot.ts"
+import { type ClassRule, type DesignSystem, StyleViolation } from "#scripts/dev/style/types.ts"
 
 /**
- * Style Linter - Design Token Enforcement
- *
- * Loads the full Tailwind v4 design system (globals + tokens + component CSS)
- * and validates that TSX classes resolve to actual CSS output.
- *
- * Rules:
- *   - no-unresolved-class: Every Tailwind class must produce CSS (catches typos + broken @theme)
- *   - no-invalid-color: Require colors from theme (ban blue-500, gray-700, etc.)
- *   - no-arbitrary-color: Ban arbitrary color values (bg-[#fff], text-[rgb(...)])
- *   - no-arbitrary-spacing: Ban arbitrary spacing (p-[37px], gap-[18px], etc.)
- *   - no-arbitrary-radius: Ban arbitrary radius (rounded-[13px], etc.)
- *   - no-arbitrary-shadow: Ban arbitrary shadows (shadow-[0_4px_12px_...], etc.)
- *   - require-data-slot: Components must have data-slot on top-level element
- *   - no-duplicate-data-slot: Each data-slot value must be unique across components
- *
- * Usage:
- *   bun scripts/dev/style.ts              # Check all TSX files
- *   bun scripts/dev/style.ts --json       # Output JSON for tooling
- *   bun scripts/dev/style.ts src/app/     # Check specific directory
+ * The style linter: design-token enforcement over the TSX files of the app's tsconfig, against the full Tailwind v4
+ * design system that the app's components.json stylesheet defines. Classes must compile, colors must be theme tokens,
+ * arbitrary spacing, radius and shadow values are banned, and components carry unique data-slot attributes.
+ * Explicit paths narrow the files (a TSX file the tsconfig excludes is added); `--json` prints the violations.
  */
 
-import { parseTsConfig } from "@scripts/dev/shared/files"
-import { extractClassesFromFile } from "@scripts/dev/style/class-extractor"
-import { loadDesignSystem } from "@scripts/dev/style/design-system"
-import * as noArbitraryRadius from "@scripts/dev/style/rules/no-arbitrary-radius"
-import * as noArbitraryShadow from "@scripts/dev/style/rules/no-arbitrary-shadow"
-import * as noArbitrarySpacing from "@scripts/dev/style/rules/no-arbitrary-spacing"
-import * as noDuplicateDataSlot from "@scripts/dev/style/rules/no-duplicate-data-slot"
-import * as noInvalidColor from "@scripts/dev/style/rules/no-invalid-color"
-import * as noUnresolvedClass from "@scripts/dev/style/rules/no-unresolved-class"
-import * as requireDataSlot from "@scripts/dev/style/rules/require-data-slot"
-import type { Violation } from "@scripts/dev/style/types"
-import * as errors from "@superbuilders/errors"
-import { logger } from "@/logger"
-import * as ts from "typescript"
+const CLASS_RULES: ReadonlyArray<ClassRule> = [
+	noUnresolvedClass,
+	noInvalidColor,
+	noArbitrarySpacing,
+	noArbitraryRadius,
+	noArbitraryShadow
+]
 
-function parseArgs(): { useJsonOutput: boolean; specificPaths: string[] } {
-	const args = process.argv.slice(2)
-	const useJsonOutput = args.includes("--json")
-	const specificPaths = args.filter((a) => !a.startsWith("--"))
-	return { useJsonOutput, specificPaths }
+const encodeViolations = jsonEncoder(Schema.Array(StyleViolation))
+
+const decodeComponentsConfig = Schema.decodeUnknownEffect(Schema.fromJsonString(ComponentsConfig))
+
+const isStyledSource = (file: string): boolean =>
+	Str.endsWith(".tsx")(file) && !isGeneratedPath(file)
+
+const violationsOf = (
+	sources: ReadonlyArray<SyntaxSource>,
+	system: DesignSystem
+): ReadonlyArray<StyleViolation> => [
+	...noDuplicateDataSlot(sources),
+	...Arr.flatMap(sources, (source) => {
+		const classes = extractClasses(source)
+		return [
+			...requireDataSlot(source),
+			...Arr.flatMap(CLASS_RULES, (rule) => rule({ classes, system }))
+		]
+	})
+]
+
+const renderText = (violations: ReadonlyArray<StyleViolation>): string => {
+	const lines = Arr.map(violations, (violation) => {
+		const detail = violation.className === undefined ? "" : ` (${violation.className})`
+		return `${repositoryPath(violation.file)}:${violation.line}:${violation.column} ${violation.rule}: ${violation.message}${detail}`
+	})
+	return Arr.join([...lines, `style: ${violations.length} violation(s)`], "\n")
 }
 
-function collectSourceFiles(program: ts.Program, specificPaths: string[]): ts.SourceFile[] {
-	const sourceFiles: ts.SourceFile[] = []
-
-	for (const sf of program.getSourceFiles()) {
-		if (sf.isDeclarationFile) continue
-		if (sf.fileName.includes("node_modules")) continue
-		if (!sf.fileName.endsWith(".tsx")) continue
-		if (!matchesAnyPath(sf.fileName, specificPaths)) continue
-		sourceFiles.push(sf)
-	}
-
-	return sourceFiles
-}
-
-function matchesAnyPath(fileName: string, specificPaths: string[]): boolean {
-	if (specificPaths.length === 0) return true
-
-	for (const p of specificPaths) {
-		if (fileName.includes(p)) return true
-	}
-
-	return false
-}
-
-function outputJson(violations: Violation[]): void {
-	process.stdout.write(JSON.stringify(violations, null, 2))
-	process.stdout.write("\n")
-}
-
-function outputText(violations: Violation[]): void {
-	for (const v of violations) {
-		const location = `${v.file}:${v.line}:${v.column}`
-		const details: Record<string, unknown> = {
-			location,
-			rule: v.rule,
-			message: v.message
-		}
-		if (v.className) {
-			details.class = v.className
-		}
-		if (v.componentName) {
-			details.component = v.componentName
-		}
-		logger.warn(details, "style violation")
-	}
-
-	if (violations.length === 0) {
-		logger.info("no style violations found")
-	} else {
-		logger.info({ violations: violations.length }, "style check complete")
-	}
-}
-
-async function main(): Promise<void> {
-	const { useJsonOutput, specificPaths } = parseArgs()
-
-	logger.info("loading design system")
-	const designSystem = await loadDesignSystem()
-	const animateCount = designSystem.themeNamespaces.get("--animate")?.size
-	const easeCount = designSystem.themeNamespaces.get("--ease")?.size
-	logger.info(
-		{
-			colors: designSystem.allowedColors.size,
-			animations: animateCount,
-			easings: easeCount,
-			utilities: designSystem.classList.size
-		},
-		"loaded design system"
+const main = Effect.gen(function* () {
+	const fs = yield* FileSystem.FileSystem
+	const path = yield* Path.Path
+	const invocation = yield* invocationOf(["--json"])
+	const selected = Arr.map(invocation.paths, (argument) => path.resolve(argument))
+	const componentsText = yield* fs.readFileString(`${appRoot}/components.json`).pipe(
+		Effect.mapError((cause) =>
+			DevtoolFailure.make({
+				detail:
+					"components.json is missing: the style linter loads the design system from the stylesheet it names (tailwind.css). Run shadcn init first.",
+				cause
+			})
+		)
 	)
-
-	logger.info("creating TypeScript program")
-	const config = parseTsConfig()
-	const program = ts.createProgram(config.fileNames, config.options)
-	const sourceFiles = collectSourceFiles(program, specificPaths)
-
-	logger.info({ count: sourceFiles.length }, "checking TSX files")
-
-	const allViolations: Violation[] = []
-
-	// Check for duplicate data-slot values across all files
-	const duplicateSlotViolations = noDuplicateDataSlot.check(sourceFiles)
-	allViolations.push(...duplicateSlotViolations)
-
-	for (const sourceFile of sourceFiles) {
-		// Check data-slot requirement
-		const dataSlotViolations = requireDataSlot.check(sourceFile)
-		allViolations.push(...dataSlotViolations)
-
-		// Check class-based violations
-		const classes = extractClassesFromFile(sourceFile)
-		if (classes.length > 0) {
-			const unresolvedViolations = noUnresolvedClass.check(
-				classes,
-				designSystem,
-				sourceFile.fileName
+	const components = yield* decodeComponentsConfig(componentsText).pipe(
+		Effect.mapError((cause) =>
+			DevtoolFailure.make({
+				detail: "components.json must name the stylesheet in tailwind.css",
+				cause
+			})
+		)
+	)
+	const entry = path.resolve(appRoot, components.tailwind.css)
+	const css = yield* fs.readFileString(entry).pipe(
+		Effect.mapError((cause) =>
+			DevtoolFailure.make({
+				detail: `${entry}, the stylesheet components.json names, could not be read`,
+				cause
+			})
+		)
+	)
+	if (!Str.isNonEmpty(Str.trim(css))) {
+		return yield* DevtoolFailure.make({
+			detail: `${entry}, the stylesheet components.json names, is empty`
+		})
+	}
+	const system = yield* loadDesignSystem({ css, base: path.dirname(entry), path: entry })
+	const configured = yield* Effect.scoped(
+		Effect.flatMap(nativeSession({ cwd: appRoot }), (api) =>
+			configFileNames({ api, config: `${appRoot}/tsconfig.json` })
+		)
+	)
+	const covered = Arr.isReadonlyArrayNonEmpty(selected)
+		? Arr.filter(configured, (file) =>
+				Arr.some(selected, (choice) => covers({ selected: choice, file }))
 			)
-			allViolations.push(...unresolvedViolations)
-
-			const colorViolations = noInvalidColor.check(classes, designSystem, sourceFile.fileName)
-			allViolations.push(...colorViolations)
-
-			const spacingViolations = noArbitrarySpacing.check(classes, designSystem, sourceFile.fileName)
-			allViolations.push(...spacingViolations)
-
-			const radiusViolations = noArbitraryRadius.check(classes, designSystem, sourceFile.fileName)
-			allViolations.push(...radiusViolations)
-
-			const shadowViolations = noArbitraryShadow.check(classes, designSystem, sourceFile.fileName)
-			allViolations.push(...shadowViolations)
-		}
+		: configured
+	const extra = Arr.filter(
+		selected,
+		(file) => isStyledSource(file) && !Arr.contains(configured, file)
+	)
+	const files = Arr.filter(Arr.dedupe([...covered, ...extra]), isStyledSource)
+	const inputs = yield* Effect.forEach(
+		files,
+		(file) =>
+			fs.readFileString(file).pipe(
+				Effect.map((text) => ({ file, text })),
+				Effect.mapError((cause) =>
+					DevtoolFailure.make({ detail: `${file} could not be read`, cause })
+				)
+			),
+		{ concurrency: 16 }
+	)
+	const violations = yield* Effect.scoped(
+		Effect.flatMap(parseSyntax(inputs), (sources) =>
+			Effect.try({
+				try: () => violationsOf(sources, system),
+				catch: (cause) => DevtoolFailure.make({ detail: "Style analysis failed", cause })
+			})
+		)
+	)
+	const output = invocation.flags.has("--json")
+		? yield* encodeViolations(violations)
+		: renderText(violations)
+	yield* Console.log(output)
+	if (Arr.isReadonlyArrayNonEmpty(violations)) {
+		yield* exitWith(1)
 	}
+}).pipe(Effect.catchTag("DevtoolFailure", reportFailure))
 
-	if (useJsonOutput) {
-		outputJson(allViolations)
-	} else {
-		outputText(allViolations)
-	}
-
-	const exitCode = allViolations.length > 0 ? 1 : 0
-	process.exit(exitCode)
-}
-
-const result = await errors.try(main())
-if (result.error) {
-	logger.error({ error: result.error }, "failed")
-	process.exit(1)
-}
+// The entry point provides Node's platform services, once, for the whole command.
+// @effect-diagnostics-next-line strictEffectProvide:off
+NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))

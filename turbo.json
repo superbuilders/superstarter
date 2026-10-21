@@ -1,0 +1,147 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"agentGuidance": false,
+	"envMode": "strict",
+	"globalDependencies": ["pnpm-workspace.yaml", "pnpm-lock.yaml", "patches/**"],
+	"globalEnv": ["SUPERSTARTER_CHECK_RUNTIME", "NODE_OPTIONS", "NODE_ENV"],
+	"tasks": {
+		"//#typecheck:tooling": {
+			"description": "Hash the root compiler's include tree, conservatively retaining workspace compiler source and manifests for transitive resolution.",
+			"inputs": [
+				"scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
+				"packages/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
+				"tsconfig.json",
+				"package.json",
+				"!**/{node_modules,.next,.turbo,dist,out,.output}/**",
+				"!**/next-env.d.ts"
+			],
+			"outputs": []
+		},
+		"//#lint:repository": {
+			"description": "Hash root compiler source, transitive workspace source and ownership manifests inspected by repository rules.",
+			"inputs": [
+				"scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
+				"packages/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
+				"tsconfig.json",
+				"package.json",
+				"!**/{node_modules,.next,.turbo,dist,out,.output}/**",
+				"!**/next-env.d.ts"
+			],
+			"outputs": []
+		},
+		"//#lint:fixtures": {
+			"description": "Hash superlint, its rules and their fixtures: every rule must report exactly its fixtures' marked lines.",
+			"inputs": [
+				"scripts/dev/lint.ts",
+				"scripts/dev/lint/**",
+				"scripts/dev/shared/**",
+				"scripts/dev/devtool-failure.ts",
+				"tsconfig.json",
+				"package.json"
+			],
+			"outputs": []
+		},
+		"//#lint:oxlint": {
+			"dependsOn": ["@superstarter/nextjs-app#typegen"],
+			"description": "Hash oxlint operands, their compiler configuration, the plugin and Git ignore rules; type-aware rules read the app's route declarations.",
+			"inputs": [
+				"{scripts,packages}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
+				".oxlintrc.json",
+				"tsconfig.json",
+				".gitignore",
+				"{scripts,packages}/**/.gitignore",
+				"package.json",
+				"!**/{node_modules,.git,.next,.turbo,dist,out,.output,.swc}/**",
+				"!**/next-env.d.ts",
+				{
+					"mode": "jit",
+					"globs": [
+						"packages/product/nextjs-app/.next/types/**/*.ts",
+						"packages/product/nextjs-app/.next/dev/types/**/*.ts"
+					]
+				}
+			],
+			"outputs": []
+		},
+		"//#style:check": {
+			"dependsOn": ["@superstarter/nextjs-app#typegen"],
+			"description": "Preserve Git-visible inventory membership and conservative compiler/design-system dependencies, excluding non-operands; typegen owns production declarations and JIT hashes independent dev declarations.",
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"!**/*.{md,txt,png,jpg,jpeg,webp,avif,gif,ico,svg,mp3,wav,ogg,mp4,webm,pdf,sql,yml,yaml,jsonl,ndjson,log,har,patch}",
+				"!**/.turbo/**",
+				{
+					"mode": "jit",
+					"globs": ["packages/product/nextjs-app/.next/dev/types/**/*.ts"]
+				}
+			],
+			"outputs": []
+		},
+		"//#format:check": {
+			"description": "Hash formatter operands, the formatter configuration and Git ignore rules.",
+			"inputs": [
+				"{scripts,packages,rules}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,css,md,yaml,yml}",
+				"{scripts,packages}/**/.gitignore",
+				"package.json",
+				"turbo.json",
+				"tsconfig.json",
+				"pnpm-workspace.yaml",
+				".oxlintrc.json",
+				".oxfmtrc.json",
+				".fallowrc.json",
+				"AGENTS.md",
+				"README.md",
+				".gitignore",
+				"!**/{node_modules,.git,.next,.turbo,dist,out,.output,.swc}/**",
+				"!**/next-env.d.ts"
+			],
+			"outputs": []
+		},
+		"//#dead-code:check": {
+			"description": "Hash every workspace's source, manifests and compiler configuration, and fallow's configuration.",
+			"inputs": [
+				"{scripts,packages}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,css}",
+				"package.json",
+				"tsconfig.json",
+				"pnpm-workspace.yaml",
+				".fallowrc.json",
+				".oxlintrc.json",
+				"!**/{node_modules,.git,.next,.turbo,dist,out,.output,.swc}/**",
+				"!**/next-env.d.ts"
+			],
+			"outputs": []
+		},
+		"source": {
+			"description": "Hash transitive workspace source without running no-emit checks in dependency order.",
+			"dependsOn": ["^source"],
+			"outputs": []
+		},
+		"build": {
+			"dependsOn": ["^build", "^source"],
+			"outputs": [".next/**", "!.next/cache/**", "!.next/dev/**", "dist/**"]
+		},
+		"typecheck": {
+			"dependsOn": ["^source"],
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/tsconfig.json"],
+			"outputs": []
+		},
+		"lint": {
+			"dependsOn": ["^source"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/scripts/dev/lint.ts",
+				"$TURBO_ROOT$/scripts/dev/lint/**",
+				"$TURBO_ROOT$/scripts/dev/shared/**",
+				"$TURBO_ROOT$/scripts/dev/devtool-failure.ts",
+				"$TURBO_ROOT$/tsconfig.json"
+			],
+			"outputs": []
+		},
+		"test": {
+			"description": "Integration suites against the local cluster's throwaway database, which each run rebuilds from the migrations; the database is their input, so they never cache.",
+			"cache": false,
+			"outputs": []
+		}
+	},
+	"globalPassThroughEnv": ["TMPDIR"]
+}

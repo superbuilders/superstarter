@@ -2,171 +2,58 @@
 globs: *.ts
 alwaysApply: false
 ---
-### No Native `try/catch/finally`
 
-Native `try` blocks are disallowed. Use explicit error handling and resource management patterns instead.
+# No `try`
 
----
+Native `try`, `catch` and `finally` are banned (oxlint `superstarter/no-try`; inside generators also tsgo `tryCatchInEffectGen`). A `catch` block widens every failure to `unknown` and hides which ones can happen. Effect keeps them in the type.
 
-## Error Handling: `errors.try()` and `errors.trySync()`
+## Catching
 
-For catching errors, use `errors.try()` (async) or `errors.trySync()` (sync).
+| Native                              | Effect                                                                  |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `try { await promise } catch`       | `Effect.tryPromise({ try: (signal) => …, catch: () => X.make({...}) })` |
+| `try { call() } catch`              | `Effect.try({ try: () => call(), catch: () => X.make({...}) })`         |
+| A synchronous helper outside Effect | `Result.try({ try: () => call(), catch: () => … })`                     |
 
-### Async Error Handling
+The `catch` callback returns a tagged error ([error-handling.md](error-handling.md)), never `unknown` or `Error`.
 
-```typescript
-import * as errors from "@superbuilders/errors"
-
-// WRONG: Native try/catch
+```ts
+// BAD
 try {
-  const data = await fetchData()
-} catch (e) {
-  console.error(e)
+	await client.connect()
+} catch (error) {
+	// which failures? the type says unknown
 }
 
-// CORRECT: errors.try()
-const result = await errors.try(fetchData())
-if (result.error) {
-  logger.error("fetch failed", { error: result.error })
-  throw errors.wrap(result.error, "fetchData")
-}
-const data = result.data
+// GOOD
+const connected = Effect.tryPromise({ try: () => client.connect(), catch: connectFailureOf })
 ```
 
-### Sync Error Handling
+## Cleanup
 
-```typescript
-import * as errors from "@superbuilders/errors"
+A `finally` becomes a scope. The release runs on success, failure and interruption.
 
-// WRONG: Native try/catch
-try {
-  const parsed = JSON.parse(input)
-} catch (e) {
-  console.error(e)
-}
+- **One resource for one use:** `Effect.acquireUseRelease(acquire, use, release)`.
+- **Resources held for a region:** `Effect.acquireRelease` or `Effect.addFinalizer`, closed by `Effect.scoped`.
+- **An action after the work, whatever the outcome:** `Effect.ensuring` or `Effect.onExit`.
 
-// CORRECT: errors.trySync()
-const result = errors.trySync(() => JSON.parse(input))
-if (result.error) {
-  logger.error("parse failed", { error: result.error })
-  throw errors.wrap(result.error, "JSON.parse")
-}
-const parsed = result.data
+```ts
+const response = yield* Effect.acquireUseRelease(
+	Effect.sync(
+		() =>
+			new SecretsManagerClient({
+				region: AWS_REGION,
+				credentials: awsCredentialsProvider({ roleArn })
+			})
+	),
+	(client) =>
+		Effect.tryPromise({
+			try: (signal) =>
+				client.send(new GetSecretValueCommand({ SecretId: secretArn }), { abortSignal: signal }),
+			catch: () => AdminSecretUnreadable.make({ reason: "fetch" })
+		}),
+	(client) => Effect.sync(() => client.destroy())
+)
 ```
 
-### Key Requirements
-
-- The `if (result.error)` block **MUST** be on the line immediately following `errors.try()` or `errors.trySync()`
-- Always log errors before throwing
-- Capture the result; never use `void` or `return` directly with `errors.try()`
-
----
-
-## Cleanup: `DisposableStack` and `AsyncDisposableStack`
-
-For cleanup logic (what you'd put in a `finally` block), use the Explicit Resource Management API.
-
-### Async Cleanup
-
-```typescript
-// WRONG: Native try/finally
-try {
-  const conn = await openConnection()
-  await doWork(conn)
-} finally {
-  await conn.close()
-}
-
-// CORRECT: AsyncDisposableStack with `await using`
-await using stack = new AsyncDisposableStack()
-const conn = await openConnection()
-stack.defer(async () => await conn.close())
-await doWork(conn)
-// conn.close() runs automatically when scope exits, even on error
-```
-
-### Sync Cleanup
-
-```typescript
-// WRONG: Native try/finally
-try {
-  const file = openFileSync(path)
-  processFile(file)
-} finally {
-  file.close()
-}
-
-// CORRECT: DisposableStack with `using`
-using stack = new DisposableStack()
-const file = openFileSync(path)
-stack.defer(() => file.close())
-processFile(file)
-// file.close() runs automatically when scope exits, even on error
-```
-
-### Using Resources That Implement Disposable
-
-If the resource already implements `Symbol.dispose` or `Symbol.asyncDispose`, use `stack.use()`:
-
-```typescript
-await using stack = new AsyncDisposableStack()
-const reader = stack.use(stream.getReader())  // auto-disposed
-await processStream(reader)
-```
-
-### DisposableStack Methods
-
-- `stack.defer(fn)` — Register a cleanup callback to run on scope exit
-- `stack.use(resource)` — Register a disposable resource (must have `[Symbol.dispose]` or `[Symbol.asyncDispose]`)
-- `stack.adopt(value, onDispose)` — Register a value with a custom dispose function
-- `stack.move()` — Transfer ownership to a new stack (prevents disposal in current scope)
-
----
-
-## Combined: Error Handling + Cleanup
-
-When you need both error handling and cleanup:
-
-```typescript
-// WRONG: Native try/catch/finally
-try {
-  const conn = await openConnection()
-  const data = await fetchData(conn)
-  return data
-} catch (e) {
-  console.error(e)
-  throw e
-} finally {
-  await conn.close()
-}
-
-// CORRECT: Both patterns together
-await using stack = new AsyncDisposableStack()
-const conn = await openConnection()
-stack.defer(async () => await conn.close())
-
-const result = await errors.try(fetchData(conn))
-if (result.error) {
-  logger.error("fetch failed", { error: result.error })
-  throw errors.wrap(result.error, "fetchData")
-}
-return result.data
-// conn.close() runs automatically when function returns or throws
-```
-
----
-
-## Browser Compatibility
-
-`DisposableStack` and `AsyncDisposableStack` are supported in:
-- Chrome 134+
-- Firefox 141+
-- Node.js 24+
-- Bun 1.3+
-- Deno 2.2.10+
-
-Safari does not yet support these APIs. If you need Safari support, use a polyfill from `core-js`.
-
----
-
-See also: [Error Handling](error-handling.md)
+Effect scopes own lifetimes; `using` and `DisposableStack` are not used.

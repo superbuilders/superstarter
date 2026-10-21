@@ -1,0 +1,52 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"typegen": {
+			"description": "Route declarations follow source and Next configuration, not rotating deployment credentials or trace identifiers.",
+			"dependsOn": ["^source"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				".env",
+				".env.local",
+				".env.production",
+				".env.production.local"
+			],
+			"env": ["!NEXT_PUBLIC_*", "!NEXT_DEPLOYMENT_ID", "!VERCEL_DEPLOYMENT_ID"],
+			"passThroughEnv": ["VERCEL*", "NEXT_PUBLIC_*"],
+			"outputs": ["next-env.d.ts", ".next/types/**"]
+		},
+		"typecheck": {
+			"env": ["!NEXT_PUBLIC_*", "!NEXT_DEPLOYMENT_ID", "!VERCEL_DEPLOYMENT_ID"],
+			"dependsOn": ["$TURBO_EXTENDS$", "typegen"],
+			"inputs": [
+				"$TURBO_EXTENDS$",
+				{
+					"mode": "jit",
+					"globs": [".next/dev/types/**/*.ts"]
+				}
+			]
+		},
+		"lint": {
+			"env": ["!NEXT_PUBLIC_*", "!NEXT_DEPLOYMENT_ID", "!VERCEL_DEPLOYMENT_ID"],
+			"dependsOn": ["$TURBO_EXTENDS$", "typegen"],
+			"inputs": [
+				"$TURBO_EXTENDS$",
+				{
+					"mode": "jit",
+					"globs": [".next/dev/types/**/*.ts"]
+				}
+			]
+		},
+		"build": {
+			"description": "Next owns incremental compilation and application typechecking. Every deployment must rebuild; restoring a Turbo artifact cannot refresh embedded deployment identity.",
+			"cache": false,
+			"outputs": [],
+			"passThroughEnv": ["*"]
+		},
+		"test": {
+			"description": "Rebuilds the same throwaway database the infrastructure suites use, so it runs after them.",
+			"dependsOn": ["@superstarter/data-infrastructure#test"]
+		}
+	}
+}

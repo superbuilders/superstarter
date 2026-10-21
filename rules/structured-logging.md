@@ -2,131 +2,86 @@
 globs: *.ts
 alwaysApply: false
 ---
-### Structured Logging
 
-All logging MUST use Pino via the central logger instance. Pino uses object-first structured logging with automatic error serialization and JSON output in production.
+# Structured Logging and Telemetry
 
-#### Import Pattern
+Logs are Effect logs, and traces are Effect spans named from a closed roster. `console` is banned (oxlint `no-console`, tsgo `globalConsole`), and so is any second logger. The operational logger and tracer are installed once, at each entry point. They tie every log to its span and export logs, spans and metrics to PostHog.
 
-```typescript
-import { logger } from "@/logger"
+## Logs
+
+The message comes first and is a terse literal: lower case, a noun phrase or a past participle. Facts follow it as a structured object or a `Cause`. Never interpolate data into the message.
+
+```ts
+// GOOD
+yield* Effect.logInfo("schema dropped", { schema: name })
+Effect.logError("postgres idle client failed").pipe(
+	Effect.annotateLogs({ diagnostic: postgresDiagnosticOf(error) })
+)
+
+// BAD
+yield* Effect.logInfo(`dropped schema ${name}`)
 ```
 
-#### Calling Convention (Object-First)
+- **Annotations:** `Effect.annotateLogs({ … })` attaches keys to every log an Effect writes.
+- **Levels:**
+  - `logDebug`: detail.
+  - `logInfo`: an operation's milestones.
+  - `logWarning`: a recoverable surprise.
+  - `logError`: a failure someone must look at.
 
-Pino uses object-first argument order:
+  The minimum level is `All`, so debug logs ship too.
 
-```typescript
-// Message only
-logger.info("starting server")
+- **Failures:** log a failure once, where it becomes a value, with its `Cause`. Code that only propagates a failure does not log it: the span records it on the way out ([error-handling.md](error-handling.md)).
+- **Content:** never log a secret, a request body, a URL's query or what a person typed (such as a todo's title). Log ids and closed codes.
 
-// Context object + message
-logger.info({ port: 3000 }, "server listening")
-logger.error({ error: result.error }, "operation failed")
-logger.debug({ userId, action: "login" }, "user authenticated")
+## Spans: `observed`
+
+Every operation worth seeing in a trace is one entry of `OPERATIONAL_SPANS` (`@superstarter/operational-telemetry/spans`): its `superstarter.<area>.<noun>` span name and every attribute its span may carry, as Schemas. `opened` is what the span opens with, required where the operation always knows it; `learned` is what the work finds out on the way. No other key types on that span.
+
+```ts
+todoCreate: operationalSpan({
+	name: "superstarter.todos.create",
+	opened: {},
+	learned: { "superstarter.todo.id": TodoId }
+}),
 ```
 
-#### ⚠️ CRITICAL: Logging AND Error Handling Together
+Wrap the work with `observed(operation, opened)` from `@superstarter/operational-telemetry/effect`:
 
-Always use BOTH logging and error handling patterns together:
-
-```typescript
-// ✅ CORRECT: Log errors for observability AND throw for proper propagation
-const result = await errors.try(someOperation())
-if (result.error) {
-	logger.error({ error: result.error }, "operation failed")
-	throw errors.wrap(result.error, "operation failed")
-}
-
-// ❌ WRONG: Silent error handling without logging loses observability
-const result = await errors.try(someOperation())
-if (result.error) {
-	throw errors.wrap(result.error, "operation failed")
-}
+```ts
+export const removeTodo = (id: TodoId) =>
+	withApplicationPostgres(
+		withPostgresStatement((scope) =>
+			scope.run((database) =>
+				database.delete(coreTodos).where(eq(coreTodos.id, id)).returning({ id: coreTodos.id })
+			)
+		)
+	).pipe(
+		Effect.flatMap(affectedOf(id)),
+		observed(OPERATIONAL_SPANS.todoDelete, { "superstarter.todo.id": id })
+	)
 ```
 
-#### Pino Error Serialization
+Write a fact learned partway through with `annotateOperation(operation, learned)`:
 
-Pino uses `pino.stdSerializers.err` to serialize error objects. Pass errors in the context object under the `error` key:
-
-```typescript
-// ✅ CORRECT: Pino serializes the error automatically
-logger.error({ error: result.error }, "operation failed")
-
-// ❌ WRONG: Manual toString() calls
-logger.error({ error: someError.toString() }, "operation failed")
-
-// ❌ WRONG: Manual cause extraction — Pino handles the error chain
-logger.error({
-	error: result.error,
-	cause: result.error.cause
-}, "operation failed")
+```ts
+Effect.tap((id) => annotateOperation(OPERATIONAL_SPANS.todoCreate, { "superstarter.todo.id": id }))
 ```
 
-#### Our Logging Philosophy: Log Everything
+`annotateOperation` needs the operation's scope in the Effect's requirements, and only `observed` for that operation provides it. Writing a fact onto an operation the work is not inside leaves the requirement unmet, which fails `tsc` at the entry point. The fact lands on the operation's own span, even from inside a span nested under it.
 
-When in doubt, add a log statement. This is especially true for the `debug` level.
+Every log written inside a span carries the span's attributes, so a log never repeats context that its span already holds.
 
-**Always Log (Info Level):**
-- Function entry/exit for major operations and workflows
-- Significant state changes (e.g., job status updated to `COMPLETED`)
-- High-level summaries of completed work (e.g., "processed 50 articles")
+## The rosters are closed
 
-**Always Log (Debug Level):**
-- Detailed inputs and outputs for every function or method
-- The exact content of API requests and raw API responses
-- The full prompts sent to AI models
-- Intermediate data transformations and validation results
-- Configuration values being used in a function
-- Every branch in control-flow logic (e.g., if/else statements)
+- **Span names** are roster members, never literals or generated strings (oxlint `superstarter/no-literal-span-name`, over `observed`, `Effect.withSpan`, `Effect.fn` and `Effect.makeSpanScoped`).
+- **`superstarter.*` attribute keys** go through `observed` or `annotateOperation`, which type them (oxlint `superstarter/no-literal-attribute-key`). `Effect.annotateCurrentSpan`, and literal keys on `Span.attribute` or in `withSpan` options, are refused.
+- **Attribute values** are identifiers, codes, counts and durations, never free text.
+- **Shared attributes:** keys no single operation owns (the deployment, the replay session, the cold start, the outcome the tracer records at a span's end) are `SharedAttributes` (`@superstarter/operational-telemetry/schema`), written only by the telemetry and the server's reporting.
+- **Extending:** a new operation is a new `OPERATIONAL_SPANS` entry; a new fact is a new key in that operation's `opened` or `learned`.
 
-#### Terse Messages with Structured Context
+## Where telemetry is installed
 
-Follow terse, structured logging patterns:
+The process's telemetry is one `OperationalTelemetry` service (`@superstarter/operational-telemetry/effect`): its origin with the instance id minted once, the one tracer and logger, and the cold start the first request span claims. The web app builds it, with the telemetry sink and the database pool, into one `ManagedRuntime` anchored on `globalThis` (`packages/product/nextjs-app/src/server/runtime.ts`), the process's only global, shared by the instrumentation bundle and every app bundle. Every entry point (render reads, server actions, the request-error hook, registration) runs on it under `withOperationalTelemetry`, which roots the work under the request's span. Work scheduled with Next's `after()` uses `withBackgroundOperationalTelemetry`: its own root span, linked to the request that scheduled it.
 
-**1. Terse Messages**
-- Use short, action-oriented verbs: `"starting"`, `"processing"`, `"inserted"`, `"completed"`, `"validating"`
-- Keep messages concise and scannable
-
-**2. Key-Value Context**
-- Move all contextual data to the context object (first argument)
-- Use structured data instead of string interpolation
-
-```typescript
-// ✅ CORRECT: Terse message with structured context
-logger.info({ file: outfile, batchSize: 1000 }, "starting zim import")
-logger.debug({ validationIssues: result.issues }, "validating lyrics")
-logger.error({ schema: name, error: err }, "failed to drop schema")
-
-// ❌ WRONG: Verbose messages with embedded data
-logger.info(`Starting ZIM import for ${outfile} with batch size ${1000}`)
-logger.error(`Error dropping schema ${name}: ${err}`)
-```
-
-#### Consistent Attribute Names
-
-Use standardized camelCase attribute names:
-
-- **`count`** - for quantities, batch sizes, totals
-- **`file`** - for file paths and filenames
-- **`articleId`** - for article references
-- **`error`** - for error objects (serialized by Pino)
-- **`userId`** - for user references
-- **`status`** - for HTTP status codes or operation states
-
-#### Log Levels
-
-- **`logger.info()`** - Major operations, user-facing progress, completion status
-- **`logger.debug()`** - **THE DEFAULT FOR DEVELOPMENT.** Detailed internal operations, data structures, API payloads, prompts, validation steps
-- **`logger.error()`** - Failures with error context (use before throwing errors for observability)
-- **`logger.warn()`** - Recoverable issues, unexpected but non-fatal conditions
-
-#### Prohibited Patterns
-
-**NEVER use:**
-- `console.log`, `console.error`, `console.debug`, `console.warn`
-- String interpolation in log messages
-- Verbose, explanatory messages
-- Silent error handling without logging (always log errors for observability)
-- **Manual `.toString()` calls on objects** (Pino serializes automatically)
-- **String-first argument order** (`logger.info("msg", { ctx })` — use object-first)
+`@superstarter/operational-telemetry` stays host-neutral. One registration module in the web server registers the OpenTelemetry SDK and builds the OTLP exporters, and superlint `operational-telemetry-boundary` refuses those imports anywhere else.

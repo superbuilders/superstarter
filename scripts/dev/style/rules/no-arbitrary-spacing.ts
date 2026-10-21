@@ -1,17 +1,8 @@
-import type { LoadedDesignSystem } from "@scripts/dev/style/design-system"
-import type { ClassLocation, Violation } from "@scripts/dev/style/types"
+import { Array as Arr, String as Str } from "effect"
+import { arbitraryValueBan } from "#scripts/dev/style/rules/arbitrary-value.ts"
+import type { ClassRule } from "#scripts/dev/style/types.ts"
 
-/**
- * Bans arbitrary spacing values in Tailwind classes.
- *
- * BAD:  p-[37px], m-[2.3rem], gap-[18px], space-x-[10px]
- * GOOD: p-4, m-2, gap-6, space-x-2 (use theme spacing tokens)
- * GOOD: h-[calc(--spacing(5.25))] (uses theme function)
- * GOOD: p-[var(--my-spacing)] (uses CSS variable)
- */
-
-const SPACING_ROOTS = new Set([
-	// Padding
+const SPACING_ROOTS: ReadonlyArray<string> = [
 	"p",
 	"px",
 	"py",
@@ -21,7 +12,6 @@ const SPACING_ROOTS = new Set([
 	"pl",
 	"ps",
 	"pe",
-	// Margin
 	"m",
 	"mx",
 	"my",
@@ -31,14 +21,11 @@ const SPACING_ROOTS = new Set([
 	"ml",
 	"ms",
 	"me",
-	// Gap
 	"gap",
 	"gap-x",
 	"gap-y",
-	// Space between
 	"space-x",
 	"space-y",
-	// Width/Height
 	"w",
 	"h",
 	"min-w",
@@ -46,7 +33,6 @@ const SPACING_ROOTS = new Set([
 	"max-w",
 	"max-h",
 	"size",
-	// Positioning
 	"top",
 	"right",
 	"bottom",
@@ -54,10 +40,8 @@ const SPACING_ROOTS = new Set([
 	"inset",
 	"inset-x",
 	"inset-y",
-	// Translate
 	"translate-x",
 	"translate-y",
-	// Scroll margin/padding
 	"scroll-m",
 	"scroll-mx",
 	"scroll-my",
@@ -72,68 +56,17 @@ const SPACING_ROOTS = new Set([
 	"scroll-pr",
 	"scroll-pb",
 	"scroll-pl"
-])
+]
 
-function check(
-	classes: ClassLocation[],
-	designSystem: LoadedDesignSystem,
-	file: string
-): Violation[] {
-	const violations: Violation[] = []
-
-	for (const cls of classes) {
-		const violation = checkClass(cls, designSystem, file)
-		if (violation) {
-			violations.push(violation)
-		}
-	}
-
-	return violations
-}
-
-function checkClass(
-	cls: ClassLocation,
-	designSystem: LoadedDesignSystem,
-	file: string
-): Violation | undefined {
-	const { ds } = designSystem
-	const parsed = ds.parseCandidate(cls.text)
-
-	for (const candidate of parsed) {
-		if (candidate.kind !== "functional") continue
-		if (!SPACING_ROOTS.has(candidate.root)) continue
-
-		const value = candidate.value
-		if (value === null) continue
-		if (typeof value !== "object") continue
-		if (value.kind !== "arbitrary") continue
-
-		// Allow theme references
-		const rawValue = value.value
-		if (typeof rawValue === "string" && isThemeReference(rawValue)) {
-			continue
-		}
-
-		return {
-			file,
-			line: cls.line,
-			column: cls.column,
-			rule: "no-arbitrary-spacing",
-			message: `Arbitrary spacing "${candidate.raw}" banned. Use theme spacing tokens.`,
-			className: cls.text
-		}
-	}
-
-	return undefined
-}
-
-function isThemeReference(value: string): boolean {
-	// CSS variables
-	if (value.includes("var(--")) return true
-	// Tailwind theme functions
-	if (value.includes("--spacing(")) return true
-	if (value.includes("--spacing-")) return true
-	return false
-}
-
-export { check }
+/**
+ * Bans arbitrary spacing and sizing: p-[37px] and gap-[18px] are violations, p-4,
+ * h-[calc(--spacing(5.25))] and p-[var(--my-spacing)] are not. CSS variables and the spacing theme function and
+ * tokens are theme references.
+ */
+export const noArbitrarySpacing: ClassRule = arbitraryValueBan({
+	rule: "no-arbitrary-spacing",
+	roots: SPACING_ROOTS,
+	isThemeReference: (value) =>
+		Arr.some(["var(--", "--spacing(", "--spacing-"], (marker) => Str.includes(marker)(value)),
+	noun: "spacing"
+})

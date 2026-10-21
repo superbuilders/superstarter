@@ -1,74 +1,45 @@
-import type { Violation } from "@scripts/dev/lint/types"
-import * as ts from "typescript"
+import { Array as Arr } from "effect"
+import * as ts from "typescript/unstable/ast"
+import { packageOfSymbol } from "#scripts/dev/lint/packages.ts"
+import type { LintRule, Violation } from "#scripts/dev/lint/types.ts"
+import { violationAt } from "#scripts/dev/lint/violation.ts"
 
-const BANNED_FACTORIES = new Set<string>(["timestamp", "date", "time", "interval"])
-const DRIZZLE_PG_CORE = "drizzle-orm/pg-core"
+const BANNED_FACTORIES: ReadonlyArray<string> = ["timestamp", "date", "time", "interval"]
 
-function isDrizzlePgCoreImport(statement: ts.Statement): statement is ts.ImportDeclaration {
-	if (!ts.isImportDeclaration(statement)) {
-		return false
-	}
-	const moduleSpecifier = statement.moduleSpecifier
-	if (!ts.isStringLiteral(moduleSpecifier)) {
-		return false
-	}
-	return moduleSpecifier.text === DRIZZLE_PG_CORE
-}
+/**
+ * Every primary key is a UUIDv7, whose first 48 bits are the row's creation time, so drizzle's timestamp, date,
+ * time and interval column factories are banned outright. The callee is resolved through the checker to its
+ * drizzle-orm export, so a renamed or namespace import cannot hide one. See rules/no-timestamp-columns.md.
+ */
+export const noTimestampColumns: LintRule = ({ sourceFile, semantics }) => {
+	const violations: Array<Violation> = []
 
-function collectBannedFromNamedImports(namedImports: ts.NamedImports, out: Set<string>): void {
-	for (const element of namedImports.elements) {
-		const importedName = element.propertyName ? element.propertyName.text : element.name.text
-		if (BANNED_FACTORIES.has(importedName)) {
-			out.add(element.name.text)
+	const bannedFactoryOf = (callee: ts.Expression): string | undefined => {
+		const symbol = semantics.symbolAt(callee)
+		const resolved = symbol === undefined ? undefined : semantics.aliasTarget(symbol)
+		if (resolved === undefined || packageOfSymbol(resolved) !== "drizzle-orm") {
+			return undefined
 		}
-	}
-}
-
-function getBannedImportNames(sourceFile: ts.SourceFile): Set<string> {
-	const bannedLocal = new Set<string>()
-	for (const statement of sourceFile.statements) {
-		if (!isDrizzlePgCoreImport(statement)) {
-			continue
-		}
-		const namedBindings = statement.importClause?.namedBindings
-		if (!namedBindings || !ts.isNamedImports(namedBindings)) {
-			continue
-		}
-		collectBannedFromNamedImports(namedBindings, bannedLocal)
-	}
-	return bannedLocal
-}
-
-function check(sourceFile: ts.SourceFile): Violation[] {
-	const violations: Violation[] = []
-	const bannedLocal = getBannedImportNames(sourceFile)
-	if (bannedLocal.size === 0) {
-		return violations
+		return Arr.contains(BANNED_FACTORIES, resolved.name) ? resolved.name : undefined
 	}
 
-	function walk(node: ts.Node): void {
-		if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-			const name = node.expression.text
-			if (bannedLocal.has(name)) {
-				const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-					node.expression.getStart(sourceFile)
-				)
-				violations.push({
-					file: sourceFile.fileName,
-					line: line + 1,
-					column: character + 1,
+	const walk = (node: ts.Node): void => {
+		const factory = ts.isCallExpression(node) ? bannedFactoryOf(node.expression) : undefined
+		if (ts.isCallExpression(node) && factory !== undefined) {
+			violations.push(
+				violationAt({
+					sourceFile,
+					node: node.expression,
 					rule: "no-timestamp-columns",
-					message: `Drizzle column factory '${name}(…)' is banned. Tables must use UUIDv7 primary keys (uuid().default(sql\`uuidv7()\`)) and recover creation order from the id via timestampFromUuidv7(). No exceptions.`,
+					message: `Drizzle column factory '${factory}(…)' is banned. Tables use UUIDv7 primary keys (uuid().default(sql\`uuidv7()\`)) and read creation time from the id with timestampFromUuidv7(). No exceptions.`,
 					suggestion:
-						"Drop the column. If you need a separate event time, model it as a UUIDv7-keyed ledger row, not a time-shaped column. See rules/no-timestamp-columns.md."
+						"Drop the column. A separate event time is its own UUIDv7-keyed ledger row; a source or future time is unix milliseconds in a bigint named for its unit. See rules/no-timestamp-columns.md."
 				})
-			}
+			)
 		}
-		ts.forEachChild(node, walk)
+		node.forEachChild(walk)
 	}
 
 	walk(sourceFile)
 	return violations
 }
-
-export { check }

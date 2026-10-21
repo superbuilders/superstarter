@@ -1,97 +1,69 @@
-import type { Violation } from "@scripts/dev/lint/types"
-import * as ts from "typescript"
+import { Predicate } from "effect"
+import * as ts from "typescript/unstable/ast"
+import type { LintRule, Violation } from "#scripts/dev/lint/types.ts"
+import { violationAt } from "#scripts/dev/lint/violation.ts"
 
-/**
- * Bans the logical OR operator (||) for fallbacks/defaults.
- * Allowed in:
- *   - Conditionals (if, while, for, do-while) for boolean logic
- *   - Return statements (boolean expressions being returned)
- *
- * Ternary expressions are NOT an exception - mixing || with ternaries is confusing.
- *
- * This rule was migrated from GritQL because GritQL has bugs with complex nested
- * `not(or{and{...}})` patterns and cannot reliably enumerate all conditional contexts.
- */
-
-function isAllowedParent(current: ts.Node, parent: ts.Node): boolean {
-	if (ts.isIfStatement(parent)) {
-		return parent.expression === current
-	}
-	if (ts.isWhileStatement(parent)) {
-		return parent.expression === current
-	}
-	if (ts.isDoStatement(parent)) {
+const isAllowedParent = (current: ts.Node, parent: ts.Node): boolean => {
+	if (ts.isIfStatement(parent) || ts.isWhileStatement(parent) || ts.isDoStatement(parent)) {
 		return parent.expression === current
 	}
 	if (ts.isForStatement(parent)) {
 		return parent.condition === current
 	}
-	if (ts.isReturnStatement(parent)) {
-		return true
-	}
-	return false
+	return ts.isReturnStatement(parent)
 }
 
-function shouldContinueUp(parent: ts.Node): boolean {
-	if (ts.isParenthesizedExpression(parent)) {
-		return true
-	}
-	if (ts.isBinaryExpression(parent)) {
-		return true
-	}
-	if (ts.isPrefixUnaryExpression(parent)) {
-		return true
-	}
-	return false
-}
+const continuesUp = Predicate.or(
+	Predicate.or(ts.isParenthesizedExpression, ts.isBinaryExpression),
+	ts.isPrefixUnaryExpression
+)
 
-function isInAllowedPosition(node: ts.Node): boolean {
+/** Walks up through parentheses, operators and negations to the statement that consumes the expression. */
+const isInAllowedPosition = (node: ts.Node): boolean => {
 	let current: ts.Node = node
-	let parent = current.parent
-
-	while (parent) {
+	while (!ts.isSourceFile(current)) {
+		const parent = current.parent
 		if (isAllowedParent(current, parent)) {
 			return true
 		}
-
-		if (shouldContinueUp(parent)) {
-			current = parent
-			parent = parent.parent
-			continue
+		if (!continuesUp(parent)) {
+			return false
 		}
-
-		break
+		current = parent
 	}
-
 	return false
 }
 
-function check(sourceFile: ts.SourceFile): Violation[] {
-	const violations: Violation[] = []
+/**
+ * `||` treats 0, "" and false as missing, so it is banned as a fallback. It stays legal as boolean logic in the
+ * condition of an if, while, do-while or for statement, and in a return statement's expression. A concise arrow
+ * body is not a return statement, and neither is a ternary's test: a predicate that needs `||` branches in an if or
+ * composes with `Predicate.or`.
+ */
+export const noLogicalOrFallback: LintRule = ({ sourceFile }) => {
+	const violations: Array<Violation> = []
 
-	function walk(node: ts.Node): void {
-		if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.BarBarToken) {
-			if (!isInAllowedPosition(node)) {
-				const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-					node.operatorToken.getStart(sourceFile)
-				)
-				violations.push({
-					file: sourceFile.fileName,
-					line: line + 1,
-					column: character + 1,
+	const walk = (node: ts.Node): void => {
+		if (
+			ts.isBinaryExpression(node) &&
+			node.operatorToken.kind === ts.SyntaxKind.BarBarToken &&
+			!isInAllowedPosition(node)
+		) {
+			violations.push(
+				violationAt({
+					sourceFile,
+					node: node.operatorToken,
 					rule: "no-logical-or-fallback",
 					message:
 						"Logical OR (||) banned for fallbacks. Only allowed in conditionals and return statements.",
-					suggestion: "See rules/no-logical-or-fallback.md for fix patterns"
+					suggestion:
+						"Branch in an if, or compose named predicates with Predicate.or. See rules/no-logical-or-fallback.md."
 				})
-			}
+			)
 		}
-
-		ts.forEachChild(node, walk)
+		node.forEachChild(walk)
 	}
 
 	walk(sourceFile)
 	return violations
 }
-
-export { check }

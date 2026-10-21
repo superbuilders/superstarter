@@ -1,0 +1,46 @@
+{
+	"name": "@superstarter/data-infrastructure",
+	"private": true,
+	"description": "Alchemy-declared AWS infrastructure for superstarter, one stack whose stage is the environment: PostgreSQL and the Vercel runtime identity. Also the operator scripts that administer the database as its master user.",
+	"type": "module",
+	"engines": {
+		"node": ">=24"
+	},
+	"imports": {
+		"#alchemy.run.ts": "./alchemy.run.ts",
+		"#*": "./src/*",
+		"#integration/*": "./integration/*"
+	},
+	"scripts": {
+		"bootstrap": "node --env-file-if-exists=.env.local scripts/with-aws.ts node scripts/bootstrap.ts",
+		"plan": "node --env-file-if-exists=.env.local scripts/with-aws.ts alchemy plan --stage",
+		"deploy": "node --env-file-if-exists=.env.local scripts/with-aws.ts node scripts/deploy.ts",
+		"db:migrate": "node --env-file-if-exists=../../product/nextjs-app/.env.local --env-file-if-exists=.env.local scripts/migrate.ts",
+		"db:studio": "node --env-file-if-exists=../../product/nextjs-app/.env.local --env-file-if-exists=.env.local scripts/studio.ts",
+		"db:local": "node scripts/local-postgres.ts start",
+		"db:local:stop": "node scripts/local-postgres.ts stop",
+		"db:test": "node scripts/local-postgres.ts test",
+		"test": "pnpm run db:test && node --test integration/*.test.ts",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"lint": "node ../../../scripts/dev/lint.ts"
+	},
+	"dependencies": {
+		"@aws-sdk/client-secrets-manager": "3.1154.0",
+		"@aws-sdk/client-sts": "3.1154.0",
+		"@aws-sdk/credential-providers": "3.1154.0",
+		"@distilled.cloud/aws": "1.0.0-rc.15",
+		"@superstarter/database": "workspace:*",
+		"@vercel/oidc-aws-credentials-provider": "3.3.14",
+		"alchemy": "2.0.0-beta.83",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.0.5",
+		"pg": "8.23.1"
+	},
+	"devDependencies": {
+		"@effect/platform-node": "4.0.5",
+		"@types/node": "24.19.2",
+		"@types/pg": "8.23.1",
+		"drizzle-kit": "1.0.0-rc.5",
+		"typescript": "7.0.2"
+	}
+}

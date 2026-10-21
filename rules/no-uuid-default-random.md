@@ -1,36 +1,42 @@
 # No `uuid().defaultRandom()`
 
-Calling `.defaultRandom()` on a Drizzle `uuid(...)` column generates a UUIDv4 — random, not time-sortable. **Categorically banned. No exceptions.**
-
-This is enforced by `scripts/dev/lint/rules/no-uuid-default-random.ts`.
+`.defaultRandom()` on a Drizzle `uuid()` column mints a UUIDv4: random, not time-sortable. It is banned with no exceptions. Superlint `no-uuid-default-random` (`scripts/dev/lint/rules/no-uuid-default-random.ts`) enforces it.
 
 ## Why
 
-UUIDv4 is uniformly random across all 122 random bits. There is no temporal ordering between two UUIDv4s, no way to scan a B-tree of UUIDv4s in creation order, and no way to recover a row's creation time from the id.
+A UUIDv4 is 122 random bits. Two of them have no order, a B-tree of them cannot be scanned in creation order, and none of them records when it was made.
 
-UUIDv7 (RFC 9562) puts a 48-bit unix-millisecond timestamp in the first 48 bits. This means:
+A UUIDv7 puts a unix-millisecond timestamp in its first 48 bits:
 
-- `ORDER BY id DESC` gives reverse-chronological order — no separate `created_at_idx` needed.
-- `WHERE id >= uuidv7LowerBound(cutoff)` is a fast PK-index range scan equivalent to `WHERE created_at >= cutoff`.
-- `timestampFromUuidv7(row.id)` recovers the creation time without a `createdAt` column (which is itself banned — see [no-timestamp-columns.md](no-timestamp-columns.md)).
+- `ORDER BY id DESC` is newest first, with no `created_at` index.
+- `id >= uuidv7LowerBound(cutoff)` is a primary-key range scan.
+- `timestampFromUuidv7(row.id)` recovers the creation time, so no timestamp column exists ([no-timestamp-columns.md](no-timestamp-columns.md)).
 
-## What's banned
+## Banned
 
-```typescript
-// ❌ Banned
-id: uuid("id").defaultRandom().notNull().primaryKey()
+```ts
+// BAD
+id: uuid().defaultRandom().notNull()
 ```
 
-## What to do instead
+## Instead
 
-```typescript
-// ✅ PG18 native uuidv7() — server-side, no app-code dependency
-id: uuid("id").primaryKey().notNull().default(sql`uuidv7()`)
+PostgreSQL mints the id with its built-in `uuidv7()`; RDS runs PostgreSQL 18.3, where it needs no extension. A CHECK pins the version, so no other kind of id can be inserted:
+
+```ts
+export const coreTodos = core.table(
+	"todos",
+	{
+		id: uuid().$type<TodoId>().default(sql`uuidv7()`).notNull()
+		// …
+	},
+	(table) => [
+		primaryKey({ name: "todos_pk", columns: [table.id] }),
+		check("todos_id_v7_ck", sql`uuid_extract_version(${table.id}) = 7`)
+	]
+)
 ```
 
-The IaC provisions Postgres 18.3, which has `uuidv7()` as a built-in function. No extension needed.
+The application never sends a primary key. `insertTodo` reads the minted id back with `.returning({ id: coreTodos.id })`.
 
-## See also
-
-- [no-timestamp-columns.md](no-timestamp-columns.md) — companion rule banning `timestamp` / `date` / `time` / `interval` columns.
-- `src/db/lib/uuid-time.ts` — helpers for working with UUIDv7 ids in app code.
+The helpers that read time from an id live in `@superstarter/database/lib/uuid-time`.

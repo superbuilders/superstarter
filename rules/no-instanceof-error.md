@@ -1,81 +1,36 @@
-# No Instanceof Error
+# No `instanceof Error`
 
-`instanceof Error` checks are banned. Use `errors.is()` for sentinel error checking instead. This is enforced by GritQL rule `no-instanceof-error`.
+`x instanceof Error` is banned (oxlint `superstarter/no-instanceof-error`). It says that something is an error, not which one. Effect already knows which, because its error channel is typed.
 
-## Why
+## Match by tag
 
-1. **Redundant check** - Biome's `useThrowOnlyError` guarantees all thrown values are Error objects, making `instanceof Error` always true
-2. **Wrong tool for sentinels** - `instanceof` checks class identity, but our error pattern uses value-based sentinels created with `errors.new()`
-3. **No type narrowing** - `instanceof` doesn't narrow to your specific error type; `errors.is()` does
-4. **Consistent patterns** - All error checking uses the same `@superbuilders/errors` library
-
-## The Rule
-
-```typescript
-// BAD: instanceof Error is always true (useThrowOnlyError guarantees it)
-if (err instanceof Error) {
-  console.log(err.message)
+```ts
+// BAD
+if (error instanceof Error) {
+	// which error? what can be done about it?
 }
 
-// BAD: instanceof with custom error classes
-if (err instanceof UserNotFoundError) {
-  // handle
-}
-```
+// GOOD: handle one tag; it leaves the error channel
+const todo = readTodo(id).pipe(Effect.catchTag("TodoNotFound", () => Effect.succeedNone))
 
-```typescript
-// GOOD: Access .message directly - err is guaranteed to be Error
-console.log(err.message)
-
-// GOOD: Check sentinel errors with errors.is()
-if (errors.is(err, ErrUserNotFound)) {
-  // handle - with type narrowing!
+// GOOD: branch on the closed union's tag
+const changeRefusalOf = (
+	error: Schema.SchemaError | TodoNotFound | DatabaseFailure
+): Refused | undefined => {
+	if (error._tag === "TodoNotFound") {
+		return GONE_REFUSED
+	}
+	if (error._tag === "PostgresTransientFailure") {
+		return CONFLICT_REFUSED
+	}
+	return undefined
 }
 ```
 
-## Common Patterns
+## Other cases
 
-### Removing Redundant Guards
+- **A Schema class:** use `Schema.is(X)`, not `instanceof X` (tsgo `instanceOfSchema`).
+- **An untyped cause** (a defect or an interruption): inspect the `Cause` with `Cause.findErrorOption` or `Cause.hasInterruptsOnly`.
+- **A native library's value:** it stays `unknown` until a `catch` callback maps it to a tagged error, at the one place it enters ([no-try.md](no-try.md)).
 
-```typescript
-// BAD: Guard is unnecessary
-const result = errors.trySync(() => riskyOperation())
-if (result.error) {
-  if (result.error instanceof Error) {
-    logger.error("operation failed", { error: result.error })
-  }
-  throw result.error
-}
-
-// GOOD: result.error is always Error
-const result = errors.trySync(() => riskyOperation())
-if (result.error) {
-  logger.error("operation failed", { error: result.error })
-  throw result.error
-}
-```
-
-### Switching to Sentinel Checking
-
-```typescript
-// BAD: Class-based error checking
-if (err instanceof NotFoundError) {
-  return null
-}
-if (err instanceof PermissionError) {
-  redirect("/login")
-}
-
-// GOOD: Sentinel-based error checking
-if (errors.is(err, ErrNotFound)) {
-  return null
-}
-if (errors.is(err, ErrPermissionDenied)) {
-  redirect("/login")
-}
-```
-
-## See Also
-
-- [No Extends Error](no-extends-error.md) - Ban extending Error class
-- [Error Handling](error-handling.md) - Complete error handling patterns
+See [error-handling.md](error-handling.md).

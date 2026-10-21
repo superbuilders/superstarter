@@ -1,16 +1,5 @@
+# One check-only gate, as in edullm: the hook never formats or stages files, it only refuses a failing commit.
 pre-commit:
-  parallel: false
   jobs:
-    - name: format
-      run: bun run format
-      stage_fixed: true
-    - name: checks
-      group:
-        parallel: true
-        jobs:
-          - name: lint
-            run: bun run lint
-          - name: typecheck
-            run: bun run typecheck
-          - name: knip
-            run: bun run knip
+    - name: check
+      run: pnpm check

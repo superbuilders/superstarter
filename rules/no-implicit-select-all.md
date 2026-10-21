@@ -3,76 +3,48 @@ description:
 globs: *.tsx,*.ts
 alwaysApply: false
 ---
-### Ban Implicit `SELECT *` (Explicit Column Selection Required)
 
-#### ⚠️ CRITICAL: `select()` and `returning()` Require Explicit Columns
+# No Implicit `SELECT *`
 
-This rule mandates that all Drizzle ORM queries using `db.select()`, `tx.select()`, or a `.returning()` clause **MUST** explicitly specify the columns to be returned. Calling these methods with no arguments, which results in an implicit `SELECT *` or `RETURNING *`, is strictly prohibited.
+Every Drizzle `select()` and `returning()` names its columns. Calling either with no argument, which reads every column, is banned.
 
-**Rationale:**
+## Why
 
-1.  **Performance:** Implicitly selecting all columns (`SELECT *`) is inefficient. It causes the database to read and transmit every column, including potentially large `text`, `jsonb`, or `vector` fields, even when they are not needed. This increases I/O, network latency, and application memory usage.
-2.  **Maintainability:** Queries that fetch all columns are brittle. If a new column is added to the database schema, the shape of the object returned by the query changes. This can break downstream code that relies on a specific object structure, especially if using object spreading (`...`) or `Object.keys()`. Explicit selection makes the code's data dependencies clear and resilient to schema evolution.
-3.  **Security:** Fetching all columns can inadvertently expose sensitive data (e.g., password hashes, personal information) to parts of the application that should not have access to it, increasing the risk of data leaks.
+- **Performance:** `SELECT *` reads and ships every column, including large `text`, `jsonb` or `vector` values the code never uses.
+- **Stability:** the result's shape follows the table, so adding a column changes every query that selects all.
+- **Exposure:** a credential or a person's data can leak into code that had no need for it.
 
-### Guiding Principles
+## Fetch only what you use
 
-Beyond just avoiding implicit `SELECT *`, all queries should adhere to the **Principle of Least Data**:
+- A `select` lists only the fields the code that follows actually reads. No field is fetched "just in case".
+- A `returning` almost always returns only `id`.
 
--   **Fetch Only What You Need:** Your `select` object should only include fields that are actually used by the code that follows the query. Do not fetch a field "just in case." If a field is not used, it should not be in the select list.
--   **Minimize Returned Data from Mutations:** When using `.returning()`, the goal is typically to get the identifier of the new or updated row for subsequent operations. Therefore, you should **almost always return only the `id` column**. Returning the entire object is an anti-pattern that leads to the same performance issues as `SELECT *`.
+```ts
+// BAD
+scope.run((database) => database.select().from(coreTodos))
+scope.run((database) => database.insert(coreTodos).values({ title }).returning())
 
-#### Prohibited Patterns
+// GOOD
+scope.run((database) =>
+	database
+		.select({ id: coreTodos.id, title: coreTodos.title, completed: coreTodos.completed })
+		.from(coreTodos)
+		.orderBy(desc(coreTodos.id))
+)
 
-The following patterns are banned because they fetch all columns from the table, leading to the issues described above.
+scope.run((database) =>
+	database.insert(coreTodos).values({ title }).returning({ id: coreTodos.id })
+)
 
-```typescript
-// ❌ WRONG: Implicitly selects all columns from the 'users' table.
-const allUserData = await db.select().from(users);
-
-// ❌ WRONG: Implicitly returns all columns from the updated row.
-const updatedUser = await db.update(users)
-  .set({ name: "New Name" })
-  .where(eq(users.id, 1))
-  .returning();
-
-// ❌ WRONG: Implicitly returns all columns from the inserted row.
-const newUser = await db.insert(users)
-  .values({ name: "Jane Doe" })
-  .returning();
-
-// ❌ WRONG: Same anti-patterns apply to transactions.
-await db.transaction(async (tx) => {
-  const user = await tx.select().from(users).where(eq(users.id, 1));
-});
+scope.run((database) =>
+	database
+		.update(coreTodos)
+		.set({ completed: not(coreTodos.completed) })
+		.where(eq(coreTodos.id, id))
+		.returning({ id: coreTodos.id })
+)
 ```
 
-#### Correct Patterns
+The same holds inside `withPostgresTransaction` and `withPostgresReadTransaction` (`@superstarter/database/postgres/transaction`).
 
-Always provide an object to `select()` or `returning()` that specifies exactly which columns are needed. This ensures that only the required data is fetched.
-
-```typescript
-// ✅ CORRECT: Explicitly select only the 'id' and 'name' columns, because both are used.
-const specificUserData = await db.select({
-  id: users.id,
-  name: users.name
-}).from(users);
-console.log(`User ID: ${specificUserData.id}, Name: ${specificUserData.name}`);
-
-
-// ✅ CORRECT: Explicitly return only the 'id' of the updated row.
-const updatedUserId = await db.update(users)
-  .set({ name: "New Name" })
-  .where(eq(users.id, 1))
-  .returning({ id: users.id });
-
-// ✅ CORRECT: Explicitly return only the 'id' of the new row.
-const newUserInfo = await db.insert(users)
-  .values({ name: "Jane Doe" })
-  .returning({ id: users.id });
-
-// ✅ CORRECT: Explicit selection within a transaction.
-await db.transaction(async (tx) => {
-  const userName = await tx.select({ name: users.name }).from(users).where(eq(users.id, 1));
-});
-```
+Superlint `no-implicit-select-all` recognises the builder by the type its method resolves to, so a scope's `database`, a `db` and a `tx` are all checked. It also refuses a relational `findMany` or `findFirst` whose config names no `columns`. Superlint `no-drizzle-write-without-where` refuses a `delete` or `update` with no `.where(…)` in the same chain.

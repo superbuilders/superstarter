@@ -1,324 +1,243 @@
-import type { Violation } from "@scripts/dev/lint/types"
-import * as ts from "typescript"
+import { Array as Arr } from "effect"
+import * as ts from "typescript/unstable/ast"
+import type { Symbol as NativeSymbol } from "typescript/unstable/sync"
+import type { LintRule, RuleContext, Violation } from "#scripts/dev/lint/types.ts"
+import { violationAt } from "#scripts/dev/lint/violation.ts"
+
+type Wrapper = ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression
+
+const MESSAGE =
+	"Pointless indirection. This function just wraps a value or call without computation."
+const SUGGESTION = "Inline the expression or use the value directly"
+
+const isTrivialCall = (expression: ts.CallExpression): boolean =>
+	Arr.every(
+		expression.arguments,
+		(argument) =>
+			!ts.isArrowFunction(argument) &&
+			!ts.isFunctionExpression(argument) &&
+			isTrivialExpression(argument)
+	)
+
+const isTrivialLeaf = (expression: ts.Expression): boolean => {
+	if (
+		ts.isStringLiteral(expression) ||
+		ts.isNumericLiteral(expression) ||
+		ts.isIdentifier(expression) ||
+		expression.kind === ts.SyntaxKind.TrueKeyword ||
+		expression.kind === ts.SyntaxKind.FalseKeyword ||
+		expression.kind === ts.SyntaxKind.NullKeyword
+	) {
+		return true
+	}
+	return ts.isCallExpression(expression) && isTrivialCall(expression)
+}
+
+const isTrivialObjectProperty = (property: ts.ObjectLiteralElementLike): boolean => {
+	if (ts.isPropertyAssignment(property)) {
+		return isTrivialExpression(property.initializer)
+	}
+	if (ts.isShorthandPropertyAssignment(property)) {
+		return true
+	}
+	return ts.isSpreadAssignment(property) && isTrivialExpression(property.expression)
+}
+
+const isTrivialArrayElement = (element: ts.Expression): boolean =>
+	ts.isSpreadElement(element)
+		? isTrivialExpression(element.expression)
+		: isTrivialExpression(element)
+
+const isTrivialElementAccess = (expression: ts.ElementAccessExpression): boolean => {
+	const argument = expression.argumentExpression
+	if (!ts.isStringLiteral(argument) && !ts.isNumericLiteral(argument)) {
+		return false
+	}
+	return isTrivialExpression(expression.expression)
+}
+
+/** Literals, names, member reads and calls of those: values that need no computation of their own. */
+const isTrivialExpression = (expression: ts.Expression): boolean => {
+	if (isTrivialLeaf(expression)) {
+		return true
+	}
+	if (ts.isPropertyAccessExpression(expression) || ts.isParenthesizedExpression(expression)) {
+		return isTrivialExpression(expression.expression)
+	}
+	if (ts.isObjectLiteralExpression(expression)) {
+		return Arr.every(expression.properties, isTrivialObjectProperty)
+	}
+	if (ts.isArrayLiteralExpression(expression)) {
+		return Arr.every(expression.elements, isTrivialArrayElement)
+	}
+	return ts.isElementAccessExpression(expression) && isTrivialElementAccess(expression)
+}
+
+const isTrivialBlock = (body: ts.Block): boolean => {
+	const statement = body.statements.length === 1 ? body.statements[0] : undefined
+	if (statement === undefined) {
+		return false
+	}
+	if (ts.isReturnStatement(statement)) {
+		return statement.expression !== undefined && isTrivialExpression(statement.expression)
+	}
+	return (
+		ts.isExpressionStatement(statement) &&
+		ts.isCallExpression(statement.expression) &&
+		isTrivialCall(statement.expression)
+	)
+}
+
+const hasTrivialBody = (node: Wrapper): boolean => {
+	const body = node.body
+	if (body === undefined) {
+		return false
+	}
+	if (ts.isArrowFunction(node) && !ts.isBlock(body)) {
+		return isTrivialExpression(body)
+	}
+	return ts.isBlock(body) && isTrivialBlock(body)
+}
+
+/** A type guard narrows, so it earns its wrapper even when its body is one call. */
+const isPointlessIndirection = (node: Wrapper): boolean => {
+	if (node.type !== undefined && ts.isTypePredicateNode(node.type)) {
+		return false
+	}
+	return hasTrivialBody(node)
+}
+
+const hasExportModifier = (node: ts.FunctionDeclaration | ts.VariableStatement): boolean =>
+	node.modifiers !== undefined &&
+	Arr.some(node.modifiers, (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
+
+/** Names exported through `export { name }` clauses anywhere in the file. */
+const exportedNamesOf = (sourceFile: ts.SourceFile): ReadonlySet<string> => {
+	const names = new Set<string>()
+	const collect = (node: ts.Node): void => {
+		if (
+			ts.isExportDeclaration(node) &&
+			node.exportClause !== undefined &&
+			ts.isNamedExports(node.exportClause)
+		) {
+			for (const element of node.exportClause.elements) {
+				names.add(element.name.text)
+			}
+		}
+		node.forEachChild(collect)
+	}
+	collect(sourceFile)
+	return names
+}
+
+/** How many times the file names each symbol, declarations included, by the checker's symbol identity: a shadowed
+ * or same-named binding is a different symbol. A shorthand property `{ run }` names the value it reads. */
+const referenceCountsOf = (context: RuleContext): ReadonlyMap<number, number> => {
+	const counts = new Map<number, number>()
+	const record = (symbol: NativeSymbol | undefined): void => {
+		if (symbol === undefined) {
+			return
+		}
+		const seen = counts.get(symbol.id)
+		counts.set(symbol.id, seen === undefined ? 1 : seen + 1)
+	}
+	const count = (node: ts.Node): void => {
+		if (ts.isShorthandPropertyAssignment(node)) {
+			record(context.checker.getShorthandAssignmentValueSymbol(node))
+		} else if (ts.isIdentifier(node)) {
+			record(context.semantics.symbolAt(node))
+		}
+		node.forEachChild(count)
+	}
+	count(context.sourceFile)
+	return counts
+}
 
 /**
- * Detects pointless indirection - functions that simply wrap another function call
- * without doing any computation or type narrowing.
- *
- * A function is pointless indirection if:
- *   1. Its body is a single statement that is just a function call
- *   2. It doesn't perform type narrowing (no type predicates)
- *
- * Examples:
- *   function handleClick() { doThing() }  // just use doThing directly
- *   const open = () => setOpen(true)  // inline the call
- *   function log(msg: string) { console.log(msg) }  // just use console.log
- *   function enrichWithId(x: Foo) { return enrich(x, id) }  // inline the call
- *   function parseIt() { return JSON.parse(data) }  // inline the call
- *
- * Does NOT flag:
- *   - Type guards (return type is `value is Type`)
- *   - Functions with multiple statements
- *   - Functions that do computation (operators, conditionals, object creation)
- *   - Functions that construct callbacks (pass arrow/function args to calls)
+ * A local function whose body only returns a value or makes one call, without computation or narrowing, and
+ * that is used once (counted by the checker's symbols), is indirection: inline the expression where it is used. A wrapper used in several places
+ * names a shared expression, which inlining would duplicate, and exported functions are public API; both stay.
  */
-function check(sourceFile: ts.SourceFile): Violation[] {
-	const violations: Violation[] = []
-
-	function hasTypePredicateReturn(
-		node: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression
-	): boolean {
-		if (node.type && ts.isTypePredicateNode(node.type)) {
-			return true
-		}
-		return false
+export const noPointlessIndirection: LintRule = (context) => {
+	const { sourceFile, semantics } = context
+	const violations: Array<Violation> = []
+	const exportedNames = exportedNamesOf(sourceFile)
+	const referenceCounts = referenceCountsOf(context)
+	/** Named by its declaration and more than one use; an unresolved name is left alone. */
+	const isReused = (name: ts.Identifier): boolean => {
+		const symbol = semantics.symbolAt(name)
+		const references = symbol === undefined ? undefined : referenceCounts.get(symbol.id)
+		return references === undefined || references > 2
 	}
 
-	function isTrivialLeaf(expr: ts.Expression): boolean {
-		if (ts.isStringLiteral(expr)) {
-			return true
-		}
-		if (ts.isNumericLiteral(expr)) {
-			return true
-		}
-		if (expr.kind === ts.SyntaxKind.TrueKeyword) {
-			return true
-		}
-		if (expr.kind === ts.SyntaxKind.FalseKeyword) {
-			return true
-		}
-		if (expr.kind === ts.SyntaxKind.NullKeyword) {
-			return true
-		}
-		if (ts.isIdentifier(expr)) {
-			return true
-		}
-		if (ts.isCallExpression(expr)) {
-			return isTrivialCall(expr)
-		}
-		return false
-	}
-
-	function isTrivialCall(expr: ts.CallExpression): boolean {
-		for (const arg of expr.arguments) {
-			if (ts.isArrowFunction(arg) || ts.isFunctionExpression(arg)) {
-				return false
-			}
-			if (!isTrivialExpression(arg)) {
-				return false
-			}
-		}
-		return true
-	}
-
-	function isTrivialObjectProperty(prop: ts.ObjectLiteralElementLike): boolean {
-		if (ts.isPropertyAssignment(prop)) {
-			return isTrivialExpression(prop.initializer)
-		}
-		if (ts.isShorthandPropertyAssignment(prop)) {
-			return true
-		}
-		if (ts.isSpreadAssignment(prop)) {
-			return isTrivialExpression(prop.expression)
-		}
-		return false
-	}
-
-	function isTrivialObjectLiteral(expr: ts.ObjectLiteralExpression): boolean {
-		for (const prop of expr.properties) {
-			if (!isTrivialObjectProperty(prop)) {
-				return false
-			}
-		}
-		return true
-	}
-
-	function isTrivialArrayElement(elem: ts.Expression): boolean {
-		if (ts.isSpreadElement(elem)) {
-			return isTrivialExpression(elem.expression)
-		}
-		return isTrivialExpression(elem)
-	}
-
-	function isTrivialArrayLiteral(expr: ts.ArrayLiteralExpression): boolean {
-		for (const elem of expr.elements) {
-			if (!isTrivialArrayElement(elem)) {
-				return false
-			}
-		}
-		return true
-	}
-
-	function isTrivialElementAccess(expr: ts.ElementAccessExpression): boolean {
-		const arg = expr.argumentExpression
-		const isStringKey = ts.isStringLiteral(arg)
-		const isNumericKey = ts.isNumericLiteral(arg)
-		if (!isStringKey && !isNumericKey) {
+	const isExportedVariable = (name: string, node: ts.VariableDeclaration): boolean => {
+		const list = node.parent
+		if (!ts.isVariableDeclarationList(list) || !ts.isVariableStatement(list.parent)) {
 			return false
 		}
-		return isTrivialExpression(expr.expression)
+		return hasExportModifier(list.parent) || exportedNames.has(name)
 	}
 
-	function isTrivialExpression(expr: ts.Expression): boolean {
-		if (isTrivialLeaf(expr)) {
-			return true
-		}
-		if (ts.isPropertyAccessExpression(expr)) {
-			return isTrivialExpression(expr.expression)
-		}
-		if (ts.isParenthesizedExpression(expr)) {
-			return isTrivialExpression(expr.expression)
-		}
-		if (ts.isObjectLiteralExpression(expr)) {
-			return isTrivialObjectLiteral(expr)
-		}
-		if (ts.isArrayLiteralExpression(expr)) {
-			return isTrivialArrayLiteral(expr)
-		}
-		if (ts.isElementAccessExpression(expr)) {
-			return isTrivialElementAccess(expr)
-		}
-		return false
-	}
-
-	function getTrivialExpressionFromArrowBody(body: ts.ConciseBody): ts.Expression | null {
-		if (ts.isBlock(body)) {
-			return null
-		}
-		if (isTrivialExpression(body)) {
-			return body
-		}
-		return null
-	}
-
-	function getTrivialExpressionFromBlock(body: ts.Block): ts.Expression | null {
-		if (body.statements.length !== 1) {
-			return null
-		}
-
-		const stmt = body.statements[0]
-		if (!stmt) {
-			return null
-		}
-
-		if (ts.isReturnStatement(stmt) && stmt.expression && isTrivialExpression(stmt.expression)) {
-			return stmt.expression
-		}
-
+	const checkFunctionDeclaration = (node: ts.FunctionDeclaration): void => {
+		const name = node.name
 		if (
-			ts.isExpressionStatement(stmt) &&
-			ts.isCallExpression(stmt.expression) &&
-			isTrivialCall(stmt.expression)
+			name === undefined ||
+			hasExportModifier(node) ||
+			exportedNames.has(name.text) ||
+			isReused(name)
 		) {
-			return stmt.expression
+			return
 		}
-
-		return null
+		if (isPointlessIndirection(node)) {
+			violations.push(
+				violationAt({
+					sourceFile,
+					node: name,
+					rule: "no-pointless-indirection",
+					message: MESSAGE,
+					suggestion: SUGGESTION
+				})
+			)
+		}
 	}
 
-	function getTrivialExpressionFromBody(
-		node: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression
-	): ts.Expression | null {
-		const body = node.body
-		if (!body) {
-			return null
+	const checkVariableDeclaration = (node: ts.VariableDeclaration): void => {
+		const initializer = node.initializer
+		if (
+			initializer === undefined ||
+			(!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer))
+		) {
+			return
 		}
-
-		if (ts.isArrowFunction(node) && !ts.isBlock(body)) {
-			return getTrivialExpressionFromArrowBody(body)
+		if (
+			!ts.isIdentifier(node.name) ||
+			isExportedVariable(node.name.text, node) ||
+			isReused(node.name) ||
+			!isPointlessIndirection(initializer)
+		) {
+			return
 		}
-
-		if (!ts.isBlock(body)) {
-			return null
-		}
-
-		return getTrivialExpressionFromBlock(body)
-	}
-
-	function isPointlessIndirection(
-		node: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression
-	): boolean {
-		if (hasTypePredicateReturn(node)) {
-			return false
-		}
-
-		const expr = getTrivialExpressionFromBody(node)
-		if (!expr) {
-			return false
-		}
-
-		return true
-	}
-
-	// Build set of exported names from export { name } declarations
-	const exportedNames = new Set<string>()
-	function collectExportedNames(node: ts.Node): void {
-		if (ts.isExportDeclaration(node) && node.exportClause) {
-			if (ts.isNamedExports(node.exportClause)) {
-				for (const element of node.exportClause.elements) {
-					exportedNames.add(element.name.text)
-				}
-			}
-		}
-		ts.forEachChild(node, collectExportedNames)
-	}
-	collectExportedNames(sourceFile)
-
-	function hasExportModifier(node: ts.Node): boolean {
-		const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined
-		if (!modifiers) {
-			return false
-		}
-		for (const mod of modifiers) {
-			if (mod.kind === ts.SyntaxKind.ExportKeyword) {
-				return true
-			}
-		}
-		return false
-	}
-
-	function isExported(name: string, node: ts.Node): boolean {
-		if (hasExportModifier(node)) {
-			return true
-		}
-		return exportedNames.has(name)
-	}
-
-	function isExportedVariable(name: string, node: ts.VariableDeclaration): boolean {
-		const parent = node.parent
-		if (!ts.isVariableDeclarationList(parent)) {
-			return false
-		}
-		const grandparent = parent.parent
-		if (!ts.isVariableStatement(grandparent)) {
-			return false
-		}
-		if (hasExportModifier(grandparent)) {
-			return true
-		}
-		return exportedNames.has(name)
-	}
-
-	function addViolation(nameNode: ts.Node): void {
-		const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-			nameNode.getStart(sourceFile)
+		violations.push(
+			violationAt({
+				sourceFile,
+				node: node.name,
+				rule: "no-pointless-indirection",
+				message: MESSAGE,
+				suggestion: SUGGESTION
+			})
 		)
-		violations.push({
-			file: sourceFile.fileName,
-			line: line + 1,
-			column: character + 1,
-			rule: "no-pointless-indirection",
-			message:
-				"Pointless indirection. This function just wraps a value or call without computation.",
-			suggestion: "Inline the expression or use the value directly"
-		})
 	}
 
-	function checkFunctionDeclaration(node: ts.FunctionDeclaration): void {
-		if (!node.name) {
-			return
-		}
-		const name = node.name.text
-		if (isExported(name, node)) {
-			return
-		}
-		if (!isPointlessIndirection(node)) {
-			return
-		}
-		addViolation(node.name)
-	}
-
-	function checkVariableDeclaration(node: ts.VariableDeclaration): void {
-		if (!node.initializer) {
-			return
-		}
-		if (!ts.isArrowFunction(node.initializer) && !ts.isFunctionExpression(node.initializer)) {
-			return
-		}
-		const name = ts.isIdentifier(node.name) ? node.name.text : ""
-		if (isExportedVariable(name, node)) {
-			return
-		}
-		if (!isPointlessIndirection(node.initializer)) {
-			return
-		}
-		addViolation(node.name)
-	}
-
-	function walk(node: ts.Node): void {
+	const walk = (node: ts.Node): void => {
 		if (ts.isFunctionDeclaration(node)) {
 			checkFunctionDeclaration(node)
 		}
-
 		if (ts.isVariableDeclaration(node)) {
 			checkVariableDeclaration(node)
 		}
-
-		ts.forEachChild(node, walk)
+		node.forEachChild(walk)
 	}
 
 	walk(sourceFile)
 	return violations
 }
-
-export { check }

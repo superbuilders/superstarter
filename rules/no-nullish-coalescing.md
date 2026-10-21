@@ -4,193 +4,133 @@ alwaysApply: true
 
 # No Nullish Coalescing
 
-The `??` operator is banned. It hides missing data by silently substituting fallback values.
+The `??` operator is banned (oxlint `superstarter/no-nullish-coalescing`, `??=` included). It hides missing data by quietly substituting a fallback.
 
-## The Rule
+## The rule
 
-When you see `x ?? fallback`, don't patch it here. Ask: **"Why is this value optional?"** Then fix the source.
+When you see `x ?? fallback`, don't patch it where it stands. Ask why the value can be missing, and fix that.
 
-## Fix Patterns
+Swapping `??` for something that does the same thing is not a fix:
 
-### 1. Remove No-op Fallbacks
+- a ternary: `x !== undefined ? x : fallback`
+- `||`
+- `Option.getOrElse(() => fallback)` with an invented default
+- a non-null assertion: `x!`
 
-TypeScript narrows discriminated unions through control flow. After an error check, the fallback is pointless:
+## Fix patterns
 
-```typescript
-// ❌ WRONG: TypeScript already narrowed this
-const result = await errors.try(fetchData())
-if (result.error) {
-  return null
-}
-const data = result.data ?? []  // POINTLESS - data is already T
+### 1. Remove fallbacks that do nothing
 
-// ✅ CORRECT: Trust the narrowing
-const result = await errors.try(fetchData())
-if (result.error) {
-  return null
-}
-const data = result.data  // Already the success type
+If the type already says the value is there, the fallback is dead code:
+
+```ts
+// Todo's Schema requires title
+// BAD
+const label = todo.title ?? "Untitled"
+
+// GOOD
+const label = todo.title
 ```
 
-Same applies to required schema fields:
+### 2. One absence, not two
 
-```typescript
-// Schema: roles: z.array(UserRoleSchema)  // REQUIRED
+`Schema.optionalKey(Schema.NullOr(X))` admits a missing key, `null` and a value: three states. Pick one ([no-null-undefined-union.md](no-null-undefined-union.md)):
 
-// ❌ WRONG
-roles: user.roles ?? []
+```ts
+// BAD: string | null, or absent
+email: Schema.optionalKey(Schema.NullOr(Schema.String))
 
-// ✅ CORRECT
-roles: user.roles  // Schema guarantees it exists
+// GOOD: absent or a string
+email: Schema.optionalKey(Schema.String)
+
+// GOOD: whatever the API sends, one Option inside
+email: Schema.OptionFromOptionalNullOr(Schema.String)
 ```
 
-### 2. Fix `.nullable().optional()` Antipattern
+### 3. Align types at boundaries
 
-Never use both. This creates `T | null | undefined` - three states to handle everywhere.
+Coercing `undefined` into `null` where a value is used means two types disagree. Make them agree:
 
-```typescript
-// ❌ WRONG: Triple state
-email: z.string().nullable().optional()  // string | null | undefined
+```ts
+// BAD
+type Input = Readonly<{ grade?: string }>
+type Output = Readonly<{ grade: string | null }>
+const output: Output = { grade: input.grade ?? null }
 
-// ✅ CORRECT: Pick one (prefer undefined)
-email: z.string().optional()  // string | undefined
-
-// ✅ CORRECT: Normalize null → undefined at boundary
-email: z.string().nullable().transform(v => v ?? undefined)
+// GOOD: one representation on both sides
+type Output = Readonly<{ grade?: string }>
 ```
 
-### 3. Align Type Boundaries
+### 4. Required data fails when it is missing
 
-If coercing `undefined` ↔ `null`, the types are misaligned. Fix at the boundary:
+If a value is optional upstream but required here, fail with a tagged error. Don't default it:
 
-```typescript
-// ❌ WRONG: Coercing at point of use
-interface Input { grade?: string }  // undefined
-interface Output { grade: string | null }  // null
-const output = { grade: input.grade ?? null }
+```ts
+// BAD
+const raw = response.SecretString ?? ""
 
-// ✅ CORRECT: Align the types
-interface Input { grade: string | null }  // Match downstream
-// OR
-interface Output { grade?: string }  // Match upstream
+// GOOD
+const raw = yield* Effect.fromNullishOr(response.SecretString).pipe(
+	Effect.mapError(() => AdminSecretUnreadable.make({ reason: "empty" }))
+)
 ```
 
-### 4. Validate Required Fields at Boundary
+When a row your own SQL just inserted must exist, its absence is a defect:
 
-If optional upstream but required downstream, validate and throw - don't silently default:
-
-```typescript
-// ❌ WRONG: Silent default
-orgs: user.orgs ?? []
-
-// ✅ CORRECT: Validate
-if (!user.orgs) {
-  logger.error("user missing required orgs", { userId: user.sourcedId })
-  throw errors.new("user orgs required")
-}
-const orgs = user.orgs  // Now narrowed
+```ts
+Effect.flatMap((rows) => Effect.fromOption(Array.head(rows)).pipe(Effect.orDie))
 ```
 
-### 5. Validate External Data
+### 5. Decode outside data before use
 
-For Redis, APIs, etc. - validate structure before use:
+Data from a cache, an API or a file is decoded with a Schema that requires what the code needs. It is never read field by field with defaults:
 
-```typescript
-// ❌ WRONG: Hope keys exist
-const data = await redis.hGetAll(key)
-return {
-  correct: Number.parseInt(data.correct ?? "0", 10),
-}
+```ts
+// BAD
+const correct = Number.parseInt(data.correct ?? "0", 10)
 
-// ✅ CORRECT: Validate keys
-const data = await redis.hGetAll(key)
-if (!data.correct || !data.incorrect) {
-  logger.error("counter data incomplete", { key, data })
-  throw errors.new("counter data missing required fields")
-}
-return {
-  correct: Number.parseInt(data.correct, 10),
-}
+// GOOD
+const Counter = Schema.Struct({ correct: Schema.Int, incorrect: Schema.Int })
+const counter = yield* Schema.decodeUnknownEffect(Counter)(data)
 ```
 
-### 6. Redirect Invalid URL Params to Canonical Form
+### 6. Redirect invalid URL params to their canonical form
 
-For URL search params, the canonical "empty" state is the **absence** of the param, not an empty string. Redirect invalid/empty params to the clean URL.
+The canonical empty state of a search param is its absence, never `""`. Decode search params with a Schema that refuses `?q=`, and redirect a URL that does not decode to its canonical form. Don't turn `""` into "no query":
 
-```typescript
-// ❌ WRONG: Silent default in parser
-export function parseFilters(params: SearchParams): ParsedFilters {
-  return {
-    query: params.q ?? "",  // Hiding empty param with fallback
-  }
-}
-
-// ❌ ALSO WRONG: Ternary fallback at point of use
-search: filters.query !== "" ? filters.query : undefined
-
-// ✅ CORRECT: Redirect empty params to canonical URL (server component)
-export default async function StudentsPage({ searchParams }) {
-  const params = await searchParams
-
-  // Canonical form: absence of param = no value
-  // Redirect ?q= (empty) to URL without q param
-  if (params.q === "") {
-    const clean = new URLSearchParams()
-    // Keep other valid params
-    if (params.role === "student" || params.role === "admin") {
-      clean.set("role", params.role)
-    }
-    const qs = clean.toString()
-    redirect(qs ? `/admin/students?${qs}` : "/admin/students")
-  }
-
-  // After redirect, params.q is either a non-empty string or undefined
-  // Parser can now use null to mean "no query" without fallbacks
-  const filters = parseFilters(params)  // query: string | null
-  // ...
-}
+```ts
+/** `?q=` is not a query; a missing `q` is. */
+const StudentFilters = Schema.Struct({ q: Schema.optionalKey(Schema.NonEmptyString) })
 ```
 
-The canonical URL form:
-- `/admin/students` = no query (param absent)
-- `/admin/students?q=foo` = query is "foo"
-- `/admin/students?q=` = **invalid**, redirect to `/admin/students`
+| URL                     | Meaning                                |
+| ----------------------- | -------------------------------------- |
+| `/admin/students`       | no query                               |
+| `/admin/students?q=ada` | the query is `ada`                     |
+| `/admin/students?q=`    | invalid: redirect to `/admin/students` |
 
-This eliminates the need for `??` fallbacks because invalid states are redirected away at the boundary.
+### 7. Don't replace `??` with `!`
 
-### 7. Don't Replace `??` with `!` (Non-null Assertion)
+A non-null assertion is the same silent assumption (oxlint `typescript/no-non-null-assertion`). Make the assumption explicit, and fail when it is false:
 
-Swapping one silent assumption for another is not a fix. Non-null assertions hide the same problem.
+```ts
+// BAD
+const option = ROLE_OPTIONS.find((candidate) => candidate.value === role)!
 
-```typescript
-// ❌ WRONG: Replacing ?? with ! and a comment
-const currentOption = ROLE_OPTIONS.find((opt) => opt.value === currentRole)
-// biome-ignore lint/style/noNonNullAssertion: array is non-empty constant
-const option = currentOption ?? ROLE_OPTIONS[0]!
-
-// ❌ ALSO WRONG: Just using ! directly
-const color = colors[index]!  // "guaranteed" by math
-
-// ✅ CORRECT: Validate and throw
-const currentOption = ROLE_OPTIONS.find((opt) => opt.value === currentRole)
-if (!currentOption) {
-  logger.error("invalid role filter value", { currentRole })
-  throw errors.new("invalid role filter")
-}
-// currentOption is now narrowed
+// GOOD
+const option = yield* Effect.fromOption(
+	Array.findFirst(ROLE_OPTIONS, (candidate) => candidate.value === role)
+).pipe(Effect.mapError(() => RoleFilterRefused.make({ role })))
 ```
-
-If you're tempted to write `!` with a comment explaining why it's safe, that's a sign you should validate and throw instead. The validation makes the assumption explicit and debuggable.
 
 ## Summary
 
-| Pattern | Fix |
-|---------|-----|
-| `result.data ?? []` after error check | Remove `?? []` - already narrowed |
-| `user.roles ?? []` on required field | Remove fallback - trust schema |
-| `z.string().nullable().optional()` | Pick one: `.optional()` preferred |
-| `input.grade ?? null` | Align Input/Output types |
-| `user.orgs ?? []` when orgs required | Validate and throw if missing |
-| `redisData.field ?? "0"` | Validate hash structure first |
-| `params.q ?? ""` in URL parsing | Redirect to canonical URL at boundary |
-| `array[index]!` with "guaranteed" comment | Validate and throw if missing |
+| Pattern                                           | Fix                                                  |
+| ------------------------------------------------- | ---------------------------------------------------- |
+| `todo.title ?? ""` on a required field            | Remove the fallback and trust the Schema             |
+| `optionalKey(NullOr(X))`                          | Pick one: `optionalKey(X)`, or decode to an `Option` |
+| `input.grade ?? null`                             | Align the input and output types                     |
+| `response.field ?? ""` when the field is required | `Effect.fromNullishOr` and a tagged error            |
+| `data.field ?? "0"` on outside data               | Decode with a Schema first                           |
+| `params.q ?? ""`                                  | Redirect to the canonical URL                        |
+| `array[index]!` or `find(…)!`                     | `Option`, then fail with a tagged error              |

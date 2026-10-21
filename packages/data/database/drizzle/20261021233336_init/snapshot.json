@@ -1,0 +1,132 @@
+{
+	"type": "base",
+	"version": "9",
+	"dialect": "postgres",
+	"id": "33742345-0639-461b-8bb9-4d2b1a030efb",
+	"prevIds": ["00000000-0000-0000-0000-000000000000"],
+	"footprints": [
+		{
+			"statementType": "create_schema",
+			"statementTarget": ["schema", "core"],
+			"writes": ["s|sch|core", "n|sch|core", "e|sch|core"]
+		},
+		{
+			"statementType": "create_table",
+			"statementTarget": ["table", "core", "todos"],
+			"writes": [
+				"s|tbl|core.todos",
+				"n|tbl|core.todos",
+				"e|tbl|core.todos",
+				"n|rel|core.todos",
+				"n|type|core.todos",
+				"n|rel|core.todos_pk"
+			],
+			"reads": ["n|sch|core"]
+		},
+		{
+			"statementType": "create_index",
+			"statementTarget": ["index", "core", "todos", "todos_completed_idx"],
+			"writes": [
+				"s|idx|core.todos_completed_idx",
+				"n|idx|core.todos_completed_idx",
+				"e|idx|core.todos_completed_idx",
+				"n|rel|core.todos_completed_idx"
+			],
+			"reads": ["n|tbl|core.todos", "n|sch|core", "n|col|core.todos.completed"]
+		}
+	],
+	"ddl": [
+		{
+			"name": "core",
+			"entityType": "schemas"
+		},
+		{
+			"schema": "core",
+			"name": "todos",
+			"isRlsEnabled": false,
+			"entityType": "tables"
+		},
+		{
+			"schema": "core",
+			"table": "todos",
+			"name": "id",
+			"type": "uuid",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "uuidv7()",
+			"generated": null,
+			"identity": null,
+			"entityType": "columns"
+		},
+		{
+			"schema": "core",
+			"table": "todos",
+			"name": "title",
+			"type": "varchar(256)",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": null,
+			"generated": null,
+			"identity": null,
+			"entityType": "columns"
+		},
+		{
+			"schema": "core",
+			"table": "todos",
+			"name": "completed",
+			"type": "boolean",
+			"typeSchema": null,
+			"notNull": true,
+			"dimensions": 0,
+			"default": "false",
+			"generated": null,
+			"identity": null,
+			"entityType": "columns"
+		},
+		{
+			"schema": "core",
+			"table": "todos",
+			"name": "todos_completed_idx",
+			"nameExplicit": true,
+			"columns": [
+				{
+					"value": "completed",
+					"isExpression": false,
+					"asc": true,
+					"nullsFirst": false,
+					"opclass": null
+				}
+			],
+			"isUnique": false,
+			"where": null,
+			"with": "",
+			"method": "btree",
+			"concurrently": false,
+			"entityType": "indexes"
+		},
+		{
+			"schema": "core",
+			"table": "todos",
+			"name": "todos_pk",
+			"columns": ["id"],
+			"nameExplicit": true,
+			"entityType": "pks"
+		},
+		{
+			"schema": "core",
+			"table": "todos",
+			"name": "todos_id_v7_ck",
+			"value": "uuid_extract_version(\"id\") = 7",
+			"entityType": "checks"
+		},
+		{
+			"schema": "core",
+			"table": "todos",
+			"name": "todos_title_ck",
+			"value": "char_length(btrim(\"title\")) > 0",
+			"entityType": "checks"
+		}
+	]
+}

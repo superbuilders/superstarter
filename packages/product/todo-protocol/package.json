@@ -1,0 +1,30 @@
+{
+	"name": "@superstarter/todo-protocol",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Every type the todo app's database, server and browser share: the todo's identity and title, the server-action contracts and their wire, and the failures that cross it. Browser-safe: never server code.",
+	"type": "module",
+	"sideEffects": false,
+	"imports": {
+		"#*": "./src/*"
+	},
+	"exports": {
+		"./action": "./src/action.ts",
+		"./todo-contracts": "./src/todo-contracts.ts",
+		"./todos": "./src/todos.ts",
+		"./transient-failure": "./src/transient-failure.ts"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"lint": "node ../../../scripts/dev/lint.ts"
+	},
+	"dependencies": {
+		"effect": "4.0.5"
+	},
+	"devDependencies": {
+		"typescript": "7.0.2"
+	}
+}

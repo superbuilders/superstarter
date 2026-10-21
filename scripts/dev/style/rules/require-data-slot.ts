@@ -1,192 +1,112 @@
-import type { Violation } from "@scripts/dev/style/types"
-import * as ts from "typescript"
+import { Array as Arr, Option, Predicate } from "effect"
+import * as ts from "typescript/unstable/ast"
+import type { SyntaxSource } from "#scripts/dev/shared/native-syntax.ts"
+import {
+	dataSlotAttributesOf,
+	isComponentFile,
+	type JsxRoot
+} from "#scripts/dev/style/components.ts"
+import type { StyleViolation } from "#scripts/dev/style/types.ts"
 
-/**
- * Requires that component functions in src/components have a data-slot attribute
- * somewhere in their returned JSX structure.
- *
- * The data-slot can be on:
- * - The top-level element directly
- * - A nested element (for composition patterns like wrapping with Portal/Button)
- *
- * BAD:  function Button() { return <button className="...">Click</button> }
- * GOOD: function Button() { return <button data-slot="button" className="...">Click</button> }
- * GOOD: function AlertDialogAction() { return <Button><Primitive data-slot="action" /></Button> }
- */
-function check(sourceFile: ts.SourceFile): Violation[] {
-	// Only check files in src/components
-	if (!sourceFile.fileName.includes("src/components")) {
-		return []
+type ComponentFunction = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction
+
+const jsxOf = (expression: ts.Expression): JsxRoot | undefined => {
+	if (
+		ts.isJsxElement(expression) ||
+		ts.isJsxSelfClosingElement(expression) ||
+		ts.isJsxFragment(expression)
+	) {
+		return expression
 	}
-
-	const violations: Violation[] = []
-	walkNode(sourceFile, violations, sourceFile)
-	return violations
+	return ts.isParenthesizedExpression(expression) ? jsxOf(expression.expression) : undefined
 }
 
-function walkNode(node: ts.Node, violations: Violation[], sourceFile: ts.SourceFile): void {
-	if (ts.isFunctionDeclaration(node) && node.name) {
-		checkAndAddViolation(node, node.name.text, violations, sourceFile)
-	}
-
-	if (ts.isVariableStatement(node)) {
-		checkVariableStatement(node, violations, sourceFile)
-	}
-
-	ts.forEachChild(node, function visit(child: ts.Node) {
-		walkNode(child, violations, sourceFile)
-	})
-}
-
-function checkVariableStatement(
-	node: ts.VariableStatement,
-	violations: Violation[],
-	sourceFile: ts.SourceFile
-): void {
-	for (const decl of node.declarationList.declarations) {
-		if (!ts.isIdentifier(decl.name)) continue
-		if (!decl.initializer) continue
-		if (!ts.isFunctionExpression(decl.initializer) && !ts.isArrowFunction(decl.initializer))
-			continue
-
-		checkAndAddViolation(decl.initializer, decl.name.text, violations, sourceFile)
-	}
-}
-
-function checkAndAddViolation(
-	node: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
-	name: string,
-	violations: Violation[],
-	sourceFile: ts.SourceFile
-): void {
-	const violation = checkComponentFunction(node, name, sourceFile)
-	if (violation) {
-		violations.push(violation)
-	}
-}
-
-function checkComponentFunction(
-	node: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
-	name: string,
-	sourceFile: ts.SourceFile
-): Violation | undefined {
-	// Component names start with uppercase
-	if (!/^[A-Z]/.test(name)) {
-		return undefined
-	}
-
-	const returnedJsx = findReturnedJsx(node)
-	if (!returnedJsx) {
-		return undefined
-	}
-
-	if (hasDataSlotAnywhere(returnedJsx)) {
-		return undefined
-	}
-
-	const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-		returnedJsx.getStart(sourceFile)
-	)
-
-	return {
-		file: sourceFile.fileName,
-		line: line + 1,
-		column: character + 1,
-		rule: "require-data-slot",
-		message: `Component "${name}" missing data-slot attribute.`,
-		componentName: name
-	}
-}
-
-function findReturnedJsx(
-	node: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction
-): ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment | undefined {
+/** The JSX of an arrow's expression body, or of the first return statement of a block body. */
+const returnedJsxOf = (node: ComponentFunction): JsxRoot | undefined => {
 	const body = node.body
-	if (!body) {
+	if (body === undefined) {
 		return undefined
 	}
-
-	// Arrow function with expression body
-	if (ts.isArrowFunction(node) && !ts.isBlock(body)) {
-		return extractJsxFromExpression(body)
-	}
-
 	if (!ts.isBlock(body)) {
+		return jsxOf(body)
+	}
+	const returned = Arr.findFirst(body.statements, ts.isReturnStatement)
+	if (Option.isNone(returned) || returned.value.expression === undefined) {
 		return undefined
 	}
-
-	// Look for return statement
-	for (const stmt of body.statements) {
-		if (ts.isReturnStatement(stmt) && stmt.expression) {
-			return extractJsxFromExpression(stmt.expression)
-		}
-	}
-
-	return undefined
+	return jsxOf(returned.value.expression)
 }
 
-function extractJsxFromExpression(
-	expr: ts.Expression
-): ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment | undefined {
-	if (ts.isJsxElement(expr)) return expr
-	if (ts.isJsxSelfClosingElement(expr)) return expr
-	if (ts.isJsxFragment(expr)) return expr
-	if (ts.isParenthesizedExpression(expr)) return extractJsxFromExpression(expr.expression)
-	return undefined
-}
+const isJsxRoot = Predicate.or(
+	Predicate.or(ts.isJsxElement, ts.isJsxSelfClosingElement),
+	ts.isJsxFragment
+)
 
-function hasDataSlotAnywhere(
-	jsx: ts.JsxElement | ts.JsxSelfClosingElement | ts.JsxFragment
-): boolean {
+const childrenHaveDataSlot = (children: ts.NodeArray<ts.JsxChild>): boolean =>
+	Arr.some(children, (child) => isJsxRoot(child) && hasDataSlotAnywhere(child))
+
+const hasDataSlotAnywhere = (jsx: JsxRoot): boolean => {
 	if (ts.isJsxFragment(jsx)) {
-		return checkFragmentChildren(jsx)
+		return childrenHaveDataSlot(jsx.children)
 	}
-
-	if (hasDataSlotAttribute(jsx)) {
+	if (Arr.isReadonlyArrayNonEmpty(dataSlotAttributesOf(jsx))) {
 		return true
 	}
-
-	if (ts.isJsxElement(jsx)) {
-		return checkElementChildren(jsx)
-	}
-
-	return false
+	return ts.isJsxElement(jsx) && childrenHaveDataSlot(jsx.children)
 }
 
-function checkFragmentChildren(jsx: ts.JsxFragment): boolean {
-	for (const child of jsx.children) {
-		if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
-			if (hasDataSlotAnywhere(child)) {
-				return true
-			}
+/**
+ * A component function (a capitalized name) in a component directory carries a data-slot attribute somewhere in
+ * the JSX it returns: on its top-level element, or nested, for compositions that wrap a primitive.
+ */
+export const requireDataSlot = (source: SyntaxSource): ReadonlyArray<StyleViolation> => {
+	const { sourceFile, file } = source
+	if (!isComponentFile(file)) {
+		return []
+	}
+	const violations: Array<StyleViolation> = []
+
+	const checkComponent = (node: ComponentFunction, name: string): void => {
+		const returned = /^[A-Z]/.test(name) ? returnedJsxOf(node) : undefined
+		if (returned === undefined || hasDataSlotAnywhere(returned)) {
+			return
+		}
+		const { line, character } = sourceFile.getLineAndCharacterOfPosition(
+			returned.getStart(sourceFile)
+		)
+		violations.push({
+			file,
+			line: line + 1,
+			column: character + 1,
+			rule: "require-data-slot",
+			message: `Component "${name}" missing data-slot attribute.`,
+			componentName: name
+		})
+	}
+
+	const checkDeclaration = (declaration: ts.VariableDeclaration): void => {
+		const initializer = declaration.initializer
+		if (
+			ts.isIdentifier(declaration.name) &&
+			initializer !== undefined &&
+			(ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer))
+		) {
+			checkComponent(initializer, declaration.name.text)
 		}
 	}
-	return false
-}
 
-function checkElementChildren(jsx: ts.JsxElement): boolean {
-	for (const child of jsx.children) {
-		if (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child) || ts.isJsxFragment(child)) {
-			if (hasDataSlotAnywhere(child)) {
-				return true
+	const walk = (node: ts.Node): void => {
+		if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+			checkComponent(node, node.name.text)
+		}
+		if (ts.isVariableStatement(node)) {
+			for (const declaration of node.declarationList.declarations) {
+				checkDeclaration(declaration)
 			}
 		}
-	}
-	return false
-}
-
-function hasDataSlotAttribute(jsx: ts.JsxElement | ts.JsxSelfClosingElement): boolean {
-	const attributes = ts.isJsxElement(jsx) ? jsx.openingElement.attributes : jsx.attributes
-
-	for (const attr of attributes.properties) {
-		if (ts.isJsxAttribute(attr) && ts.isIdentifier(attr.name)) {
-			if (attr.name.text === "data-slot") {
-				return true
-			}
-		}
+		node.forEachChild(walk)
 	}
 
-	return false
+	walk(sourceFile)
+	return violations
 }
-
-export { check }

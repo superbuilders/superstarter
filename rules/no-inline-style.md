@@ -9,6 +9,7 @@ The `style={{}}` prop is banned. Use Tailwind classes for everything.
 ## Why
 
 CSS is dead. Tailwind handles all styling. Inline styles:
+
 1. Break the single-paradigm approach
 2. Require `as React.CSSProperties` type assertions
 3. Don't work with Tailwind modifiers (hover, responsive, etc.)

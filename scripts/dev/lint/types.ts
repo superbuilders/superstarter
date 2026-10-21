@@ -1,33 +1,45 @@
-import type * as ts from "typescript"
+import { Schema } from "effect"
+import type * as ts from "typescript/unstable/ast"
+import type { Checker } from "typescript/unstable/sync"
+import type { Semantics } from "#scripts/dev/lint/semantic.ts"
 
-type RuleId =
-	| "no-null-undefined-union"
-	| "no-unnecessary-condition"
-	| "no-unnecessary-default-case"
-	| "prefer-early-return"
-	| "no-impossible-logical-or"
-	| "no-logical-or-fallback"
-	| "no-arrow-functions"
-	| "no-object-module"
-	| "no-pointless-indirection"
-	| "no-pointless-type-alias"
-	| "no-unused-params"
-	| "tracing-options-last"
-	| "no-timestamp-columns"
-	| "no-uuid-default-random"
+/** Every rule superlint reports. A rule's id is its name in the output and in the rules/*.md docs. */
+const RULE_IDS = [
+	"no-null-undefined-union",
+	"prefer-early-return",
+	"no-logical-or-fallback",
+	"effect-classes-only",
+	"no-module-state",
+	"no-pointless-indirection",
+	"no-pointless-type-alias",
+	"no-timestamp-columns",
+	"no-uuid-default-random",
+	"no-implicit-select-all",
+	"no-drizzle-write-without-where",
+	"operational-telemetry-boundary",
+	"program-isolation"
+] as const
 
-interface Violation {
-	file: string
-	line: number
-	column: number
-	rule: RuleId
-	message: string
-	suggestion?: string
-}
+const RuleId = Schema.Literals(RULE_IDS)
 
-interface LintRule {
-	id: RuleId
-	check: (sourceFile: ts.SourceFile, checker: ts.TypeChecker) => Violation[]
-}
+export type RuleId = typeof RuleId.Type
 
-export type { LintRule, RuleId, Violation }
+export const Violation = Schema.Struct({
+	file: Schema.String,
+	line: Schema.Int,
+	column: Schema.Int,
+	rule: RuleId,
+	message: Schema.String,
+	suggestion: Schema.optional(Schema.String)
+})
+
+export type Violation = typeof Violation.Type
+
+/** What a rule sees: one owned source file, its program's checker, and the file's prepared semantic lookups. */
+export type RuleContext = Readonly<{
+	sourceFile: ts.SourceFile
+	checker: Checker
+	semantics: Semantics
+}>
+
+export type LintRule = (context: RuleContext) => ReadonlyArray<Violation>

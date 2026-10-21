@@ -3,24 +3,15 @@ globs: *.ts
 alwaysApply: false
 ---
 
-### No `crypto.randomUUID()`
+# No `crypto.randomUUID()`
 
-Using `crypto.randomUUID()` is disallowed. It generates UUIDv4, which is random and not time-sortable. Use `Bun.randomUUIDv7()` instead.
+`crypto.randomUUID()` is banned (tsgo `cryptoRandomUUID`). It mints a UUIDv4, which is random: it neither sorts by time nor records one.
 
-**Incorrect:**
+- **Primary keys** are minted by PostgreSQL's `uuidv7()` as the column default, so the application never sends one. See [no-uuid-default-random.md](no-uuid-default-random.md).
+- **A throwaway client-side key** that is never sent, such as an optimistic row's React key, comes from `uuid`'s `v7()`:
 
-```typescript
-const id = crypto.randomUUID()
+```ts
+import { v7 } from "uuid"
+
+applyOptimistic({ kind: "create", key: v7(), title })
 ```
-
-**Correct:**
-
-```typescript
-const id = Bun.randomUUIDv7()
-```
-
-**Why:**
-
-- UUIDv7 is time-sortable — better index locality and chronological ordering
-- `Bun.randomUUIDv7()` generates time-sortable UUIDs client-side
-- `crypto.randomUUID()` produces non-sortable UUIDv4

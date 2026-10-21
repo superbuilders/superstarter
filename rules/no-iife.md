@@ -2,34 +2,36 @@
 globs: *.ts
 alwaysApply: false
 ---
-### No IIFE (Immediately Invoked Function Expressions)
 
-IIFEs are disallowed. Define a named function and call it, or restructure control flow without IIFEs.
+# No IIFE
 
-**Incorrect:**
-```typescript
+Immediately invoked function expressions are banned (oxlint `superstarter/no-iife`; tsgo `effectFnIife` for `Effect.fn`). Name the function and call it, or restructure the code so it needs no function.
+
+```ts
+// BAD
 const result = (() => {
-	// complex logic
+	// …
 	return value
 })()
 
 await (async () => {
-	// async logic
+	// …
 })()
-```
 
-**Correct:**
-```typescript
-function computeResult() {
-	// complex logic
+// GOOD
+const computeResult = () => {
+	// …
 	return value
 }
 const result = computeResult()
-
-async function performAsyncWork() {
-	// async logic
-}
-await performAsyncWork()
 ```
 
-For modules, prefer top-level await over async IIFEs.
+A script's work is an Effect value, run once at the end of the file:
+
+```ts
+const main = Effect.gen(function* () {
+	// …
+})
+
+NodeRuntime.runMain(main)
+```

@@ -2,274 +2,96 @@
 globs: *.ts
 alwaysApply: false
 ---
-### Error Handling
 
-Always import the errors namespace: `import * as errors from "@superbuilders/errors"`. Never use regular try/catch blocks; always use `errors.try` instead. The `if (result.error)` block **MUST** be placed on the line immediately following the operation. No empty newlines are permitted between the line containing `errors.try`/`errors.trySync` and the subsequent `if (result.error)` statement.
+# Error Handling
 
-```typescript
-import * as errors from "@superbuilders/errors"
-import { logger } from "@/logger"
+A failure is a value in Effect's error channel. An expected failure is a `Schema.TaggedError`. A failure that can only mean a bug is a defect. Nothing throws through application code, nothing is swallowed, and nothing falls back to an invented value.
 
-const result = await errors.try(somePromise)
-if (result.error) {
-	// Handle error case by logging AND throwing the error
-	logger.error({ error: result.error }, "operation failed")
-	throw errors.wrap(result.error, "operation")
-}
-const data = result.data // Safe to use the data now
+## Expected failures are tagged errors
+
+```ts
+import { Schema } from "effect"
+import { TodoId } from "#lib/todos.ts"
+
+/** The todo a toggle or delete names no longer exists. */
+export class TodoNotFound extends Schema.TaggedError<
+	TodoNotFound,
+	{ readonly brand: unique symbol }
+>()("TodoNotFound", {
+	id: TodoId
+}) {}
 ```
 
-When propagating errors, always log them using `logger.error` AND use `errors.wrap` with throw for errors from external sources:
+- **Name:** `<Subject><State>`, such as `TodoNotFound`, `AdminSecretUnreadable`, `PostgresStatementRejected` or `PostgresTransientFailure`. No `Error` suffix.
+- **Tag:** `_tag` equals the class name (tsgo `deterministicKeys`).
+- **Brand:** the second type argument is required (tsgo `schemaClassMissingBrand`), so two errors with the same fields stay distinct types.
+- **Fields:** fields are Schemas that hold closed facts: ids, literal reasons, admitted diagnostics. Never put a provider's message or a raw caught value in a field, because those can carry secrets or user content. When the cases differ by one fact, write one class with a literal field (`reason: Schema.Literals(["fetch", "empty", "shape"])`) rather than one class per case.
+- **Construction:** construct with `X.make({...})` (tsgo `newSchemaClass`). In a generator, `yield* X.make({...})` fails it; elsewhere use `Effect.fail(X.make({...}))`.
 
-```typescript
-const result = await errors.try(somePromise)
-if (result.error) {
-	logger.error({ error: result.error }, "screenshot capture failed")
-	throw errors.wrap(result.error, "screenshot capture")
-}
-```
-
-For synchronous operations, use `errors.trySync` and always log then throw errors when bubbling up:
-
-```typescript
-const result = errors.trySync(() => someOperation())
-if (result.error) {
-	logger.error({ error: result.error }, "synchronous operation failed")
-	throw errors.wrap(result.error, "synchronous operation")
-}
-```
-
-NEVER use `console.log`, `console.debug`, or `console.error` in any files. Use the Pino logger via `import { logger } from "@/logger"` instead. When handling errors, always log them using `logger.error` AND propagate them by throwing via `errors.wrap` (for external errors) or `errors.new` (for our own errors). Both logging and propagation are required for proper error handling.
-
-#### ⚠️ CRITICAL: Script Error Logging Pattern
-
-For manual scripts that need to log errors before exiting:
-
-```typescript
-import { logger } from "@/logger"
-import * as errors from "@superbuilders/errors"
-
-const result = await errors.try(main())
-if (result.error) {
-	logger.error({ error: result.error }, "operation failed")
-	process.exit(1)
-}
-```
-
-#### Custom Error Constants and Type-Safe Error Checking
-
-For domain-specific error handling, define custom error constants using `errors.new` and use `errors.is` for type-safe error checking. This pattern enables precise error handling with automatic type narrowing.
-
-**1. Define Custom Error Constants**
-
-Create named constants for specific error types in your module:
-
-```typescript
-// ✅ CORRECT: Define custom error constants
-export const ErrUserNotFound = errors.new("user not found")
-export const ErrInvalidPermission = errors.new("invalid permission")
-export const ErrDataCorrupted = errors.new("data corrupted")
-```
-
-**2. Throw Custom Errors with Context**
-
-Use `errors.wrap` with custom error constants to add contextual information while preserving error identity for `errors.is` checks:
-
-```typescript
-// ✅ CORRECT: Throw custom errors with context
-function getUser(id: string): User {
-	if (!id) {
-		throw errors.wrap(ErrUserNotFound, `user id cannot be empty`)
-	}
-	
-	const user = database.findUser(id)
-	if (!user) {
-		throw errors.wrap(ErrUserNotFound, `user with id '${id}' does not exist`)
-	}
-	
-	return user
-}
-```
-
-**3. Handle Operations That Throw Custom Errors**
-
-Use `errors.trySync` to catch custom errors and check for specific types using `errors.is`:
-
-```typescript
-// ✅ CORRECT: Handle custom errors with errors.is
-function processUser(id: string): void {
-	const userResult = errors.trySync(() => getUser(id))
-	if (userResult.error) {
-		if (errors.is(userResult.error, ErrUserNotFound)) {
-			// Handle missing user specifically
-			logger.warn({ userId: id }, "skipping missing user")
-			return
+```ts
+/** The one row a toggle or delete returned, or the refusal that it named nothing. */
+const affectedOf =
+	(id: TodoId) =>
+	(rows: ReadonlyArray<Readonly<{ id: TodoId }>>): Effect.Effect<void, TodoNotFound> => {
+		if (Array.isReadonlyArrayNonEmpty(rows)) {
+			return Effect.void
 		}
-		// Handle other unexpected errors
-		throw userResult.error // Bubble up other errors unchanged
+		return Effect.fail(TodoNotFound.make({ id }))
 	}
-	
-	// Type narrowing: userResult.data is automatically typed as User
-	const user = userResult.data
-	// Process user...
-}
 ```
 
-**4. Error Bubbling Pattern**
+## Capturing native failures
 
-When errors need to bubble up unchanged (preserving the error chain), throw the error directly:
+Native code throws and rejects, so wrap it where it is called. The `catch` maps the thrown value to a tagged error. It never returns `unknown` or `Error` (tsgo `unknownInEffectCatch`, `globalErrorInEffectCatch`).
 
-```typescript
-// ✅ CORRECT: Bubble errors without additional wrapping
-const operationResult = errors.trySync(() => riskyOperation())
-if (operationResult.error) {
-	throw operationResult.error // Preserves error chain for errors.is checks
-}
+| Work                                  | Capture                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------ |
+| A Promise                             | `Effect.tryPromise({ try: (signal) => …, catch: () => X.make({...}) })`  |
+| A synchronous call that throws        | `Effect.try({ try: () => …, catch: () => X.make({...}) })`               |
+| A synchronous call outside Effect     | `Result.try({ try: () => …, catch: () => … })`                           |
+| A value that may be null or undefined | `Effect.fromNullishOr(value).pipe(Effect.mapError(() => X.make({...})))` |
+
+```ts
+const response = yield* Effect.tryPromise({
+	try: (signal) =>
+		client.send(new GetSecretValueCommand({ SecretId: secretArn }), { abortSignal: signal }),
+	catch: () => AdminSecretUnreadable.make({ reason: "fetch" })
+})
+const raw = yield* Effect.fromNullishOr(response.SecretString).pipe(
+	Effect.mapError(() => AdminSecretUnreadable.make({ reason: "empty" }))
+)
 ```
 
-**5. Multiple Error Types in One Function**
+Pass `signal` on, so that interruption aborts the call.
 
-Functions can throw different custom errors for different failure modes:
+## Handling
 
-```typescript
-// ✅ CORRECT: Multiple custom error types
-export const ErrArticleRedirect = errors.new("article is a redirect")
-export const ErrArticleNotHtml = errors.new("article is not html")
-export const ErrArticleDataConversion = errors.new("article data conversion failed")
+- **One tag:** `Effect.catchTag("TodoNotFound", (error) => …)`. The handled tag leaves the error channel.
+- **Several tags:** `Effect.catchTags({ TodoNotFound: …, PostgresTransientFailure: … })`.
+- **A different domain failure:** `Effect.mapError`.
+- **Our own bug:** `Effect.orDie`, for a failure that cannot happen unless our code is wrong, such as a row of our own SQL that does not decode or a missing `Config` at runtime.
+- **Retry:** `PostgresTransientFailure` (SQLSTATE 40001 or 40P01) means the attempt changed nothing and may succeed when run again. Nothing retries automatically. The caller decides, with `retryPostgresTransient` (`@superstarter/database/postgres/retry`): three more attempts, exponentially spaced from 20 ms. The todo lifecycle suite proves it against a real conflict.
 
-function getArticleContent(entry: Entry): ArticleContent {
-	if (entry.isRedirect) {
-		throw errors.wrap(ErrArticleRedirect, `article at path '${entry.path}' is a redirect`)
-	}
-	
-	if (!entry.mimetype?.startsWith("text/html")) {
-		throw errors.wrap(ErrArticleNotHtml, `article at path '${entry.path}' has mimetype '${entry.mimetype}'`)
-	}
-	
-	const contentResult = errors.trySync(() => extractContent(entry))
-	if (contentResult.error) {
-		throw contentResult.error // Bubble data conversion errors
-	}
-	
-	return contentResult.data
-}
+  ```ts
+  flipTodo(id).pipe(retryPostgresTransient)
+  ```
 
-// Consumer can handle each error type specifically
-const articleResult = errors.trySync(() => getArticleContent(entry))
-if (articleResult.error) {
-	if (errors.is(articleResult.error, ErrArticleRedirect)) {
-		// Handle redirect case
-	} else if (errors.is(articleResult.error, ErrArticleNotHtml)) {
-		// Handle non-HTML case  
-	} else if (errors.is(articleResult.error, ErrArticleDataConversion)) {
-		// Handle data conversion failure
-	} else {
-		// Handle unexpected errors
-		throw articleResult.error
-	}
-	return
-}
+## Boundaries
 
-// Type narrowing: articleResult.data is automatically typed as ArticleContent
-const article = articleResult.data
-```
+- **Server actions** run through `effectAction` (`packages/product/nextjs-app/src/server/effect-action.ts`). A failure the action's contract names crosses to the browser as itself, decoded back into the same class. Every other cause is reported once and crosses as the opaque `ActionFailed`. The client never sees an exception or an error's text; it writes its own message per `_tag`.
+- **Render reads** reject the promise the page passed down, and the route's error boundary renders.
+- **Scripts** end in `NodeRuntime.runMain(main)`, which reports a failure and sets the exit code.
+- **Native callbacks:** `throw` appears only where a native callback's contract demands it, such as pg's `password` callback, and it throws a tagged error.
 
-**Key Benefits:**
-- **Type Safety**: `errors.is` provides automatic type narrowing without manual casting
-- **Error Chain Integrity**: Custom errors maintain pointer equality through the error chain
-- **Explicit Handling**: Each error type can be handled specifically with clear intent
-- **Contextual Information**: `errors.wrap` adds context while preserving error identity
+## Reporting
 
-#### Error Message Naming
+- Report a failure once, where it becomes a value (`effectAction` does this). Code that only propagates a failure does not log it: the cause travels in the error channel, and the span records it.
+- Never flatten a failure into a string (`String(error)`, `error.message`). Keep the typed error or the `Cause`.
+- Telemetry classifies failures by `_tag` into closed codes (`FAILURE_CODES` in `@superstarter/operational-telemetry/failure`). A new tagged error that can reach telemetry gets a row there; without one it reports as `unknown`.
 
-Follow Go-style error message conventions with terse, context-focused descriptions:
+## See also
 
-**Guidelines:**
-- Use lowercase, no punctuation or capitalization
-- Omit redundant words like "failed", "error", "unable to"
-- Focus on the operation or context, not the failure
-- Use noun phrases or simple action descriptions
-
-**Examples:**
-
-```typescript
-// ✅ CORRECT: Terse, context-focused
-throw errors.wrap(result.error, "database connection")
-throw errors.wrap(result.error, "user authentication")
-throw errors.wrap(result.error, "file upload")
-throw errors.wrap(result.error, "metadata retrieval")
-throw errors.wrap(result.error, "article processing")
-throw errors.new("invalid configuration")
-throw errors.new("missing required field")
-
-// ❌ WRONG: Verbose, redundant prefixes
-throw errors.wrap(result.error, "Failed to connect to database")
-throw errors.wrap(result.error, "Error during user authentication")
-throw errors.wrap(result.error, "Unable to upload file")
-throw errors.wrap(result.error, "Failed during metadata retrieval")
-throw errors.new("Configuration is invalid")
-throw errors.new("Required field is missing")
-```
-
-**Consistent Naming Patterns:**
-- **Database operations:** `"database connection"`, `"query execution"`, `"transaction commit"`
-- **File operations:** `"file read"`, `"file write"`, `"directory creation"`
-- **Network operations:** `"http request"`, `"api call"`, `"response parsing"`
-- **Data processing:** `"data validation"`, `"content extraction"`, `"format conversion"`
-- **Authentication:** `"user authentication"`, `"token validation"`, `"permission check"`
-
-#### Proper Use of errors.wrap vs errors.new
-
-`errors.wrap` should only be used to wrap errors that originate from external sources or lower-level operations (e.g., database queries, API calls), preserving the error chain for debugging. The first argument to `errors.wrap` must NEVER be a `new Error("some message")` or `errors.new("some message")`. 
-
-For creating your own errors, use `errors.new()` instead of `new Error()` to ensure consistent error handling integration with the errors library.
-
-**✅ CORRECT: Wrapping an External Error**
-
-```typescript
-const result = await errors.try(someExternalOperation())
-if (result.error) {
-	throw errors.wrap(result.error, "external operation")
-}
-```
-
-**✅ CORRECT: Creating Your Own Error**
-
-```typescript
-if (!user) {
-	throw errors.new("user not found")
-}
-```
-
-**❌ WRONG: Wrapping Our Own Error**
-
-```typescript
-// ❌ WRONG: Wrapping an error that we created
-throw errors.wrap(errors.new("some error"), "operation failed")
-throw errors.wrap(new Error("some error"), "operation failed")
-// ✅ CORRECT: Just create the error directly
-throw errors.new("operation: some error")
-```
-
-**❌ WRONG: Using new Error() Instead of errors.new()**
-
-```typescript
-// ❌ WRONG: Using new Error() directly
-throw new Error("invalid configuration")
-// ✅ CORRECT: Use errors.new() for consistent error handling
-throw errors.new("invalid configuration")
-```
-
-#### ⚠️ CRITICAL: Error Handling and Human Safety
-
-Error handling is not just about code correctness – it's about preventing catastrophic failures that could cost human lives. **Every unhandled error is a potential disaster.**
-
-See also: [No Fallbacks: Save Human Lives](no-fallbacks-save-human-lives.md)
-
-When handling errors in critical systems:
-1. **NEVER provide fallback values** – missing data must stop the system
-2. **ALWAYS log errors before throwing** – create an audit trail
-3. **NEVER silently swallow errors** – every error must be visible
-4. **ALWAYS fail fast and loud** – better to stop than guess
-
-Remember: In critical systems, an error that stops the system saves lives. An error that's hidden with a fallback kills people.
+- [no-try.md](no-try.md): no `try`/`catch`/`finally`
+- [no-new-error.md](no-new-error.md), [no-extends-error.md](no-extends-error.md), [no-instanceof-error.md](no-instanceof-error.md)
+- [no-nullish-coalescing.md](no-nullish-coalescing.md): missing data stops the work
+- [structured-logging.md](structured-logging.md)

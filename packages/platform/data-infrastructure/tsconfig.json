@@ -1,0 +1,14 @@
+{
+	"extends": "../../../tsconfig.json",
+	"compilerOptions": {
+		"types": ["node"],
+		"lib": ["ESNext"]
+	},
+	"include": [
+		"alchemy.run.ts",
+		"drizzle.config.ts",
+		"src/**/*.ts",
+		"scripts/**/*.ts",
+		"integration/**/*.ts"
+	]
+}

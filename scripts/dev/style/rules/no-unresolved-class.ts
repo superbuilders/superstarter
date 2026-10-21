@@ -1,220 +1,160 @@
-import { COLOR_UTILITIES } from "@scripts/dev/style/design-system"
-import type { LoadedDesignSystem } from "@scripts/dev/style/design-system"
-import type { ClassLocation, Violation } from "@scripts/dev/style/types"
-
-/**
- * Validates that Tailwind utility classes referencing custom @theme tokens
- * actually resolve to CSS output.
- *
- * Catches:
- *   - Broken @theme chain: namespace is empty → "No animation tokens found"
- *   - Typos in token names: close Levenshtein match → "Did you mean?"
- *
- * Skips:
- *   - Classes that resolve via candidatesToCss (valid)
- *   - Non-Tailwind syntax (fragments, unknown roots)
- *   - Bare-value utilities (p-4, text-sm, animate-spin) that __unstable__loadDesignSystem
- *     cannot resolve — these use Tailwind's built-in scales, not @theme tokens
- *
- * Three-layer validation:
- *   1. candidatesToCss — positive signal (resolves → valid)
- *   2. parseCandidate + theme namespace — targeted check for custom tokens
- *   3. Levenshtein diagnostics — smart error messages
- */
+import { Array as Arr, Option, String as Str } from "effect"
+import { COLOR_UTILITIES } from "#scripts/dev/style/design-system.ts"
+import type {
+	Candidate,
+	ClassLocation,
+	ClassRule,
+	DesignSystem,
+	StyleViolation
+} from "#scripts/dev/style/types.ts"
 
 const MAX_LEVENSHTEIN_DISTANCE = 2
 
-/**
- * Maps utility roots to theme namespace prefixes.
- * Only namespaces where we define CUSTOM tokens are useful for validation.
- */
-function getThemeNamespace(root: string): string | undefined {
-	if (COLOR_UTILITIES.has(root)) return "--color"
-	if (root === "animate") return "--animate"
-	if (root === "ease") return "--ease"
-	if (root === "rounded" || root.startsWith("rounded-")) return "--radius"
-	if (root === "shadow" || root === "drop-shadow") return "--shadow"
-	if (root === "inset-shadow") return "--inset-shadow"
-	if (root.startsWith("font")) return "--font"
-	return undefined
-}
-
-function levenshtein(a: string, b: string): number {
-	const m = a.length
-	const n = b.length
-
-	// Single-row DP — extract indexed values into locals for strict-mode narrowing
-	let prev = new Int32Array(n + 1)
-	let curr = new Int32Array(n + 1)
-
-	for (let j = 0; j <= n; j++) prev[j] = j
-
-	for (let i = 1; i <= m; i++) {
-		curr[0] = i
-		for (let j = 1; j <= n; j++) {
-			const cost = a[i - 1] === b[j - 1] ? 0 : 1
-			const above = prev[j]
-			const left = curr[j - 1]
-			const diag = prev[j - 1]
-			if (above === undefined || left === undefined || diag === undefined) continue
-			curr[j] = Math.min(above + 1, left + 1, diag + cost)
-		}
-		;[prev, curr] = [curr, prev]
+/** Only the namespaces where the theme defines custom tokens can tell a typo from a built-in value. */
+const themeNamespaceOf = (root: string): string | undefined => {
+	if (Arr.contains(COLOR_UTILITIES, root)) {
+		return "--color"
 	}
-
-	const result = prev[n]
-	if (result === undefined) return m + n
-	return result
+	if (root === "animate" || root === "ease") {
+		return `--${root}`
+	}
+	if (root === "rounded" || Str.startsWith("rounded-")(root)) {
+		return "--radius"
+	}
+	if (root === "shadow" || root === "drop-shadow") {
+		return "--shadow"
+	}
+	if (root === "inset-shadow") {
+		return "--inset-shadow"
+	}
+	return Str.startsWith("font")(root) ? "--font" : undefined
 }
 
-function findClosest(input: string, candidates: string[]): string | undefined {
-	let closest: string | undefined
-	let closestDist = MAX_LEVENSHTEIN_DISTANCE + 1
+/** One row of the edit-distance table: the distances from the first `i` characters of `a`, whose last is
+ * `character`, to every prefix of `b`; undefined when the previous row is too short. */
+const nextRow = (
+	input: Readonly<{
+		previous: ReadonlyArray<number>
+		character: string | undefined
+		b: string
+		i: number
+	}>
+): ReadonlyArray<number> | undefined => {
+	const { previous, character, b, i } = input
+	const current = [i]
+	for (let j = 1; j <= b.length; j += 1) {
+		const cost = character === b[j - 1] ? 0 : 1
+		const above = previous[j]
+		const left = current[j - 1]
+		const diagonal = previous[j - 1]
+		if (above === undefined || left === undefined || diagonal === undefined) {
+			return undefined
+		}
+		current.push(Math.min(above + 1, left + 1, diagonal + cost))
+	}
+	return current
+}
 
+const levenshtein = (a: string, b: string): number => {
+	let previous: ReadonlyArray<number> = Arr.makeBy(b.length + 1, (index) => index)
+	for (let i = 1; i <= a.length; i += 1) {
+		const current = nextRow({ previous, character: a[i - 1], b, i })
+		if (current === undefined) {
+			return a.length + b.length
+		}
+		previous = current
+	}
+	const distance = previous[b.length]
+	return distance === undefined ? a.length + b.length : distance
+}
+
+const closestOf = (input: string, candidates: Iterable<string>): string | undefined => {
+	let closest: string | undefined = undefined
+	let closestDistance = MAX_LEVENSHTEIN_DISTANCE + 1
 	for (const candidate of candidates) {
-		const dist = levenshtein(input, candidate)
-		if (dist < closestDist) {
-			closestDist = dist
+		const distance = levenshtein(input, candidate)
+		if (distance < closestDistance) {
+			closestDistance = distance
 			closest = candidate
 		}
 	}
-
 	return closest
 }
 
-interface ParsedCandidate {
-	kind: string
-	root?: string
-	value: string | { kind: string; value?: unknown } | null
-	raw: string
+/** "hover:bg-prmary" with root "bg" and suggestion "primary" becomes "hover:bg-primary". */
+const suggestionOf = (className: string, root: string, value: string): string => {
+	const prefix = Option.match(Str.lastIndexOf(root)(className), {
+		onNone: () => "",
+		onSome: (index) => Str.slice(0, index)(className)
+	})
+	return `${prefix}${root}-${value}`
 }
 
 /**
- * Reconstructs a full class string with variant prefixes and a corrected value.
- * "hover:bg-prmary" + root "bg" + suggestion "primary" → "hover:bg-primary"
+ * Why a class does not resolve, from the theme's namespaces; undefined when it is most likely a bare-value
+ * utility that the design system cannot resolve rather than a mistake.
  */
-function rebuildSuggestion(originalClass: string, root: string, suggestedValue: string): string {
-	const rootIndex = originalClass.lastIndexOf(root)
-	const prefix = originalClass.slice(0, rootIndex)
-	return `${prefix}${root}-${suggestedValue}`
-}
-
-/**
- * Diagnoses WHY a class doesn't resolve, using theme namespace introspection.
- *
- * Returns a violation message if high-confidence the class is wrong, or undefined
- * if the class is likely a bare-value utility that __unstable__loadDesignSystem
- * simply can't resolve.
- */
-function diagnose(
-	cls: ClassLocation,
-	candidate: ParsedCandidate,
-	designSystem: LoadedDesignSystem
-): string | undefined {
-	const root = candidate.root
-	if (!root) return undefined // Arbitrary candidate (no root) → skip
-
-	const { themeNamespaces, allColors } = designSystem
-	const namespace = getThemeNamespace(root)
-
-	// No namespace mapping → bare-value utility (p-4, tracking-tight, etc.) → skip
-	if (!namespace) return undefined
-
-	// Extract the named value the user typed
-	const typedValue =
-		candidate.value &&
-		typeof candidate.value === "object" &&
-		candidate.value.kind === "named" &&
-		typeof candidate.value.value === "string"
-			? candidate.value.value
-			: undefined
-
-	if (!typedValue) return undefined
-
-	// Special case: color namespace
-	// text-sm, text-lg etc. have root "text" which maps to --color,
-	// but "sm"/"lg" are font-size values, not colors. Check for typos
-	// among known colors; if not close to any color, skip (non-color value).
-	if (namespace === "--color") {
-		const colorNames = [...allColors]
-		const closest = findClosest(typedValue, colorNames)
-		if (closest) {
-			const suggestion = rebuildSuggestion(cls.text, root, closest)
-			return `did you mean "${suggestion}"?`
-		}
+const diagnose = (
+	location: ClassLocation,
+	candidate: Candidate,
+	system: DesignSystem
+): string | undefined => {
+	if (candidate.kind !== "functional" || candidate.value?.kind !== "named") {
 		return undefined
 	}
-
-	const ns = themeNamespaces.get(namespace)
-
-	// Empty namespace → @theme chain is broken
-	if (!ns || ns.size === 0) {
-		const label = namespace.slice(2) // "--animate" → "animate"
-		return `no ${label} tokens found in design system — check @theme import chain`
+	const root = candidate.root
+	const typed = candidate.value.value
+	const namespace = themeNamespaceOf(root)
+	if (namespace === undefined) {
+		return undefined
 	}
-
-	// Exact match in namespace → valid token (may fail candidatesToCss due to
-	// @utility rules being opaque to __unstable__loadDesignSystem, e.g. tw-animate-css)
-	if (ns.has(typedValue)) return undefined
-
-	// Check for close Levenshtein match → typo
-	const tokenNames = [...ns.keys()].filter((k): k is string => k !== null)
-	const closest = findClosest(typedValue, tokenNames)
-
-	if (closest) {
-		const suggestion = rebuildSuggestion(cls.text, root, closest)
-		return `did you mean "${suggestion}"?`
+	// text-sm maps to the color namespace too, so a value close to no color is some other utility's value.
+	if (namespace === "--color") {
+		const closest = closestOf(typed, system.allColors)
+		return closest === undefined
+			? undefined
+			: `did you mean "${suggestionOf(location.text, root, closest)}"?`
 	}
-
-	// No close match → probably a built-in value (animate-spin, shadow-md, etc.) → skip
-	return undefined
+	const tokens = system.themeNamespaces.get(namespace)
+	if (tokens === undefined) {
+		return `no ${Str.slice(2)(namespace)} tokens found in design system — check @theme import chain`
+	}
+	// An exact token may still fail to compile when an @utility rule is opaque to the design system.
+	if (tokens.has(typed)) {
+		return undefined
+	}
+	const closest = closestOf(
+		typed,
+		Arr.filter(Arr.fromIterable(tokens), (token) => token !== null)
+	)
+	return closest === undefined
+		? undefined
+		: `did you mean "${suggestionOf(location.text, root, closest)}"?`
 }
 
-function check(
-	classes: ClassLocation[],
-	designSystem: LoadedDesignSystem,
-	file: string
-): Violation[] {
-	const { ds } = designSystem
-
-	// Layer 1: batch resolution check — classes that produce CSS are valid
-	const classTexts = classes.map((c) => c.text)
-	const cssResults = ds.candidatesToCss(classTexts)
-
-	// Collect unresolved classes that also parse as Tailwind syntax
-	const unresolved: { cls: ClassLocation; candidate: ParsedCandidate }[] = []
-	for (let i = 0; i < classes.length; i++) {
-		const cls = classes[i]
-		if (!cls) continue
-		if (cssResults[i] !== null) continue // Resolves to CSS — valid
-
-		const parsed = ds.parseCandidate(cls.text)
-		const first = parsed[0]
-		if (!first) continue // Not Tailwind syntax — skip
-
-		const root = "root" in first ? first.root : undefined
-		const value = "value" in first ? first.value : null
-		const candidate: ParsedCandidate = { kind: first.kind, root, value, raw: first.raw }
-		unresolved.push({ cls, candidate })
+/**
+ * Every Tailwind class must compile to CSS. A class that does not, and parses as Tailwind syntax, is diagnosed
+ * against the theme: an empty namespace means a broken @theme chain, a close token name means a typo.
+ */
+export const noUnresolvedClass: ClassRule = ({ classes, system }) => {
+	const resolved = system.resolvesToCss(Arr.map(classes, (location) => location.text))
+	const violations: Array<StyleViolation> = []
+	for (const [index, location] of classes.entries()) {
+		const candidate = system.parseCandidate(location.text)[0]
+		if (resolved[index] === true || candidate === undefined) {
+			continue
+		}
+		const detail = diagnose(location, candidate, system)
+		if (detail !== undefined) {
+			violations.push({
+				file: location.file,
+				line: location.line,
+				column: location.column,
+				rule: "no-unresolved-class",
+				message: `Class "${location.text}" — ${detail}`,
+				className: location.text
+			})
+		}
 	}
-
-	// Layer 2 + 3: diagnose unresolved classes against theme namespaces
-	const violations: Violation[] = []
-	for (const { cls, candidate } of unresolved) {
-		const detail = diagnose(cls, candidate, designSystem)
-		if (!detail) continue // Likely a bare-value utility — skip
-
-		violations.push({
-			file,
-			line: cls.line,
-			column: cls.column,
-			rule: "no-unresolved-class",
-			message: `Class "${cls.text}" — ${detail}`,
-			className: cls.text
-		})
-	}
-
 	return violations
 }
-
-export { check }

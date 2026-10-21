@@ -1,152 +1,75 @@
-import type { LoadedDesignSystem } from "@scripts/dev/style/design-system"
-import type { ClassLocation, Violation } from "@scripts/dev/style/types"
+import { Array as Arr, Option } from "effect"
+import type {
+	Candidate,
+	ClassLocation,
+	ClassRule,
+	DesignSystem,
+	StyleViolation
+} from "#scripts/dev/style/types.ts"
 
-/**
- * Validates that color utilities only use allowed theme tokens.
- *
- * BAD:  bg-blue-500 (Tailwind default, not in our theme)
- * BAD:  text-gray-700 (Tailwind default)
- * GOOD: bg-primary, bg-background, bg-muted
- * GOOD: text-foreground, text-muted-foreground
- * GOOD: text-sm, ring-1, border-t (not color utilities)
- */
-function check(
-	classes: ClassLocation[],
-	designSystem: LoadedDesignSystem,
-	file: string
-): Violation[] {
-	const violations: Violation[] = []
+const COLOR_FUNCTIONS: ReadonlyArray<RegExp> = [
+	/^#[0-9a-fA-F]{3,8}$/,
+	/^rgba?\s*\(/,
+	/^hsla?\s*\(/,
+	/^oklch\s*\(/,
+	/^oklab\s*\(/,
+	/^lch\s*\(/,
+	/^lab\s*\(/,
+	/^color\s*\(/
+]
 
-	for (const cls of classes) {
-		const violation = checkClass(cls, designSystem, file)
-		if (violation) {
-			violations.push(violation)
-		}
-	}
+const isColorValue = (value: string): boolean =>
+	Arr.some(COLOR_FUNCTIONS, (pattern) => pattern.test(value))
 
-	return violations
-}
-
-function checkClass(
-	cls: ClassLocation,
-	designSystem: LoadedDesignSystem,
-	file: string
-): Violation | undefined {
-	const { ds, allowedColors, allColors } = designSystem
-	const parsed = ds.parseCandidate(cls.text)
-
-	for (const candidate of parsed) {
-		if (candidate.kind !== "functional") continue
-
-		const value = candidate.value
-		if (value === null) continue
-		if (typeof value !== "object") continue
-
-		const violation = checkCandidateValue(value, cls, file, allowedColors, allColors)
-		if (violation) {
-			return violation
-		}
-	}
-
-	return undefined
-}
-
-interface CandidateValue {
-	kind: string
-	value?: unknown
-}
-
-function checkCandidateValue(
-	value: CandidateValue,
-	cls: ClassLocation,
-	file: string,
-	allowedColors: Set<string>,
-	allColors: Set<string>
-): Violation | undefined {
-	if (value.kind === "arbitrary") {
-		return checkArbitraryValue(value, cls, file)
-	}
-
-	if (value.kind === "named") {
-		return checkNamedValue(value, cls, file, allowedColors, allColors)
-	}
-
-	return undefined
-}
-
-function checkArbitraryValue(
-	value: CandidateValue,
-	cls: ClassLocation,
-	file: string
-): Violation | undefined {
-	if (typeof value.value !== "string") {
+const candidateViolation = (
+	candidate: Candidate,
+	location: ClassLocation,
+	system: DesignSystem
+): StyleViolation | undefined => {
+	if (candidate.kind !== "functional" || candidate.value === null) {
 		return undefined
 	}
-
-	if (isColorValue(value.value)) {
+	const value = candidate.value
+	if (value.kind === "arbitrary") {
+		if (!isColorValue(value.value)) {
+			return undefined
+		}
 		return {
-			file,
-			line: cls.line,
-			column: cls.column,
+			file: location.file,
+			line: location.line,
+			column: location.column,
 			rule: "no-arbitrary-color",
 			message: `Arbitrary color value "${value.value}" banned. Use theme tokens.`,
-			className: cls.text
+			className: location.text
 		}
 	}
-
-	return undefined
+	// A named value that is no theme color at all ("sm", "1", "none") is some other utility's value.
+	if (!system.allColors.has(value.value) || system.allowedColors.has(value.value)) {
+		return undefined
+	}
+	return {
+		file: location.file,
+		line: location.line,
+		column: location.column,
+		rule: "no-invalid-color",
+		message: `Color "${value.value}" not in theme. Use a design token.`,
+		className: location.text
+	}
 }
 
-function checkNamedValue(
-	value: CandidateValue,
-	cls: ClassLocation,
-	file: string,
-	allowedColors: Set<string>,
-	allColors: Set<string>
-): Violation | undefined {
-	if (typeof value.value !== "string") {
-		return undefined
-	}
-
-	const colorName = value.value
-
-	// Skip if this value isn't even a color (e.g., "sm", "1", "t", "none")
-	if (!allColors.has(colorName)) {
-		return undefined
-	}
-
-	// Flag if it's a color but not in allowed colors
-	if (!allowedColors.has(colorName)) {
-		return {
-			file,
-			line: cls.line,
-			column: cls.column,
-			rule: "no-invalid-color",
-			message: `Color "${colorName}" not in theme. Use a design token.`,
-			className: cls.text
+/**
+ * Color utilities use the theme's tokens: bg-blue-500 and text-gray-700 (Tailwind defaults) are violations, so is
+ * an arbitrary color like bg-[#fff]; bg-primary, text-muted-foreground and non-color values like text-sm are not.
+ */
+export const noInvalidColor: ClassRule = ({ classes, system }) => {
+	const violations: Array<StyleViolation> = []
+	for (const location of classes) {
+		const violation = Arr.findFirst(system.parseCandidate(location.text), (candidate) =>
+			Option.fromUndefinedOr(candidateViolation(candidate, location, system))
+		)
+		if (Option.isSome(violation)) {
+			violations.push(violation.value)
 		}
 	}
-
-	return undefined
+	return violations
 }
-
-function isColorValue(value: string): boolean {
-	// Hex colors
-	if (/^#[0-9a-fA-F]{3,8}$/.test(value)) return true
-	// rgb/rgba
-	if (/^rgba?\s*\(/.test(value)) return true
-	// hsl/hsla
-	if (/^hsla?\s*\(/.test(value)) return true
-	// oklch/oklab
-	if (/^oklch\s*\(/.test(value)) return true
-	if (/^oklab\s*\(/.test(value)) return true
-	// lch/lab
-	if (/^lch\s*\(/.test(value)) return true
-	if (/^lab\s*\(/.test(value)) return true
-	// color()
-	if (/^color\s*\(/.test(value)) return true
-
-	return false
-}
-
-export { check }

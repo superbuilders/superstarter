@@ -2,20 +2,27 @@
 globs: *.ts
 alwaysApply: false
 ---
-### No `new Error()`
 
-Using `new Error()` directly is disallowed. Use `errors.new()` instead for consistent error handling integration.
+# No `new Error()`
 
-**Incorrect:**
-```typescript
-throw new Error("something went wrong")
+`new Error(...)` is banned (oxlint `superstarter/no-new-error`, which also refuses a bare `Error(...)` call). An `Error` carries free text and nothing a caller can match on. Model the failure as a `Schema.TaggedError` and construct it with `make`.
+
+```ts
+// BAD
+throw new Error("todo not found")
+Effect.fail(new Error("todo not found"))
+
+// GOOD
+export class TodoNotFound extends Schema.TaggedError<
+	TodoNotFound,
+	{ readonly brand: unique symbol }
+>()("TodoNotFound", {
+	id: TodoId
+}) {}
+
+Effect.fail(TodoNotFound.make({ id }))
 ```
 
-**Correct:**
-```typescript
-import * as errors from "@superbuilders/errors"
+tsgo also refuses the global `Error` type in an Effect's failure channel (`globalErrorInEffectFailure`) and `new` on a Schema class (`newSchemaClass`).
 
-throw errors.new("something went wrong")
-```
-
-See also: [Error Handling](error-handling.md)
+See [error-handling.md](error-handling.md).

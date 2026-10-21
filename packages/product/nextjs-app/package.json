@@ -1,0 +1,69 @@
+{
+	"name": "@superstarter/nextjs-app",
+	"version": "0.0.0",
+	"private": true,
+	"description": "The Next.js app: the todo list, its server actions, the server's telemetry registration and the shadcn UI.",
+	"type": "module",
+	"imports": {
+		"#*": "./src/*"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start",
+		"env:pull": "pnpm dlx vercel@65.0.0 env pull .env.local --environment=development --yes",
+		"typegen": "next typegen",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"lint": "node ../../../scripts/dev/lint.ts",
+		"test": "pnpm --filter @superstarter/data-infrastructure run db:test && LOCAL_POSTGRES_DATABASE=superstarter_test node --conditions=react-server --test integration/*.test.ts"
+	},
+	"dependencies": {
+		"@superstarter/database": "workspace:*",
+		"@superstarter/operational-telemetry": "workspace:*",
+		"@superstarter/todo-protocol": "workspace:*",
+		"@aws-sdk/rds-signer": "3.1154.0",
+		"@base-ui/react": "1.9.0",
+		"@opentelemetry/api": "1.10.0",
+		"@opentelemetry/api-logs": "0.223.0",
+		"@opentelemetry/exporter-logs-otlp-http": "0.223.0",
+		"@opentelemetry/exporter-metrics-otlp-http": "0.223.0",
+		"@opentelemetry/exporter-trace-otlp-http": "0.223.0",
+		"@opentelemetry/instrumentation": "0.223.0",
+		"@opentelemetry/instrumentation-runtime-node": "0.36.0",
+		"@opentelemetry/resources": "2.12.0",
+		"@opentelemetry/sdk-logs": "0.223.0",
+		"@opentelemetry/sdk-metrics": "2.12.0",
+		"@opentelemetry/sdk-trace-base": "2.12.0",
+		"@vercel/functions": "3.10.2",
+		"@vercel/oidc-aws-credentials-provider": "3.3.14",
+		"@vercel/otel": "2.1.3",
+		"class-variance-authority": "0.7.1",
+		"clsx": "2.1.1",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.0.5",
+		"lucide-react": "1.61.0",
+		"next": "16.4.2",
+		"posthog-js": "1.438.13",
+		"posthog-node": "5.56.4",
+		"react": "19.3.1",
+		"react-dom": "19.3.1",
+		"server-only": "0.0.1",
+		"shadcn": "4.22.1",
+		"tailwind-merge": "3.7.0",
+		"tw-animate-css": "1.4.0",
+		"uuid": "14.0.3"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "4.3.3",
+		"@types/node": "24.19.2",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"babel-plugin-react-compiler": "1.0.0",
+		"postcss": "8.5.31",
+		"tailwindcss": "4.3.3",
+		"typescript": "7.0.2"
+	}
+}

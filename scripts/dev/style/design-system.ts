@@ -1,20 +1,10 @@
-import * as fs from "node:fs"
-import * as path from "node:path"
-import { __unstable__loadDesignSystem } from "tailwindcss"
-import * as errors from "@superbuilders/errors"
-import { logger } from "@/logger"
+import { __unstable__loadDesignSystem } from "@tailwindcss/node"
+import { Array as Arr, Effect, Predicate, Schema, String as Str } from "effect"
+import { DevtoolFailure } from "#scripts/dev/devtool-failure.ts"
+import { Candidate, type DesignSystem } from "#scripts/dev/style/types.ts"
 
-type DesignSystem = Awaited<ReturnType<typeof __unstable__loadDesignSystem>>
-
-interface LoadedDesignSystem {
-	ds: DesignSystem
-	allowedColors: Set<string>
-	allColors: Set<string>
-	classList: Set<string>
-	themeNamespaces: Map<string, Map<string | null, string>>
-}
-
-const COLOR_UTILITIES = new Set([
+/** The utility roots whose values are colors. */
+export const COLOR_UTILITIES: ReadonlyArray<string> = [
 	"bg",
 	"text",
 	"border",
@@ -37,13 +27,10 @@ const COLOR_UTILITIES = new Set([
 	"from",
 	"via",
 	"to"
-])
+]
 
-/**
- * Known theme namespace prefixes.
- * Used to enumerate tokens by category for diagnostics.
- */
-const THEME_NAMESPACE_PREFIXES = [
+/** The theme namespaces whose tokens the diagnostics enumerate. */
+const THEME_NAMESPACE_PREFIXES: ReadonlyArray<string> = [
 	"--color",
 	"--animate",
 	"--ease",
@@ -56,135 +43,114 @@ const THEME_NAMESPACE_PREFIXES = [
 	"--drop-shadow"
 ]
 
-function readGlobalsPath(): string {
-	const raw = fs.readFileSync("components.json", "utf-8")
-	const config = JSON.parse(raw)
-	return config.tailwind.css
+/** components.json names the stylesheet shadcn writes, which is the design system's entry point. */
+export const ComponentsConfig = Schema.Struct({
+	tailwind: Schema.Struct({ css: Schema.NonEmptyString })
+})
+
+const ThemeEntries = Schema.Array(
+	Schema.Tuple([Schema.String, Schema.Struct({ value: Schema.String })])
+)
+
+const NamespaceEntries = Schema.Array(Schema.Tuple([Schema.NullOr(Schema.String), Schema.String]))
+
+const isCandidate = Schema.is(Candidate)
+
+const admit =
+	<S extends Schema.ConstraintDecoder<unknown>>(schema: S, what: string) =>
+	(value: unknown) =>
+		Schema.decodeUnknownEffect(schema)(value).pipe(
+			Effect.mapError((cause) =>
+				DevtoolFailure.make({ detail: `Tailwind returned ${what} in an unknown shape`, cause })
+			)
+		)
+
+/** @tailwindcss/node's declarations import its Theme and Candidate types from modules the package does not ship,
+ * so both arrive untyped; what the linter reads from them is admitted from unknown like any outside value. */
+type EntriesSource = Readonly<{ entries: () => unknown }>
+
+type NamespacedTheme = Readonly<{ namespace: (prefix: string) => unknown }>
+
+const hasEntries = (value: unknown): value is EntriesSource =>
+	Predicate.hasProperty(value, "entries") && typeof value.entries === "function"
+
+const hasNamespaces = (value: unknown): value is NamespacedTheme =>
+	Predicate.hasProperty(value, "namespace") && typeof value.namespace === "function"
+
+const entriesOf = (
+	value: unknown,
+	what: string
+): Effect.Effect<ReadonlyArray<unknown>, DevtoolFailure> => {
+	if (!hasEntries(value)) {
+		return Effect.fail(
+			DevtoolFailure.make({ detail: `Tailwind returned ${what} without entries()` })
+		)
+	}
+	const entries = value.entries()
+	if (!Predicate.isIterable(entries)) {
+		return Effect.fail(
+			DevtoolFailure.make({ detail: `Tailwind returned ${what} whose entries() is not iterable` })
+		)
+	}
+	return Effect.succeed(Arr.fromIterable(entries))
 }
 
 /**
- * Derives the theme entry point from the globals.css path.
- * Convention: index.css in the same directory as globals.css
- * is the full theme entry point (imports globals + tokens + components).
+ * Loads the full Tailwind v4 design system from the entry stylesheet's text, with imports resolved from its
+ * directory. A design system that cannot compile `flex` is a broken stylesheet chain, not an empty theme.
  */
-function readEntryPath(): string {
-	const globalsPath = readGlobalsPath()
-	const dir = path.dirname(globalsPath)
-	return path.join(dir, "index.css")
-}
-
-function resolveViaPkgJson(
-	id: string
-): { path: string; content: string; base: string } | undefined {
-	const pkgPath = path.resolve("node_modules", id, "package.json")
-	if (!fs.existsSync(pkgPath)) return undefined
-
-	const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"))
-	const entry = typeof pkg.style === "string" ? pkg.style : pkg.main
-	if (typeof entry !== "string") return undefined
-	if (!entry.endsWith(".css")) return undefined
-
-	const resolved = path.resolve("node_modules", id, entry)
-	if (!fs.existsSync(resolved)) return undefined
-
-	return {
-		path: resolved,
-		content: fs.readFileSync(resolved, "utf-8"),
-		base: path.dirname(resolved)
-	}
-}
-
-function resolveStylesheet(
-	id: string,
-	base: string
-): { path: string; content: string; base: string } {
-	// Relative imports: resolve against importing file's directory
-	if (id.startsWith("./") || id.startsWith("../")) {
-		const resolved = path.resolve(base, id)
-		const content = fs.existsSync(resolved) ? fs.readFileSync(resolved, "utf-8") : ""
-		return { path: resolved, content, base: path.dirname(resolved) }
-	}
-
-	// npm packages: try <id>/index.css
-	const indexPath = path.resolve("node_modules", id, "index.css")
-	if (fs.existsSync(indexPath)) {
-		return {
-			path: indexPath,
-			content: fs.readFileSync(indexPath, "utf-8"),
-			base: path.dirname(indexPath)
+export const loadDesignSystem = (
+	entry: Readonly<{ css: string; base: string; path: string }>
+): Effect.Effect<DesignSystem, DevtoolFailure> =>
+	Effect.gen(function* () {
+		const ds = yield* Effect.tryPromise({
+			try: () => __unstable__loadDesignSystem(entry.css, { base: entry.base }),
+			catch: (cause) =>
+				DevtoolFailure.make({
+					detail: `The Tailwind design system in ${entry.path} failed to load`,
+					cause
+				})
+		})
+		if (ds.candidatesToCss(["flex"])[0] === null) {
+			return yield* DevtoolFailure.make({
+				detail: `The design system in ${entry.path} is not compiled: candidatesToCss returns null for basic utilities`
+			})
 		}
-	}
-
-	// npm packages: try <id>.css
-	const cssPath = path.resolve("node_modules", `${id}.css`)
-	if (fs.existsSync(cssPath)) {
-		return {
-			path: cssPath,
-			content: fs.readFileSync(cssPath, "utf-8"),
-			base: path.dirname(cssPath)
-		}
-	}
-
-	// npm packages: resolve via package.json "style" or "main" field
-	const pkgJsonResolved = resolveViaPkgJson(id)
-	if (pkgJsonResolved) return pkgJsonResolved
-
-	return { path: id, content: "", base }
-}
-
-async function loadDesignSystem(entryPath = readEntryPath()): Promise<LoadedDesignSystem> {
-	const css = fs.readFileSync(entryPath, "utf-8")
-
-	const ds = await __unstable__loadDesignSystem(css, {
-		base: path.dirname(path.resolve(entryPath)),
-		loadStylesheet: async (id, base) => resolveStylesheet(id, base)
-	})
-
-	// Sanity check: verify the design system is properly compiled
-	const sanityResult = ds.candidatesToCss(["flex"])
-	if (sanityResult[0] === null) {
-		logger.error({ entryPath }, "design system sanity check failed")
-		throw errors.new(
-			"design system not properly compiled — candidatesToCss returns null for basic utilities"
+		const theme: unknown = ds.theme
+		const themeEntries = yield* entriesOf(theme, "a theme").pipe(
+			Effect.flatMap(admit(ThemeEntries, "theme entries"))
 		)
-	}
-
-	// Extract all color tokens and allowed colors from theme
-	const allColors = new Set<string>()
-	const allowedColors = new Set<string>()
-
-	for (const [key, obj] of ds.theme.entries()) {
-		if (key.startsWith("--color-")) {
-			const colorName = key.slice("--color-".length)
-			allColors.add(colorName)
-			// Allowed colors are those that reference CSS variables (Shadcn tokens)
-			if (obj.value.startsWith("var(--")) {
-				allowedColors.add(colorName)
+		if (!hasNamespaces(theme)) {
+			return yield* DevtoolFailure.make({ detail: "Tailwind returned a theme without namespace()" })
+		}
+		const colorEntries = Arr.filter(themeEntries, ([key]) => Str.startsWith("--color-")(key))
+		const colorName = Str.slice("--color-".length)
+		const allColors = new Set(Arr.map(colorEntries, ([key]) => colorName(key)))
+		const allowedColors = new Set(
+			Arr.map(
+				Arr.filter(colorEntries, ([, token]) => Str.startsWith("var(--")(token.value)),
+				([key]) => colorName(key)
+			)
+		)
+		const themeNamespaces = new Map<string, ReadonlySet<string | null>>()
+		for (const prefix of THEME_NAMESPACE_PREFIXES) {
+			const entries = yield* entriesOf(theme.namespace(prefix), `the ${prefix} namespace`).pipe(
+				Effect.flatMap(admit(NamespaceEntries, `the ${prefix} namespace`))
+			)
+			if (Arr.isReadonlyArrayNonEmpty(entries)) {
+				themeNamespaces.set(prefix, new Set(Arr.map(entries, ([name]) => name)))
 			}
 		}
-	}
-
-	// Build class list from design system for fuzzy matching
-	const classList = new Set<string>()
-	for (const [name] of ds.getClassList()) {
-		classList.add(name)
-	}
-
-	// Build theme namespace map for targeted diagnostics
-	const themeNamespaces = new Map<string, Map<string | null, string>>()
-	for (const prefix of THEME_NAMESPACE_PREFIXES) {
-		const ns = ds.theme.namespace(prefix)
-		if (ns.size > 0) {
-			themeNamespaces.set(prefix, ns)
+		const system: DesignSystem = {
+			parseCandidate: (className) => {
+				const parsed: ReadonlyArray<unknown> = ds.parseCandidate(className)
+				return Arr.filter(parsed, isCandidate)
+			},
+			resolvesToCss: (classNames) =>
+				Arr.map(ds.candidatesToCss([...classNames]), (css) => css !== null),
+			allowedColors,
+			allColors,
+			themeNamespaces
 		}
-	}
-
-	return { ds, allowedColors, allColors, classList, themeNamespaces }
-}
-
-function isColorUtility(root: string): boolean {
-	return COLOR_UTILITIES.has(root)
-}
-
-export { COLOR_UTILITIES, THEME_NAMESPACE_PREFIXES, isColorUtility, loadDesignSystem }
-export type { DesignSystem, LoadedDesignSystem }
+		return system
+	})

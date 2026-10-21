@@ -1,15 +1,8 @@
-import type { LoadedDesignSystem } from "@scripts/dev/style/design-system"
-import type { ClassLocation, Violation } from "@scripts/dev/style/types"
+import { Array as Arr, String as Str } from "effect"
+import { arbitraryValueBan } from "#scripts/dev/style/rules/arbitrary-value.ts"
+import type { ClassRule } from "#scripts/dev/style/types.ts"
 
-/**
- * Bans arbitrary border-radius values in Tailwind classes.
- *
- * BAD:  rounded-[13px], rounded-t-[0.5rem], rounded-tl-[4px]
- * GOOD: rounded-md, rounded-lg, rounded-xl (use theme radius tokens)
- * GOOD: rounded-[var(--radius-md)] (uses CSS variable)
- */
-
-const RADIUS_ROOTS = new Set([
+const RADIUS_ROOTS: ReadonlyArray<string> = [
 	"rounded",
 	"rounded-t",
 	"rounded-r",
@@ -25,67 +18,16 @@ const RADIUS_ROOTS = new Set([
 	"rounded-se",
 	"rounded-es",
 	"rounded-ee"
-])
+]
 
-function check(
-	classes: ClassLocation[],
-	designSystem: LoadedDesignSystem,
-	file: string
-): Violation[] {
-	const violations: Violation[] = []
-
-	for (const cls of classes) {
-		const violation = checkClass(cls, designSystem, file)
-		if (violation) {
-			violations.push(violation)
-		}
-	}
-
-	return violations
-}
-
-function checkClass(
-	cls: ClassLocation,
-	designSystem: LoadedDesignSystem,
-	file: string
-): Violation | undefined {
-	const { ds } = designSystem
-	const parsed = ds.parseCandidate(cls.text)
-
-	for (const candidate of parsed) {
-		if (candidate.kind !== "functional") continue
-		if (!RADIUS_ROOTS.has(candidate.root)) continue
-
-		const value = candidate.value
-		if (value === null) continue
-		if (typeof value !== "object") continue
-		if (value.kind !== "arbitrary") continue
-
-		// Allow theme references
-		const rawValue = value.value
-		if (typeof rawValue === "string" && isThemeReference(rawValue)) {
-			continue
-		}
-
-		return {
-			file,
-			line: cls.line,
-			column: cls.column,
-			rule: "no-arbitrary-radius",
-			message: `Arbitrary radius "${candidate.raw}" banned. Use theme radius tokens.`,
-			className: cls.text
-		}
-	}
-
-	return undefined
-}
-
-function isThemeReference(value: string): boolean {
-	// CSS variables (including theme radius vars)
-	if (value.includes("var(--")) return true
-	// Tailwind theme functions
-	if (value.includes("--radius(")) return true
-	return false
-}
-
-export { check }
+/**
+ * Bans arbitrary border radii: rounded-[13px] is a violation, rounded-md and rounded-[var(--radius-md)] are not.
+ * CSS variables and the --radius() theme function are theme references.
+ */
+export const noArbitraryRadius: ClassRule = arbitraryValueBan({
+	rule: "no-arbitrary-radius",
+	roots: RADIUS_ROOTS,
+	isThemeReference: (value) =>
+		Arr.some(["var(--", "--radius("], (marker) => Str.includes(marker)(value)),
+	noun: "radius"
+})

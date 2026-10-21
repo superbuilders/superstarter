@@ -1,76 +1,38 @@
-import type { Violation } from "@scripts/dev/lint/types"
-import * as ts from "typescript"
+import * as ts from "typescript/unstable/ast"
+import type { LintRule, Violation } from "#scripts/dev/lint/types.ts"
+import { violationAt } from "#scripts/dev/lint/violation.ts"
 
-function violation(sourceFile: ts.SourceFile, node: ts.TypeAliasDeclaration): Violation {
-	const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.name.getStart(sourceFile))
-	return {
-		file: sourceFile.fileName,
-		line: line + 1,
-		column: character + 1,
-		rule: "no-pointless-type-alias",
-		message: "Pointless type alias. Direct aliases to primitives, literals, or bare types are banned.",
-		suggestion: "Use the underlying type directly or define real structure/composition."
-	}
-}
+const unparenthesized = (node: ts.TypeNode): ts.TypeNode =>
+	ts.isParenthesizedTypeNode(node) ? unparenthesized(node.type) : node
 
-function unparenthesizedType(node: ts.TypeNode): ts.TypeNode {
-	let current = node
-	while (ts.isParenthesizedTypeNode(current)) {
-		current = current.type
-	}
-	return current
-}
+const PRIMITIVE_KEYWORDS: ReadonlySet<ts.SyntaxKind> = new Set([
+	ts.SyntaxKind.AnyKeyword,
+	ts.SyntaxKind.BigIntKeyword,
+	ts.SyntaxKind.BooleanKeyword,
+	ts.SyntaxKind.NeverKeyword,
+	ts.SyntaxKind.NumberKeyword,
+	ts.SyntaxKind.ObjectKeyword,
+	ts.SyntaxKind.StringKeyword,
+	ts.SyntaxKind.SymbolKeyword,
+	ts.SyntaxKind.UndefinedKeyword,
+	ts.SyntaxKind.UnknownKeyword,
+	ts.SyntaxKind.VoidKeyword
+])
 
-function isPrimitiveKeywordType(node: ts.TypeNode): boolean {
-	switch (node.kind) {
-		case ts.SyntaxKind.AnyKeyword:
-		case ts.SyntaxKind.BigIntKeyword:
-		case ts.SyntaxKind.BooleanKeyword:
-		case ts.SyntaxKind.NeverKeyword:
-		case ts.SyntaxKind.NumberKeyword:
-		case ts.SyntaxKind.ObjectKeyword:
-		case ts.SyntaxKind.StringKeyword:
-		case ts.SyntaxKind.SymbolKeyword:
-		case ts.SyntaxKind.UndefinedKeyword:
-		case ts.SyntaxKind.UnknownKeyword:
-		case ts.SyntaxKind.VoidKeyword:
-			return true
-		default:
-			return false
-	}
-}
+const isBareTypeReference = (node: ts.TypeNode): boolean =>
+	ts.isTypeReferenceNode(node) &&
+	!(node.typeArguments !== undefined && node.typeArguments.length > 0)
 
-function isBareTypeReference(node: ts.TypeNode): boolean {
-	if (!ts.isTypeReferenceNode(node)) {
-		return false
-	}
-	return node.typeArguments === undefined || node.typeArguments.length === 0
-}
-
-function isValidateInferType(node: ts.TypeNode): boolean {
-	if (!ts.isTypeReferenceNode(node)) {
-		return false
-	}
-	const name = node.typeName
-	if (!ts.isQualifiedName(name)) {
-		return false
-	}
-	return ts.isIdentifier(name.left) && name.left.text === "validate" && name.right.text === "Infer"
-}
-
-function isPointlessTypeAlias(node: ts.TypeAliasDeclaration): boolean {
-	const aliasedType = unparenthesizedType(node.type)
-	if (isValidateInferType(aliasedType)) {
-		return false
-	}
+const isPointlessTypeAlias = (node: ts.TypeAliasDeclaration): boolean => {
+	const aliased = unparenthesized(node.type)
 	return (
-		isPrimitiveKeywordType(aliasedType) ||
-		ts.isLiteralTypeNode(aliasedType) ||
-		isBareTypeReference(aliasedType)
+		PRIMITIVE_KEYWORDS.has(aliased.kind) ||
+		ts.isLiteralTypeNode(aliased) ||
+		isBareTypeReference(aliased)
 	)
 }
 
-function isInsideNamespace(node: ts.Node): boolean {
+const isInsideNamespace = (node: ts.Node): boolean => {
 	let current: ts.Node = node.parent
 	while (!ts.isSourceFile(current)) {
 		if (ts.isModuleDeclaration(current)) {
@@ -81,18 +43,26 @@ function isInsideNamespace(node: ts.Node): boolean {
 	return false
 }
 
-function check(sourceFile: ts.SourceFile): Violation[] {
-	const violations: Violation[] = []
+/** An alias of a primitive, a literal or a bare type adds a name without adding structure. */
+export const noPointlessTypeAlias: LintRule = ({ sourceFile }) => {
+	const violations: Array<Violation> = []
 
-	function walk(node: ts.Node): void {
+	const walk = (node: ts.Node): void => {
 		if (ts.isTypeAliasDeclaration(node) && !isInsideNamespace(node) && isPointlessTypeAlias(node)) {
-			violations.push(violation(sourceFile, node))
+			violations.push(
+				violationAt({
+					sourceFile,
+					node: node.name,
+					rule: "no-pointless-type-alias",
+					message:
+						"Pointless type alias. Direct aliases to primitives, literals, or bare types are banned.",
+					suggestion: "Use the underlying type directly or define real structure/composition."
+				})
+			)
 		}
-		ts.forEachChild(node, walk)
+		node.forEachChild(walk)
 	}
 
 	walk(sourceFile)
 	return violations
 }
-
-export { check }

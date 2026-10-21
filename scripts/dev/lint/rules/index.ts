@@ -1,34 +1,29 @@
-import { check as checkArrowFunctions } from "@scripts/dev/lint/rules/arrow-functions"
-import { check as checkImpossibleLogicalOr } from "@scripts/dev/lint/rules/impossible-logical-or"
-import { check as checkLogicalOrFallback } from "@scripts/dev/lint/rules/logical-or-fallback"
-import { check as checkNoPointlessTypeAlias } from "@scripts/dev/lint/rules/no-pointless-type-alias"
-import { check as checkNoUnusedParams } from "@scripts/dev/lint/rules/no-unused-params"
-import { check as checkNullUndefinedUnion } from "@scripts/dev/lint/rules/null-undefined-union"
-import { check as checkObjectModule } from "@scripts/dev/lint/rules/object-module"
-import { check as checkPointlessIndirection } from "@scripts/dev/lint/rules/pointless-indirection"
-import { check as checkPreferEarlyReturn } from "@scripts/dev/lint/rules/prefer-early-return"
-import { check as checkTimestampColumns } from "@scripts/dev/lint/rules/no-timestamp-columns"
-import { check as checkTracingOptionsLast } from "@scripts/dev/lint/rules/tracing-options-last"
-import { check as checkUnnecessaryCondition } from "@scripts/dev/lint/rules/unnecessary-condition"
-import { check as checkUnnecessaryDefaultCase } from "@scripts/dev/lint/rules/unnecessary-default-case"
-import { check as checkUuidDefaultRandom } from "@scripts/dev/lint/rules/no-uuid-default-random"
-import type { LintRule } from "@scripts/dev/lint/types"
+import { effectClassesOnly } from "#scripts/dev/lint/rules/effect-classes-only.ts"
+import { noLogicalOrFallback } from "#scripts/dev/lint/rules/logical-or-fallback.ts"
+import { noDrizzleWriteWithoutWhere } from "#scripts/dev/lint/rules/no-drizzle-write-without-where.ts"
+import { noImplicitSelectAll } from "#scripts/dev/lint/rules/no-implicit-select-all.ts"
+import { noModuleState } from "#scripts/dev/lint/rules/no-module-state.ts"
+import { noPointlessTypeAlias } from "#scripts/dev/lint/rules/no-pointless-type-alias.ts"
+import { noTimestampColumns } from "#scripts/dev/lint/rules/no-timestamp-columns.ts"
+import { noUuidDefaultRandom } from "#scripts/dev/lint/rules/no-uuid-default-random.ts"
+import { noNullUndefinedUnion } from "#scripts/dev/lint/rules/null-undefined-union.ts"
+import { operationalTelemetryBoundary } from "#scripts/dev/lint/rules/operational-telemetry-boundary.ts"
+import { noPointlessIndirection } from "#scripts/dev/lint/rules/pointless-indirection.ts"
+import { preferEarlyReturn } from "#scripts/dev/lint/rules/prefer-early-return.ts"
+import type { LintRule, RuleId } from "#scripts/dev/lint/types.ts"
 
-const rules: LintRule[] = [
-	{ id: "no-null-undefined-union", check: checkNullUndefinedUnion },
-	{ id: "no-unnecessary-condition", check: checkUnnecessaryCondition },
-	{ id: "no-unnecessary-default-case", check: checkUnnecessaryDefaultCase },
-	{ id: "prefer-early-return", check: checkPreferEarlyReturn },
-	{ id: "no-impossible-logical-or", check: checkImpossibleLogicalOr },
-	{ id: "no-logical-or-fallback", check: checkLogicalOrFallback },
-	{ id: "no-arrow-functions", check: checkArrowFunctions },
-	{ id: "no-object-module", check: checkObjectModule },
-	{ id: "no-pointless-indirection", check: checkPointlessIndirection },
-	{ id: "no-pointless-type-alias", check: checkNoPointlessTypeAlias },
-	{ id: "no-unused-params", check: checkNoUnusedParams },
-	{ id: "tracing-options-last", check: checkTracingOptionsLast },
-	{ id: "no-timestamp-columns", check: checkTimestampColumns },
-	{ id: "no-uuid-default-random", check: checkUuidDefaultRandom }
+/** Every rule runs on every owned file; a rule may report under its own id only. */
+export const RULES: ReadonlyArray<Readonly<{ id: RuleId; check: LintRule }>> = [
+	{ id: "no-null-undefined-union", check: noNullUndefinedUnion },
+	{ id: "prefer-early-return", check: preferEarlyReturn },
+	{ id: "no-logical-or-fallback", check: noLogicalOrFallback },
+	{ id: "effect-classes-only", check: effectClassesOnly },
+	{ id: "no-module-state", check: noModuleState },
+	{ id: "no-pointless-indirection", check: noPointlessIndirection },
+	{ id: "no-pointless-type-alias", check: noPointlessTypeAlias },
+	{ id: "no-timestamp-columns", check: noTimestampColumns },
+	{ id: "no-uuid-default-random", check: noUuidDefaultRandom },
+	{ id: "no-implicit-select-all", check: noImplicitSelectAll },
+	{ id: "no-drizzle-write-without-where", check: noDrizzleWriteWithoutWhere },
+	{ id: "operational-telemetry-boundary", check: operationalTelemetryBoundary }
 ]
-
-export { rules }

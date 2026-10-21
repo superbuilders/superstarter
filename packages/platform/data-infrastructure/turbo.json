@@ -1,0 +1,9 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"bootstrap": { "cache": false },
+		"plan": { "cache": false },
+		"deploy": { "cache": false }
+	}
+}

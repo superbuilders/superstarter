@@ -1,308 +1,183 @@
-# Opinionated Next.js Starter with Biome & GritQL
+# superstarter
 
-[![Built with Biome](https://img.shields.io/badge/formatter-Biome-blueviolet?style=flat-square&logo=biome)](https://biomejs.dev)
-[![Linted with GritQL](https://img.shields.io/badge/linter-GritQL-orange?style=flat-square)](https://www.grit.io/docs)
+A Next.js starter on Effect. Everything in it is typed end to end and checked harder than usual:
+TypeScript 7 with every Effect language-service diagnostic as an error, a semantic linter on the
+TypeScript 7 native API, type-aware oxlint, a Tailwind token linter and a dead-code gate. The example app is a
+todo list: server actions, PostgreSQL on RDS behind Drizzle, and traces, logs and metrics in PostHog
+(on Vercel) or in local JSONL files (everywhere else).
+Working rules live in [AGENTS.md](AGENTS.md); each rule's rationale lives in [rules/](rules).
 
-A comprehensive, highly-opinionated starter template for building robust and scalable full-stack applications. This template integrates Next.js with Drizzle ORM, Vercel Workflows, AWS RDS Postgres (IAM auth via OIDC), and a powerful, custom-enforced set of coding standards called the Superbuilder Ruleset, powered by Biome and GritQL.
+## Stack
 
-The philosophy of this starter is simple: **prevent entire classes of bugs at the source**. By enforcing strict patterns for error handling, data consistency, and type safety, we aim to build applications that are not only fast and modern but also exceptionally maintainable and reliable.
+| Layer          | Choice                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------ |
+| Runtime        | Node 24+, running TypeScript by type stripping; pnpm                                                   |
+| Framework      | Next.js 16.4 (App Router, Cache Components, React Compiler), React 19.3                                |
+| Language       | TypeScript 7.0.2 patched by `@effect/tsgo`, Effect 4                                                   |
+| Data           | PostgreSQL 18.3 on RDS, Drizzle ORM 1.0, `pg`; RDS IAM auth through Vercel OIDC                        |
+| Telemetry      | Effect's tracer and logger bridged to OpenTelemetry (`@vercel/otel`): PostHog or local JSONL           |
+| UI             | shadcn (Base UI, `base-nova`), Tailwind 4                                                              |
+| Infrastructure | Alchemy 2 on Effect, in [packages/platform/data-infrastructure](packages/platform/data-infrastructure) |
+| Workspace      | pnpm workspaces and Turborepo: per-package typecheck and lint, cached                                  |
+| Checks         | oxlint + tsgolint, oxfmt, superlint, style lint, fallow, lefthook                                      |
 
-## Core Technologies
+## How it fits together
 
-*   **Framework**: [Next.js](https://nextjs.org/) (App Router)
-*   **Runtime**: [Bun](https://bun.sh/)
-*   **ORM**: [Drizzle ORM](https://orm.drizzle.team/) (with PostgreSQL)
-*   **Async Workflows**: [Vercel Workflows](https://useworkflow.dev/) (`"use workflow"` / `"use step"` directives)
-*   **Infrastructure**: AWS via [Alchemy](https://alchemy.run) — see [`packages/superstarter-iac`](packages/superstarter-iac/README.md)
-*   **Auth model**: Vercel ↔ AWS OIDC federation; runtime mints per-connection RDS IAM auth tokens (no DB password in env)
-*   **Linting & Formatting**: [Biome](https://biomejs.dev/)
-*   **Custom Static Analysis**: [GritQL](https://www.grit.io/)
-*   **Environment Variables**: [T3 Env](https://env.t3.gg/)
-*   **Error Handling**: A custom, robust error handling library (`@superbuilders/errors`)
-*   **Logging**: [Pino](https://getpino.io/) via a centralised `@/logger`
-*   **TypeScript**: [TypeScript 7.0](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/) via `tsc` (`@typescript/native` alias; `typescript` stays on 6.x for tools that need the legacy API)
+- **Server first.** Pages are server components that are never async: a page builds a promise of its
+  data and hands it to a client component that calls `use()` inside `<Suspense>`. A mutation is a server
+  action built by `effectAction` from a contract (`@superstarter/todo-protocol/todo-contracts`): its name and its payload,
+  success and error Schemas. The browser calls it through `callAction` as an Effect that fails with the
+  contract's own error classes.
+- **Effect inside, Promises at the edges.** Reads and writes are Effect values; Next's boundaries run them
+  with `runRenderRead` (pages, tied to React's `cacheSignal`) and `effectAction` (server actions). Failures are
+  `Schema.TaggedError` values in the type, never exceptions.
+- **One database path.** `withApplicationPostgres` borrows a pooled connection that signed in as `app`
+  with an RDS IAM token. `withPostgresStatement`, `withPostgresTransaction` and
+  `withPostgresReadTransaction` lend a scope that can only build and run statements. Every transaction is
+  SERIALIZABLE; a 40001 or 40P01 comes back as a typed `PostgresTransientFailure`. Primary keys are
+  UUIDv7 minted by PostgreSQL, and there are no timestamp columns.
+- **Typed telemetry.** Each operation in `OPERATIONAL_SPANS` declares its span name and the Schemas of
+  every attribute its span may carry. `observed` wraps work in that span; `annotateOperation` writes a
+  learned fact, and only types inside that operation's `observed`. Every log carries its span's
+  attributes. Where it all goes is decided once, from the deployment (`telemetryBackend` in the app's
+  `src/env.ts`):
+  - **On Vercel** (production and preview), spans, logs and metrics export to PostHog over OTLP, server
+    exceptions go to PostHog Error Tracking, and posthog-js runs in the browser. The project token is
+    required there.
+  - **Locally** (`pnpm dev`, a local `pnpm build`/`start`), nothing reaches PostHog and no token is read.
+    Each signal is appended to the app's `out/telemetry/traces.jsonl`, `logs.jsonl` and `metrics.jsonl`, one
+    OTLP/JSON export request per line (the OpenTelemetry Collector file exporter's format); server
+    exceptions go to `out/telemetry/exceptions.jsonl` beside them; logs also print to the terminal; the browser
+    starts no analytics. Metrics are written once a minute.
+- **Config is code.** Each package that reads environment declares every variable it reads as an Effect
+  `Config` in its own `src/env.ts` (the app, the infrastructure package). The database package reads none:
+  connection facts are passed in. The browser never reads env; the server passes what the client needs.
 
-## Getting Started
+## Setup
 
-### Prerequisites
+You need Node 24 or later, pnpm, a Vercel project, and an AWS account for the infrastructure.
 
-*   [Bun](https://bun.sh/) (1.3+)
-*   AWS account with credentials in `~/.aws/credentials` and a default VPC in `us-east-1`
-*   Vercel project (note its team slug + project name)
-
-### Installation
-
-1.  **Clone and install:**
-    ```bash
-    git clone https://github.com/superbuilders/superstarter.git
-    cd superstarter
-    bun install
-    bunx lefthook install   # wires up the pre-commit hook (format + lint + typecheck)
-    ```
-
-2.  **Provision AWS infrastructure** (RDS Postgres, IAM OIDC provider, Vercel role):
-    ```bash
-    cd packages/superstarter-iac
-    VERCEL_TEAM_SLUG=<slug> ALCHEMY_PASSWORD=<32+ char secret> bun run deploy
-    cd ../..
-    ```
-    The deploy logs print the env vars to paste into Vercel and your local `.env`. See [`packages/superstarter-iac/README.md`](packages/superstarter-iac/README.md) for the full team workflow.
-
-3.  **Set up environment variables:** Copy `.env.example` to `.env` and fill in the values from the IaC deploy output:
-    ```bash
-    cp .env.example .env
-    ```
-
-4.  **Bootstrap the database:**
-    ```bash
-    bun db:push:programs    # creates the `app` user, grants rds_iam, installs pgcrypto
-    bun db:push             # pushes the table schema (core_todos, …)
-    ```
-
-5.  **Run the development server:**
-    ```bash
-    bun dev
-    ```
-
-Your application should now be running at `http://localhost:3000`.
-
-## The Superbuilder Ruleset: Enforced Best Practices
-
-This starter isn't just a collection of technologies; it's a prescriptive framework for writing high-quality code. The Superbuilder Ruleset is a set of development patterns enforced by Biome and our custom GritQL rules. These rules are not mere suggestions—they are compiled into the linter and will cause build errors if violated.
-
-### Error Handling & Logging
-
-We enforce a Go-inspired error handling pattern that favors explicit error checking over `try...catch` blocks.
-
-<details>
-<summary><strong>🚫 Ban <code>try...catch</code> and <code>new Error()</code></strong></summary>
-
-**Rule:** Never use native `try...catch` blocks or `new Error()`. Instead, use the custom `errors.try()` wrapper and `errors.new()` / `errors.wrap()` for creating and propagating errors.
-
-**Rationale:** This pattern makes error handling explicit and predictable. It eliminates hidden control flow from exceptions and forces developers to handle every potential failure point, creating more robust code.
-
-**Enforced by:**
-*   `gritql/no-try.grit`
-*   `gritql/no-new-error.grit`
-
-#### ✅ Correct
-```typescript
-import * as errors from "@superbuilders/errors";
-
-const result = await errors.try(somePromise());
-if (result.error) {
-	throw errors.wrap(result.error, "failed to process something");
-}
-const data = result.data;
-
-if (!isValid) {
-	throw errors.new("validation failed: input is not valid");
-}
+```sh
+pnpm install                 # also patches tsc with @effect/tsgo and installs the git hook
 ```
 
-#### ❌ Incorrect
-```typescript
-try {
-	const data = await somePromise();
-} catch (e) {
-	throw new Error("Something went wrong");
-}
-```
-</details>
+1. **Infrastructure.** Follow [packages/platform/data-infrastructure/README.md](packages/platform/data-infrastructure/README.md):
+   bootstrap once, plan, deploy. The deploy prints `AWS_ROLE_ARN`, `DATABASE_HOST` and
+   `DATABASE_ADMIN_SECRET_ARN`.
+2. **Vercel project.** Set the project's Root Directory to `packages/product/nextjs-app` in the Vercel
+   dashboard. The app's [vercel.json](packages/product/nextjs-app/vercel.json) installs the workspace
+   with `pnpm install --frozen-lockfile` and builds with `pnpm run build`; Turbo does not run on Vercel.
+3. **Environment.** Set those three in the Vercel project, and `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`
+   for its deployments ([the app's .env.example](packages/product/nextjs-app/.env.example) describes
+   each), then pull them, with `VERCEL_OIDC_TOKEN`, into the app's `.env.local`. The database scripts read
+   that file too. The PostHog token is only ever read on a Vercel deployment; locally, telemetry goes to
+   the app's `out/telemetry/` and needs no env (the build needs none either):
 
-<details>
-<summary><strong>📜 Enforce Structured Logging</strong></summary>
+   ```sh
+   pnpm env:pull
+   ```
 
-**Rule:** All logging must use Pino via the centralised `@/logger` module. Log calls take an optional context object first and a string-literal message second.
+   Set `NEXT_OTEL_VERBOSE=1` in Vercel as well if you want every Next.js framework span.
 
-**Rationale:** Structured logging produces machine-readable logs that are easy to parse, query, and monitor. Object-first calls keep messages terse and ensure context is never lost in a string.
+4. **Database.** `pnpm db:migrate apply` applies the reviewed migrations through Drizzle's native
+   migrator, then the SQL programs: the `app` login, its `rds_iam` membership and its grants on `core`.
+   It signs in as the RDS master user through the Vercel OIDC role, so no AWS keys are needed.
+5. **Run locally.** `pnpm db:local` starts superstarter's own PostgreSQL 18 (Homebrew's, production's
+   major) in the gitignored `out/postgres/`, on localhost:5434 with trust authentication, creating the
+   cluster the first time; then it migrates the `superstarter` database and applies the programs. It is
+   idempotent, so rerun it whenever. The app signs in to it as `app` when
+   `LOCAL_POSTGRES_DATABASE=superstarter` is in the app's `.env.development.local`.
 
-**Enforced by:** `gritql/logger-structured-args.grit`
+   ```sh
+   pnpm db:local
+   pnpm dev
+   ```
 
-#### ✅ Correct
-```typescript
-import { logger } from "@/logger";
+## Commands
 
-logger.info({ userId: user.id, plan: "premium" }, "user created");
-logger.error({ error: err, attempt: 3 }, "database connection failed");
-```
+Every command runs from the repository root. The checks go through `scripts/dev/check.ts`, which runs
+Turborepo: a task whose inputs did not change replays its cached result, and a package's checks rerun
+whenever a package it depends on changes. Concurrency comes from `--concurrency`, else
+`CHECK_CONCURRENCY` in the shell, else in the root `.env.local`, else Turbo's default.
 
-#### ❌ Incorrect
-```typescript
-console.log(`User ${user.id} was created with plan ${plan}.`);
-logger.info("User created", user.id, "premium");
-logger.info("user created: " + user.id);
-```
-</details>
+| Command                                  | What it does                                                                                                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Next.js, in the app package. `build` also typechecks with the patched `tsc`.                                                                                                               |
+| `pnpm check`                             | The gate, run by the pre-commit hook: every typecheck, superlint, oxlint, style lint, format check and fallow. Never writes.                                                               |
+| `pnpm typecheck`                         | `tsc` for every package (the app after `next typegen`) and for the root tooling.                                                                                                           |
+| `pnpm lint`                              | Superlint for every package and the root tooling, and oxlint (type-aware, with the repository plugin).                                                                                     |
+| `pnpm style`                             | The Tailwind token linter.                                                                                                                                                                 |
+| `pnpm format` / `pnpm format:write`      | oxfmt and the blank-line formatter: check / write.                                                                                                                                         |
+| `pnpm dead-code`                         | fallow: unused files, exports, types and dependencies, across the workspace.                                                                                                               |
+| `pnpm env:pull`                          | Vercel's development environment into the app's `.env.local`.                                                                                                                              |
+| `pnpm test`                              | Rebuilds the throwaway `superstarter_test` database from the migrations, then runs the prepared-statement suites and the todo lifecycle suite. Never cached, and not part of `pnpm check`. |
+| `pnpm db:local` / `pnpm db:local:stop`   | Start (creating it the first time) / stop the local PostgreSQL 18 on localhost:5434; `db:local` also migrates `superstarter` and applies the programs.                                     |
+| `pnpm db:generate`                       | Draft a migration from schema changes. A person drafts and reviews every migration.                                                                                                        |
+| `pnpm db:migrate status` / `apply`       | On RDS: packaged against applied migrations / apply the pending ones through the native migrator, then the SQL programs.                                                                   |
+| `pnpm db:studio`                         | Drizzle Studio on RDS, signed in as the master user.                                                                                                                                       |
 
-### Database: UUIDv7 IDs, No Timestamp Columns
+Schema changes are migrations only: there is no push and no ad hoc SQL. `db:generate` runs in
+`@superstarter/database`, whose drizzle-kit config never connects; the other `db:*` commands are
+operator scripts in `@superstarter/data-infrastructure`. Every statement the app runs is a declared
+`preparePostgresStatement` in `@superstarter/database/queries/*`; the prepared-statement suite finds
+each one through the compiler and PREPAREs it under `app` against the migrated test database, so a
+column, grant or parameter PostgreSQL would refuse fails `pnpm test` instead of production.
 
-<details>
-<summary><strong>🚫 No <code>timestamp</code> / <code>date</code> / <code>time</code> / <code>interval</code> columns. No <code>uuid().defaultRandom()</code>. Zero exceptions.</strong></summary>
+## Strictness
 
-**Rule:** Every PK is `uuid("id").primaryKey().notNull().default(sql\`uuidv7()\`)`. Drizzle's `timestamp`, `date`, `time`, and `interval` column factories are categorically banned. So is `defaultRandom()` on uuid columns (which generates UUIDv4 — random, not time-sortable).
+- **TypeScript.** The root `tsconfig.json`, which every package extends, turns on `strict`, `exactOptionalPropertyTypes`,
+  `noUncheckedIndexedAccess`, `noPropertyAccessFromIndexSignature`, `noUncheckedSideEffectImports`,
+  `noImplicitReturns`, `erasableSyntaxOnly` and the unused checks.
+- **Effect.** All 130 `@effect/tsgo` diagnostics are errors, suggestions included, so `tsc` refuses, for
+  example:
+  - `async` functions, native array, string and record methods, `Date`, `Math.random`, `process.env`,
+    `console` and Node built-ins that Effect replaces;
+  - an exported two-argument function without a pipeable form;
+  - an error tag that differs from its class name.
 
-**Rationale:** UUIDv7's first 48 bits are a unix-millisecond timestamp ([RFC 9562](https://www.rfc-editor.org/rfc/rfc9562)). Every row's creation time is already in its primary key, so a separate `createdAt` column is redundant — and the PK index serves as a free time-sorted index. PostgreSQL 18.3 (which the IaC provisions) has `uuidv7()` as a built-in function.
+  One exception: `unstableApiUsage` is off, because Effect's whole Node platform layer is marked unstable.
+  Server actions need no exemption: `effectAction` returns a plain function, which Next accepts as a
+  `"use server"` export.
 
-**Enforced by:**
-- `scripts/dev/lint/rules/no-timestamp-columns.ts`
-- `scripts/dev/lint/rules/no-uuid-default-random.ts`
+- **oxlint** (`.oxlintrc.json`): the correctness and suspicious categories, every type-aware rule tsgolint
+  offers (no floating promises, no unnecessary conditions, exhaustive switches with no needless default,
+  strict boolean expressions), React, accessibility and Next.js rules, and no relative imports, Zod, `process.env`,
+  `console` or inline styles. Five rules stay off on purpose:
+  - `typescript/prefer-nullish-coalescing`: `??` is banned.
+  - `typescript/promise-function-async`: `async` is banned.
+  - `eslint/no-redeclare`: tsc reports redeclarations, and a Schema shares its type's name.
+  - `typescript/consistent-return`: it contradicts `return yield*`, which tsgo requires for an Effect that only
+    fails, and exhaustive switches with no `default`; tsc's `noImplicitReturns` proves every path returns.
+  - `typescript/no-invalid-void-type`: oxlint's port refuses `void` as a generic argument
+    (`Promise.withResolvers<void>()`), which the rule exists to allow.
+- **The repository plugin** (`scripts/dev/oxlint-plugin.ts`, run by oxlint): no `try`, `as`, `??`, IIFEs,
+  `new Error`, `instanceof Error`, evolving `null`/`[]` variables, needless template literals, untitled
+  `<svg>`, span names or attribute keys outside the rosters, and Biome's cognitive complexity (at most 15).
+- **Superlint** (`scripts/dev/lint.ts`): the opinionated type-aware rules on TypeScript 7's native API,
+  including no null-and-undefined unions, no `||` fallbacks, no classes but Effect's, no timestamp columns
+  or random UUIDs, no implicit Drizzle `SELECT *`, and no Drizzle `delete` or `update` without `.where()`.
+- **Style lint** (`scripts/dev/style.ts`): every Tailwind class resolves against the theme in the app's
+  `src/styles/globals.css`; no arbitrary colors, spacing, radii or shadows; every component carries a
+  `data-slot`.
 
-**Helpers:** `src/db/lib/uuid-time.ts` exports `timestampFromUuidv7(id)` and `uuidv7LowerBound(date)`.
-
-#### ✅ Correct
-```typescript
-import { sql } from "drizzle-orm"
-import { boolean, pgTable, uuid, varchar } from "drizzle-orm/pg-core"
-
-const coreTodos = pgTable("core_todos", {
-    id: uuid("id").primaryKey().notNull().default(sql`uuidv7()`),
-    title: varchar("title", { length: 256 }).notNull(),
-    completed: boolean("completed").notNull().default(false)
-})
-
-// Time-sorted scan via the PK index:
-db.select(...).from(coreTodos).orderBy(desc(coreTodos.id))
-
-// Recover creation time in app code:
-import { timestampFromUuidv7 } from "@/db/lib/uuid-time"
-const createdAt = timestampFromUuidv7(row.id)
-```
-
-#### ❌ Incorrect
-```typescript
-const coreTodos = pgTable("core_todos", {
-    id: uuid("id").defaultRandom().primaryKey(),                                // UUIDv4 — banned
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),    // banned
-    updatedAt: timestamp("updated_at").$onUpdate(() => new Date()),             // banned
-})
-```
-
-See [rules/no-timestamp-columns.md](rules/no-timestamp-columns.md) and [rules/no-uuid-default-random.md](rules/no-uuid-default-random.md) for the full rationale and the "but I really need a timestamp" answer (you don't).
-</details>
-
-<details>
-<summary><strong>⚠️ Human-led Database Migrations</strong></summary>
-
-**Rule:** Never run `drizzle-kit generate` or `bun db:generate` automatically. Database migrations must be handled by a human developer.
-
-**Rationale:** Automated migration generation is dangerous and can lead to irreversible data loss. All schema changes require careful human review to assess impact, ensure data integrity, and plan for production deployment.
-
-**Process:**
-1.  Modify a table file in `src/db/schemas/<domain>/<table>.ts` (one table per file).
-2.  **Manually** run `bun db:generate` to create a migration file.
-3.  Carefully review the generated SQL migration.
-4.  Apply with `bun db:push` or `bun db:migrate`.
-</details>
-
-### Type Safety & Data Consistency
-
-<details>
-<summary><strong>🚫 Ban Unsafe <code>as</code> Type Assertions</strong></summary>
-
-**Rule:** The `as` keyword for type assertions is forbidden, with the sole exception of `as const` for creating immutable, literal types.
-
-**Rationale:** The `as` keyword is a blind spot in TypeScript's type system. It tells the compiler to trust the developer's assertion, even if it's incorrect at runtime, leading to potential runtime errors. Safer alternatives like runtime validation (with Zod) or proper type narrowing should be used instead.
-
-**Enforced by:** `gritql/no-as-type-assertion.grit`
-
-#### ✅ Correct
-```typescript
-const command = 'start' as const;
-
-if (typeof value === 'string') {
-    // value is now safely typed as string
-}
-```
-
-#### ❌ Incorrect
-```typescript
-const response: unknown = { id: 1 };
-const user = response as { id: number; name: string };
-```
-</details>
-
-<details>
-<summary><strong>❓ Prefer <code>undefined</code> over <code>null</code></strong></summary>
-
-**Rule:** Types must never include both `null` AND `undefined` at function boundaries. Prefer `undefined` (optionals) for all internal types; only use `null` when writing to an external API that requires it.
-
-**Rationale:** JavaScript has two values for "nothing" which can lead to confusion and triple-state branching. Standardising on `undefined` aligns with TypeScript's optional syntax (`?:`) and modern idioms (optional chaining `?.`).
-
-**Enforced by:** `super-lint.ts` rule `no-null-undefined-union`
-
-#### ✅ Correct
-```typescript
-interface UserProfile {
-    name: string;
-    bio?: string;
-}
-```
-
-#### ❌ Incorrect
-```typescript
-interface UserProfile {
-    name: string;
-    bio: string | null | undefined;
-}
-```
-</details>
-
-## Biome Configuration Highlights
-
-Beyond the custom GritQL rules, this template uses a strict Biome configuration to enforce modern best practices. Here are some of the key rules enabled in `biome.json`:
-
-*   `suspicious/noConsole`: (`error`) - Bans `console.log` and its variants, pushing developers to use the structured logger.
-*   `complexity/noForEach`: (`error`) - Prefers `for...of` loops over `Array.prototype.forEach` for better performance and control flow (e.g., `break`, `continue`).
-*   `style/noNonNullAssertion`: (`error`) - Forbids the `!` non-null assertion operator, promoting safer type guards.
-*   `style/useTemplate`: (`error`) - Enforces the use of template literals over string concatenation.
-*   `performance/noImgElement`: (`error`) - Recommends using Next.js's `<Image>` component for performance optimizations instead of the standard `<img>` tag.
-*   `correctness/noUnusedVariables`: (`error`) - Keeps the codebase clean by flagging unused variables, imports, and function parameters.
-*   ...and many more from the `recommended` ruleset.
-
-## File Structure
+## Layout
 
 ```
-.
-├── gritql/                            # Custom GritQL linting rules
-├── packages/
-│   └── superstarter-iac/              # Alchemy IaC workspace (AWS RDS + OIDC + Vercel role)
-├── public/                            # Static assets
-├── rules/                             # Markdown documentation for custom rules
-└── src/
-    ├── app/                           # Next.js App Router
-    │   ├── page.tsx                   # Home page (server component)
-    │   ├── content.tsx                # Client component (useOptimistic todos)
-    │   ├── actions.ts                 # Server actions (revalidatePath after mutations)
-    │   └── layout.tsx                 # Root layout
-    ├── components/ui/                 # shadcn/ui components
-    ├── db/                            # Drizzle ORM
-    │   ├── schemas/<domain>/<table>.ts  # One table per file
-    │   ├── schema.ts                  # Barrel
-    │   ├── index.ts                   # IAM-auth pool (app user, OIDC creds)
-    │   ├── admin.ts                   # Admin pool (Secrets Manager) for scripts
-    │   ├── programs/                  # SQL programs (app_user role, grants, pgcrypto)
-    │   └── scripts/                   # drizzle-kit shim, push-programs, drop-schema
-    ├── workflows/                     # Vercel Workflow definitions ("use workflow")
-    ├── styles/                        # Global styles
-    ├── env.ts                         # Environment variable validation (T3 Env)
-    └── logger.ts                      # Pino logger
+packages/
+  product/
+    nextjs-app/             the Next app: pages, server actions and reads, telemetry registration, shadcn UI, env
+    todo-protocol/          browser-safe types the database, server and browser share: todos, action contracts
+  platform/
+    operational-telemetry/  the span registry, the Effect→OTel bridge, PostHog and file export
+    data-infrastructure/    Alchemy 2 stack (network, RDS, Vercel runtime role) and the database operator scripts
+  data/
+    database/               Drizzle schema (core.*), postgres pool/connection/transaction, query contracts, SQL programs
+scripts/dev/                check launcher, superlint, oxlint plugin, formatter, style linter
+rules/                      one document per rule: the rule and why
+turbo.json                  the task graph: per-package typecheck and lint, root tooling tasks
+tsconfig.json               the strict base every package extends, and the tooling program
 ```
 
-## Available Commands
+## License
 
-| Command                    | Description                                                                |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `bun dev`                  | Starts the Next.js development server.                                     |
-| `bun build`                | Builds the application for production.                                     |
-| `bun start`                | Starts the production server.                                              |
-| `bun typecheck`            | Runs TypeScript 7 type checking via `tsc`.                                 |
-| `bun lint`                 | Runs Biome and the custom super-lint on staged files.                      |
-| `bun lint:all`             | Runs Biome and super-lint across the whole repo.                           |
-| `bun format`               | Strips comments and applies Biome formatting.                              |
-| `bun db:generate`          | Generates a SQL migration file from schema changes.                        |
-| `bun db:migrate`           | Applies pending migrations and runs `db:push:programs`.                    |
-| `bun db:push`              | Pushes schema directly to the database and runs `db:push:programs`.        |
-| `bun db:push:programs`     | Creates the `app` user, grants `rds_iam`, installs `pgcrypto`.             |
-| `bun db:studio`            | Opens Drizzle Studio.                                                      |
-| `bun db:drop:schema`       | **DANGER:** Drops the named schema(s) using admin credentials.             |
+0BSD. See [LICENSE](LICENSE).

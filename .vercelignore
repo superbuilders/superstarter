@@ -1,0 +1,27 @@
+# CLI deploys do not inherit .gitignore. Upload only build inputs.
+/*
+# Turbo still needs the repository's generated-file exclusions without Git metadata.
+!/.gitignore
+!/package.json
+!/pnpm-lock.yaml
+!/pnpm-workspace.yaml
+!/turbo.json
+!/tsconfig.json
+!/.npmrc
+!/packages
+!/scripts
+!/patches
+
+# Never ship local credentials, caches, or generated output.
+**/.env*
+**/out
+**/node_modules
+**/.next
+**/.vercel
+**/.alchemy
+**/.turbo
+**/.swc
+**/.output
+**/*.tsbuildinfo
+**/next-env.d.ts
+**/dist

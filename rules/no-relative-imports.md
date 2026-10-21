@@ -2,65 +2,45 @@
 alwaysApply: true
 ---
 
-### No Relative Imports
+# No Relative Imports
 
-#### ⚠️ CRITICAL: Ban All Relative Imports
+Every import inside a package goes through that package's `#` subpath imports, naming the file with its real extension. `./` and `../` are banned (oxlint `no-restricted-imports`; tsc refuses an import without its extension, because no file matches it).
 
-All imports **MUST** use the absolute `@/` module alias prefix. Relative imports of any kind (e.g., `./something` or `../something`) are strictly prohibited.
+Each package's `package.json` maps its prefixes. The app's:
 
-**Rationale:**
-
-- **Consistency and Maintainability:** Relative paths create "path hell" where moving files requires updating multiple import statements. Absolute paths with `@/` provide a stable reference point from the src directory.
-- **Readability:** Absolute paths clearly indicate the module's location in the project structure without mental path resolution.
-- **Refactoring Safety:** Tools like IDEs can more reliably refactor code with absolute imports.
-- **Alignment with Alias Configuration:** Our project is configured with `@/` aliases in tsconfig.json, making all relative imports unnecessary and error-prone.
-
-This rule complements the [Import Patterns](import-alias-paths.md) guidelines, which mandate `@/` for src directory imports.
-
-#### Permitted Patterns
-
-1. **Absolute Imports with `@/` Prefix:** Use for all imports within the project.
-
-```typescript
-// ✅ CORRECT: Absolute import from src directory
-import { Button } from "@/app/components/ui/button"
-import { getUserId } from "@/server/auth"
-import { db } from "@/server/db"
-
-// ✅ CORRECT: Absolute import for co-located components
-import { Content } from "@/app/(user)/[subject]/[course]/(overview)/[unit]/components/content"
-import { Sidebar } from "@/app/(user)/profile/components/sidebar"
+```json
+"imports": {
+	"#*": "./src/*"
+}
 ```
 
-2. **External Module Imports:** Standard node_modules or external packages (no prefix needed).
+The root maps `"#scripts/*": "./scripts/*"` for the tooling.
 
-```typescript
-// ✅ CORRECT: External package imports
-import * as React from "react"
-import { z } from "zod"
-import { and, eq } from "drizzle-orm"
+```ts
+// GOOD
+import { readTodos } from "#server/todos/todos.ts"
+import { Button } from "#ui/button.tsx"
+import { violationAt } from "#scripts/dev/lint/violation.ts"
+
+// BAD
+import { TodoList } from "./todo-list"
+import { TodoId } from "../../lib/todos"
 ```
 
-#### Prohibited Patterns
+Same-directory imports follow the rule too: write `#app/todo-list.tsx`, not `./todo-list.tsx`.
 
-```typescript
-// ❌ WRONG: Relative import traversing parent directory
-import { Button } from "../../components/ui/button"
-import { getUserId } from "../../../server/auth"
+## Across packages
 
-// ❌ WRONG: Deep relative traversal
-import { db } from "../../../../server/db"
+Another workspace package is imported by name, through its `exports`, without an extension, the way edullm does it. Each package exports its raw TypeScript; nothing is built.
 
-// ❌ WRONG: Same-directory relative import
-import { Content } from "./content"
-import { Sidebar } from "./sidebar"
-
-// ❌ WRONG: Any relative import
-import { util } from "../lib/utils" // Use "@/shared/ui/utils/cn" instead
+```ts
+import { TodoId } from "@superstarter/todo-protocol/todos"
+import { withPostgresStatement } from "@superstarter/database/postgres/transaction"
 ```
 
-#### No Exceptions
+## Why
 
-There are no exceptions to this rule. All imports within the project must use absolute `@/` paths. Even co-located components in the same directory must use absolute imports.
+- **One spelling per module.** A path names where the module lives, not where it sits relative to the importer, so a grep for `@superstarter/database/postgres/pool` finds every importer outside the package, and `#postgres/pool.ts` every one inside.
+- **Real files.** Node runs the `.ts` files directly and resolves `#` imports natively, so the extension is part of the path and no bundler or loader rewrites it.
 
-If you encounter a case where absolute imports seem impossible, reconsider the project structure or consult with the team before introducing relative imports.
+Packages are imported by name. Effect is imported from its barrel, `import { Effect, Schema } from "effect"`, never from `effect/Effect` (tsgo `preferBarrelImport`).

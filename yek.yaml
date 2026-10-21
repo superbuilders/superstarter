@@ -2,11 +2,11 @@ ignore_patterns:
   - "yek.yaml"
   - "patches/*"
   - "scripts/*"
-  - "bun.lock"
-  - "public/**"
-  - "src/components/ui/**"
+  - "pnpm-lock.yaml"
+  - "packages/product/nextjs-app/public/**"
+  - "packages/product/nextjs-app/src/ui/**"
 priority_rules:
   - score: 99
     pattern: "^rules/"
   - score: 100
-    pattern: "^gritql/"
+    pattern: "^\\.oxlintrc\\.json$"

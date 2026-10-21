@@ -1,0 +1,4 @@
+node_modules/
+# Alchemy's local version-check cache. Durable state lives in the S3 state bucket, so a fresh clone
+# does not need this directory to deploy.
+.alchemy/

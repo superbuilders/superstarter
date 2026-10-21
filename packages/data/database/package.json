@@ -1,0 +1,49 @@
+{
+	"name": "@superstarter/database",
+	"version": "0.0.0",
+	"private": true,
+	"description": "The PostgreSQL schema (core.*), the pooled connection, statement and SERIALIZABLE transaction scopes, the query contracts, the SQL programs and the migrations drizzle-kit generates. It reads no environment: connection facts are passed in.",
+	"type": "module",
+	"imports": {
+		"#drizzle.schema.ts": "./drizzle.schema.ts",
+		"#*": "./src/*"
+	},
+	"exports": {
+		"./catalog/pg-catalog": "./src/catalog/pg-catalog.ts",
+		"./lib/uuid-time": "./src/lib/uuid-time.ts",
+		"./migrations/migration-artifacts": "./src/migrations/migration-artifacts.ts",
+		"./postgres/client": "./src/postgres/client.ts",
+		"./postgres/connection": "./src/postgres/connection.ts",
+		"./postgres/diagnostic": "./src/postgres/diagnostic.ts",
+		"./postgres/pool": "./src/postgres/pool.ts",
+		"./postgres/principals": "./src/postgres/principals.ts",
+		"./postgres/rds-ca": "./src/postgres/rds-ca.ts",
+		"./postgres/retry": "./src/postgres/retry.ts",
+		"./postgres/transaction": "./src/postgres/transaction.ts",
+		"./programs/app-user": "./src/programs/app-user.ts",
+		"./queries/todos": "./src/queries/todos.ts",
+		"./query/contracts": "./src/query/contracts.ts",
+		"./schema/core/todos": "./src/schema/core/todos.ts"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"generate": "drizzle-kit generate",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"lint": "node ../../../scripts/dev/lint.ts"
+	},
+	"dependencies": {
+		"@superstarter/operational-telemetry": "workspace:*",
+		"@superstarter/todo-protocol": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"effect": "4.0.5",
+		"pg": "8.23.1"
+	},
+	"devDependencies": {
+		"@types/node": "24.19.2",
+		"@types/pg": "8.23.1",
+		"drizzle-kit": "1.0.0-rc.5",
+		"typescript": "7.0.2"
+	}
+}
