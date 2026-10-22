@@ -189,7 +189,6 @@ const invocationMetricReader = (exporter: PushMetricExporter): InvocationMetricR
 	return {
 		setMetricProducer(metricProducer) {
 			if (producer !== undefined) {
-				// The specification forbids registering one reader on two meter providers.
 				diag.error("MetricReader can not be bound to a MeterProvider again.")
 				return
 			}
@@ -223,7 +222,6 @@ const invocationMetricReader = (exporter: PushMetricExporter): InvocationMetricR
 				}
 			)
 		},
-		// Export now when the cadence has elapsed; an export already in flight is joined.
 		exportIfDue: () => {
 			if (inFlight !== undefined) {
 				return inFlight
@@ -392,8 +390,6 @@ export const createSpanMeasurements = (meterProvider: ApiMeterProvider): SpanPro
 		advice: { explicitBucketBoundaries: [...OPERATION_DURATION_BUCKETS_MILLISECONDS] }
 	})
 
-	// One label per correlation key, present or absent, so the completeness series is keyed by the
-	// same spelling the spans carry.
 	const correlation = meter.createCounter("superstarter.telemetry.correlation.spans", {
 		unit: "{span}"
 	})
@@ -430,15 +426,11 @@ export const createSpanMeasurements = (meterProvider: ApiMeterProvider): SpanPro
 			const memory = process.memoryUsage()
 			result.observe(memory.rss, { kind: "rss" })
 			result.observe(memory.heapUsed, { kind: "heap-used" })
-			// Node reports maxRSS in KiB; this is process lifetime, not request allocation.
 			result.observe(process.resourceUsage().maxRSS * 1024, {
 				kind: "rss-peak-since-process-start"
 			})
 		})
 
-	// Fluid shares one instance across concurrent invocations; CPU time per mode separates a
-	// saturated instance from slow dependencies. Node reports microseconds since process start.
-	// https://opentelemetry.io/docs/specs/semconv/system/process-metrics/#metric-processcputime
 	meter.createObservableCounter("process.cpu.time", { unit: "s" }).addCallback((result) => {
 		const usage = process.cpuUsage()
 		result.observe(usage.user / 1_000_000, { "cpu.mode": "user" })

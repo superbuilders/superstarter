@@ -80,7 +80,6 @@ const applyPending = (database: NativePostgresDatabase, identity: PostgresAppIde
 			try: () => migrate(database, migrationConfiguration),
 			catch: () => MigrationApplyRejected.make({ reason: "migrator" })
 		})
-		// The init-failure response exists only for `drizzle-kit pull --init`; a plain apply never returns it.
 		if (typeof response === "object") {
 			return yield* MigrationApplyRejected.make({ reason: "init-response" })
 		}

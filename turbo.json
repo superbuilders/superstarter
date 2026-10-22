@@ -97,7 +97,7 @@
 			],
 			"outputs": []
 		},
-		"//#dead-code:check": {
+		"//#lint:dead-code": {
 			"description": "Hash every workspace's source, manifests and compiler configuration, and fallow's configuration.",
 			"inputs": [
 				"{scripts,packages}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,css}",

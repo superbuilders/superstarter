@@ -110,6 +110,5 @@ const program = Effect.gen(function* () {
 	})
 })
 
-// The entry point provides Node's platform services, once, for the whole command.
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeServices.layer)))

@@ -1,4 +1,3 @@
-// The suite runs under node:test with node:assert, which Effect has no equivalent for.
 // @effect-diagnostics nodeBuiltinImport:off
 import assert from "node:assert/strict"
 import { test } from "node:test"
@@ -269,7 +268,6 @@ void test(
 	"every production prepared statement is accepted by PostgreSQL",
 	{ concurrency: true },
 	(suite) =>
-		// The test is the entry point: it provides Node's platform services to the source scan.
 		// @effect-diagnostics-next-line strictEffectProvide:off
 		Effect.runPromise(discover.pipe(Effect.provide(NodeServices.layer)))
 			.then(assertRegistry)

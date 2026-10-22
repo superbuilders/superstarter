@@ -43,7 +43,6 @@ const candidateViolation = (
 			className: location.text
 		}
 	}
-	// A named value that is no theme color at all ("sm", "1", "none") is some other utility's value.
 	if (!system.allColors.has(value.value) || system.allowedColors.has(value.value)) {
 		return undefined
 	}

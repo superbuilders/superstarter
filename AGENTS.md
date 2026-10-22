@@ -6,10 +6,12 @@ convention here is meant to survive the copy.
 
 ## Code is the documentation
 
-Code, types and lint rules are the documentation. Write prose (comments, Markdown) only for what they
-cannot express: why a design exists, what it rejects, and outside facts. Comments state rules in plain
-words; they never narrate history or cite documents. Lint (oxlint, superlint) and tsgo rules record owner decisions:
-strengthen them, never weaken them.
+Code, types and lint rules are the documentation. The only comments are JSDoc on declarations and tool
+directives (`@effect-diagnostics`, `oxlint-disable`, `fallow-ignore`): the formatter strips every other
+comment, and `pnpm check` refuses one. Write JSDoc and Markdown only for what code cannot express: why a
+design exists, what it rejects, and outside facts. They state rules in plain words and never narrate
+history or cite documents. Lint (oxlint, superlint) and tsgo rules record owner decisions: strengthen
+them, never weaken them.
 
 ## Design
 

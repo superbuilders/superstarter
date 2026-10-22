@@ -74,6 +74,5 @@ export const nativeSpanLimits: SpanLimits = {
 	linkCountLimit: SPAN_ITEM_COUNT,
 	attributePerEventCountLimit: SPAN_ITEM_COUNT,
 	attributePerLinkCountLimit: SPAN_ITEM_COUNT,
-	// The SDK's default is unlimited string length. Receiver bytes bound exports.
 	attributeValueLengthLimit: Number.POSITIVE_INFINITY
 }

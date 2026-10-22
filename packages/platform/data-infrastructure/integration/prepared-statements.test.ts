@@ -1,4 +1,3 @@
-// The suite runs under node:test with node:assert.
 // @effect-diagnostics nodeBuiltinImport:off
 import assert from "node:assert/strict"
 import { test } from "node:test"

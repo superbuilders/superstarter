@@ -4,6 +4,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Array as Arr, Console, Effect, FileSystem, Path, String as Str } from "effect"
 import { DevtoolFailure, exitWith, reportFailure } from "#scripts/dev/devtool-failure.ts"
 import { findBlankLineViolations, normalizeBlankLines } from "#scripts/dev/fmt/blank-lines.ts"
+import { findStrippableComments, stripComments } from "#scripts/dev/fmt/comments.ts"
 import { invocationOf } from "#scripts/dev/shared/arguments.ts"
 import { configFileNames, nativeSession } from "#scripts/dev/shared/native-api.ts"
 import { parseSyntax, type SyntaxInput } from "#scripts/dev/shared/native-syntax.ts"
@@ -17,14 +18,17 @@ import {
 } from "#scripts/dev/shared/repository.ts"
 
 /**
- * The repository formatter's own rule, on top of oxfmt: gofumpt's blank lines. Braces on every
- * control-flow body are oxlint's `curly`. It formats the files of the root tsconfig and of every
+ * The repository formatter's own rules, on top of oxfmt: every comment but JSDoc and tool directives is
+ * stripped, then gofumpt's blank lines. Braces on every control-flow body are oxlint's `curly`. It formats the files of the root tsconfig and of every
  * workspace package's tsconfig, vendored shadcn (the app's src/ui) aside, or only the files at or
  * under explicit paths. Without `--write` it is a dry run that reports and exits 1 if anything would
  * change.
  */
 
-type FileReport = Readonly<{ file: string; blankLines: number }>
+/** Removals inside one stripped comment's text land on the next pass; a few passes reach the fixed point. */
+const MAX_STRIP_PASSES = 5
+
+type FileReport = Readonly<{ file: string; comments: number; blankLines: number }>
 
 type FormattedFile = FileReport & Readonly<{ original: string; formatted: string }>
 
@@ -34,26 +38,68 @@ const isFormattable = (file: string): boolean =>
 	!isGeneratedPath(file) &&
 	!isVendoredPath(file)
 
-/** One pass over the original text: the dry run reports what the write would change. */
-const formattedOf = (
+/** The dry run counts every finding in the original text, the way a single write pass would find them. */
+const checkFiles = (
 	inputs: ReadonlyArray<SyntaxInput>
 ): Effect.Effect<ReadonlyArray<FormattedFile>, DevtoolFailure> =>
 	Effect.scoped(
 		Effect.map(parseSyntax(inputs), (sources) =>
-			Arr.map(sources, (source) => {
-				const violations = findBlankLineViolations(source)
-				return {
-					file: source.file,
-					blankLines: violations.length,
-					original: source.text,
-					formatted: normalizeBlankLines({ text: source.text, violations })
-				}
-			})
+			Arr.map(sources, (source) => ({
+				file: source.file,
+				comments: findStrippableComments(source).length,
+				blankLines: findBlankLineViolations(source).length,
+				original: source.text,
+				formatted: source.text
+			}))
 		)
 	)
 
+/** Strips comments pass by pass until none is left, counting what each file lost. */
+const stripAll = (
+	inputs: ReadonlyArray<SyntaxInput>
+): Effect.Effect<ReadonlyArray<SyntaxInput & Readonly<{ comments: number }>>, DevtoolFailure> =>
+	Effect.gen(function* () {
+		let current = Arr.map(inputs, (input) => ({ ...input, comments: 0 }))
+		for (let pass = 0; pass < MAX_STRIP_PASSES; pass += 1) {
+			const sources = yield* Effect.scoped(parseSyntax(current))
+			const removals = Arr.map(sources, findStrippableComments)
+			if (!Arr.some(removals, Arr.isReadonlyArrayNonEmpty)) {
+				return current
+			}
+			current = Arr.map(Arr.zip(current, removals), ([input, found]) => ({
+				...input,
+				text: stripComments({ text: input.text, removals: found }),
+				comments: input.comments + found.length
+			}))
+		}
+		return yield* DevtoolFailure.make({
+			detail: `Comment stripping did not settle after ${MAX_STRIP_PASSES} passes`
+		})
+	})
+
+/** Comments first, then blank lines on the stripped text, as one write pass. */
+const formatFiles = (
+	inputs: ReadonlyArray<SyntaxInput>
+): Effect.Effect<ReadonlyArray<FormattedFile>, DevtoolFailure> =>
+	Effect.gen(function* () {
+		const stripped = yield* stripAll(inputs)
+		const sources = yield* Effect.scoped(parseSyntax(stripped))
+		return Arr.map(Arr.zip(Arr.zip(inputs, stripped), sources), ([[input, strip], source]) => {
+			const violations = findBlankLineViolations(source)
+			return {
+				file: input.file,
+				comments: strip.comments,
+				blankLines: violations.length,
+				original: input.text,
+				formatted: normalizeBlankLines({ text: source.text, violations })
+			}
+		})
+	})
+
+const issuesOf = (report: FileReport): number => report.comments + report.blankLines
+
 const summaryLine = (report: FileReport): string =>
-	`${repositoryPath(report.file)}: ${report.blankLines} blank line(s)`
+	`${repositoryPath(report.file)}: ${report.comments} comment(s), ${report.blankLines} blank line(s)`
 
 /** The root tsconfig and each workspace package's: packages/<group>/<package>/tsconfig.json. */
 const workspaceConfigs = Effect.gen(function* () {
@@ -121,9 +167,9 @@ const main = Effect.gen(function* () {
 			),
 		{ concurrency: 16 }
 	)
-	const results = yield* formattedOf(inputs)
-	const changed = Arr.filter(results, (result) => result.blankLines > 0)
-	const total = Arr.reduce(changed, 0, (sum, result) => sum + result.blankLines)
+	const results = write ? yield* formatFiles(inputs) : yield* checkFiles(inputs)
+	const changed = Arr.filter(results, (result) => issuesOf(result) > 0)
+	const total = Arr.reduce(changed, 0, (sum, result) => sum + issuesOf(result))
 	if (!Arr.isReadonlyArrayNonEmpty(changed)) {
 		yield* Console.log("No formatting issues found.")
 		return
@@ -159,6 +205,5 @@ const main = Effect.gen(function* () {
 	yield* exitWith(1)
 }).pipe(Effect.catchTag("DevtoolFailure", reportFailure))
 
-// The entry point provides Node's platform services, once, for the whole command.
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))

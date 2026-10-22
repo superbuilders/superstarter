@@ -35,6 +35,5 @@ const program = Effect.gen(function* () {
 
 const services = Layer.mergeAll(nativeAws, NodeHttpClient.layerNodeHttp, NodeServices.layer)
 
-// The entry point provides the operator's AWS session and Node's platform services, once, for the whole command.
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(program.pipe(Effect.provide(services)))

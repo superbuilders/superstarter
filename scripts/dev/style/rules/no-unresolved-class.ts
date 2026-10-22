@@ -108,7 +108,6 @@ const diagnose = (
 	if (namespace === undefined) {
 		return undefined
 	}
-	// text-sm maps to the color namespace too, so a value close to no color is some other utility's value.
 	if (namespace === "--color") {
 		const closest = closestOf(typed, system.allColors)
 		return closest === undefined
@@ -119,7 +118,6 @@ const diagnose = (
 	if (tokens === undefined) {
 		return `no ${Str.slice(2)(namespace)} tokens found in design system — check @theme import chain`
 	}
-	// An exact token may still fail to compile when an @utility rule is opaque to the design system.
 	if (tokens.has(typed)) {
 		return undefined
 	}

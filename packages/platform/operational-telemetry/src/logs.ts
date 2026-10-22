@@ -102,7 +102,6 @@ export type OperationalLogEntry = Readonly<{
  * body, so Vercel Logs hold every record even when PostHog is unreachable. */
 export const emitOperationalLog = ({ record, level }: OperationalLogEntry) =>
 	Result.try(() => {
-		// The message belongs to the full body; metadata supplies searchable fields.
 		const fields = searchableTelemetryAttributes(Record.remove(record, "message"))
 		const { attributes: nested } = record
 		const annotations: NativeAttributes =
@@ -164,9 +163,6 @@ export const createOperationalLogProcessor = ({
 	meterProvider
 }: OperationalLogPipeline): Effect.Effect<SpanProcessor, OperationalTelemetryProviderConflict> =>
 	Effect.suspend(() => {
-		// Weak attribution does not retain records beyond their native SDK lifetime. The SDK has no
-		// public queue-admission or drop callback: a completed flush is the proof that offered
-		// records not handed to export were dropped by it.
 		let admissions: Admissions = { offered: 0, handed: 0 }
 		const attribution = new WeakMap<ReadableLogRecord, Admissions>()
 		const unsettledAdmissions = new Set<Admissions>()
@@ -244,9 +240,6 @@ export const createOperationalLogProcessor = ({
 						expandOversized: logEvidenceParts
 					})
 				},
-				// SDK 0.222 does not clear _flushing when this hook rejects while accelerating a current
-				// export. Keep its cleanup path running; the authoritative outer receipt still rejects
-				// with the original failure.
 				forceFlush: () =>
 					Promise.resolve()
 						.then(() => exporter.forceFlush())
@@ -299,14 +292,10 @@ export const createOperationalLogProcessor = ({
 				unsettledAdmissions.add(admissions)
 				admissions = { offered: 0, handed: 0 }
 				const through = [...unsettledAdmissions]
-				// SDK 0.222 reports export callback failures through globalErrorHandler and resolves
-				// forceFlush anyway. The adapter's receipt is authoritative.
 				const native = yield* settled([Promise.resolve().then(() => batch[method]())])
 				const transport = yield* settled(
 					method === "forceFlush" ? [Promise.resolve().then(() => exporter.forceFlush())] : []
 				)
-				// Native SDK timeouts can finish before sequential evidence packets. The host owns the
-				// adapter completion, not merely its current wire packet.
 				yield* settled([...inFlight])
 				const causes = rejectedReasons([...native, ...transport])
 				const drained = !Arr.isArrayNonEmpty(causes) && inFlight.size === 0
@@ -359,8 +348,6 @@ export const createOperationalLogProcessor = ({
 		const processor: SpanProcessor = {
 			onStart() {},
 			onEnd() {},
-			// The public provider applies its own deadline. Host lifetime must await this same drain
-			// owner, including an adapter still completing packets.
 			forceFlush: flush,
 			shutdown: () =>
 				provider.shutdown().finally(() => {

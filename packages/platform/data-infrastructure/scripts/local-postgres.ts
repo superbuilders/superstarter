@@ -155,6 +155,5 @@ const main = Effect.gen(function* () {
 	yield* migrated({ name: database, fresh: mode === "test" })
 })
 
-// The entry point provides Node's platform services, once, for the whole command.
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))

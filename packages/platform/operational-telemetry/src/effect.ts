@@ -87,9 +87,6 @@ const recordCompletion = (span: Span, exit: Exit.Exit<unknown, unknown>): void =
 	if (outcome === "interrupted") {
 		return
 	}
-	// The exception event carries the failure's tag and codes and a header-only stack
-	// (`failureExceptionOf`); the whole cause stays in the log body.
-	// https://opentelemetry.io/docs/specs/semconv/exceptions/exceptions-spans/
 	const exception = failureExceptionOf(exit.cause)
 	span.recordException(exception)
 	span.setStatus({ code: SpanStatusCode.ERROR, message: `${exception.name}: ${exception.message}` })
@@ -165,11 +162,6 @@ const operationalTracer = (deployment: OperationalDeployment): Tracer.Tracer => 
 			const native = new Tracer.NativeSpan(options)
 			const parent = Option.getOrUndefined(options.parent)
 			const parentContext = parentContextOf(options.root, parent)
-			// Correlation lives on the Effect span too, so every Effect child inherits it even when
-			// its fiber resumes outside the request's async context. The replay session enters
-			// through the request context; a parent's own correlation wins over it. A root still
-			// belongs to the request that scheduled it (background work under `after()`): its
-			// correlation comes from the active request context.
 			const correlationContext = options.root ? context.active() : parentContext
 			const inherited = definedAttributes(
 				correlationAttributes({
@@ -187,7 +179,6 @@ const operationalTracer = (deployment: OperationalDeployment): Tracer.Tracer => 
 				},
 				parentContext
 			)
-			// An unsampled or unregistered host never records; only a recorded span can be ended early.
 			const recorded = span.isRecording()
 			const { identity, hosted } = identityOf(span, native, parentContext)
 			for (const [key, value] of Record.toEntries(inherited)) {
@@ -228,13 +219,6 @@ const operationalTracer = (deployment: OperationalDeployment): Tracer.Tracer => 
 					}
 					native.end(at, exit)
 					if (recorded && !span.isRecording()) {
-						// `@vercel/otel`'s CompositeSpanProcessor ends every span still open when the local root of its
-						// trace ends. The native span then exports with neither outcome nor its real end, and the SDK
-						// ignores this bridge's later end. Count each such span so the loss is visible; the counter
-						// carries only the code-defined span name and the true outcome. The same ending reaches its fetch
-						// instrumentation's span of a request still in flight; `patches/@vercel__otel@2.1.3.patch` makes
-						// that instrumentation write only while its span records, as its response-body path already does.
-						// https://github.com/vercel/otel/blob/main/packages/otel/src/processor/composite-span-processor.ts
 						metrics
 							.getMeter(OPERATIONAL_SCOPE)
 							.createCounter("superstarter.telemetry.span.ended_by_host", { unit: "{span}" })

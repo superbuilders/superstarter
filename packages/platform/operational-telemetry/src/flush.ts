@@ -32,7 +32,6 @@ export const coalescedFlush = (flush: () => Promise<void>): (() => Promise<void>
 		if (!running) {
 			running = true
 			queueMicrotask(() => {
-				// The drain's failures settle the callers' receipts, so its own promise only orders the passes.
 				void run()
 			})
 		}

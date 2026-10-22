@@ -83,12 +83,9 @@ const program = Effect.gen(function* () {
 		...logging,
 		approvePlan: (plan, options) =>
 			logging.displayPlan(plan, options).pipe(Effect.andThen(admitPlan(plan)), Effect.as(true)),
-		// Admit at the apply boundary too, action-only plans included: the apply session starts before
-		// any resource, action or state mutation.
 		startApplySession: (plan, options) =>
 			admitPlan(plan).pipe(Effect.andThen(logging.startApplySession(plan, options)))
 	})
-	// Alchemy's own deploy command, composed the same way: plan, approve, apply.
 	const deploy = Effect.gen(function* () {
 		const cli = yield* Cli
 		const display = { stage }
@@ -101,7 +98,6 @@ const program = Effect.gen(function* () {
 			Effect.flatMap(Stack.plan<typeof Entrypoint>),
 			Effect.orDie
 		)
-		// `Stack.hasChanges` omits binding and action work; every change requires approval.
 		const changed = yield* changedIdsOf(snapshot.native)
 		if (Arr.isReadonlyArrayNonEmpty(changed)) {
 			const approved = yield* cli.approvePlan(snapshot.native, display)
@@ -133,6 +129,5 @@ const services = Layer.mergeAll(
 	CredentialsStoreLive
 ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerNodeHttp)))
 
-// The entry point provides Alchemy's CLI services and Node's platform services, once, for the whole command.
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(services)))

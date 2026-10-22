@@ -33,7 +33,6 @@ const withoutQuery = (url: string): string => {
  * @see https://posthog.com/docs/libraries/js/config
  * @see https://posthog.com/docs/error-tracking/installation/nextjs */
 export const startProductAnalytics = (token: string): void => {
-	// React's development double-effect and a remounted layout start it once.
 	if (posthog.__loaded) {
 		return
 	}
@@ -71,7 +70,6 @@ export const startProductAnalytics = (token: string): void => {
 			maskTextSelector: "[data-posthog-mask], [data-posthog-mask] *",
 			recordHeaders: false,
 			recordBody: false,
-			// Page URLs (a name-only entry) and network entries alike keep a URL without query or hash.
 			maskCapturedNetworkRequestFn: (request) => ({
 				...Struct.omit(request, ["requestHeaders", "responseHeaders"]),
 				name: withoutQuery(request.name),
@@ -94,7 +92,6 @@ const digestOf = (error: unknown): string | null =>
 type ExceptionProperties = Readonly<Record<string, string | number | boolean | null>>
 
 const captureException = (error: unknown, properties: ExceptionProperties): void => {
-	// The local backend never starts the SDK, and an unstarted SDK only warns.
 	if (!posthog.__loaded) {
 		return
 	}

@@ -84,7 +84,6 @@ export const ApplicationPostgresLive = Layer.effect(
 		const acquire = Effect.acquireRelease(
 			Effect.gen(function* () {
 				const pool = applicationPoolOf(yield* databaseTarget)
-				// An idle client's socket error belongs to no borrower: pg has already evicted it.
 				pool.native.on("error", (error) => {
 					runFork(
 						Effect.logError("postgres idle client failed").pipe(

@@ -48,7 +48,6 @@ const evidenceOf = (item: unknown): unknown => {
  * failure codes only (`failureExceptionOf`). Secrets belong in Effect Redacted values at their
  * source, never in a regex scrubber. */
 export const serializeEvidence = (value: unknown): string | undefined =>
-	// JSON.stringify hands the replacer a key and a value; only the value decides what is written.
 	JSON.stringify(value, (...[, item]: readonly [string, unknown]) => evidenceOf(item))
 
 /** An array slot a native attribute admits: the array's one scalar kind, or a nullish hole. */

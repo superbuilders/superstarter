@@ -113,6 +113,5 @@ const main = Effect.gen(function* () {
 	})
 }).pipe(Effect.catchTag("DevtoolFailure", reportFailure))
 
-// The entry point provides Node's platform services, once, for the whole command.
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))

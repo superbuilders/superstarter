@@ -4,10 +4,6 @@ import {
 } from "@superstarter/operational-telemetry/schema"
 import { Config, Option, Schema } from "effect"
 
-// Every environment variable the app reads is declared here as an Effect Config, and nothing else
-// reads process.env. Configs are values: yield one inside an Effect, or run it once where a
-// module needs the value at load. The browser never reads env; the server hands it what it needs.
-
 export const AWS_REGION = "us-east-1"
 
 const AwsRoleArn = Schema.String.check(

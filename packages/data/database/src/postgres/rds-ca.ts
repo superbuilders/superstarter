@@ -1,5 +1,3 @@
-// Amazon RDS us-east-1 root authorities (RSA2048 G1, RSA4096 G1, ECC384 G1). The driver trusts
-// only these for every PostgreSQL session, so a certificate from any other authority is refused.
 export const RDS_US_EAST_1_CA_PEM = `-----BEGIN CERTIFICATE-----
 MIID/zCCAuegAwIBAgIRAPVSMfFitmM5PhmbaOFoGfUwDQYJKoZIhvcNAQELBQAw
 gZcxCzAJBgNVBAYTAlVTMSIwIAYDVQQKDBlBbWF6b24gV2ViIFNlcnZpY2VzLCBJ

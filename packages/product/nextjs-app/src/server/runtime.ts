@@ -28,9 +28,6 @@ const WebLive = Layer.mergeAll(TelemetrySinkLive, ApplicationPostgresLive).pipe(
 type WebRuntime = ManagedRuntime.ManagedRuntime<WebServices, never>
 
 declare global {
-	// Next evaluates a module once per bundle (instrumentation, then each chunk group), so the one
-	// runtime per process lives here, where every bundle finds it. This is the process's only
-	// global: everything it holds is a service of the runtime.
 	var superstarterWebRuntime: WebRuntime | undefined
 }
 

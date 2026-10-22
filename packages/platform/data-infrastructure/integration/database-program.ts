@@ -1,4 +1,3 @@
-// The suite runs under node:test with node:assert, which Effect has no equivalent for.
 // @effect-diagnostics nodeBuiltinImport:off
 import assert from "node:assert/strict"
 import { nativeDrizzleHistory } from "@superstarter/database/catalog/pg-catalog"

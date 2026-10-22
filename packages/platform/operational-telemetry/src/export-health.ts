@@ -209,8 +209,6 @@ const LOUD_LEVELS: ReadonlySet<DiagnosticLevel> = new Set(["error", "warn"])
  * still replaces this logger in `@vercel/otel` registration.
  * https://opentelemetry.io/docs/languages/js/getting-started/nodejs/#troubleshooting */
 export const observeSdkDiagnostics = (origin: OperationalOrigin): void => {
-	// Counting reaches the meter API, which itself reports through diag (a shut-down provider
-	// warns on every getMeter). A diagnostic raised while counting one is written, not counted.
 	let counting = false
 	const count = (level: DiagnosticLevel): void => {
 		if (counting || !LOUD_LEVELS.has(level)) {
@@ -260,6 +258,5 @@ export const observeSdkDiagnostics = (origin: OperationalOrigin): void => {
 		debug: write("debug"),
 		verbose: write("verbose")
 	}
-	// INFO is the API's own default threshold for a logger installed without one.
 	diag.setLogger(logger, { logLevel: DiagLogLevel.INFO, suppressOverrideMessage: true })
 }

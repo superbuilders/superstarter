@@ -181,7 +181,6 @@ const openLintProgram = (
 			)
 		const overlayBase = path.join(path.dirname(config), ".superlint-base.tsconfig.json")
 		const overlay = yield* encodeOverlay({ extends: overlayBase, files: input.extraFiles })
-		// Every file read through these callbacks is an extra IPC round trip, so they are installed only when needed.
 		const nativeFs: NativeFileSystem = {
 			readFile: (file) => {
 				if (file === config) {
@@ -490,6 +489,5 @@ const main = Effect.gen(function* () {
 	}
 }).pipe(Effect.catchTag("DevtoolFailure", reportFailure))
 
-// The entry point provides Node's platform services, once, for the whole command.
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))

@@ -27,8 +27,6 @@ const registration = Effect.gen(function* () {
 	const { origin } = yield* OperationalTelemetry
 	const { exporters } = yield* TelemetrySink
 	observeSdkDiagnostics(origin)
-	// Metrics export inside live invocations on Vercel: a request's telemetry flush exports them
-	// once their cadence has elapsed, never an idle instance's timer. Locally, once a minute.
 	const metricsOwner = yield* startOperationalMetrics({
 		origin,
 		exporter: exporters.metrics,
@@ -45,14 +43,10 @@ const registration = Effect.gen(function* () {
 		serviceName: origin.service,
 		autoDetectResources: false,
 		resourceDetectors: [],
-		// Request spans are roots: neither Vercel's runtime propagator ("auto") nor W3C extraction
-		// adopts the proxy's inbound trace context, whose span never reaches PostHog.
 		propagators: [outboundTraceContextPropagator, "baggage", replayPropagator],
 		spanProcessors: [processor, metricExportProcessor(metricsOwner)],
 		traceSampler: "always_on",
 		spanLimits: nativeSpanLimits,
-		// "fetch" is the library default; the runtime instrumentation adds event-loop delay and
-		// utilization, GC and heap-space metrics, and exports an uncaught exception as a log.
 		instrumentations: ["fetch", new RuntimeNodeInstrumentation({ captureUncaughtException: true })],
 		attributes: operationalResourceAttributes(origin)
 	})

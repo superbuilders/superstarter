@@ -41,7 +41,6 @@ export default Stack.Stack(
 			Effect.flatMap(Schema.decodeUnknownEffect(Environment)),
 			Effect.orDie
 		)
-		// Modules add no Alchemy namespace, so moving one never changes a deployed resource's name.
 		return yield* COMPOSE[environment]
 	})
 )

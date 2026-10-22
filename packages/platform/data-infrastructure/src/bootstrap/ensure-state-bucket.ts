@@ -32,7 +32,6 @@ const ensureStateKey = Effect.fn(function* (account: string) {
 					Tags: Arr.map(tags, ({ Key, Value }) => ({ TagKey: Key, TagValue: Value }))
 				})
 				const key = yield* admitStateKey({ account, metadata: created.KeyMetadata })
-				// A failed alias creation leaves a key for the owner to reconcile, never a hidden retry.
 				yield* kms.createAlias({ AliasName: STATE_KEY_ALIAS, TargetKeyId: key.KeyId })
 				return key
 			})

@@ -70,8 +70,6 @@ export const operationalProcessor = ({
 }: OperationalPipeline): Effect.Effect<SpanProcessor, OperationalTelemetryProviderConflict> =>
 	createOperationalLogProcessor({ origin, exporter: exporters.logs, meterProvider }).pipe(
 		Effect.map((logs): SpanProcessor => {
-			// Await the whole adapter batch, including any sequential evidence packets.
-			// Exporter.forceFlush alone only knows packets handed to it so far.
 			const inFlight = new Set<Promise<void>>()
 			let exportFailure: { failedBatches: number; firstExportFailure: unknown } | undefined =
 				undefined
@@ -169,9 +167,6 @@ export const operationalProcessor = ({
 				return receipt
 			}
 			return {
-				// Every native child (fetch, pg) inherits its parent's correlation here, so a request's
-				// coordinates reach its provider calls with no side channel. A parent's own
-				// coordinates win over the request context's replay session.
 				onStart(span, parent) {
 					span.setAttributes(
 						definedAttributes(
@@ -184,8 +179,6 @@ export const operationalProcessor = ({
 					measurements.onStart(span, parent)
 					traces.onStart(span, parent)
 				},
-				// Span end runs on the request path: queue the native span only. The PostHog projection
-				// and its structural serialization run in the batch exporter, after the response.
 				onEnd(span) {
 					observeSpanLoss({ origin, span })
 					measurements.onEnd(span)

@@ -136,7 +136,6 @@ export const spanEvidenceParts = ({
 					endTime: span.startTime,
 					duration: [0, 0],
 					parentSpanContext: source,
-					// Native span ids are 8 bytes; source hash and offset give a stable part identity.
 					spanContext: () => ({ ...source, spanId: Str.slice(0, 16)(identity) }),
 					droppedAttributesCount: 0,
 					droppedEventsCount: 0,
@@ -161,8 +160,6 @@ export const logEvidenceParts = ({
 	readonly ReadableLogRecord[],
 	TelemetryEvidenceEnvelopeTooLarge
 > => {
-	// Native LogRecordImpl exposes severity, event and drop fields through prototype getters.
-	// Copy the public contract explicitly; object spread loses them.
 	const original: ReadableLogRecord = {
 		hrTime: log.hrTime,
 		hrTimeObserved: log.hrTimeObserved,

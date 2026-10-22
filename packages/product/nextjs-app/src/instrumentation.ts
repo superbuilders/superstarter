@@ -16,7 +16,6 @@ type ErrorContext = Parameters<Instrumentation.onRequestError>[2]
 /** Next compiles this file for the Edge runtime too, where the telemetry (Node code) never runs.
  * The Node graph loads only behind Next's compile-time runtime check, so no Edge bundle holds it. */
 const nodeTelemetry = () => {
-	// Next inlines NEXT_RUNTIME at compile time and prunes this branch from the Edge bundle.
 	// oxlint-disable node/no-process-env -- Next's compile-time runtime intrinsic, not configuration.
 	// @effect-diagnostics-next-line processEnv:off
 	if (process.env.NEXT_RUNTIME === "nodejs") {

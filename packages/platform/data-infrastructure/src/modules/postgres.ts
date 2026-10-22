@@ -54,8 +54,6 @@ export const postgresNetwork = Effect.fn(function* (names: Names) {
 				vpcId: vpc.vpcId,
 				cidrBlock: subnet.cidr,
 				availabilityZone: subnet.zone,
-				// RDS public placement uses the internet route, not launch-time addresses, and nothing
-				// else launches here.
 				mapPublicIpOnLaunch: false,
 				tags
 			})
@@ -63,7 +61,6 @@ export const postgresNetwork = Effect.fn(function* (names: Names) {
 				routeTableId: routes.routeTableId,
 				subnetId: resource.subnetId
 			})
-			// RDS public placement needs usable routing, not merely allocated subnet IDs.
 			return Output.all(resource.subnetId, association.associationId, route.state).pipe(
 				Output.map(([subnetId]) => subnetId)
 			)
@@ -96,7 +93,6 @@ export const postgresInstance = Effect.fn(function* (
 		ingress: [
 			{ ipProtocol: "tcp", fromPort: POSTGRES_PORT, toPort: POSTGRES_PORT, cidrIpv4: "0.0.0.0/0" }
 		],
-		// Stateful responses need no outbound permission.
 		egress: [],
 		tags
 	})
@@ -111,11 +107,7 @@ export const postgresInstance = Effect.fn(function* (
 		family: "postgres18",
 		description: names.databaseParametersDescription,
 		parameters: {
-			// Refuse every unencrypted connection.
-			// https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.SSL.html
 			"rds.force_ssl": "1",
-			// And every encrypted one below TLS 1.3.
-			// https://www.postgresql.org/docs/18/runtime-config-connection.html#GUC-SSL-MIN-PROTOCOL-VERSION
 			ssl_min_protocol_version: "TLSv1.3"
 		},
 		tags
@@ -162,8 +154,6 @@ export const postgresInstance = Effect.fn(function* (
 			]
 		},
 		{
-			// The admin scripts (`db:push:programs`, `db:migrate`) read the master credential under the
-			// same OIDC role; the app itself never does.
 			Sid: "PostgresAdminSecret",
 			Effect: "Allow",
 			Action: ["secretsmanager:GetSecretValue"],

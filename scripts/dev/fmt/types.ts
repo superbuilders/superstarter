@@ -13,5 +13,14 @@ export type BlankLineViolation = Readonly<{
 	end: number
 }>
 
+/** A comment the formatter deletes, with the text its deletion takes: its line when it stands alone, the
+ * spaces beside it otherwise. */
+export type CommentRemoval = Readonly<{
+	file: string
+	line: number
+	start: number
+	end: number
+}>
+
 /** One edit to a file's text: the range it covers and the text that replaces it. */
 export type TextEdit = Readonly<{ start: number; end: number }>

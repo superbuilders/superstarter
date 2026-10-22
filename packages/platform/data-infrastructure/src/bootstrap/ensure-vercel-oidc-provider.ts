@@ -40,7 +40,6 @@ export const ensureVercelOidcProvider = Effect.fn(function* (
 	yield* iam.createOpenIDConnectProvider({
 		Url: `https://${issuer}`,
 		ClientIDList: [audience],
-		// No Project tag: the provider serves every project of the team in this account.
 		Tags: [{ Key: "Stage", Value: requiredTags("shared").Stage }]
 	})
 })
