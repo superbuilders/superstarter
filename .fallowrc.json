@@ -1,7 +1,7 @@
 {
 	"$schema": "./node_modules/fallow/schema.json",
 	"entry": ["packages/platform/data-infrastructure/alchemy.run.ts"],
-	"ignorePatterns": ["out/**", "scripts/dev/lint/fixtures/**"],
+	"ignorePatterns": ["out/**", "scripts/dev/lint/fixtures/**", "scripts/dev/style/fixtures/**"],
 	"ignoreExports": [
 		{
 			"file": "packages/product/nextjs-app/src/ui/**",

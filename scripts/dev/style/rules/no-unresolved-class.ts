@@ -1,34 +1,12 @@
-import { Array as Arr, Option, String as Str } from "effect"
-import { COLOR_UTILITIES } from "#scripts/dev/style/design-system.ts"
-import type {
-	Candidate,
-	ClassLocation,
-	ClassRule,
-	DesignSystem,
-	StyleViolation
-} from "#scripts/dev/style/types.ts"
+import { Array as Arr, Option, Order, String as Str } from "effect"
+import { type ClassSaying, perClass } from "#scripts/dev/style/rules/per-class.ts"
+import type { ExplainedClass, Theme } from "#scripts/dev/style/types.ts"
 
 const MAX_LEVENSHTEIN_DISTANCE = 2
 
-/** Only the namespaces where the theme defines custom tokens can tell a typo from a built-in value. */
-const themeNamespaceOf = (root: string): string | undefined => {
-	if (Arr.contains(COLOR_UTILITIES, root)) {
-		return "--color"
-	}
-	if (root === "animate" || root === "ease") {
-		return `--${root}`
-	}
-	if (root === "rounded" || Str.startsWith("rounded-")(root)) {
-		return "--radius"
-	}
-	if (root === "shadow" || root === "drop-shadow") {
-		return "--shadow"
-	}
-	if (root === "inset-shadow") {
-		return "--inset-shadow"
-	}
-	return Str.startsWith("font")(root) ? "--font" : undefined
-}
+/** Tailwind's `group` and `peer` markers compile to no CSS of their own: the group-* and peer-* variants select
+ * the element that carries them. */
+const VARIANT_ANCHOR = /^(group|peer)(\/[\w-]+)?$/
 
 /** One row of the edit-distance table: the distances from the first `i` characters of `a`, whose last is
  * `character`, to every prefix of `b`; undefined when the previous row is too short. */
@@ -68,91 +46,55 @@ const levenshtein = (a: string, b: string): number => {
 	return distance === undefined ? a.length + b.length : distance
 }
 
-const closestOf = (input: string, candidates: Iterable<string>): string | undefined => {
-	let closest: string | undefined = undefined
-	let closestDistance = MAX_LEVENSHTEIN_DISTANCE + 1
-	for (const candidate of candidates) {
-		const distance = levenshtein(input, candidate)
-		if (distance < closestDistance) {
-			closestDistance = distance
-			closest = candidate
-		}
-	}
-	return closest
-}
+const closestOf = (typed: string, tokens: ReadonlyArray<string>): Option.Option<string> =>
+	Option.filter(
+		Arr.head(Arr.sortWith(tokens, (token) => levenshtein(typed, token), Order.Number)),
+		(token) => levenshtein(typed, token) <= MAX_LEVENSHTEIN_DISTANCE
+	)
 
-/** "hover:bg-prmary" with root "bg" and suggestion "primary" becomes "hover:bg-primary". */
-const suggestionOf = (className: string, root: string, value: string): string => {
+/** "hover:bg-prmary" with root "bg" and the token "primary" becomes "hover:bg-primary". */
+const correctedOf = (className: string, root: string, token: string): string => {
 	const prefix = Option.match(Str.lastIndexOf(root)(className), {
 		onNone: () => "",
 		onSome: (index) => Str.slice(0, index)(className)
 	})
-	return `${prefix}${root}-${value}`
+	return `${prefix}${root}-${token}`
 }
 
-/**
- * Why a class does not resolve, from the theme's namespaces; undefined when it is most likely a bare-value
- * utility that the design system cannot resolve rather than a mistake.
- */
-const diagnose = (
-	location: ClassLocation,
-	candidate: Candidate,
-	system: DesignSystem
-): string | undefined => {
+/** A hint for a class that does not compile, from the theme: an empty vocabulary means a broken @theme chain, a
+ * close token name a typo. A root that takes bare values only has no hint. */
+const hintOf = ({ candidate, text }: ExplainedClass, theme: Theme): Option.Option<string> => {
 	if (candidate.kind !== "functional" || candidate.value?.kind !== "named") {
-		return undefined
+		return Option.none()
 	}
-	const root = candidate.root
+	const { root } = candidate
 	const typed = candidate.value.value
-	const namespace = themeNamespaceOf(root)
-	if (namespace === undefined) {
-		return undefined
-	}
-	if (namespace === "--color") {
-		const closest = closestOf(typed, system.allColors)
-		return closest === undefined
-			? undefined
-			: `did you mean "${suggestionOf(location.text, root, closest)}"?`
-	}
-	const tokens = system.themeNamespaces.get(namespace)
-	if (tokens === undefined) {
-		return `no ${Str.slice(2)(namespace)} tokens found in design system — check @theme import chain`
-	}
-	if (tokens.has(typed)) {
-		return undefined
-	}
-	const closest = closestOf(
-		typed,
-		Arr.filter(Arr.fromIterable(tokens), (token) => token !== null)
-	)
-	return closest === undefined
-		? undefined
-		: `did you mean "${suggestionOf(location.text, root, closest)}"?`
+	return Option.flatMap(Option.fromUndefinedOr(theme.vocabularies.get(root)), (vocabulary) => {
+		if (!Arr.isReadonlyArrayNonEmpty(vocabulary.tokens)) {
+			return Option.some(
+				`The design system has no ${Arr.join(vocabulary.namespaces, " or ")} tokens: check the @theme import chain.`
+			)
+		}
+		return Option.map(
+			closestOf(typed, vocabulary.tokens),
+			(token) => `Did you mean "${correctedOf(text, root, token)}"?`
+		)
+	})
 }
 
 /**
- * Every Tailwind class must compile to CSS. A class that does not, and parses as Tailwind syntax, is diagnosed
- * against the theme: an empty namespace means a broken @theme chain, a close token name means a typo.
+ * Every class compiles to CSS. A class that does not is reported whatever it looks like; the theme's hint, when
+ * there is one, is a suggestion, not the reason to report.
  */
-export const noUnresolvedClass: ClassRule = ({ classes, system }) => {
-	const resolved = system.resolvesToCss(Arr.map(classes, (location) => location.text))
-	const violations: Array<StyleViolation> = []
-	for (const [index, location] of classes.entries()) {
-		const candidate = system.parseCandidate(location.text)[0]
-		if (resolved[index] === true || candidate === undefined) {
-			continue
-		}
-		const detail = diagnose(location, candidate, system)
-		if (detail !== undefined) {
-			violations.push({
-				file: location.file,
-				line: location.line,
-				column: location.column,
-				rule: "no-unresolved-class",
-				message: `Class "${location.text}" — ${detail}`,
-				className: location.text
-			})
-		}
+export const noUnresolvedClass = perClass((explained, theme) => {
+	if (explained.compiled !== undefined || VARIANT_ANCHOR.test(explained.text)) {
+		return Option.none()
 	}
-	return violations
-}
+	const message = `Class "${explained.text}" does not compile.`
+	return Option.some(
+		Option.match(hintOf(explained, theme), {
+			onNone: (): ClassSaying => ({ message }),
+			onSome: (suggestion): ClassSaying => ({ message, suggestion })
+		})
+	)
+})

@@ -2,9 +2,12 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
-import * as todos from "@superstarter/database/queries/todos"
-import type { PreparedPostgresStatement } from "@superstarter/database/query/contracts"
-import { Array as Arr, Effect, FileSystem, Predicate, Record, Result, String as Str } from "effect"
+import { TODO_STATEMENTS } from "@superstarter/database/queries/todos"
+import type {
+	PostgresResultSchema,
+	PreparedPostgresStatement
+} from "@superstarter/database/query/contracts"
+import { Array as Arr, Effect, FileSystem, Option, Record, String as Str } from "effect"
 import * as ts from "typescript/unstable/ast"
 import type { Checker, Project } from "typescript/unstable/sync"
 import {
@@ -25,7 +28,7 @@ import { borrowPreparedDatabase } from "#integration/prepared-target.ts"
  * inferred parameter type per bound parameter, and a resolved result row.
  */
 
-/** A declared statement factory: its module path and the exported name. */
+/** A declared statement: its module path and the plan name its declaration spells. */
 type Declared = Readonly<{ path: string; name: string }>
 
 /** A `.prepare` call that does not sit inside a `preparePostgresStatement` factory's callback, or
@@ -42,16 +45,23 @@ const isFactoryCall = (node: ts.Node): node is ts.CallExpression =>
 	ts.isIdentifier(node.expression) &&
 	node.expression.text === "preparePostgresStatement"
 
-/** `const name = preparePostgresStatement(...)`: one declared statement factory. */
-const factoryNameOf = (node: ts.Node): string | undefined => {
-	if (
-		!ts.isVariableDeclaration(node) ||
-		!ts.isIdentifier(node.name) ||
-		node.initializer === undefined
-	) {
-		return undefined
+/** `preparePostgresStatement({ name: "…", … })`: the plan name one declaration spells. */
+const planNameOf = (node: ts.Node): Option.Option<string> => {
+	if (!isFactoryCall(node)) {
+		return Option.none()
 	}
-	return isFactoryCall(node.initializer) ? node.name.text : undefined
+	const [plan] = node.arguments
+	if (plan === undefined || !ts.isObjectLiteralExpression(plan)) {
+		return Option.none()
+	}
+	return Arr.findFirst(plan.properties, (property) =>
+		ts.isPropertyAssignment(property) &&
+		ts.isIdentifier(property.name) &&
+		property.name.text === "name" &&
+		ts.isStringLiteral(property.initializer)
+			? Option.some(property.initializer.text)
+			: Option.none()
+	)
 }
 
 /** The `prepare` the call resolves to is Drizzle pg-core's own method: a query builder's, never a
@@ -99,9 +109,9 @@ const discoverSource = (
 				stray.push({ path: input.path, line: line + 1, reason })
 			}
 		}
-		const name = factoryNameOf(node)
-		if (name !== undefined) {
-			declared.push({ path: input.path, name })
+		const name = planNameOf(node)
+		if (Option.isSome(name)) {
+			declared.push({ path: input.path, name: name.value })
 		}
 		node.forEachChild(visit)
 	}
@@ -159,28 +169,21 @@ const discover = Effect.flatMap(packageConfigs, (configs) =>
 	})
 )
 
-/** A statement module's export that the factory built: it carries the native plan name. */
-const isStatement = (value: unknown): value is PreparedPostgresStatement<ReadonlyArray<unknown>> =>
-	Predicate.hasProperty(value, "statementName") &&
-	Predicate.isString(value.statementName) &&
-	Predicate.hasProperty(value, "handleOf") &&
-	Predicate.isFunction(value.handleOf)
-
-/** The statement modules, statically imported by source path: the one place a new module is
- * registered, which the source scan checks against (a declared factory in a module missing here,
- * or a module here without a factory, fails the suite). */
-const statementModules: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
-	"packages/data/database/src/queries/todos.ts": todos
+/** Each statement module's roster, keyed by source path: the one place a new module is
+ * registered, which the source scan checks against (a declaration missing from its module's roster,
+ * or a rostered statement without a declaration, fails the suite). */
+const STATEMENT_ROSTERS: Readonly<
+	Record<string, ReadonlyArray<PreparedPostgresStatement<PostgresResultSchema>>>
+> = {
+	"packages/data/database/src/queries/todos.ts": TODO_STATEMENTS
 }
 
-/** Every exported statement of every registered module, keyed by path and export name, recognised
- * by the `statementName` the factory attaches. */
-const exportedStatements = () =>
-	Arr.flatMap(Record.toEntries(statementModules), ([path, module]) =>
-		Arr.filterMap(Record.toEntries(module), ([name, value]) =>
-			isStatement(value) ? Result.succeed([`${path}#${name}`, value] as const) : Result.failVoid
-		)
-	)
+/** Every rostered statement, keyed by its module path and plan name. */
+const rosteredStatements: ReadonlyArray<
+	readonly [string, PreparedPostgresStatement<PostgresResultSchema>]
+> = Arr.flatMap(Record.toEntries(STATEMENT_ROSTERS), ([path, roster]) =>
+	Arr.map(roster, (statement) => [`${path}#${statement.name}`, statement] as const)
+)
 
 /** The scan's findings against the registry: every check the suite makes before it connects. */
 const assertRegistry = (
@@ -196,16 +199,15 @@ const assertRegistry = (
 	assert.ok(Arr.isReadonlyArrayNonEmpty(declared), "the source scan found statement factories")
 	assertSameMembers({
 		actual: Arr.dedupe(Arr.map(declared, ({ path }) => path)),
-		expected: Record.keys(statementModules),
+		expected: Record.keys(STATEMENT_ROSTERS),
 		where: "the scanned statement modules and the registered ones"
 	})
-	const statements = exportedStatements()
 	assertSameMembers({
-		actual: Arr.map(statements, ([key]) => key),
+		actual: Arr.map(rosteredStatements, ([key]) => key),
 		expected: Arr.map(declared, ({ path, name }) => `${path}#${name}`),
-		where: "declared factories and exported statements"
+		where: "declared statements and rostered ones"
 	})
-	return statements
+	return rosteredStatements
 }
 
 void test(
@@ -227,7 +229,7 @@ void test(
 									Effect.asVoid(
 										preparedOnce({
 											database,
-											query: statement.handleOf(database, database.$client).getQuery()
+											query: statement.build(database, statement.name).getQuery()
 										})
 									)
 								)

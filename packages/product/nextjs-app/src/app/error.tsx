@@ -15,7 +15,7 @@ export default function RootError({
 		captureProductException(error, { boundary: "root" })
 	}, [error])
 	return (
-		<main className="flex min-h-dvh items-center justify-center p-6">
+		<main data-slot="root-error" className="flex min-h-dvh items-center justify-center p-6">
 			<section className="flex w-full max-w-md flex-col gap-4 rounded-lg border p-8">
 				<p className="text-lg font-semibold" role="alert">
 					Something went wrong.

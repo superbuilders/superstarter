@@ -1,15 +1,16 @@
 import { ExportResultCode } from "@opentelemetry/core"
 import { Array as Arr, Cause, Effect, Exit, Schema } from "effect"
+import type { ExportHealth } from "#export-health.ts"
 import type { Completion, OtlpSignal } from "#otlp-batch.ts"
 
 /** The reasons of the settled promises that rejected. */
-export const rejectedReasons = (results: readonly PromiseSettledResult<unknown>[]): unknown[] =>
+const rejectedReasons = (results: readonly PromiseSettledResult<unknown>[]): unknown[] =>
 	Arr.flatMap(results, (result): ReadonlyArray<unknown> =>
 		result.status === "rejected" ? [result.reason] : []
 	)
 
 /** One settlement of every pending promise, never short-circuited by the first rejection. */
-export const settled = (promises: readonly Promise<unknown>[]) =>
+const settled = (promises: readonly Promise<unknown>[]) =>
 	Effect.promise(() => Promise.allSettled(promises))
 
 /** How a drain pass ends an owner's pending work: flushing it, or closing for good. */
@@ -19,7 +20,7 @@ export type FlushMethod = "forceFlush" | "shutdown"
 type FlushSignal = OtlpSignal | "all"
 
 /** A drain or shutdown of a telemetry owner left a signal, an exporter or an export unsettled. */
-export class TelemetryFlushFailure extends Schema.TaggedError<
+class TelemetryFlushFailure extends Schema.TaggedError<
 	TelemetryFlushFailure,
 	{ readonly brand: unique symbol }
 >()("TelemetryFlushFailure", {
@@ -110,18 +111,40 @@ export type DrainLifecycle = Readonly<{
 	shutdown: () => Promise<void>
 }>
 
+/** One owner of pending telemetry: its signal, the ledger of its exports, the pipeline's export
+ * health, and the native steps one drain pass settles for a method, in order. */
+export type DrainOwner = Readonly<{
+	signal: FlushSignal
+	ledger: ExportLedger
+	health: ExportHealth
+	steps: (method: FlushMethod) => ReadonlyArray<() => Promise<unknown>>
+}>
+
+/** One drain pass: each native step settles before the next starts, then the ledger's receipt is
+ * taken. Every rejection and failed export is a cause; the pass is recorded either way. */
+const passOf =
+	(owner: DrainOwner) =>
+	(method: FlushMethod): Effect.Effect<void, TelemetryFlushFailure> =>
+		Effect.gen(function* () {
+			const native = yield* Effect.forEach(owner.steps(method), (step) =>
+				settled([Promise.resolve().then(step)])
+			)
+			const failed = yield* owner.ledger.receipt
+			const causes = [...rejectedReasons(Arr.flatten(native)), ...failed]
+			owner.health.observeFlush({ signal: owner.signal, method, causes })
+			if (Arr.isArrayNonEmpty(causes)) {
+				return yield* TelemetryFlushFailure.make({ signal: owner.signal, method, causes })
+			}
+		})
+
 /** Flushes coalesce into the next pass that has not started. Shutdown runs once: it flushes, then
  * runs the shutdown pass, and every later flush or shutdown answers with its receipt. */
-export const drainLifecycle = (
-	owner: Readonly<{
-		signal: FlushSignal
-		pass: (method: FlushMethod) => Effect.Effect<void, TelemetryFlushFailure>
-	}>
-): DrainLifecycle => {
-	const drain = coalescedFlush(() => Effect.runPromise(owner.pass("forceFlush")))
+export const drainLifecycle = (owner: DrainOwner): DrainLifecycle => {
+	const pass = passOf(owner)
+	const drain = coalescedFlush(() => Effect.runPromise(pass("forceFlush")))
 	const close = Effect.gen(function* () {
 		const flushed = yield* settled([drain()])
-		const closed = yield* Effect.exit(owner.pass("shutdown"))
+		const closed = yield* Effect.exit(pass("shutdown"))
 		const causes = [
 			...rejectedReasons(flushed),
 			...(Exit.isFailure(closed) ? [Cause.squash(closed.cause)] : [])

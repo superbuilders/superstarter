@@ -53,27 +53,13 @@ export const exitCodecOf = <S extends WireSchema, E extends WireSchema>(
 		Schema.Exit(contract.success, Schema.Union([contract.error, ActionFailed]), Schema.Never)
 	)
 
-const callActionOf = <P extends WireSchema, S extends WireSchema, E extends WireSchema>(
-	contract: ActionContract<P, S, E>,
-	action: ServerAction<P>
-) => {
-	const encodePayload = Schema.encodeEffect(contract.payload)
-	const decodeExit = Schema.decodeUnknownEffect(exitCodecOf(contract))
-	return (
-		payload: P["Type"]
-	): Effect.Effect<S["Type"], E["Type"] | ActionFailed | ActionUnconfirmed> =>
-		encodePayload(payload).pipe(
-			Effect.orDie,
-			Effect.flatMap((encoded) =>
-				Effect.tryPromise({ try: () => action(encoded), catch: () => ActionUnconfirmed.make({}) })
-			),
-			Effect.flatMap((wire) => decodeExit(wire).pipe(Effect.orDie)),
-			Effect.flatten
-		)
-}
+/** What a server action's promise settled as: the wire it answered, or the reason it rejected. */
+type Answer =
+	| Readonly<{ kind: "answered"; wire: Schema.Json }>
+	| Readonly<{ kind: "rejected"; cause: unknown }>
 
 /** The client's view of a server action: an Effect that fails with the contract's own errors. */
-export const callAction: {
+type CallAction = {
 	<P extends WireSchema, S extends WireSchema, E extends WireSchema>(
 		action: ServerAction<P>
 	): (
@@ -85,4 +71,47 @@ export const callAction: {
 		contract: ActionContract<P, S, E>,
 		action: ServerAction<P>
 	): (payload: P["Type"]) => Effect.Effect<S["Type"], E["Type"] | ActionFailed | ActionUnconfirmed>
-} = Fn.dual(2, callActionOf)
+}
+
+/**
+ * The client for one host. A rejected action promise is one of two things: the host's own control
+ * signal (Next's redirect or notFound), which leaves as a defect so the host's boundary acts on it,
+ * or a request that never answered, which is `ActionUnconfirmed`. The host recognizes its signals;
+ * the contracts stay host-neutral.
+ */
+export const makeActionClient = (isHostSignal: (cause: unknown) => boolean): CallAction =>
+	Fn.dual(
+		2,
+		<P extends WireSchema, S extends WireSchema, E extends WireSchema>(
+			contract: ActionContract<P, S, E>,
+			action: ServerAction<P>
+		) => {
+			const encodePayload = Schema.encodeEffect(contract.payload)
+			const decodeExit = Schema.decodeUnknownEffect(exitCodecOf(contract))
+			const settle = (
+				answer: Answer
+			): Effect.Effect<S["Type"], E["Type"] | ActionFailed | ActionUnconfirmed> => {
+				if (answer.kind === "answered") {
+					return decodeExit(answer.wire).pipe(Effect.orDie, Effect.flatten)
+				}
+				return isHostSignal(answer.cause)
+					? Effect.die(answer.cause)
+					: Effect.fail(ActionUnconfirmed.make({}))
+			}
+			return (
+				payload: P["Type"]
+			): Effect.Effect<S["Type"], E["Type"] | ActionFailed | ActionUnconfirmed> =>
+				encodePayload(payload).pipe(
+					Effect.orDie,
+					Effect.flatMap((encoded) =>
+						Effect.promise(() =>
+							action(encoded).then(
+								(wire): Answer => ({ kind: "answered", wire }),
+								(cause: unknown): Answer => ({ kind: "rejected", cause })
+							)
+						)
+					),
+					Effect.flatMap(settle)
+				)
+		}
+	)

@@ -6,38 +6,40 @@
 	"globalEnv": ["SUPERSTARTER_CHECK_RUNTIME", "NODE_OPTIONS", "NODE_ENV"],
 	"tasks": {
 		"//#typecheck:tooling": {
-			"description": "Hash the root compiler's include tree, conservatively retaining workspace compiler source and manifests for transitive resolution.",
+			"description": "Hash the root compiler's include tree: the tooling under scripts/, which imports no workspace package (the repository superlint's program isolation refuses one). The rule fixtures compile in programs of their own.",
 			"inputs": [
 				"scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
-				"packages/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
 				"tsconfig.json",
 				"package.json",
-				"!**/{node_modules,.next,.turbo,dist,out,.output}/**",
-				"!**/next-env.d.ts"
+				"!scripts/dev/{lint,style}/fixtures/**",
+				"!**/{node_modules,.turbo,out}/**"
 			],
 			"outputs": []
 		},
 		"//#lint:repository": {
-			"description": "Hash root compiler source, transitive workspace source and ownership manifests inspected by repository rules.",
+			"description": "Hash the tooling's source and the root manifest the repository rules read; program isolation keeps every workspace package out of this program, and the rule fixtures compile in programs of their own.",
 			"inputs": [
 				"scripts/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
-				"packages/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc}",
 				"tsconfig.json",
 				"package.json",
-				"!**/{node_modules,.next,.turbo,dist,out,.output}/**",
-				"!**/next-env.d.ts"
+				"!scripts/dev/{lint,style}/fixtures/**",
+				"!**/{node_modules,.turbo,out}/**"
 			],
 			"outputs": []
 		},
 		"//#lint:fixtures": {
-			"description": "Hash superlint, its rules and their fixtures, and the oxlint plugin's rules and their RuleTester cases: every rule must report exactly its fixtures' marked lines and its invalid cases.",
+			"description": "Hash superlint and the style linter with their rules and fixtures, the app's design system and class helper the style fixtures compile against, and the oxlint plugin's rules and their RuleTester cases: every rule must report exactly its fixtures' marked lines and its invalid cases.",
 			"inputs": [
 				"scripts/dev/lint.ts",
 				"scripts/dev/lint/**",
+				"scripts/dev/style.ts",
+				"scripts/dev/style/**",
 				"scripts/dev/oxlint-plugin.ts",
 				"scripts/dev/oxlint/**",
 				"scripts/dev/shared/**",
-				"scripts/dev/devtool-failure.ts",
+				"packages/product/nextjs-app/components.json",
+				"packages/product/nextjs-app/src/styles/**",
+				"packages/product/nextjs-app/src/lib/cn.ts",
 				"tsconfig.json",
 				"package.json"
 			],
@@ -66,16 +68,12 @@
 			"outputs": []
 		},
 		"//#style:check": {
-			"dependsOn": ["@superstarter/nextjs-app#typegen"],
-			"description": "Preserve Git-visible inventory membership and conservative compiler/design-system dependencies, excluding non-operands; typegen owns production declarations and JIT hashes independent dev declarations.",
+			"description": "Hash every Git-visible operand of the app's program (its source and the workspace packages it loads) and of the design system, excluding non-operands and the rule fixtures. Class analysis reads no generated route declaration, so typegen is no dependency.",
 			"inputs": [
 				"$TURBO_DEFAULT$",
 				"!**/*.{md,txt,png,jpg,jpeg,webp,avif,gif,ico,svg,mp3,wav,ogg,mp4,webm,pdf,sql,yml,yaml,jsonl,ndjson,log,har,patch}",
-				"!**/.turbo/**",
-				{
-					"mode": "jit",
-					"globs": ["packages/product/nextjs-app/.next/dev/types/**/*.ts"]
-				}
+				"!scripts/dev/{lint,style}/fixtures/**",
+				"!**/.turbo/**"
 			],
 			"outputs": []
 		},
@@ -122,14 +120,20 @@
 				"$TURBO_DEFAULT$",
 				"$TURBO_ROOT$/scripts/dev/lint.ts",
 				"$TURBO_ROOT$/scripts/dev/lint/**",
+				"!$TURBO_ROOT$/scripts/dev/lint/fixtures/**",
 				"$TURBO_ROOT$/scripts/dev/shared/**",
-				"$TURBO_ROOT$/scripts/dev/devtool-failure.ts",
 				"$TURBO_ROOT$/tsconfig.json"
 			],
 			"outputs": []
 		},
+		"//#db:test": {
+			"description": "Rebuilds the local cluster's throwaway superstarter_test database from the migrations, once per test run, before any suite reads it.",
+			"cache": false,
+			"outputs": []
+		},
 		"test": {
-			"description": "Integration suites against the local cluster's throwaway database, which each run rebuilds from the migrations; the database is their input, so they never cache.",
+			"description": "Integration suites against the throwaway database //#db:test just rebuilt; the database is their input, so they never cache.",
+			"dependsOn": ["//#db:test"],
 			"cache": false,
 			"outputs": []
 		}

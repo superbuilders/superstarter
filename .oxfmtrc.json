@@ -20,5 +20,9 @@
 	"sortTailwindcss": {
 		"stylesheet": "./packages/product/nextjs-app/src/styles/globals.css"
 	},
-	"ignorePatterns": ["packages/product/nextjs-app/src/ui/**", "scripts/dev/lint/fixtures/**"]
+	"ignorePatterns": [
+		"packages/product/nextjs-app/src/ui/**",
+		"scripts/dev/lint/fixtures/**",
+		"scripts/dev/style/fixtures/**"
+	]
 }

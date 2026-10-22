@@ -13,9 +13,11 @@ import {
 	posthogExportRequests
 } from "@superstarter/operational-telemetry/destination"
 import { makeLocalTelemetryFiles } from "@superstarter/operational-telemetry/file-export"
-import type { MetricCadence } from "@superstarter/operational-telemetry/metrics"
-import type { OperationalExporters, RequestDrain } from "@superstarter/operational-telemetry/remote"
-import type { OperationalMetricExportHost } from "@superstarter/operational-telemetry/schema"
+import type { OperationalExporters } from "@superstarter/operational-telemetry/remote"
+import type {
+	FunctionDeadline,
+	TelemetryLifetime
+} from "@superstarter/operational-telemetry/schema"
 import { serializeEvidence } from "@superstarter/operational-telemetry/span-export"
 import { getDeadline } from "@vercel/functions"
 import { type Cause, Context, DateTime, Effect, Layer } from "effect"
@@ -23,26 +25,20 @@ import { PostHog } from "posthog-node"
 import { telemetryBackend } from "#env.ts"
 
 /** The function's deadline as Vercel publishes it to the invocation, when it does. */
-const observeFunctionHost = (): OperationalMetricExportHost => {
+const observeFunctionDeadline = (): FunctionDeadline => {
 	const deadline = getDeadline()
-	return {
-		kind: "function",
-		deadline:
-			deadline === undefined
-				? { kind: "unavailable" }
-				: { kind: "observed", atMilliseconds: deadline.getTime() }
-	}
+	return deadline === undefined
+		? { kind: "unavailable" }
+		: { kind: "observed", atMilliseconds: deadline.getTime() }
 }
 
-/** One backend's exporters and who drains them at a request's end. The metric exporter exists
- * first, because the meter provider it feeds is what every exporter measures itself through:
- * `bind` hands that provider to the metric exporter and builds the trace and log exporters on it. */
+/** One backend's exporters and how long its telemetry lives. The metric exporter exists first,
+ * because the meter provider it feeds is what every exporter measures itself through: `bind`
+ * hands that provider to the metric exporter and builds the trace and log exporters on it. */
 type BackendExporters = Readonly<{
 	metrics: PushMetricExporter
-	cadence: MetricCadence
-	host: () => OperationalMetricExportHost
+	lifetime: TelemetryLifetime
 	bind: (meterProvider: MeterProvider) => OperationalExporters
-	requestDrain: RequestDrain
 }>
 
 /** One server exception and the coordinates it is reported with. */
@@ -73,10 +69,8 @@ const sinkOf = Effect.gen(function* () {
 		return TelemetrySink.of({
 			exporters: {
 				metrics: files.metrics,
-				cadence: "periodic",
-				host: () => ({ kind: "process" }),
-				bind: () => ({ traces: files.traces, logs: files.logs }),
-				requestDrain: "root-span"
+				lifetime: { kind: "process" },
+				bind: () => ({ traces: files.traces, logs: files.logs })
 			},
 			sendException: ({ error, properties }) =>
 				Effect.tryPromise(() =>
@@ -106,8 +100,7 @@ const sinkOf = Effect.gen(function* () {
 	return TelemetrySink.of({
 		exporters: {
 			metrics,
-			cadence: "invocation",
-			host: observeFunctionHost,
+			lifetime: { kind: "invocation", deadline: observeFunctionDeadline },
 			bind: (meterProvider) => {
 				metrics.setSelfObsMeterProvider(meterProvider)
 				return {
@@ -122,8 +115,7 @@ const sinkOf = Effect.gen(function* () {
 						selfObsMeterProvider: meterProvider
 					})
 				}
-			},
-			requestDrain: "host"
+			}
 		},
 		sendException: ({ error, properties }) =>
 			Effect.tryPromise(() => posthog.captureExceptionImmediate(error, undefined, properties))

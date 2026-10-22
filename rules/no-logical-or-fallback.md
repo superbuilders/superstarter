@@ -4,7 +4,7 @@ alwaysApply: true
 
 # No Logical OR Fallback
 
-`||` is banned as a fallback. Superlint `no-logical-or-fallback` allows it only as boolean logic in two places: the condition of an `if`, `while`, `do … while` or `for`, and the expression of a `return` statement.
+`||` is banned as a fallback. oxlint `superstarter/no-logical-or-fallback` allows it only as boolean logic in two places: the condition of an `if`, `while`, `do … while` or `for`, and the expression of a `return` statement.
 
 ## Why
 

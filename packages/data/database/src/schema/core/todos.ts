@@ -4,7 +4,7 @@ import {
 	type TodoTitle
 } from "@superstarter/todo-protocol/todos"
 import { sql } from "drizzle-orm"
-import { boolean, check, index, primaryKey, uuid, varchar } from "drizzle-orm/pg-core"
+import { boolean, check, primaryKey, uuid, varchar } from "drizzle-orm/pg-core"
 import { core } from "#schema/core/namespace.ts"
 
 export const coreTodos = core.table(
@@ -20,7 +20,6 @@ export const coreTodos = core.table(
 	(table) => [
 		primaryKey({ name: "todos_pk", columns: [table.id] }),
 		check("todos_id_v7_ck", sql`uuid_extract_version(${table.id}) = 7`),
-		check("todos_title_ck", sql`char_length(btrim(${table.title})) > 0`),
-		index("todos_completed_idx").on(table.completed)
+		check("todos_title_ck", sql`${table.title} ~ '^[^[:space:]](.*[^[:space:]])?$'`)
 	]
 )

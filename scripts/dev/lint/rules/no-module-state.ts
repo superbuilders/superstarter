@@ -1,8 +1,8 @@
 import { Array as Arr, Option, Result } from "effect"
 import * as ts from "typescript/unstable/ast"
 import type { Checker, Type } from "typescript/unstable/sync"
-import type { LintRule, RuleContext, Violation } from "#scripts/dev/lint/types.ts"
-import { violationAt } from "#scripts/dev/lint/violation.ts"
+import type { RuleContext, Visit } from "#scripts/dev/lint/types.ts"
+import type { Report } from "#scripts/dev/shared/finding.ts"
 
 /** Containers whose contents change in place; their Readonly views (`ReadonlyMap`, `ReadonlySet`, `ReadonlyArray`)
  * are values. */
@@ -111,12 +111,6 @@ const isReflectiveGlobalWrite = (node: ts.Node): node is ts.CallExpression => {
 	)
 }
 
-/**
- * A module holds no state that every request of the process shares. It refuses a module-level `let` or `var`, a
- * module-level constant whose type (by the checker) is a mutable container, and a write to the global object
- * unless the same file declares that global in `declare global`. There is one such declaration in the
- * application: the web runtime's anchor. See rules/no-module-state.md.
- */
 /** The mutable container a type holds, a union member included: a `Map`, `Set`, `WeakMap`, `WeakSet`, array or
  * tuple that is not readonly. */
 const mutableContainerOf = (checker: Checker, type: Type): Option.Option<string> =>
@@ -151,22 +145,49 @@ const sharedStateOf = (
 	)
 }
 
-/** Every module-level binding that holds shared state, ambient declarations aside. */
-const moduleBindingsOf = (
-	context: RuleContext
-): ReadonlyArray<Readonly<{ node: ts.Node; message: string }>> =>
-	Arr.flatMap(context.sourceFile.statements, (statement) => {
-		if (!ts.isVariableStatement(statement) || isAmbient(statement)) {
-			return []
-		}
-		const kind = bindingKindOf(statement)
-		return Arr.filterMap(statement.declarationList.declarations, (declaration) =>
-			Option.match(sharedStateOf(context, kind, declaration), {
-				onNone: () => Result.failVoid,
-				onSome: (message) => Result.succeed({ node: declaration.name, message })
-			})
-		)
-	})
+/** The module-level bindings of a variable statement that hold shared state, ambient declarations aside. */
+const moduleBindingsOf = (context: RuleContext, node: ts.Node): ReadonlyArray<Report> => {
+	if (!ts.isVariableStatement(node) || !ts.isSourceFile(node.parent) || isAmbient(node)) {
+		return []
+	}
+	const kind = bindingKindOf(node)
+	return Arr.filterMap(node.declarationList.declarations, (declaration) =>
+		Option.match(sharedStateOf(context, kind, declaration), {
+			onNone: () => Result.failVoid,
+			onSome: (message) =>
+				Result.succeed({ node: declaration.name, message, suggestion: SUGGESTION })
+		})
+	)
+}
+
+/** A write to the global object: to a property this module does not declare in `declare global`, or by
+ * reflection. */
+const globalWritesOf = (
+	declaredGlobals: ReadonlyArray<string>,
+	node: ts.Node
+): ReadonlyArray<Report> => {
+	const target = writtenTargetOf(node)
+	const property = target === undefined ? Option.none<string>() : globalPropertyOf(target)
+	if (Option.isSome(property) && !Arr.contains(declaredGlobals, property.value)) {
+		return [
+			{
+				node,
+				message: `Write to the global object's '${property.value}', which this module does not declare in \`declare global\`.`,
+				suggestion: SUGGESTION
+			}
+		]
+	}
+	if (isReflectiveGlobalWrite(node)) {
+		return [
+			{
+				node,
+				message: "Reflective write to the global object; its property cannot be checked.",
+				suggestion: SUGGESTION
+			}
+		]
+	}
+	return []
+}
 
 /**
  * A module holds no state that every request of the process shares. It refuses a module-level `let` or `var`, a
@@ -174,45 +195,7 @@ const moduleBindingsOf = (
  * unless the same file declares that global in `declare global`. There is one such declaration in the
  * application: the web runtime's anchor. See rules/no-module-state.md.
  */
-export const noModuleState: LintRule = (context: RuleContext) => {
-	const { sourceFile } = context
-	const violations: Array<Violation> = []
-	const declaredGlobals = declaredGlobalsOf(sourceFile)
-
-	const report = (input: Readonly<{ node: ts.Node; message: string }>): void => {
-		violations.push(
-			violationAt({
-				sourceFile,
-				node: input.node,
-				rule: "no-module-state",
-				message: input.message,
-				suggestion: SUGGESTION
-			})
-		)
-	}
-
-	for (const binding of moduleBindingsOf(context)) {
-		report(binding)
-	}
-
-	const walk = (node: ts.Node): void => {
-		const target = writtenTargetOf(node)
-		const property = target === undefined ? Option.none<string>() : globalPropertyOf(target)
-		if (Option.isSome(property) && !Arr.contains(declaredGlobals, property.value)) {
-			report({
-				node,
-				message: `Write to the global object's '${property.value}', which this module does not declare in \`declare global\`.`
-			})
-		}
-		if (isReflectiveGlobalWrite(node)) {
-			report({
-				node,
-				message: "Reflective write to the global object; its property cannot be checked."
-			})
-		}
-		node.forEachChild(walk)
-	}
-
-	walk(sourceFile)
-	return violations
+export const noModuleState: Visit = (context) => {
+	const declaredGlobals = declaredGlobalsOf(context.sourceFile)
+	return (node) => [...moduleBindingsOf(context, node), ...globalWritesOf(declaredGlobals, node)]
 }

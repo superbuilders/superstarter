@@ -1,16 +1,18 @@
 import type { Rule } from "#scripts/dev/oxlint/rule.ts"
 import { cognitiveComplexity } from "#scripts/dev/oxlint/rules/cognitive-complexity.ts"
-import { noAsTypeAssertion } from "#scripts/dev/oxlint/rules/no-as-type-assertion.ts"
 import { noEvolvingTypes } from "#scripts/dev/oxlint/rules/no-evolving-types.ts"
 import { noIife } from "#scripts/dev/oxlint/rules/no-iife.ts"
-import { noInstanceofError } from "#scripts/dev/oxlint/rules/no-instanceof-error.ts"
 import { noLiteralAttributeKey } from "#scripts/dev/oxlint/rules/no-literal-attribute-key.ts"
+import { noLogicalOrFallback } from "#scripts/dev/oxlint/rules/no-logical-or-fallback.ts"
 import { noNewError } from "#scripts/dev/oxlint/rules/no-new-error.ts"
 import { noNullishCoalescing } from "#scripts/dev/oxlint/rules/no-nullish-coalescing.ts"
+import { noOptionBridge } from "#scripts/dev/oxlint/rules/no-option-bridge.ts"
+import { noPointlessTypeAlias } from "#scripts/dev/oxlint/rules/no-pointless-type-alias.ts"
 import { noSvgWithoutTitle } from "#scripts/dev/oxlint/rules/no-svg-without-title.ts"
 import { noTry } from "#scripts/dev/oxlint/rules/no-try.ts"
 import { noUnusedTemplateLiteral } from "#scripts/dev/oxlint/rules/no-unused-template-literal.ts"
 import { noUselessContinue } from "#scripts/dev/oxlint/rules/no-useless-continue.ts"
+import { preferEarlyReturn } from "#scripts/dev/oxlint/rules/prefer-early-return.ts"
 import { telemetryOwnership } from "#scripts/dev/oxlint/rules/telemetry-ownership.ts"
 
 /**
@@ -26,17 +28,19 @@ const plugin: Readonly<{
 	meta: { name: "superstarter" },
 	rules: {
 		"cognitive-complexity": cognitiveComplexity,
-		"no-as-type-assertion": noAsTypeAssertion,
 		"no-evolving-types": noEvolvingTypes,
 		"no-iife": noIife,
-		"no-instanceof-error": noInstanceofError,
 		"no-literal-attribute-key": noLiteralAttributeKey,
+		"no-logical-or-fallback": noLogicalOrFallback,
 		"no-new-error": noNewError,
 		"no-nullish-coalescing": noNullishCoalescing,
+		"no-option-bridge": noOptionBridge,
+		"no-pointless-type-alias": noPointlessTypeAlias,
 		"no-svg-without-title": noSvgWithoutTitle,
 		"no-try": noTry,
 		"no-unused-template-literal": noUnusedTemplateLiteral,
 		"no-useless-continue": noUselessContinue,
+		"prefer-early-return": preferEarlyReturn,
 		"telemetry-ownership": telemetryOwnership
 	}
 }

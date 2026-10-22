@@ -11,7 +11,7 @@ export default function GlobalError({ error }: Readonly<{ error: unknown }>) {
 	}, [error])
 	return (
 		<html lang="en">
-			<body>
+			<body data-slot="global-error">
 				<NextError statusCode={0} />
 			</body>
 		</html>

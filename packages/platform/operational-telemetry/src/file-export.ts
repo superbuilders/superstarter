@@ -8,7 +8,7 @@ import {
 import type { LogRecordExporter } from "@opentelemetry/sdk-logs"
 import type { PushMetricExporter } from "@opentelemetry/sdk-metrics"
 import type { SpanExporter } from "@opentelemetry/sdk-trace-base"
-import { Effect, FileSystem, ManagedRuntime, Schema } from "effect"
+import { Effect, FileSystem, Schema } from "effect"
 import type { Completion } from "#otlp-batch.ts"
 
 /** The local sink, relative to the process's working directory: the app package under `next dev`,
@@ -29,15 +29,6 @@ class TelemetryFileWriteFailed extends Schema.TaggedError<
 
 const textDecoder = new TextDecoder()
 
-const appended = (stream: LocalStream, line: string) =>
-	Effect.gen(function* () {
-		const fileSystem = yield* FileSystem.FileSystem
-		yield* fileSystem.makeDirectory(LOCAL_TELEMETRY_DIRECTORY, { recursive: true })
-		yield* fileSystem.writeFileString(`${LOCAL_TELEMETRY_DIRECTORY}/${stream}.jsonl`, `${line}\n`, {
-			flag: "a"
-		})
-	})
-
 /** One line for one stream's file. */
 type LocalLine = Readonly<{ stream: LocalStream; line: string }>
 
@@ -51,11 +42,14 @@ export type LocalTelemetryFiles = Readonly<{
 
 /**
  * The local sink, built once by the host's runtime. The exporters run in SDK callbacks, outside any
- * Effect program, so the sink owns the file system its writes run on. Each file's writes go out one
- * at a time, in order, so no two lines interleave: the sink owns the tail of each file's queue.
+ * Effect program, so the sink holds the one file system service its writes run on, and makes its
+ * directory once, here; a machine that cannot is broken. Each file's writes go out one at a time,
+ * in order, so no two lines interleave: the sink owns the tail of each file's queue.
  */
-export const makeLocalTelemetryFiles: Effect.Effect<LocalTelemetryFiles> = Effect.sync(() => {
-	const files = ManagedRuntime.make(NodeFileSystem.layer)
+export const makeLocalTelemetryFiles: Effect.Effect<LocalTelemetryFiles> = Effect.gen(function* () {
+	const fileSystem = yield* FileSystem.FileSystem
+	yield* fileSystem.makeDirectory(LOCAL_TELEMETRY_DIRECTORY, { recursive: true })
+	const run = Effect.runPromiseWith(yield* Effect.context())
 	const tails = new Map<LocalStream, Promise<void>>()
 	const settledTail = (stream: LocalStream): Promise<void> => {
 		const tail = tails.get(stream)
@@ -63,7 +57,13 @@ export const makeLocalTelemetryFiles: Effect.Effect<LocalTelemetryFiles> = Effec
 	}
 	const append = (entry: LocalLine): Promise<void> => {
 		const written = settledTail(entry.stream).then(() =>
-			files.runPromise(appended(entry.stream, entry.line))
+			run(
+				fileSystem.writeFileString(
+					`${LOCAL_TELEMETRY_DIRECTORY}/${entry.stream}.jsonl`,
+					`${entry.line}\n`,
+					{ flag: "a" }
+				)
+			)
 		)
 		tails.set(
 			entry.stream,
@@ -126,5 +126,6 @@ export const makeLocalTelemetryFiles: Effect.Effect<LocalTelemetryFiles> = Effec
 			shutdown: () => settledTail("metrics")
 		},
 		append
-	}
-})
+	} satisfies LocalTelemetryFiles
+	// @effect-diagnostics-next-line strictEffectProvide:off
+}).pipe(Effect.provide(NodeFileSystem.layer), Effect.orDie)

@@ -1,28 +1,28 @@
 #!/usr/bin/env -S node
 
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Array as Arr, Console, Effect, FileSystem, Path, String as Str } from "effect"
-import { DevtoolFailure, exitWith, reportFailure } from "#scripts/dev/devtool-failure.ts"
+import { Array as Arr, Console, Effect, FileSystem, String as Str } from "effect"
 import { findBlankLineViolations, normalizeBlankLines } from "#scripts/dev/fmt/blank-lines.ts"
 import { findStrippableComments, stripComments } from "#scripts/dev/fmt/comments.ts"
 import { invocationOf } from "#scripts/dev/shared/arguments.ts"
+import { DevtoolFailure, runDevtool } from "#scripts/dev/shared/devtool.ts"
+import { statusOf } from "#scripts/dev/shared/finding.ts"
 import { configFileNames, nativeSession } from "#scripts/dev/shared/native-api.ts"
 import { parseSyntax, type SyntaxInput } from "#scripts/dev/shared/native-syntax.ts"
 import {
-	covers,
 	isGeneratedPath,
 	isTypeScriptPath,
 	isVendoredPath,
 	repositoryPath,
 	repositoryRoot
 } from "#scripts/dev/shared/repository.ts"
+import { selectFiles } from "#scripts/dev/shared/selection.ts"
 
 /**
  * The repository formatter's own rules, on top of oxfmt: every comment but JSDoc and tool directives is
- * stripped, then gofumpt's blank lines. Braces on every control-flow body are oxlint's `curly`. It formats the files of the root tsconfig and of every
- * workspace package's tsconfig, vendored shadcn (the app's src/ui) aside, or only the files at or
- * under explicit paths. Without `--write` it is a dry run that reports and exits 1 if anything would
- * change.
+ * stripped, then gofumpt's blank lines. Braces on every control-flow body are oxlint's `curly`. It formats the
+ * files of the root tsconfig and of every workspace package's tsconfig, vendored shadcn (the app's src/ui) aside,
+ * or only the files at or under explicit paths (a file no tsconfig selects is added). Without `--write` it is a
+ * dry run that reports and exits 1 if anything would change.
  */
 
 /** Removals inside one stripped comment's text land on the next pass; a few passes reach the fixed point. */
@@ -127,10 +127,8 @@ const workspaceConfigs = Effect.gen(function* () {
 
 const main = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem
-	const path = yield* Path.Path
 	const invocation = yield* invocationOf(["--write"])
 	const write = invocation.flags.has("--write")
-	const selected = Arr.map(invocation.paths, (argument) => path.resolve(argument))
 	const configs = yield* workspaceConfigs
 	const configured = yield* Effect.scoped(
 		Effect.flatMap(nativeSession({ cwd: repositoryRoot }), (api) =>
@@ -140,16 +138,13 @@ const main = Effect.gen(function* () {
 			)
 		)
 	)
-	const covered = Arr.isReadonlyArrayNonEmpty(selected)
-		? Arr.filter(configured, (file) =>
-				Arr.some(selected, (choice) => covers({ selected: choice, file }))
-			)
-		: configured
-	const extra = Arr.filter(
-		selected,
-		(file) => isTypeScriptPath(file) && !Arr.contains(configured, file)
-	)
-	const files = Arr.filter(Arr.dedupe([...covered, ...extra]), isFormattable)
+	const files = yield* selectFiles({
+		available: Arr.filter(
+			Arr.dedupe([...configured, ...Arr.filter(invocation.paths, isTypeScriptPath)]),
+			isFormattable
+		),
+		paths: invocation.paths
+	})
 	const inputs = yield* Effect.forEach(
 		files,
 		(file) =>
@@ -172,7 +167,7 @@ const main = Effect.gen(function* () {
 	const total = Arr.reduce(changed, 0, (sum, result) => sum + issuesOf(result))
 	if (!Arr.isReadonlyArrayNonEmpty(changed)) {
 		yield* Console.log("No formatting issues found.")
-		return
+		return 0
 	}
 	if (write) {
 		yield* Effect.forEach(
@@ -188,7 +183,7 @@ const main = Effect.gen(function* () {
 			{ concurrency: 16 }
 		)
 		yield* Console.log(`Fixed ${total} issue(s) in ${changed.length} file(s).`)
-		return
+		return 0
 	}
 	yield* Console.log(
 		Arr.join(
@@ -202,8 +197,7 @@ const main = Effect.gen(function* () {
 			"\n"
 		)
 	)
-	yield* exitWith(1)
-}).pipe(Effect.catchTag("DevtoolFailure", reportFailure))
+	return statusOf(changed)
+})
 
-// @effect-diagnostics-next-line strictEffectProvide:off
-NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))
+runDevtool(main)

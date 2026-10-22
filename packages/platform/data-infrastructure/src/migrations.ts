@@ -28,6 +28,12 @@ import { Array as Arr, Effect, Schema } from "effect"
 export const MigrationMode = Schema.Literals(["status", "apply"])
 export type MigrationMode = typeof MigrationMode.Type
 
+/** One run of a sanctioned operation: `status` reads, and only `apply` names the identity its
+ * programs grant the application login. */
+export type Migration =
+	| Readonly<{ mode: "status" }>
+	| Readonly<{ mode: "apply"; identity: PostgresAppIdentity }>
+
 /** The native migrator refused; its message names no credential or host. */
 class MigrationApplyRejected extends Schema.TaggedError<
 	MigrationApplyRejected,
@@ -93,10 +99,8 @@ const applyPending = (database: NativePostgresDatabase, identity: PostgresAppIde
 		yield* reportStatus(database)
 	})
 
-/** `status` or `apply` on one database, as the identity its application login authenticates with. */
-export const runMigration = (
-	input: Readonly<{ mode: MigrationMode; identity: PostgresAppIdentity }>
-) =>
-	input.mode === "status"
+/** One migration run on one database. */
+export const runMigration = (migration: Migration) =>
+	migration.mode === "status"
 		? reportStatus
-		: (database: NativePostgresDatabase) => applyPending(database, input.identity)
+		: (database: NativePostgresDatabase) => applyPending(database, migration.identity)

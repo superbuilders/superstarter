@@ -31,7 +31,7 @@ type RowProps = Readonly<{
 	onRemove?: (todo: Todo) => void
 }>
 
-const timestampFromUuidv7 = (id: string): Option.Option<DateTime.Utc> => { … }
+const parseInstant = (text: string): Option.Option<DateTime.Utc> => { … }
 ```
 
 `null` appears only where an outside system speaks it.

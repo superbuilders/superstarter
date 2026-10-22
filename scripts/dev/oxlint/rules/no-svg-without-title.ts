@@ -6,22 +6,17 @@ type JsxAttributeItem = NodeOf<"JSXOpeningElement">["attributes"][number]
 const attributeNamed = (
 	attributes: ReadonlyArray<JsxAttributeItem>,
 	name: string
-): NodeOf<"JSXAttribute"> | undefined =>
-	Option.getOrUndefined(
-		Arr.findFirst(
-			attributes,
-			(attribute): attribute is NodeOf<"JSXAttribute"> =>
-				attribute.type === "JSXAttribute" &&
-				attribute.name.type === "JSXIdentifier" &&
-				attribute.name.name === name
-		)
+): Option.Option<NodeOf<"JSXAttribute">> =>
+	Arr.findFirst(
+		attributes,
+		(attribute): attribute is NodeOf<"JSXAttribute"> =>
+			attribute.type === "JSXAttribute" &&
+			attribute.name.type === "JSXIdentifier" &&
+			attribute.name.name === name
 	)
 
 /** `aria-hidden`, `aria-hidden="true"` or `aria-hidden={true}`. */
-const isHidden = (attribute: NodeOf<"JSXAttribute"> | undefined): boolean => {
-	if (attribute === undefined) {
-		return false
-	}
+const isHidden = (attribute: NodeOf<"JSXAttribute">): boolean => {
 	const value = attribute.value
 	if (value === null) {
 		return true
@@ -37,10 +32,10 @@ const isHidden = (attribute: NodeOf<"JSXAttribute"> | undefined): boolean => {
 }
 
 const hasAccessibleName = (attributes: ReadonlyArray<JsxAttributeItem>): boolean => {
-	if (attributeNamed(attributes, "aria-label") !== undefined) {
+	if (Option.isSome(attributeNamed(attributes, "aria-label"))) {
 		return true
 	}
-	return attributeNamed(attributes, "aria-labelledby") !== undefined
+	return Option.isSome(attributeNamed(attributes, "aria-labelledby"))
 }
 
 const hasTitleChild = (element: NodeOf<"JSXElement">): boolean =>
@@ -62,10 +57,13 @@ export const noSvgWithoutTitle: CreateRule = {
 			}
 			const attributes = opening.attributes
 			const role = attributeNamed(attributes, "role")
-			const isImage = role?.value?.type === "Literal" && role.value.value === "img"
+			const isImage = Option.exists(
+				role,
+				(attribute) => attribute.value?.type === "Literal" && attribute.value.value === "img"
+			)
 			if (
 				hasTitleChild(node) ||
-				isHidden(attributeNamed(attributes, "aria-hidden")) ||
+				Option.exists(attributeNamed(attributes, "aria-hidden"), isHidden) ||
 				(isImage && hasAccessibleName(attributes))
 			) {
 				return

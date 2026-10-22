@@ -12,8 +12,9 @@ import {
 	Schema,
 	Stdio
 } from "effect"
-import { ChildProcess } from "effect/process"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { awsProfile, devFactoryCredentialsPath, homeDirectory } from "#env.ts"
+import { argumentsOf, exitWith } from "#script.ts"
 
 /** The DevFactory AWS portal's credential dump: one temporary session. The secrets stay redacted,
  * so no log line or failure can print them. */
@@ -29,11 +30,6 @@ const Arguments = Schema.TupleWithRest(Schema.Tuple([Schema.NonEmptyString]), [S
 
 /** A session that expires sooner than this would expire mid-command. */
 const MINIMUM_HEADROOM = Duration.seconds(60)
-
-class WithAwsUsage extends Schema.TaggedError<WithAwsUsage, { readonly brand: unique symbol }>()(
-	"WithAwsUsage",
-	{ usage: Schema.Literal("with-aws <command> [args...]") }
-) {}
 
 class DevFactoryCredentialsMissing extends Schema.TaggedError<
 	DevFactoryCredentialsMissing,
@@ -70,8 +66,7 @@ const program = Effect.gen(function* () {
 	const path = yield* Path.Path
 	const stdio = yield* Stdio.Stdio
 	const [command, ...args] = yield* stdio.args.pipe(
-		Effect.flatMap(Schema.decodeUnknownEffect(Arguments)),
-		Effect.mapError(() => WithAwsUsage.make({ usage: "with-aws <command> [args...]" }))
+		Effect.flatMap(argumentsOf(Arguments, "with-aws <command> [args...]"))
 	)
 	const shadowing = yield* awsProfile
 	if (Option.isSome(shadowing)) {
@@ -104,23 +99,24 @@ const program = Effect.gen(function* () {
 			args
 		})
 	)
-	const child = yield* ChildProcess.make(command, args, {
-		env: {
-			AWS_ACCESS_KEY_ID: Redacted.value(credentials.accessKeyId),
-			AWS_SECRET_ACCESS_KEY: Redacted.value(credentials.secretAccessKey),
-			AWS_SESSION_TOKEN: Redacted.value(credentials.sessionToken),
-			AWS_REGION
-		},
-		extendEnv: true,
-		stdin: "inherit",
-		stdout: "inherit",
-		stderr: "inherit"
-	})
-	const exitCode = yield* child.exitCode
-	yield* Effect.sync(() => {
-		process.exitCode = exitCode
-	})
+	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+	yield* spawner
+		.exitCode(
+			ChildProcess.make(command, args, {
+				env: {
+					AWS_ACCESS_KEY_ID: Redacted.value(credentials.accessKeyId),
+					AWS_SECRET_ACCESS_KEY: Redacted.value(credentials.secretAccessKey),
+					AWS_SESSION_TOKEN: Redacted.value(credentials.sessionToken),
+					AWS_REGION
+				},
+				extendEnv: true,
+				stdin: "inherit",
+				stdout: "inherit",
+				stderr: "inherit"
+			})
+		)
+		.pipe(Effect.flatMap(exitWith))
 })
 
 // @effect-diagnostics-next-line strictEffectProvide:off
-NodeRuntime.runMain(program.pipe(Effect.scoped, Effect.provide(NodeServices.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)))

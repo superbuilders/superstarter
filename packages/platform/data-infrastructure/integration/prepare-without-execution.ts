@@ -17,32 +17,16 @@ import { Effect } from "effect"
 /** The one native plan name every preparation takes; the inspection reads it back by this name. */
 const PREPARED_STATEMENT_NAME = "superstarter_integration_statement"
 
-/** One read-only transaction under a production role on the borrowed physical client: `use`
- * runs after the role is set, and `release` (a rollback first) returns the session as found. */
-const readOnlyUnderRole = <A, E>(
-	database: NativePostgresDatabase,
-	role: PostgresPrincipal,
-	use: Effect.Effect<A, E>,
-	release: Effect.Effect<unknown>
-) =>
-	Effect.acquireUseRelease(
-		Effect.promise(() => database.$client.query("BEGIN READ ONLY")),
-		() =>
-			Effect.promise(() => database.$client.query(`SET LOCAL ROLE ${role}`)).pipe(
-				Effect.andThen(use)
-			),
-		() => release
-	)
-
-const rollback = (database: NativePostgresDatabase) =>
-	Effect.promise(() => database.$client.query("ROLLBACK"))
+/** One statement against the borrowed session. */
+const sent = (database: NativePostgresDatabase, statement: string) =>
+	Effect.promise(() => database.$client.query(statement))
 
 /** Integration-only custody: parse the production SQL without EXECUTE or dummy values, under the
- * role that runs it in production, so its grants are part of what the parse proves. `inspect`
- * reads the prepared plan's catalog row inside the same read-only transaction, before the
- * rollback and DEALLOCATE release the session. A refusal is a defect carrying PostgreSQL's own
- * error, which names the missing column, grant or parameter type. Every subtest exclusively
- * borrows a physical client. */
+ * role that runs it in production, so its grants are part of what the parse proves, inside one
+ * read-only transaction. `inspect` reads the prepared plan's catalog row in that transaction. The
+ * subtest's own session closes when its borrow ends, which ends the transaction and the plan, so
+ * nothing is released here. A refusal is a defect carrying PostgreSQL's own error, which names the
+ * missing column, grant or parameter type. */
 const prepareWithoutExecution = <A, E>(
 	input: Readonly<{
 		database: NativePostgresDatabase
@@ -51,15 +35,12 @@ const prepareWithoutExecution = <A, E>(
 		inspect: (scope: PostgresQueryScope) => Effect.Effect<A, E>
 	}>
 ) =>
-	readOnlyUnderRole(
-		input.database,
-		input.role,
-		Effect.promise(() =>
-			input.database.$client.query(`PREPARE ${PREPARED_STATEMENT_NAME} AS ${input.statement}`)
-		).pipe(Effect.andThen(() => withPostgresStatement(input.database, input.inspect))),
-		rollback(input.database).pipe(
-			Effect.ensuring(Effect.promise(() => input.database.$client.query("DEALLOCATE ALL")))
-		)
+	sent(input.database, "BEGIN READ ONLY").pipe(
+		Effect.andThen(sent(input.database, `SET LOCAL ROLE ${input.role}`)),
+		Effect.andThen(
+			sent(input.database, `PREPARE ${PREPARED_STATEMENT_NAME} AS ${input.statement}`)
+		),
+		Effect.andThen(withPostgresStatement(input.database, input.inspect))
 	)
 
 /** The prepared plan's catalog row: how many parameter types PostgreSQL inferred, and whether it

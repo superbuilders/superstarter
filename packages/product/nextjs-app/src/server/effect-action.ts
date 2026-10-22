@@ -13,29 +13,66 @@ import {
 	type ServerActionName,
 	type WireSchema
 } from "@superstarter/todo-protocol/action"
-import { Cause, Effect, Exit, Function as Fn, Option, Result, Schema } from "effect"
-import { unstable_rethrow } from "next/navigation"
+import { Array as Arr, Cause, Effect, Exit, Function as Fn, Option, Schema } from "effect"
+import { isNextSignal } from "#lib/next-signal.ts"
 import { reportHandledFailure } from "#server/observability/request-error.ts"
 import type { TelemetrySink } from "#server/observability/sink.ts"
 import { runWeb, type WebServices } from "#server/runtime.ts"
 
-/** `redirect()` and `notFound()` throw Next's own signals; `unstable_rethrow` recognises them. */
-const isNextSignal = (defect: unknown): boolean =>
-	Result.isFailure(
-		Result.try(() => {
-			unstable_rethrow(defect)
-		})
-	)
-
 type ServerActionScope = OperationScope<typeof OPERATIONAL_SPANS.serverAction.name>
+
+type ServerActionResultKind =
+	(typeof OPERATIONAL_SPANS.serverAction.learned.Type)["superstarter.result.kind"]
+
+/** How one finished run leaves the action: its kind, and the Exit the wire carries (or Next's
+ * signal, raised again as itself). */
+type Crossing<S, E> = Readonly<{
+	kind: ServerActionResultKind
+	wire: Effect.Effect<Exit.Exit<S, E | ActionFailed>, never, OperationalTelemetry | TelemetrySink>
+}>
+
+/** The cause's one reason, when it has exactly one: a refusal or a signal speaks for a run only when
+ * nothing else went wrong beside it. */
+const soleReasonOf = <X>(cause: Cause.Cause<X>): Option.Option<Cause.Reason<X>> =>
+	cause.reasons.length === 1 ? Arr.head(cause.reasons) : Option.none()
+
+const errorOf = <X>(reason: Cause.Reason<X>): Option.Option<X> =>
+	Cause.isFailReason(reason) ? Option.some(reason.error) : Option.none()
+
+const defectOf = <X>(reason: Cause.Reason<X>): Option.Option<unknown> =>
+	Cause.isDieReason(reason) ? Option.some(reason.defect) : Option.none()
 
 /**
  * What crosses the wire for one finished run. Success crosses as it is, and so does a failure the
- * contract names: the contract is the allow-list of what the browser may see. A Next signal leaves
- * the action as itself so Next can act on it. Anything else (a failure the contract does not name,
- * a defect, an interruption) is reported once here and crosses only as the opaque `ActionFailed`,
- * so its message never reaches the browser.
+ * contract names when it is the run's only reason: the contract is the allow-list of what the
+ * browser may see. A Next signal leaves the action as itself so Next can act on it. Anything else (a
+ * failure the contract does not name, a refusal beside another failure, a defect, an interruption)
+ * is reported once here and crosses only as the opaque `ActionFailed`, so its message never reaches
+ * the browser.
  */
+const crossingOf = <S, E, X>(
+	name: ServerActionName,
+	isRefusal: (error: unknown) => error is E,
+	exit: Exit.Exit<S, X>
+): Crossing<S, E> => {
+	if (Exit.isSuccess(exit)) {
+		return { kind: "succeeded", wire: Effect.succeed(Exit.succeed(exit.value)) }
+	}
+	const sole = soleReasonOf(exit.cause)
+	const refusal = Option.filter(Option.flatMap(sole, errorOf), isRefusal)
+	if (Option.isSome(refusal)) {
+		return { kind: "refused", wire: Effect.succeed(Exit.fail(refusal.value)) }
+	}
+	const signal = Option.filter(Option.flatMap(sole, defectOf), isNextSignal)
+	if (Option.isSome(signal)) {
+		return { kind: "navigated", wire: Effect.die(signal.value) }
+	}
+	return {
+		kind: "failed",
+		wire: reportHandledFailure(name, exit.cause).pipe(Effect.as(Exit.fail(ActionFailed.make({}))))
+	}
+}
+
 const settledOf = <S, E, X>(
 	name: ServerActionName,
 	isRefusal: (error: unknown) => error is E,
@@ -45,29 +82,10 @@ const settledOf = <S, E, X>(
 	never,
 	ServerActionScope | OperationalTelemetry | TelemetrySink
 > => {
-	if (Exit.isSuccess(exit)) {
-		return annotateOperation(OPERATIONAL_SPANS.serverAction, {
-			"superstarter.result.kind": "succeeded"
-		}).pipe(Effect.as(Exit.succeed(exit.value)))
-	}
-	const refusal = Option.filter(Cause.findErrorOption(exit.cause), isRefusal)
-	if (Option.isSome(refusal)) {
-		return annotateOperation(OPERATIONAL_SPANS.serverAction, {
-			"superstarter.result.kind": "refused"
-		}).pipe(Effect.as(Exit.fail(refusal.value)))
-	}
-	const signal = Option.filter(Result.getSuccess(Cause.findDefect(exit.cause)), isNextSignal)
-	if (Option.isSome(signal)) {
-		return annotateOperation(OPERATIONAL_SPANS.serverAction, {
-			"superstarter.result.kind": "navigated"
-		}).pipe(Effect.andThen(Effect.die(signal.value)))
-	}
-	return reportHandledFailure(name, exit.cause).pipe(
-		Effect.andThen(
-			annotateOperation(OPERATIONAL_SPANS.serverAction, { "superstarter.result.kind": "failed" })
-		),
-		Effect.as(Exit.fail(ActionFailed.make({})))
-	)
+	const { kind, wire } = crossingOf(name, isRefusal, exit)
+	return annotateOperation(OPERATIONAL_SPANS.serverAction, {
+		"superstarter.result.kind": kind
+	}).pipe(Effect.andThen(wire))
 }
 
 const effectActionOf = <P extends WireSchema, S extends WireSchema, X>(

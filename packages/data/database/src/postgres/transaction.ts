@@ -1,10 +1,13 @@
 import { PostgresTransientFailure } from "@superstarter/todo-protocol/transient-failure"
-import { TransactionRollbackError } from "drizzle-orm/errors"
-import type { PgTransactionConfig } from "drizzle-orm/pg-core"
-import { Cause, Effect, Exit, Function as Fn } from "effect"
-import type { Client, PoolClient } from "pg"
+import { type SQL, sql } from "drizzle-orm"
+import { Cause, Effect, Exit, Function as Fn, Option, Schema } from "effect"
 import { postgresDiagnosticOf, transientReasonOf } from "#postgres/diagnostic.ts"
-import { observeStatement, observeTransaction } from "#postgres/observation.ts"
+import {
+	observeStatement,
+	observeTransaction,
+	type TransactionAccess
+} from "#postgres/observation.ts"
+
 import {
 	type NativePostgresDatabase,
 	type PostgresBuilder,
@@ -29,31 +32,23 @@ type ScopeRunner = {
 /** The one decode of an issued statement's or transaction's native failure: a transient SQLSTATE
  * becomes its own error, every other refusal keeps its admitted diagnostic. */
 const issueFailureOf =
-	(operation: PostgresTransientFailure["operation"]) =>
+	(operation: PostgresStatementRejected["operation"]) =>
 	(error: unknown): PostgresOperationFailure => {
 		const diagnostic = postgresDiagnosticOf(error)
-		const reason = transientReasonOf(diagnostic)
-		if (reason === undefined) {
-			return PostgresStatementRejected.make({ operation, diagnostic })
-		}
-		return PostgresTransientFailure.make({ operation, reason })
+		return Option.match(transientReasonOf(diagnostic), {
+			onNone: (): PostgresOperationFailure =>
+				PostgresStatementRejected.make({ operation, diagnostic }),
+			onSome: (reason) => PostgresTransientFailure.make({ operation, reason })
+		})
 	}
 
-/** Builders construct synchronously and issue nothing; a throw while building is the statement's
- * own failure, and never a transient one, since nothing was issued. Issuing is uninterruptible, so
- * a client is never released mid-protocol. */
+/** Builders are ours and pure: rendering issues nothing, so a throw while rendering is a defect.
+ * Issuing is uninterruptible, so a client is never released mid-protocol. */
 const issue = <Statement, A>(
 	build: () => Statement,
 	execute: (statement: Statement) => Promise<A>
 ): Effect.Effect<A, PostgresOperationFailure> =>
-	Effect.try({
-		try: build,
-		catch: (error) =>
-			PostgresStatementRejected.make({
-				operation: "construction",
-				diagnostic: postgresDiagnosticOf(error)
-			})
-	}).pipe(
+	Effect.sync(build).pipe(
 		Effect.flatMap((statement) =>
 			Effect.tryPromise({
 				try: () => execute(statement),
@@ -62,86 +57,72 @@ const issue = <Statement, A>(
 		)
 	)
 
-const scopeOf = (database: PostgresBuilder, client: Client | PoolClient): PostgresQueryScope => ({
+const scopeOf = (database: PostgresBuilder): PostgresQueryScope => ({
 	run: (build) =>
 		issue(
 			() => build(database),
 			(statement) => statement.execute()
-		).pipe(observeStatement({ kind: "builder" })),
+		).pipe(observeStatement({ "db.system.name": "postgresql" })),
 	runPrepared: (statement, parameters) =>
 		issue(
-			() => statement.handleOf(database, client),
+			() => statement.build(database, statement.name),
 			(prepared) => prepared.execute(parameters)
-		).pipe(observeStatement({ kind: "prepared", name: statement.statementName }))
+		).pipe(
+			Effect.flatMap((result) =>
+				Schema.decodeUnknownEffect(statement.result)(result).pipe(Effect.orDie)
+			),
+			observeStatement({ "db.system.name": "postgresql", "db.operation.name": statement.name })
+		)
 })
 
-/** A failed `consume` rolls back through Drizzle's own rollback; a failure of BEGIN, COMMIT or
- * ROLLBACK itself joins the consumer's cause rather than replacing it. */
-const transactionCauseOf = <E>(
-	consumed: Exit.Exit<unknown, E | PostgresOperationFailure> | undefined,
-	error: unknown
-): Cause.Cause<E | PostgresOperationFailure> => {
-	const failed = consumed !== undefined && Exit.isFailure(consumed) ? consumed.cause : undefined
-	if (failed !== undefined && error instanceof TransactionRollbackError) {
-		return failed
-	}
-	const native = Cause.fail(issueFailureOf("transaction")(error))
-	if (failed === undefined) {
-		return native
-	}
-	return Cause.combine(failed, native)
-}
+/** The statements that open and close a transaction. Every transaction is SERIALIZABLE. A read-only
+ * one is also DEFERRABLE: it waits for a snapshot no writer can invalidate, so a read never fails
+ * with a serialization conflict. */
+const CONTROL = {
+	"begin-read-write": sql`BEGIN ISOLATION LEVEL SERIALIZABLE READ WRITE`,
+	"begin-read-only": sql`BEGIN ISOLATION LEVEL SERIALIZABLE READ ONLY DEFERRABLE`,
+	commit: sql`COMMIT`,
+	rollback: sql`ROLLBACK`
+} as const satisfies Readonly<Record<`begin-${TransactionAccess}` | "commit" | "rollback", SQL>>
 
-/**
- * Drizzle owns BEGIN, COMMIT and ROLLBACK on the borrowed client, and `consume` runs inside its
- * callback with the caller's services. Interruption reaches `consume` through the signal, and the
- * borrow waits for Drizzle to settle before the client goes back to the pool.
- */
-const withNativeTransaction = <A, E, R>(
-	database: NativePostgresDatabase,
-	config: PgTransactionConfig,
-	consume: ScopeConsumer<A, E, R>
-): Effect.Effect<A, E | PostgresOperationFailure, R> =>
-	Effect.gen(function* () {
-		const run = Effect.runPromiseExitWith(yield* Effect.context<R>())
-		return yield* Effect.callback<A, E | PostgresOperationFailure>(function (resume, signal) {
-			let consumed: Exit.Exit<A, E | PostgresOperationFailure> | undefined = undefined
-			const settled = database
-				.transaction(
-					(transaction) =>
-						run(consume(scopeOf(transaction, database.$client)), {
-							signal,
-							scheduler: this
-						}).then((exit) => {
-							consumed = exit
-							if (Exit.isFailure(exit)) {
-								return transaction.rollback()
-							}
-							return exit.value
-						}),
-					config
-				)
-				.then(
-					(value) => {
-						resume(Effect.succeed(value))
-					},
-					(error: unknown) => {
-						resume(Effect.failCause(transactionCauseOf(consumed, error)))
-					}
-				)
-			return Effect.promise(() => settled).pipe(Effect.uninterruptible)
-		})
+/** One control statement on the borrowed client. A SERIALIZABLE conflict PostgreSQL reports at
+ * COMMIT is the transaction's own transient failure. */
+const control = (database: NativePostgresDatabase, statement: keyof typeof CONTROL) =>
+	Effect.tryPromise({
+		try: () => database.execute(CONTROL[statement]),
+		catch: issueFailureOf("transaction")
 	})
 
-const READ_WRITE: PgTransactionConfig = { isolationLevel: "serializable", accessMode: "read write" }
-
-/** A read-only SERIALIZABLE DEFERRABLE transaction waits for a snapshot no writer can invalidate,
- * so a read never fails with a serialization conflict. */
-const READ_ONLY: PgTransactionConfig = {
-	isolationLevel: "serializable",
-	accessMode: "read only",
-	deferrable: true
-}
+/**
+ * One transaction on the borrowed client: BEGIN, `consume` (the only interruptible part), then
+ * COMMIT when it succeeded or ROLLBACK when it failed or was interrupted. Control statements never
+ * run interrupted, so the client always goes back to the pool outside a transaction. A failed
+ * ROLLBACK joins the consumer's cause rather than replacing it.
+ */
+const transactionOf = (access: TransactionAccess): ScopeRunner =>
+	Fn.dual(
+		2,
+		<A, E, R>(
+			database: NativePostgresDatabase,
+			consume: ScopeConsumer<A, E, R>
+		): Effect.Effect<A, E | PostgresOperationFailure, R> =>
+			Effect.uninterruptibleMask((restore) =>
+				Effect.gen(function* () {
+					yield* control(database, `begin-${access}`)
+					const consumed = yield* Effect.exit(restore(consume(scopeOf(database))))
+					if (Exit.isSuccess(consumed)) {
+						yield* control(database, "commit")
+						return consumed.value
+					}
+					const rolledBack = yield* Effect.exit(control(database, "rollback"))
+					return yield* Effect.failCause(
+						Exit.isFailure(rolledBack)
+							? Cause.combine(consumed.cause, rolledBack.cause)
+							: consumed.cause
+					)
+				})
+			).pipe(observeTransaction(access))
+	)
 
 /** One autocommit statement scope, without BEGIN and COMMIT round trips. Each statement is its own
  * SERIALIZABLE transaction through the session default. */
@@ -151,31 +132,17 @@ export const withPostgresStatement: ScopeRunner = Fn.dual(
 		database: NativePostgresDatabase,
 		consume: ScopeConsumer<A, E, R>
 	): Effect.Effect<A, E | PostgresOperationFailure, R> =>
-		Effect.suspend(() => consume(scopeOf(database, database.$client)))
+		Effect.suspend(() => consume(scopeOf(database)))
 )
 
 /**
  * A SERIALIZABLE read-write transaction: several statements that commit together or not at all.
  * @public
  */
-export const withPostgresTransaction: ScopeRunner = Fn.dual(
-	2,
-	<A, E, R>(
-		database: NativePostgresDatabase,
-		consume: ScopeConsumer<A, E, R>
-	): Effect.Effect<A, E | PostgresOperationFailure, R> =>
-		withNativeTransaction(database, READ_WRITE, consume).pipe(observeTransaction("read-write"))
-)
+export const withPostgresTransaction: ScopeRunner = transactionOf("read-write")
 
 /**
  * A SERIALIZABLE READ ONLY DEFERRABLE transaction: several reads that must agree on one snapshot.
  * @public
  */
-export const withPostgresReadTransaction: ScopeRunner = Fn.dual(
-	2,
-	<A, E, R>(
-		database: NativePostgresDatabase,
-		consume: ScopeConsumer<A, E, R>
-	): Effect.Effect<A, E | PostgresOperationFailure, R> =>
-		withNativeTransaction(database, READ_ONLY, consume).pipe(observeTransaction("read-only"))
-)
+export const withPostgresReadTransaction: ScopeRunner = transactionOf("read-only")

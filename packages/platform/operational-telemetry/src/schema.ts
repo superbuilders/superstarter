@@ -44,6 +44,12 @@ export type OperationalOrigin = Readonly<{
 	instanceId: string
 }>
 
+/** Runs work in the async context the process had before any request: captured once, at
+ * registration, with `AsyncLocalStorage.snapshot()`. Telemetry that reads the clock inside an SDK
+ * callback (a metric record at span end, an SDK diagnostic) runs there, so Next's render never sees
+ * it as the render's own synchronous I/O, which would end the render's static stage. */
+export type OutsideRequests = <A>(work: () => A) => A
+
 /** Configured host and its public deadline observation. An unavailable deadline does not prove
  * absent request context; an observed one does not prove that the export was registered with
  * `waitUntil` or that its invocation remains active. */
@@ -58,6 +64,30 @@ const OperationalMetricExportHost = Schema.Union([
 	})
 ])
 export type OperationalMetricExportHost = typeof OperationalMetricExportHost.Type
+
+/** A function's deadline as its host publishes it to the invocation, when it does. */
+export type FunctionDeadline = Extract<
+	OperationalMetricExportHost,
+	{ kind: "function" }
+>["deadline"]
+
+/**
+ * How long the process's telemetry lives, which decides who drains it. `process`: a local process
+ * that runs until it is stopped; the pipeline drains itself as each request's root span ends, and
+ * metrics export on the SDK's own timer. `invocation`: a Vercel function, which the platform may
+ * suspend between invocations; `@vercel/otel` drains the pipeline under `waitUntil` as each request
+ * ends, metrics export inside that drain once their cadence has elapsed, and the host publishes the
+ * invocation's deadline.
+ */
+export type TelemetryLifetime =
+	| Readonly<{ kind: "process" }>
+	| Readonly<{ kind: "invocation"; deadline: () => FunctionDeadline }>
+
+/** The host a metric export receipt names, observed at the export. */
+export const exportHostOf = (lifetime: TelemetryLifetime): OperationalMetricExportHost =>
+	lifetime.kind === "process"
+		? { kind: "process" }
+		: { kind: "function", deadline: lifetime.deadline() }
 
 /** Export transport timing has no endpoint, headers, payload or error text. Metrics report
  * through the log owner; logging a log export through itself would manufacture telemetry. */

@@ -5,6 +5,7 @@ import { Effect, FileSystem, Path, Redacted } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { readAdminSecret } from "#database/admin-secret.ts"
 import { databaseHost } from "#env.ts"
+import { exitWith } from "#script.ts"
 
 /**
  * Opens Drizzle Studio on RDS as the master user, to browse. Schema changes are migrations only
@@ -25,15 +26,17 @@ const main = Effect.gen(function* () {
 	const password = encodeURIComponent(Redacted.value(secret.password))
 	const url = `postgresql://${user}:${password}@${host}:${POSTGRES_PORT}/${POSTGRES_DATABASE_NAME}?sslmode=verify-full`
 	const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-	process.exitCode = yield* spawner.exitCode(
-		ChildProcess.make("drizzle-kit", ["studio"], {
-			env: { DATABASE_URL: url, NODE_EXTRA_CA_CERTS: caPath },
-			extendEnv: true,
-			stdin: "inherit",
-			stdout: "inherit",
-			stderr: "inherit"
-		})
-	)
+	yield* spawner
+		.exitCode(
+			ChildProcess.make("drizzle-kit", ["studio"], {
+				env: { DATABASE_URL: url, NODE_EXTRA_CA_CERTS: caPath },
+				extendEnv: true,
+				stdin: "inherit",
+				stdout: "inherit",
+				stderr: "inherit"
+			})
+		)
+		.pipe(Effect.flatMap(exitWith))
 }).pipe(Effect.scoped)
 
 // @effect-diagnostics-next-line strictEffectProvide:off

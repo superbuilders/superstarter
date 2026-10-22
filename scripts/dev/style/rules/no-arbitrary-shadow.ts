@@ -7,7 +7,6 @@ import type { ClassRule } from "#scripts/dev/style/types.ts"
  * shadow-[var(--shadow-custom)] are not. CSS variables and the --shadow() theme function are theme references.
  */
 export const noArbitraryShadow: ClassRule = arbitraryValueBan({
-	rule: "no-arbitrary-shadow",
 	roots: ["shadow", "drop-shadow"],
 	isThemeReference: (value) =>
 		Arr.some(["var(--", "--shadow("], (marker) => Str.includes(marker)(value)),

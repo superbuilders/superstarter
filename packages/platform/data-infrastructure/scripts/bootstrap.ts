@@ -5,14 +5,10 @@ import { nativeAws } from "#aws/native-aws.ts"
 import { ensureStateBucket } from "#bootstrap/ensure-state-bucket.ts"
 import { ensureVercelOidcProvider } from "#bootstrap/ensure-vercel-oidc-provider.ts"
 import { VERCEL_TEAM_SLUG } from "#env.ts"
+import { argumentsOf } from "#script.ts"
 
 /** `bootstrap --execute`: account singletons are created only by an owner who says so. */
 const Arguments = Schema.Tuple([Schema.Literal("--execute")])
-
-class BootstrapExecutionRequired extends Schema.TaggedError<
-	BootstrapExecutionRequired,
-	{ readonly brand: unique symbol }
->()("BootstrapExecutionRequired", { usage: Schema.Literal("bootstrap --execute") }) {}
 
 /**
  * The account singletons every stage depends on, created once per account before the first plan:
@@ -21,10 +17,7 @@ class BootstrapExecutionRequired extends Schema.TaggedError<
  */
 const program = Effect.gen(function* () {
 	const stdio = yield* Stdio.Stdio
-	yield* stdio.args.pipe(
-		Effect.flatMap(Schema.decodeUnknownEffect(Arguments)),
-		Effect.mapError(() => BootstrapExecutionRequired.make({ usage: "bootstrap --execute" }))
-	)
+	yield* stdio.args.pipe(Effect.flatMap(argumentsOf(Arguments, "bootstrap --execute")))
 	const team = yield* VERCEL_TEAM_SLUG
 	const { accountId: account } = yield* AWSEnvironment.current
 	yield* Effect.logInfo("bootstrapping account").pipe(Effect.annotateLogs({ account, team }))

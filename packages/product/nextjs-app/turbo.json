@@ -45,8 +45,8 @@
 			"passThroughEnv": ["*"]
 		},
 		"test": {
-			"description": "Rebuilds the same throwaway database the infrastructure suites use, so it runs after them.",
-			"dependsOn": ["@superstarter/data-infrastructure#test"]
+			"description": "Shares the throwaway database with the infrastructure suites and writes to it, so it runs after them.",
+			"dependsOn": ["$TURBO_EXTENDS$", "@superstarter/data-infrastructure#test"]
 		}
 	}
 }

@@ -59,8 +59,9 @@ other package's export by name, without an extension (`@superstarter/database/po
   each package's typecheck and superlint (`scripts/dev/lint.ts`, the opinionated type-aware rules, on
   TypeScript 7's native API, run in the package), and the root's tooling typecheck, repository superlint,
   oxlint (type-aware through tsgolint, with the repository's syntax rules in `scripts/dev/oxlint/rules/`,
-  each with a RuleTester self-test), the style linter, oxfmt and the blank-line and brace formatter in check
-  mode, and fallow for dead code. Turbo replays any task whose inputs did not change; a package's checks
+  each with a RuleTester self-test), the style linter (`scripts/dev/style.ts`, on the app's checker), oxfmt and
+  the comment and blank-line formatter in check mode, and fallow for dead code. Superlint and the style linter
+  prove every rule against fixtures that mark the lines it must report. Turbo replays any task whose inputs did not change; a package's checks
   rerun when any package it depends on changes. Nothing in the gate writes files; `pnpm format:write` does.
   A rule that can live in oxlint lives there; superlint keeps the rules oxlint cannot express.
 
@@ -89,8 +90,9 @@ other package's export by name, without an extension (`@superstarter/database/po
   Logs are wide: each carries its span's attributes. `telemetryBackend` (the app's `src/env.ts`) picks the
   sink from the deployment: PostHog on every Vercel deployment (token required), JSONL under the app's
   `out/telemetry/` locally, where nothing reaches PostHog and the token is never read. Read the local files
-  to see what a change emits. Only the app's `src/instrumentation.ts` reads `process.env` (Next's
-  `NEXT_RUNTIME` intrinsic), so no Node code enters the Edge bundle.
+  to see what a change emits. Only the app's `src/instrumentation.ts` touches `process.env`: it reads Next's
+  `NEXT_RUNTIME` intrinsic, so no Node code enters the Edge bundle, and in a local process it turns on Next's
+  verbose framework spans.
 - **Data.** Every primary key is a UUIDv7 minted by PostgreSQL's `uuidv7()`; there are no timestamp
   columns (`@superstarter/database/lib/uuid-time` reads time from the id). Every transaction is SERIALIZABLE; a 40001 or
   40P01 is a typed `PostgresTransientFailure` the caller may retry. Sessions run with
@@ -103,7 +105,8 @@ other package's export by name, without an extension (`@superstarter/database/po
   db:local`, `pnpm test`), which is superstarter's own PostgreSQL 18 on localhost:5434.
 - **UI.** shadcn components live in the app's `src/ui/`, installed with the shadcn CLI run in the app
   package (`#ui`, `#lib/cn.ts`). Styling is Tailwind tokens only; the style linter refuses arbitrary
-  values and colors outside the theme. The React Compiler compiles every component, and one it cannot
+  values, colors outside the theme, and any class it cannot read whole in the source: map state to fixed class
+  strings, never interpolate into a class. The React Compiler compiles every component, and one it cannot
   compile fails the build (`panicThreshold: "all_errors"`), so `useMemo`, `useCallback` and `memo`
   never appear.
 - **RSC data.** Pages are not async. A page builds a promise

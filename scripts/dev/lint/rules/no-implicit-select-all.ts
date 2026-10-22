@@ -1,8 +1,7 @@
 import { Array as Arr, Predicate } from "effect"
 import * as ts from "typescript/unstable/ast"
 import { isDrizzleMethodCall, type MethodCall } from "#scripts/dev/lint/drizzle.ts"
-import type { LintRule, Violation } from "#scripts/dev/lint/types.ts"
-import { violationAt } from "#scripts/dev/lint/violation.ts"
+import type { Visit } from "#scripts/dev/lint/types.ts"
 
 /** Each column-taking builder method, with how many arguments come before its column object. */
 const COLUMN_POSITIONS: ReadonlyMap<string, number> = new Map([
@@ -57,25 +56,18 @@ const messageOf = (method: string): string => {
  * method resolves to, not by a receiver name, so a query scope's `database` is checked like `db` and `tx`. See
  * rules/no-implicit-select-all.md.
  */
-export const noImplicitSelectAll: LintRule = ({ sourceFile, semantics }) => {
-	const violations: Array<Violation> = []
-
-	const walk = (node: ts.Node): void => {
+export const noImplicitSelectAll: Visit =
+	({ semantics }) =>
+	(node) => {
 		const call = { semantics, node, names: METHODS }
-		if (isDrizzleMethodCall(call) && omitsColumns(call.node)) {
-			violations.push(
-				violationAt({
-					sourceFile,
-					node: call.node.expression.name,
-					rule: "no-implicit-select-all",
-					message: messageOf(call.node.expression.name.text),
-					suggestion: "See rules/no-implicit-select-all.md."
-				})
-			)
+		if (!isDrizzleMethodCall(call) || !omitsColumns(call.node)) {
+			return []
 		}
-		node.forEachChild(walk)
+		return [
+			{
+				node: call.node.expression.name,
+				message: messageOf(call.node.expression.name.text),
+				suggestion: "See rules/no-implicit-select-all.md."
+			}
+		]
 	}
-
-	walk(sourceFile)
-	return violations
-}

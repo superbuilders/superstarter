@@ -1,9 +1,9 @@
 import { Array as Arr, Effect, Record, Schema, type Scope, String as Str } from "effect"
 import type { SourceFile } from "typescript/unstable/ast"
 import { createVirtualFileSystem } from "typescript/unstable/fs"
-import { DevtoolFailure } from "#scripts/dev/devtool-failure.ts"
+import { DevtoolFailure } from "#scripts/dev/shared/devtool.ts"
 import { jsonEncoder } from "#scripts/dev/shared/json.ts"
-import { nativeSession, openProjects } from "#scripts/dev/shared/native-api.ts"
+import { nativeSession, openProject } from "#scripts/dev/shared/native-api.ts"
 import { repositoryRoot } from "#scripts/dev/shared/repository.ts"
 
 export type SyntaxInput = Readonly<{ file: string; text: string }>
@@ -62,11 +62,7 @@ export const parseSyntax = (
 			...Arr.map(entries, (entry) => [entry.virtual, entry.input.text] as const)
 		])
 		const api = yield* nativeSession({ cwd: directory, fs: createVirtualFileSystem(files) })
-		const projects = yield* openProjects({ api, configs: [config] })
-		const program = projects[0]?.program
-		if (program === undefined) {
-			return yield* DevtoolFailure.make({ detail: "The native syntax project was not opened" })
-		}
+		const { program } = yield* openProject({ api, config })
 		const realFile = new Map(Arr.map(entries, (entry) => [entry.virtual, entry.input.file]))
 		const diagnostics = yield* Effect.try({
 			try: () => program.getSyntacticDiagnostics(),

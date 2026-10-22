@@ -84,18 +84,20 @@ export const startProductAnalytics = (token: string): void => {
 	})
 }
 
-/** The digest Next attaches to a Server Component or server-action error, which joins it to the
- * server's `$exception` and log for the same failure. */
-const digestOf = (error: unknown): string | null =>
-	Predicate.hasProperty(error, "digest") && typeof error.digest === "string" ? error.digest : null
+/** The digest Next attaches to a Server Component or server-action error, under the name the
+ * server's span and `$exception` give it, so the three join on one property. */
+const digestOf = (error: unknown): Readonly<{ "next.error.digest"?: string }> =>
+	Predicate.hasProperty(error, "digest") && typeof error.digest === "string"
+		? { "next.error.digest": error.digest }
+		: {}
 
-type ExceptionProperties = Readonly<Record<string, string | number | boolean | null>>
+type ExceptionProperties = Readonly<Record<string, string | number | boolean>>
 
 const captureException = (error: unknown, properties: ExceptionProperties): void => {
 	if (!posthog.__loaded) {
 		return
 	}
-	Result.try(() => posthog.captureException(error, { ...properties, digest: digestOf(error) }))
+	Result.try(() => posthog.captureException(error, { ...properties, ...digestOf(error) }))
 }
 
 /** Error tracking for a handled or caught failure. Handled React boundary errors do not reliably

@@ -12,11 +12,11 @@ A page or layout is never `async`. tsgo `asyncFunction` refuses `async` everywhe
 
 ## The shape
 
-- **The read** is an Effect exported from a `server-only` module under the app's `src/server/<area>/`, such as `readTodos` in `packages/product/nextjs-app/src/server/todos/todos.ts`. Its row type comes from a Schema in the same module (`Todo`).
+- **The read** is an Effect exported from a `server-only` module under the app's `src/server/<area>/`, such as `readTodos` in `packages/product/nextjs-app/src/server/todos/todos.ts`. Its row type is the result Schema of the prepared statement it runs (`Todo` in `@superstarter/database/queries/todos`), which decodes every row once.
 - **The page** is a server component. It turns the read into a promise with `connection().then(() => runRenderRead(read))` and passes the promise as a prop.
   - `connection()` holds the read until a request arrives, so a build never opens a database session and the page shell prerenders around the fallback.
   - `runRenderRead` runs the Effect under the server's web telemetry.
-- **The view** is a `"use client"` component that calls `use(promise)`. It imports the row type with `import type` from the server module, never the module's values.
+- **The view** is a `"use client"` component that calls `use(promise)`. It imports the row type with `import type` from the query module, never a server module's values.
 - **The Suspense boundary** wraps the view, in the page or in the layout (see [placement](#suspense-boundary-identity)).
 
 `src/app/page.tsx`, with imports omitted:
@@ -50,7 +50,7 @@ export default function TodosPage() {
 "use client"
 
 import { use } from "react"
-import type { Todo } from "#server/todos/todos.ts"
+import type { Todo } from "@superstarter/database/queries/todos"
 
 export function TodoList({ todos }: Readonly<{ todos: Promise<ReadonlyArray<Todo>> }>) {
 	const saved = use(todos)
@@ -100,8 +100,8 @@ The read decodes the raw `id` with `Schema.decodeEffect(TodoId)` before it reach
 A mutation is a server action in a `"use server"` module named `*-actions.ts`, such as `packages/product/nextjs-app/src/server/todos/todo-actions.ts`. It has three parts:
 
 - **The contract** lives in browser-safe code (`@superstarter/todo-protocol/todo-contracts`): the action's name from the `SERVER_ACTIONS` roster, and Schemas for its payload, its success and its errors. Both sides of the wire use the one definition.
-- **The action** is `effectAction(contract, handler)` (`packages/product/nextjs-app/src/server/effect-action.ts`). It returns a plain function, not an `async` one, which Next accepts as a `"use server"` export. Export only values built by `effectAction` from these modules. The wrapper decodes the payload, runs the handler's Effect inside one `superstarter.action` span, and answers the encoded `Exit`. A failure the contract names crosses as itself, and a Next signal (`redirect`, `notFound`) leaves as itself. Anything else is reported once and crosses as the opaque `ActionFailed`. The handler calls `revalidatePath` so the page's read runs again.
-- **The client** builds an Effect per action with `callAction(contract, action)`. It calls it inside `startTransition`, applies the change at once with `useOptimistic`, and turns a failure into a message with an exhaustive `switch` on `_tag`:
+- **The action** is `effectAction(contract, handler)` (`packages/product/nextjs-app/src/server/effect-action.ts`). It returns a plain function, not an `async` one, which Next accepts as a `"use server"` export. Export only values built by `effectAction` from these modules. The wrapper decodes the payload, runs the handler's Effect inside one `superstarter.action` span, and answers the encoded `Exit`. A failure the contract names crosses as itself when it is the run's only reason, and a Next signal (`redirect`, `notFound`) leaves as itself. Anything else, a refusal beside another failure included, is reported once and crosses as the opaque `ActionFailed`. The handler calls `revalidatePath` so the page's read runs again.
+- **The client** builds an Effect per action with the app's `callAction(contract, action)` (`#lib/action-client.ts`): the protocol's `makeActionClient`, given Next's signal recognizer (`#lib/next-signal.ts`, which the server's wrapper uses too). It calls it inside `startTransition`, applies the change at once with `useOptimistic`, and turns a failure into a notice by looking its `_tag` up in a table typed over every refusal:
 
 ```ts
 // src/server/todos/todo-actions.ts
@@ -116,13 +116,15 @@ const callToggle = callAction(ToggleTodo, toggleTodo)
 
 const toggle = (todo: Todo): void => {
 	startTransition(() => {
-		applyOptimistic({ kind: "toggle", todo })
-		return messageAfter(callToggle(todo.id)).then(setMessage)
+		applyOptimistic({ kind: "toggle", id: todo.id })
+		return noticeOnSettle(callToggle(todo.id))
 	})
 }
 ```
 
-`callAction` fails with `ActionUnconfirmed` when the request never answered: the page went away, or the request failed in transit. The change may or may not have landed, so the client never retries it on its own. A defect rejects the transition and reaches the route's error boundary.
+`callAction` fails with `ActionUnconfirmed` when the request never answered: the page went away, or the request failed in transit. The change may or may not have landed, so the client never retries it on its own. When the action called `redirect()` or `notFound()`, the rejection is Next's own signal: `callAction` raises it again as a defect, the transition rejects with it, and Next's boundary navigates. A defect rejects the transition and reaches the route's error boundary.
+
+A form submits through `onSubmit` with `preventDefault`, not through a form action: the draft then clears as a discrete update the input shows at once, so a second Enter finds it empty instead of submitting the same todo again.
 
 ## Suspense boundary identity
 

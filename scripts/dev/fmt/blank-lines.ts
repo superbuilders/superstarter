@@ -98,7 +98,7 @@ const isFunctionBody = (block: ts.Block): boolean => {
 export const findBlankLineViolations = (
 	source: SyntaxSource
 ): ReadonlyArray<BlankLineViolation> => {
-	const { sourceFile, text, file } = source
+	const { sourceFile, text } = source
 	const violations: Array<BlankLineViolation> = []
 
 	const lineOf = (position: number): number =>
@@ -115,14 +115,7 @@ export const findBlankLineViolations = (
 		if (!breaks(gap.bound, blankLines)) {
 			return
 		}
-		violations.push({
-			file,
-			line: lineOf(gap.start),
-			currentBlankLines: blankLines,
-			bound: gap.bound,
-			start: gap.start,
-			end: gap.end
-		})
+		violations.push(gap)
 	}
 
 	const isMultiline = (node: ts.Node): boolean =>

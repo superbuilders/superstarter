@@ -3,18 +3,12 @@ import {
 	AggregationType,
 	type IMetricReader,
 	type MetricData,
-	type PushMetricExporter
+	type PushMetricExporter,
+	type ResourceMetrics
 } from "@opentelemetry/sdk-metrics"
-import { Array as Arr, Effect } from "effect"
-import type { ExportHealth } from "#export-health.ts"
-import {
-	drainLifecycle,
-	type FlushMethod,
-	makeExportLedger,
-	rejectedReasons,
-	settled,
-	TelemetryFlushFailure
-} from "#flush.ts"
+import { Array as Arr } from "effect"
+import { type ExportHealth, unavailableScope } from "#export-health.ts"
+import { drainLifecycle, makeExportLedger } from "#flush.ts"
 import { exportBisecting } from "#otlp-batch.ts"
 
 /** A reader's or a wrapper's aggregation choices: the wrapped exporter's own, else the SDK's
@@ -32,9 +26,39 @@ export const aggregationOf = (
 			: exporter.selectAggregationTemporality(kind)
 })
 
-/** A metric's data points are independent OTLP records; retain each point and its descriptor. */
-const points = <T extends MetricData>(metric: T): T[] =>
-	Arr.map(metric.dataPoints, (point): T => ({ ...metric, dataPoints: [point] }))
+/** One data point as a record the halving can separate, by its place in the collection: its
+ * scope's, its metric's and its own index. A request is rebuilt from the collection, so the points
+ * of one metric travel under one descriptor. */
+type PointAddress = `${number}/${number}/${number}`
+
+const addressOf = (scope: number, metric: number, point: number): PointAddress =>
+	`${scope}/${metric}/${point}`
+
+/** The metric with only the points a request carries. */
+const withPoints = <T extends MetricData>(metric: T, sent: (point: number) => boolean): T => ({
+	...metric,
+	dataPoints: Arr.flatten(
+		Arr.map(metric.dataPoints, (point, index) => (sent(index) ? [point] : []))
+	)
+})
+
+/** The collection cut down to the points of one request: each scope once, each metric once under
+ * its scope, holding every point of it the request carries, and nothing the request does not. */
+const requestOf = (data: ResourceMetrics, sent: ReadonlySet<PointAddress>): ResourceMetrics => ({
+	...data,
+	scopeMetrics: Arr.filter(
+		Arr.map(data.scopeMetrics, (scope, scopeIndex) => ({
+			...scope,
+			metrics: Arr.filter(
+				Arr.map(scope.metrics, (metric, metricIndex) =>
+					withPoints(metric, (point) => sent.has(addressOf(scopeIndex, metricIndex, point)))
+				),
+				(metric) => metric.dataPoints.length > 0
+			)
+		})),
+		(scope) => Arr.isReadonlyArrayNonEmpty(scope.metrics)
+	)
+})
 
 /** The process metric exporter, and the export health its owner creates once the meter provider
  * this exporter feeds exists. */
@@ -50,32 +74,31 @@ export const boundedMetricExporter = ({
 	health
 }: BoundedMetricExport): PushMetricExporter => {
 	const ledger = makeExportLedger("metrics")
-	const pass = (method: FlushMethod) =>
-		Effect.gen(function* () {
-			const native = yield* settled([Promise.resolve().then(() => exporter[method]())])
-			const failed = yield* ledger.receipt
-			const causes = [...rejectedReasons(native), ...failed]
-			health().observeFlush({ signal: "metrics", method, causes })
-			if (Arr.isArrayNonEmpty(causes)) {
-				return yield* TelemetryFlushFailure.make({ signal: "metrics", method, causes })
-			}
-		})
-	const lifecycle = drainLifecycle({ signal: "metrics", pass })
+	const lifecycle = drainLifecycle({
+		signal: "metrics",
+		ledger,
+		get health() {
+			return health()
+		},
+		steps: (method) => [() => exporter[method]()]
+	})
 	return {
 		export(data, callback) {
-			const fragments = Arr.flatMap(data.scopeMetrics, (scope) =>
-				Arr.flatMap(scope.metrics, (metric) =>
-					Arr.map(points(metric), (point) => ({ ...scope, metrics: [point] }))
-				)
-			)
-			exportBisecting({
+			exportBisecting<PointAddress>({
 				signal: "metrics",
-				records: fragments,
-				send: (scopeMetrics, done) => {
-					exporter.export({ ...data, scopeMetrics: [...scopeMetrics] }, done)
+				records: Arr.flatMap(data.scopeMetrics, (scope, scopeIndex) =>
+					Arr.flatMap(scope.metrics, (metric, metricIndex) =>
+						Arr.makeBy(metric.dataPoints.length, (point) =>
+							addressOf(scopeIndex, metricIndex, point)
+						)
+					)
+				),
+				send: (addresses, done) => {
+					exporter.export(requestOf(data, new Set(addresses)), done)
 				},
 				callback: ledger.track(callback),
-				health: health()
+				health: health(),
+				scopeOf: unavailableScope
 			})
 		},
 		forceFlush: lifecycle.forceFlush,

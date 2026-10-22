@@ -1,82 +1,46 @@
-import { Array as Arr, Predicate } from "effect"
+import { Array as Arr, Option, Result } from "effect"
 import * as ts from "typescript/unstable/ast"
-import type { SyntaxSource } from "#scripts/dev/shared/native-syntax.ts"
+import type { Report } from "#scripts/dev/shared/finding.ts"
 import { repositoryPath } from "#scripts/dev/shared/repository.ts"
-import { dataSlotAttributesOf, isComponentFile } from "#scripts/dev/style/components.ts"
-import type { StyleViolation } from "#scripts/dev/style/types.ts"
+import { dataSlotAttributesOf } from "#scripts/dev/style/components.ts"
 
-type SlotUsage = Readonly<{ file: string; line: number; column: number; componentName: string }>
+/** One data-slot written in a file: its value and the attribute that writes it. */
+type SlotUse = Readonly<{ slot: string; attribute: ts.JsxAttribute }>
 
-const slotValueOf = (attribute: ts.JsxAttribute): string | undefined => {
+const slotValueOf = (attribute: ts.JsxAttribute): Option.Option<string> => {
 	const initializer = attribute.initializer
-	if (initializer === undefined) {
-		return undefined
-	}
-	if (ts.isStringLiteral(initializer)) {
-		return initializer.text
-	}
-	const expression = ts.isJsxExpression(initializer) ? initializer.expression : undefined
-	return expression !== undefined && ts.isStringLiteral(expression) ? expression.text : undefined
+	const literal =
+		initializer !== undefined && ts.isJsxExpression(initializer)
+			? initializer.expression
+			: initializer
+	return literal !== undefined && ts.isStringLiteral(literal) && literal.text !== ""
+		? Option.some(literal.text)
+		: Option.none()
 }
 
-const isFunctionValue = (node: ts.Expression | undefined): boolean =>
-	node !== undefined && Predicate.or(ts.isArrowFunction, ts.isFunctionExpression)(node)
-
-const recordUsage = (
-	usages: Map<string, Array<SlotUsage>>,
-	slot: string,
-	usage: SlotUsage
-): void => {
-	const known = usages.get(slot)
-	if (known === undefined) {
-		usages.set(slot, [usage])
-		return
-	}
-	known.push(usage)
-}
-
-const slotAttributesOf = (node: ts.Node): ReadonlyArray<ts.JsxAttribute> => {
-	if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
-		return dataSlotAttributesOf(node)
-	}
-	return []
-}
-
-/** The name of the function a node declares, when it declares one: the component its JSX belongs to. */
-const declaredFunctionNameOf = (node: ts.Node): string | undefined => {
-	if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
-		return node.name.text
-	}
-	if (
-		ts.isVariableDeclaration(node) &&
-		ts.isIdentifier(node.name) &&
-		isFunctionValue(node.initializer)
-	) {
-		return node.name.text
-	}
-	return undefined
-}
-
-const collectSlotUsages = (source: SyntaxSource, usages: Map<string, Array<SlotUsage>>): void => {
-	const { sourceFile, file } = source
-	let componentName = ""
+const slotUsesOf = (sourceFile: ts.SourceFile): ReadonlyArray<SlotUse> => {
+	const uses: Array<SlotUse> = []
 	const walk = (node: ts.Node): void => {
-		const declared = declaredFunctionNameOf(node)
-		if (declared !== undefined) {
-			componentName = declared
-		}
-		for (const attribute of slotAttributesOf(node)) {
-			const slot = slotValueOf(attribute)
-			if (slot !== undefined && slot !== "") {
-				const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-					attribute.getStart(sourceFile)
+		if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+			for (const attribute of dataSlotAttributesOf(node)) {
+				uses.push(
+					...Option.match(slotValueOf(attribute), {
+						onNone: () => [],
+						onSome: (slot) => [{ slot, attribute }]
+					})
 				)
-				recordUsage(usages, slot, { file, line: line + 1, column: character + 1, componentName })
 			}
 		}
 		node.forEachChild(walk)
 	}
 	walk(sourceFile)
+	return uses
+}
+
+const locationOf = (attribute: ts.JsxAttribute): string => {
+	const sourceFile = attribute.getSourceFile()
+	const { line } = sourceFile.getLineAndCharacterOfPosition(attribute.getStart(sourceFile))
+	return `${repositoryPath(sourceFile.fileName)}:${line + 1}`
 }
 
 /**
@@ -85,30 +49,19 @@ const collectSlotUsages = (source: SyntaxSource, usages: Map<string, Array<SlotU
  * an earlier file is reported at every use in the later files.
  */
 export const noDuplicateDataSlot = (
-	sources: ReadonlyArray<SyntaxSource>
-): ReadonlyArray<StyleViolation> => {
-	const usages = new Map<string, Array<SlotUsage>>()
-	for (const source of sources) {
-		if (isComponentFile(source.file)) {
-			collectSlotUsages(source, usages)
+	sourceFiles: ReadonlyArray<ts.SourceFile>
+): ReadonlyArray<Report> => {
+	const uses = Arr.flatMap(sourceFiles, (sourceFile) =>
+		Arr.map(slotUsesOf(sourceFile), (use) => ({ ...use, file: sourceFile.fileName }))
+	)
+	return Arr.filterMap(uses, (use) => {
+		const first = Arr.findFirst(uses, (candidate) => candidate.slot === use.slot)
+		if (Option.isNone(first) || first.value.file === use.file) {
+			return Result.failVoid
 		}
-	}
-	const violations: Array<StyleViolation> = []
-	for (const [slot, slotUsages] of usages) {
-		const first = slotUsages[0]
-		if (first === undefined) {
-			continue
-		}
-		for (const usage of Arr.filter(slotUsages, (candidate) => candidate.file !== first.file)) {
-			violations.push({
-				file: usage.file,
-				line: usage.line,
-				column: usage.column,
-				rule: "no-duplicate-data-slot",
-				message: `Duplicate data-slot="${slot}". Already defined in ${repositoryPath(first.file)}:${first.line}.`,
-				componentName: usage.componentName
-			})
-		}
-	}
-	return violations
+		return Result.succeed({
+			node: use.attribute,
+			message: `Duplicate data-slot="${use.slot}", already defined at ${locationOf(first.value.attribute)}.`
+		})
+	})
 }

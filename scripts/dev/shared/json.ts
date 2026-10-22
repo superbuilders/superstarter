@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { DevtoolFailure } from "#scripts/dev/devtool-failure.ts"
+import { DevtoolFailure } from "#scripts/dev/shared/devtool.ts"
 
 /** JSON text goes through a Schema, so what a tool prints or hands the compiler has a declared shape. */
 export const jsonEncoder =

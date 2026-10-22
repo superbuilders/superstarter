@@ -47,7 +47,7 @@ export type BisectedExport<T> = Readonly<{
 	send: (records: readonly T[], callback: (result: Completion) => void) => void
 	callback: (result: Completion) => void
 	health: ExportHealth
-	scopeOf?: (records: readonly T[]) => ExportScope
+	scopeOf: (records: readonly T[]) => ExportScope
 }>
 
 const SUCCEEDED: Completion = { code: ExportResultCode.SUCCESS }
@@ -68,10 +68,7 @@ const firstFailureOf = (first: Completion, next: Completion): Completion =>
  * else success. */
 export const exportBisecting = <T>(batch: BisectedExport<T>): void => {
 	const { signal, health } = batch
-	const scopeOf = (records: readonly T[]) => {
-		const scope = batch.scopeOf
-		return scope === undefined ? undefined : () => scope(records)
-	}
+	const scopeOf = (records: readonly T[]) => () => batch.scopeOf(records)
 	const sent = (records: readonly T[]): Effect.Effect<Completion> =>
 		Effect.callback<Completion>((resume) => {
 			const handed = Result.try(() => {

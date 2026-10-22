@@ -1,6 +1,5 @@
 #!/usr/bin/env -S node
 
-import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import {
 	Array as Arr,
 	Config,
@@ -13,7 +12,7 @@ import {
 	String as Str
 } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
-import { DevtoolFailure, reportFailure } from "#scripts/dev/devtool-failure.ts"
+import { DevtoolFailure, runDevtool } from "#scripts/dev/shared/devtool.ts"
 import { jsonEncoder } from "#scripts/dev/shared/json.ts"
 import { repositoryRoot } from "#scripts/dev/shared/repository.ts"
 
@@ -96,7 +95,7 @@ const main = Effect.gen(function* () {
 		arch: process.arch,
 		execArgv: process.execArgv
 	})
-	const exitCode = yield* spawner
+	return yield* spawner
 		.exitCode(
 			ChildProcess.make(process.execPath, [TURBO, "run", ...concurrency, ...taskArguments], {
 				cwd: repositoryRoot,
@@ -108,10 +107,6 @@ const main = Effect.gen(function* () {
 			})
 		)
 		.pipe(Effect.mapError((cause) => DevtoolFailure.make({ detail: "turbo could not run", cause })))
-	yield* Effect.sync(() => {
-		process.exitCode = exitCode
-	})
-}).pipe(Effect.catchTag("DevtoolFailure", reportFailure))
+})
 
-// @effect-diagnostics-next-line strictEffectProvide:off
-NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))
+runDevtool(main)

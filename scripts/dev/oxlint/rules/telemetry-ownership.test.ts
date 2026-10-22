@@ -15,7 +15,7 @@ const EXPORTER_OWNED =
 
 const SDK_OWNED =
 	/^@vercel\/otel is owned by .*observability\/\. The web registration registers the OpenTelemetry SDK, once\.$/
-const ANALYTICS_OWNED = /^posthog-js is owned by .*product-analytics\.ts, .*posthog-provider\.tsx\./
+const ANALYTICS_OWNED = /^posthog-js is owned by .*product-analytics\.ts\./
 const SPAN_WRITER = /^Effect\.\w+ opens or annotates a span outside the registry\./
 const NAMED_FN = /^Effect\.fn with a name opens a span outside the registry\./
 

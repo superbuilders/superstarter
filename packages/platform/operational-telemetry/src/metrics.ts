@@ -2,6 +2,7 @@ import {
 	type MeterProvider as ApiMeterProvider,
 	type Attributes,
 	diag,
+	type Meter,
 	metrics
 } from "@opentelemetry/api"
 import { ExportResultCode } from "@opentelemetry/core"
@@ -19,25 +20,22 @@ import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base"
 import { Array as Arr, DateTime, Duration, Effect, Order, Record, Result, Schema } from "effect"
 import { v7 } from "uuid"
 import { OperationalTelemetryProviderConflict } from "#destination.ts"
-import { makeExportHealth } from "#export-health.ts"
+import { type ExportHealth, makeExportHealth } from "#export-health.ts"
 import { emitOperationalLog } from "#logs.ts"
 import { aggregationOf, boundedMetricExporter } from "#metric-export.ts"
 import { OPERATIONAL_SCOPE, operationalResourceAttributes } from "#resource.ts"
 
 import {
-	type OperationalMetricExportHost,
-	OperationalMetricExportRecord,
-	type OperationalOrigin
+	exportHostOf,
+	type OperationalMetricExportRecord,
+	type OperationalOrigin,
+	type TelemetryLifetime
 } from "#schema.ts"
-import { CORRELATION_KEYS } from "#span-export.ts"
+import { CORRELATION_KEYS, telemetryAttributes } from "#span-export.ts"
 
 /** Each metric dimension comes from admitted program metadata. Passes, keys, request ids and
  * trace ids stay in logs and traces, never in metric series. */
-const dimensionKeys = [
-	"superstarter.effect.outcome",
-	"superstarter.result.kind",
-	"http.response.status_code"
-] as const
+const dimensionKeys = ["superstarter.effect.outcome", "superstarter.result.kind"] as const
 
 /**
  * @limitKind published
@@ -93,9 +91,6 @@ const OPERATION_DURATION_BUCKETS_MILLISECONDS: ReadonlyArray<number> = Arr.sort(
 	Order.Number
 )
 
-/** The host's public deadline observation, read at each export. */
-type OperationalMetricHost = Readonly<{ observe: () => OperationalMetricExportHost }>
-
 /**
  * @limitKind published
  * @owner OpenTelemetry JavaScript metrics SDK
@@ -125,11 +120,11 @@ class MetricReaderUnavailable extends Schema.TaggedError<
 	MetricReaderUnavailable,
 	{ readonly brand: unique symbol }
 >()("MetricReaderUnavailable", {
-	reason: Schema.Literals(["unbound", "shut-down", "rebound"])
+	reason: Schema.Literals(["unbound", "shut-down"])
 }) {}
 
 /** A reader whose metrics export only when an invocation asks: the process's one OTLP metrics
- * owner, plus the request-end hook that exports when the cadence has elapsed. */
+ * owner, plus the hook the invocation's drain calls. */
 type InvocationMetricReader = IMetricReader & Readonly<{ exportIfDue: () => Promise<void> }>
 
 /** The reader's deadline, when the caller gave one: the SDK's own timeout option. */
@@ -144,27 +139,36 @@ const withinDeadline = (
 	return Effect.runPromise(Effect.promise(run).pipe(Effect.timeout(Duration.millis(timeoutMillis))))
 }
 
+/** Where an invocation reader is: not yet bound to its meter provider, idle since its last export
+ * began, exporting one pass, or closed for good. */
+type ReaderState =
+	| Readonly<{ kind: "unbound" }>
+	| Readonly<{ kind: "idle"; producer: MetricProducer; lastExportAt: number }>
+	| Readonly<{ kind: "exporting"; producer: MetricProducer; pass: Promise<void> }>
+	| Readonly<{ kind: "shut-down" }>
+
 /**
  * Collection and export happen only inside a live invocation. A free-running reader's timer fires
  * on an idle Fluid instance, which the platform may suspend mid-export: the request then times out
- * when the next invocation wakes it. This reader exports when an invocation's telemetry flush asks
- * it to (`metricExportProcessor`) and the cadence has elapsed since the last export, and once more
- * at shutdown. The cadence is measured on the monotonic clock.
+ * when the next invocation wakes it. This reader exports when an invocation's telemetry drain asks
+ * it to (`exportIfDue`) and the cadence has elapsed since the last export began, and once more at
+ * shutdown. One pass runs at a time: a drain that arrives during a pass joins it, and a flush waits
+ * for it and then runs its own. The cadence is measured on the monotonic clock.
  */
 const invocationMetricReader = (exporter: PushMetricExporter): InvocationMetricReader => {
-	let producer: MetricProducer | undefined = undefined
-	let shutDown = false
-	let lastExportAt = performance.now()
-	let inFlight: Promise<void> | undefined = undefined
+	let state: ReaderState = { kind: "unbound" }
 	const collect = (options?: Readonly<{ timeoutMillis?: number }>): Promise<CollectionResult> => {
-		if (producer === undefined) {
-			return Promise.reject(MetricReaderUnavailable.make({ reason: "unbound" }))
+		switch (state.kind) {
+			case "unbound":
+				return Promise.reject(MetricReaderUnavailable.make({ reason: "unbound" }))
+			case "shut-down":
+				return Promise.reject(MetricReaderUnavailable.make({ reason: "shut-down" }))
+			case "idle":
+			case "exporting": {
+				const timeoutMillis = options?.timeoutMillis
+				return state.producer.collect(timeoutMillis === undefined ? {} : { timeoutMillis })
+			}
 		}
-		if (shutDown) {
-			return Promise.reject(MetricReaderUnavailable.make({ reason: "shut-down" }))
-		}
-		const timeoutMillis = options?.timeoutMillis
-		return producer.collect(timeoutMillis === undefined ? {} : { timeoutMillis })
 	}
 	const exported = (resourceMetrics: ResourceMetrics): Promise<void> => {
 		const settled = Promise.withResolvers<void>()
@@ -174,54 +178,72 @@ const invocationMetricReader = (exporter: PushMetricExporter): InvocationMetricR
 		return settled.promise
 	}
 	const exportOnce = (): Promise<void> => {
-		lastExportAt = performance.now()
-		const pass = collect()
-			.then(({ resourceMetrics }) =>
-				Arr.isArrayNonEmpty(resourceMetrics.scopeMetrics) ? exported(resourceMetrics) : undefined
-			)
-			.finally(() => {
-				inFlight = undefined
-			})
-		inFlight = pass
-		return pass
+		switch (state.kind) {
+			case "unbound":
+			case "shut-down":
+				return Promise.resolve()
+			case "exporting":
+				return state.pass.then(exportOnce)
+			case "idle": {
+				const { producer } = state
+				const startedAt = performance.now()
+				const pass = collect()
+					.then(({ resourceMetrics }) =>
+						Arr.isArrayNonEmpty(resourceMetrics.scopeMetrics)
+							? exported(resourceMetrics)
+							: undefined
+					)
+					.finally(() => {
+						if (state.kind === "exporting" && state.pass === pass) {
+							state = { kind: "idle", producer, lastExportAt: startedAt }
+						}
+					})
+				state = { kind: "exporting", producer, pass }
+				return pass
+			}
+		}
 	}
 	return {
 		setMetricProducer(metricProducer) {
-			if (producer !== undefined) {
+			if (state.kind !== "unbound") {
 				diag.error("MetricReader can not be bound to a MeterProvider again.")
 				return
 			}
-			producer = metricProducer
+			state = { kind: "idle", producer: metricProducer, lastExportAt: performance.now() }
 		},
 		...aggregationOf(exporter),
 		selectCardinalityLimit: () => METRIC_CARDINALITY_LIMIT,
 		collect,
 		forceFlush: (options) => {
-			if (shutDown) {
+			if (state.kind === "shut-down") {
 				diag.warn("Cannot forceFlush on already shutdown MetricReader.")
 				return Promise.resolve()
 			}
 			return withinDeadline(() => exportOnce().then(() => exporter.forceFlush()), options)
 		},
 		shutdown: (options) => {
-			if (shutDown) {
+			if (state.kind === "shut-down") {
 				diag.error("Cannot call shutdown twice.")
 				return Promise.resolve()
 			}
 			return withinDeadline(() => exportOnce().then(() => exporter.shutdown()), options).then(
 				() => {
-					shutDown = true
+					state = { kind: "shut-down" }
 				}
 			)
 		},
 		exportIfDue: () => {
-			if (inFlight !== undefined) {
-				return inFlight
+			switch (state.kind) {
+				case "exporting":
+					return state.pass
+				case "idle":
+					return performance.now() - state.lastExportAt < METRIC_EXPORT_INTERVAL_MILLISECONDS
+						? Promise.resolve()
+						: exportOnce()
+				case "unbound":
+				case "shut-down":
+					return Promise.resolve()
 			}
-			if (performance.now() - lastExportAt < METRIC_EXPORT_INTERVAL_MILLISECONDS) {
-				return Promise.resolve()
-			}
-			return exportOnce()
 		}
 	}
 }
@@ -229,25 +251,20 @@ const invocationMetricReader = (exporter: PushMetricExporter): InvocationMetricR
 /** Epoch milliseconds now, for the export receipt's wall-clock fields. */
 const epochMillisecondsNow = (): number => DateTime.toEpochMillis(DateTime.nowUnsafe())
 
-/** The process metrics pipeline: who it describes, its OTLP exporter, and the host's deadline. */
+/** The process metrics pipeline: who it describes, its OTLP exporter, and how long it lives. */
 export type OperationalMetricsPipeline = Readonly<{
 	origin: OperationalOrigin
 	exporter: PushMetricExporter
-	host: OperationalMetricHost
-	cadence: MetricCadence
+	lifetime: TelemetryLifetime
 }>
 
-/** When metrics export. `invocation`: inside a live Vercel invocation, when its telemetry flush
- * asks and the cadence has elapsed. `periodic`: on the SDK's own timer, for a local process, where
- * no invocation ever flushes and no idle instance is ever suspended. */
-export type MetricCadence = "invocation" | "periodic"
-
-/** The reader a cadence exports through, and the request-end hook it answers. */
+/** The reader a lifetime exports through, and the hook a request's drain calls. A process exports
+ * on the SDK's own timer, where no invocation ever drains and no idle instance is ever suspended. */
 const readerOf = (
-	cadence: MetricCadence,
+	lifetime: TelemetryLifetime,
 	exporter: PushMetricExporter
 ): Readonly<{ reader: IMetricReader; exportIfDue: () => Promise<void> }> => {
-	if (cadence === "periodic") {
+	if (lifetime.kind === "process") {
 		return {
 			reader: new PeriodicExportingMetricReader({
 				exporter,
@@ -260,24 +277,43 @@ const readerOf = (
 	return { reader, exportIfDue: () => reader.exportIfDue() }
 }
 
-/** The installed metrics owner: its provider, the request-end export hook and its shutdown. */
+/** The installed metrics owner: its provider, the pipeline's one export health built on it, the
+ * hook a request's drain calls, and its shutdown. */
 export type OperationalMetrics = Readonly<{
 	meterProvider: ApiMeterProvider
+	health: ExportHealth
 	exportIfDue: () => Promise<void>
 	shutdown: () => Promise<void>
 }>
 
+/** The process's own resource use: resident memory, its peak, and CPU time by mode. */
+const observeProcess = (meter: Meter): void => {
+	meter
+		.createObservableGauge("superstarter.process.memory", { unit: "By" })
+		.addCallback((result) => {
+			result.observe(process.memoryUsage().rss, { kind: "rss" })
+			result.observe(process.resourceUsage().maxRSS * 1024, {
+				kind: "rss-peak-since-process-start"
+			})
+		})
+	meter.createObservableCounter("process.cpu.time", { unit: "s" }).addCallback((result) => {
+		const usage = process.cpuUsage()
+		result.observe(usage.user / 1_000_000, { "cpu.mode": "user" })
+		result.observe(usage.system / 1_000_000, { "cpu.mode": "system" })
+	})
+}
+
 /** One native OTLP metrics owner per process, exported only inside live invocations on Vercel
- * (see `invocationMetricReader`) and periodically elsewhere. Stable explicit buckets permit PostHog to combine processes and
- * windows; hosts export delta counters. Shutdown performs the last collection. The installed
- * provider is returned so every later SDK component binds its self-observability to it
- * explicitly: a component built before this call would bind the API's no-op provider permanently.
+ * (see `invocationMetricReader`) and periodically elsewhere. Stable explicit buckets permit PostHog
+ * to combine processes and windows; hosts export delta counters. Shutdown performs the last
+ * collection. The installed provider is returned so every later SDK component binds its
+ * self-observability to it explicitly: a component built before this call would bind the API's
+ * no-op provider permanently.
  * https://posthog.com/docs/metrics */
 export const startOperationalMetrics = ({
 	origin,
 	exporter,
-	host,
-	cadence
+	lifetime
 }: OperationalMetricsPipeline): Effect.Effect<
 	OperationalMetrics,
 	OperationalTelemetryProviderConflict
@@ -309,17 +345,17 @@ export const startOperationalMetrics = ({
 					Result.try(() => {
 						const observed = lifecycle()
 						const failed = observed.kind === "settled" && observed.outcome === "failed"
-						const level = failed ? "Error" : "Info"
 						emitOperationalLog({
-							record: OperationalMetricExportRecord.make({ ...record, lifecycle: observed }),
-							level
+							body: { ...record, lifecycle: observed } satisfies OperationalMetricExportRecord,
+							attributes: record,
+							level: failed ? "Error" : "Info"
 						})
 					})
-				report(() => ({ kind: "started", host: host.observe() }))
+				report(() => ({ kind: "started", host: exportHostOf(lifetime) }))
 				transport.export(data, (result) => {
 					report(() => ({
 						kind: "settled",
-						host: host.observe(),
+						host: exportHostOf(lifetime),
 						outcome: result.code === ExportResultCode.SUCCESS ? "acknowledged" : "failed",
 						endedAtMilliseconds: epochMillisecondsNow(),
 						elapsedMilliseconds: Math.max(0, performance.now() - start)
@@ -331,17 +367,20 @@ export const startOperationalMetrics = ({
 			shutdown: () => transport.shutdown(),
 			...aggregationOf(exporter)
 		}
-		const { reader, exportIfDue } = readerOf(cadence, observedExporter)
+		const { reader, exportIfDue } = readerOf(lifetime, observedExporter)
 		const provider = new MeterProvider({
 			resource: resourceFromAttributes(operationalResourceAttributes(origin)),
 			readers: [reader]
 		})
-		const health = makeExportHealth({ origin, meter: provider.getMeter(OPERATIONAL_SCOPE) })
+		const meter = provider.getMeter(OPERATIONAL_SCOPE)
+		const health = makeExportHealth({ origin, meter })
 		if (!metrics.setGlobalMeterProvider(provider)) {
 			return OperationalTelemetryProviderConflict.make({ signal: "metrics" })
 		}
+		observeProcess(meter)
 		return Effect.succeed({
 			meterProvider: provider,
+			health,
 			exportIfDue,
 			shutdown: () =>
 				provider.shutdown().then(() => {
@@ -354,7 +393,9 @@ const attributesOf = (span: ReadableSpan): Attributes => ({
 	scope: span.instrumentationScope.name,
 	"span.kind": span.kind,
 	"status.code": span.status.code,
-	...Record.fromEntries(Arr.map(dimensionKeys, (key) => [key, span.attributes[key]] as const))
+	...telemetryAttributes(
+		Record.fromEntries(Arr.map(dimensionKeys, (key) => [key, span.attributes[key]] as const))
+	)
 })
 
 const presence = (span: ReadableSpan) =>
@@ -406,21 +447,6 @@ export const createSpanMeasurements = (meterProvider: ApiMeterProvider): SpanPro
 				result.observe(start === undefined ? 0 : Math.max(0, now - start), { scope })
 			}
 		})
-	meter
-		.createObservableGauge("superstarter.process.memory", { unit: "By" })
-		.addCallback((result) => {
-			const memory = process.memoryUsage()
-			result.observe(memory.rss, { kind: "rss" })
-			result.observe(process.resourceUsage().maxRSS * 1024, {
-				kind: "rss-peak-since-process-start"
-			})
-		})
-
-	meter.createObservableCounter("process.cpu.time", { unit: "s" }).addCallback((result) => {
-		const usage = process.cpuUsage()
-		result.observe(usage.user / 1_000_000, { "cpu.mode": "user" })
-		result.observe(usage.system / 1_000_000, { "cpu.mode": "system" })
-	})
 	return {
 		onStart(span) {
 			const scope = span.instrumentationScope.name
@@ -438,14 +464,3 @@ export const createSpanMeasurements = (meterProvider: ApiMeterProvider): SpanPro
 		shutdown: () => Promise.resolve()
 	}
 }
-
-/** The invocation's telemetry flush, which `@vercel/otel` runs for every request's root span while
- * the invocation is alive, also exports metrics when their cadence has elapsed. */
-export const metricExportProcessor = (
-	owner: Pick<OperationalMetrics, "exportIfDue">
-): SpanProcessor => ({
-	onStart: () => undefined,
-	onEnd: () => undefined,
-	forceFlush: () => owner.exportIfDue(),
-	shutdown: () => Promise.resolve()
-})

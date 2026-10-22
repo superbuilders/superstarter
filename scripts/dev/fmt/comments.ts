@@ -1,7 +1,7 @@
 import { Array as Arr, Option, Order, String as Str } from "effect"
 import * as ts from "typescript/unstable/ast"
 import { applyEdits } from "#scripts/dev/fmt/edits.ts"
-import type { CommentRemoval, TextEdit } from "#scripts/dev/fmt/types.ts"
+import type { TextEdit } from "#scripts/dev/fmt/types.ts"
 import type { SyntaxSource } from "#scripts/dev/shared/native-syntax.ts"
 
 /** The comments a tool reads. Every other comment but JSDoc is stripped. */
@@ -138,10 +138,10 @@ const removalOf = (text: string, span: TextEdit): TextEdit => {
 	return { start: span.start, end: spaced ? span.end + 1 : span.end }
 }
 
-/** Every comment but JSDoc and tool directives, with the text its deletion takes. A JSX expression that
- * holds only comments goes whole. */
-export const findStrippableComments = (source: SyntaxSource): ReadonlyArray<CommentRemoval> => {
-	const { sourceFile, text, file } = source
+/** Every comment but JSDoc and tool directives, with the text its deletion takes: its line when it stands alone,
+ * the spaces beside it otherwise. A JSX expression that holds only comments goes whole. */
+export const findStrippableComments = (source: SyntaxSource): ReadonlyArray<TextEdit> => {
+	const { sourceFile, text } = source
 	const syntax = syntaxOf(sourceFile)
 	const stripped = Arr.filter(
 		commentsOf(text, syntax.literals),
@@ -152,14 +152,10 @@ export const findStrippableComments = (source: SyntaxSource): ReadonlyArray<Comm
 			syntax.emptyExpressions,
 			(expression) => expression.start <= comment.start && comment.end <= expression.end
 		)
-		const target = Option.getOrElse(enclosing, () => comment)
-		const removal = removalOf(text, target)
-		return {
-			file,
-			line: sourceFile.getLineAndCharacterOfPosition(comment.start).line + 1,
-			start: removal.start,
-			end: removal.end
-		}
+		return removalOf(
+			text,
+			Option.getOrElse(enclosing, () => comment)
+		)
 	})
 	return Arr.sort(
 		Arr.dedupeWith(removals, (left, right) => left.start === right.start),
@@ -169,6 +165,6 @@ export const findStrippableComments = (source: SyntaxSource): ReadonlyArray<Comm
 
 /** Deletes each removal's text. Overlapping removals land on the next pass. */
 export const stripComments = (
-	input: Readonly<{ text: string; removals: ReadonlyArray<CommentRemoval> }>
+	input: Readonly<{ text: string; removals: ReadonlyArray<TextEdit> }>
 ): string =>
-	applyEdits<CommentRemoval>({ text: input.text, edits: input.removals, replacementOf: () => "" })
+	applyEdits<TextEdit>({ text: input.text, edits: input.removals, replacementOf: () => "" })

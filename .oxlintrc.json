@@ -17,7 +17,11 @@
 		"reportUnusedDisableDirectives": "error",
 		"respectEslintDisableDirectives": false
 	},
-	"ignorePatterns": ["packages/product/nextjs-app/src/ui/**", "scripts/dev/lint/fixtures/**"],
+	"ignorePatterns": [
+		"packages/product/nextjs-app/src/ui/**",
+		"scripts/dev/lint/fixtures/**",
+		"scripts/dev/style/fixtures/**"
+	],
 	"rules": {
 		"eslint/array-callback-return": "error",
 		"eslint/default-case-last": "error",
@@ -79,7 +83,7 @@
 				"patterns": [
 					{
 						"group": ["./*", "../*"],
-						"message": "Relative imports are banned. Use a `#` subpath import with the real file extension (`#lib/cn.ts`, `#scripts/dev/devtool-failure.ts`). See rules/no-relative-imports.md."
+						"message": "Relative imports are banned. Use a `#` subpath import with the real file extension (`#lib/cn.ts`, `#scripts/dev/shared/devtool.ts`). See rules/no-relative-imports.md."
 					}
 				]
 			}
@@ -165,23 +169,31 @@
 		"react/rules-of-hooks": "error",
 		"react/self-closing-comp": "error",
 		"superstarter/cognitive-complexity": "error",
-		"superstarter/no-as-type-assertion": "error",
 		"superstarter/no-evolving-types": "error",
 		"superstarter/no-iife": "error",
-		"superstarter/no-instanceof-error": "error",
 		"superstarter/no-literal-attribute-key": "error",
+		"superstarter/no-logical-or-fallback": "error",
 		"superstarter/no-new-error": "error",
 		"superstarter/no-nullish-coalescing": "error",
+		"superstarter/no-option-bridge": "error",
+		"superstarter/no-pointless-type-alias": "error",
 		"superstarter/no-svg-without-title": "error",
 		"superstarter/no-try": "error",
 		"superstarter/no-unused-template-literal": "error",
 		"superstarter/no-useless-continue": "error",
+		"superstarter/prefer-early-return": "error",
 		"superstarter/telemetry-ownership": "error",
 		"typescript/adjacent-overload-signatures": "error",
 		"typescript/await-thenable": "error",
 		"typescript/ban-ts-comment": "error",
 		"typescript/ban-types": "error",
 		"typescript/consistent-return": "off",
+		"typescript/consistent-type-assertions": [
+			"error",
+			{
+				"assertionStyle": "never"
+			}
+		],
 		"typescript/consistent-type-exports": "error",
 		"typescript/consistent-type-imports": "error",
 		"typescript/dot-notation": "error",
@@ -371,6 +383,12 @@
 		"unicorn/no-array-for-each": "error",
 		"unicorn/no-document-cookie": "error",
 		"unicorn/no-instanceof-array": "error",
+		"unicorn/no-instanceof-builtins": [
+			"error",
+			{
+				"useErrorIsError": true
+			}
+		],
 		"unicorn/no-useless-switch-case": "error",
 		"unicorn/prefer-array-flat-map": "error",
 		"unicorn/prefer-array-index-of": "error",

@@ -1,8 +1,7 @@
 import { Array as Arr } from "effect"
 import * as ts from "typescript/unstable/ast"
-import { packageOfSymbol } from "#scripts/dev/lint/packages.ts"
-import type { LintRule, Violation } from "#scripts/dev/lint/types.ts"
-import { violationAt } from "#scripts/dev/lint/violation.ts"
+import type { Visit } from "#scripts/dev/lint/types.ts"
+import { packageOfSymbol } from "#scripts/dev/shared/packages.ts"
 
 const BANNED_FACTORIES: ReadonlyArray<string> = ["timestamp", "date", "time", "interval"]
 
@@ -11,9 +10,7 @@ const BANNED_FACTORIES: ReadonlyArray<string> = ["timestamp", "date", "time", "i
  * time and interval column factories are banned outright. The callee is resolved through the checker to its
  * drizzle-orm export, so a renamed or namespace import cannot hide one. See rules/no-timestamp-columns.md.
  */
-export const noTimestampColumns: LintRule = ({ sourceFile, semantics }) => {
-	const violations: Array<Violation> = []
-
+export const noTimestampColumns: Visit = ({ semantics }) => {
 	const bannedFactoryOf = (callee: ts.Expression): string | undefined => {
 		const symbol = semantics.symbolAt(callee)
 		const resolved = symbol === undefined ? undefined : semantics.aliasTarget(symbol)
@@ -23,23 +20,18 @@ export const noTimestampColumns: LintRule = ({ sourceFile, semantics }) => {
 		return Arr.contains(BANNED_FACTORIES, resolved.name) ? resolved.name : undefined
 	}
 
-	const walk = (node: ts.Node): void => {
+	return (node) => {
 		const factory = ts.isCallExpression(node) ? bannedFactoryOf(node.expression) : undefined
-		if (ts.isCallExpression(node) && factory !== undefined) {
-			violations.push(
-				violationAt({
-					sourceFile,
-					node: node.expression,
-					rule: "no-timestamp-columns",
-					message: `Drizzle column factory '${factory}(…)' is banned. Tables use UUIDv7 primary keys (uuid().default(sql\`uuidv7()\`)) and read creation time from the id with timestampFromUuidv7(). No exceptions.`,
-					suggestion:
-						"Drop the column. A separate event time is its own UUIDv7-keyed ledger row; a source or future time is unix milliseconds in a bigint named for its unit. See rules/no-timestamp-columns.md."
-				})
-			)
+		if (!ts.isCallExpression(node) || factory === undefined) {
+			return []
 		}
-		node.forEachChild(walk)
+		return [
+			{
+				node: node.expression,
+				message: `Drizzle column factory '${factory}(…)' is banned. Tables use UUIDv7 primary keys (uuid().default(sql\`uuidv7()\`)) and read creation time from the id with timestampFromUuidv7(). No exceptions.`,
+				suggestion:
+					"Drop the column. A separate event time is its own UUIDv7-keyed ledger row; a source or future time is unix milliseconds in a bigint named for its unit. See rules/no-timestamp-columns.md."
+			}
+		]
 	}
-
-	walk(sourceFile)
-	return violations
 }

@@ -1,7 +1,7 @@
 import { SqlState } from "@superstarter/operational-telemetry/failure"
 import type { PostgresTransientFailure } from "@superstarter/todo-protocol/transient-failure"
 import { DrizzleQueryError } from "drizzle-orm/errors"
-import { Match, Predicate, Schema } from "effect"
+import { Match, Option, Predicate, Record, Schema } from "effect"
 import { DatabaseError } from "pg"
 
 /** Node's code for a socket that failed below the protocol: refused, reset, timed out, unresolved. */
@@ -64,19 +64,17 @@ export const postgresDiagnosticOf = (error: unknown): PostgresDiagnostic =>
 		Match.orElse(transportDiagnosticOf)
 	)
 
-type TransientReason = PostgresTransientFailure["reason"]
-
 /** A SERIALIZABLE conflict (40001) and a deadlock (40P01) leave the attempt without effect, so it
  * may succeed when run again. Callers decide whether to retry; nothing here retries. */
-export const transientReasonOf = (diagnostic: PostgresDiagnostic): TransientReason | undefined => {
-	if (diagnostic.kind !== "sqlstate") {
-		return undefined
-	}
-	if (diagnostic.sqlState === "40001") {
-		return "serialization-failure"
-	}
-	if (diagnostic.sqlState === "40P01") {
-		return "deadlock"
-	}
-	return undefined
+const TRANSIENT_SQLSTATES: Readonly<Record<string, PostgresTransientFailure["reason"]>> = {
+	"40001": "serialization-failure",
+	"40P01": "deadlock"
 }
+
+/** Why a refusal is transient, when its SQLSTATE says so. */
+export const transientReasonOf = (
+	diagnostic: PostgresDiagnostic
+): Option.Option<PostgresTransientFailure["reason"]> =>
+	diagnostic.kind === "sqlstate"
+		? Record.get(TRANSIENT_SQLSTATES, diagnostic.sqlState)
+		: Option.none()

@@ -6,16 +6,19 @@ import {
 	withOperationalTelemetry
 } from "@superstarter/operational-telemetry/effect"
 import type { SharedAttributes } from "@superstarter/operational-telemetry/schema"
-import { correlationAttributes } from "@superstarter/operational-telemetry/span-export"
+import {
+	correlationAttributes,
+	sessionAliases
+} from "@superstarter/operational-telemetry/span-export"
 import type { OPERATIONAL_SPANS } from "@superstarter/operational-telemetry/spans"
 import { Effect, Function as Fn, Result } from "effect"
 import { after } from "next/server"
 import { TelemetrySink } from "#server/observability/sink.ts"
 
-/** The coordinates of a failure Next reported, with `digest`, the property the browser's boundary
+/** The coordinates of a failure Next reported, whose `next.error.digest` the browser's boundary
  * capture sets for the same failure; or the action that reported a failure it converted into a value. */
 export type ServerExceptionContext =
-	| (typeof OPERATIONAL_SPANS.frameworkRequestError.opened.Type & Readonly<{ digest?: string }>)
+	| typeof OPERATIONAL_SPANS.frameworkRequestError.opened.Type
 	| Required<Pick<SharedAttributes, "superstarter.failure.operation">>
 
 /** Hands `send` to Next's `after()`, which runs it once the response has finished. Outside a
@@ -35,12 +38,13 @@ const captureException = (
 		const { origin } = yield* OperationalTelemetry
 		const { sendException } = yield* TelemetrySink
 		const span = trace.getActiveSpan()?.spanContext()
-		const correlation = requestCorrelation()
+		const correlated = correlationAttributes({ ...requestCorrelation(), ...context })
 		const send = sendException({
 			error,
 			properties: {
 				...context,
-				...correlationAttributes({ ...correlation, ...context }),
+				...correlated,
+				...sessionAliases(correlated),
 				service: origin.service,
 				deployment: origin.deployment,
 				trace_id: span?.traceId,

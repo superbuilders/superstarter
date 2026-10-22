@@ -1,6 +1,6 @@
 import { String as Str } from "effect"
 import * as ts from "typescript/unstable/ast"
-import type { Semantics } from "#scripts/dev/lint/semantic.ts"
+import type { Semantics } from "#scripts/dev/shared/semantic.ts"
 
 /** `receiver.method(…)`: the call shape of a Drizzle query-builder step. */
 export type MethodCall = ts.CallExpression & Readonly<{ expression: ts.PropertyAccessExpression }>

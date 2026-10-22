@@ -2,26 +2,16 @@ import { observed } from "@superstarter/operational-telemetry/effect"
 import { OPERATIONAL_SPANS } from "@superstarter/operational-telemetry/spans"
 import type { Effect } from "effect"
 
-/** How a scope issued one statement: a Drizzle builder, or a code-named prepared plan. Spans carry
- * the plan's name, never SQL text or bound values. */
-export type PostgresStatementIdentity =
-	| Readonly<{ kind: "builder" }>
-	| Readonly<{ kind: "prepared"; name: string }>
+type StatementAttributes = typeof OPERATIONAL_SPANS.postgresStatement.opened.Type
 
-const statementAttributesOf = (identity: PostgresStatementIdentity) => {
-	if (identity.kind === "prepared") {
-		return { "db.system.name": "postgresql", "db.operation.name": identity.name } as const
-	}
-	return { "db.system.name": "postgresql" } as const
-}
-
-/** One span per issued statement. */
+/** One span per issued statement. A prepared plan names itself; a builder statement has no name,
+ * and SQL text or bound values never become one. */
 export const observeStatement =
-	(identity: PostgresStatementIdentity) =>
+	(attributes: StatementAttributes) =>
 	<A, E, R>(statement: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-		statement.pipe(observed(OPERATIONAL_SPANS.postgresStatement, statementAttributesOf(identity)))
+		statement.pipe(observed(OPERATIONAL_SPANS.postgresStatement, attributes))
 
-type TransactionAccess =
+export type TransactionAccess =
 	(typeof OPERATIONAL_SPANS.postgresTransaction.opened.Type)["superstarter.postgres.access"]
 
 /** One span per transaction, around BEGIN through COMMIT or ROLLBACK. */

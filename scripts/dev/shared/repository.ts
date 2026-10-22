@@ -1,4 +1,4 @@
-import { Array as Arr, String as Str } from "effect"
+import { Array as Arr, Option, String as Str } from "effect"
 
 /**
  * The repository root, three directories above this module, wherever a tool is started from. The dev tools assume
@@ -11,6 +11,13 @@ export const repositoryRoot: string = Str.slice(
 
 /** Files under these directory segments are generated or installed, never maintained source. */
 const GENERATED_SEGMENTS: ReadonlyArray<string> = ["node_modules", ".next", ".git"]
+
+/** The directory a file sits in. */
+export const directoryOf = (file: string): string =>
+	Option.match(Str.lastIndexOf("/")(file), {
+		onNone: () => ".",
+		onSome: (index) => Str.slice(0, index)(file)
+	})
 
 /** A repository-relative path; a file outside the repository keeps its absolute path. */
 export const repositoryPath = (file: string): string =>

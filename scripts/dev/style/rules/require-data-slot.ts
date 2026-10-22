@@ -1,12 +1,7 @@
 import { Array as Arr, Option, Predicate } from "effect"
 import * as ts from "typescript/unstable/ast"
-import type { SyntaxSource } from "#scripts/dev/shared/native-syntax.ts"
-import {
-	dataSlotAttributesOf,
-	isComponentFile,
-	type JsxRoot
-} from "#scripts/dev/style/components.ts"
-import type { StyleViolation } from "#scripts/dev/style/types.ts"
+import type { Report } from "#scripts/dev/shared/finding.ts"
+import { dataSlotAttributesOf, type JsxRoot } from "#scripts/dev/style/components.ts"
 
 type ComponentFunction = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction
 
@@ -55,58 +50,43 @@ const hasDataSlotAnywhere = (jsx: JsxRoot): boolean => {
 	return ts.isJsxElement(jsx) && childrenHaveDataSlot(jsx.children)
 }
 
+/** A component: a function with a capitalized name, declared or bound to a constant. */
+const componentOf = (
+	node: ts.Node
+): Readonly<{ name: string; component: ComponentFunction }> | undefined => {
+	if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+		return { name: node.name.text, component: node }
+	}
+	if (
+		!ts.isVariableDeclaration(node) ||
+		!ts.isIdentifier(node.name) ||
+		node.initializer === undefined ||
+		(!ts.isFunctionExpression(node.initializer) && !ts.isArrowFunction(node.initializer))
+	) {
+		return undefined
+	}
+	return { name: node.name.text, component: node.initializer }
+}
+
 /**
- * A component function (a capitalized name) in a component directory carries a data-slot attribute somewhere in
- * the JSX it returns: on its top-level element, or nested, for compositions that wrap a primitive.
+ * A component function (a capitalized name) carries a data-slot attribute somewhere in the JSX it returns: on its
+ * top-level element, or nested, for compositions that wrap a primitive.
  */
-export const requireDataSlot = (source: SyntaxSource): ReadonlyArray<StyleViolation> => {
-	const { sourceFile, file } = source
-	if (!isComponentFile(file)) {
-		return []
-	}
-	const violations: Array<StyleViolation> = []
-
-	const checkComponent = (node: ComponentFunction, name: string): void => {
-		const returned = /^[A-Z]/.test(name) ? returnedJsxOf(node) : undefined
-		if (returned === undefined || hasDataSlotAnywhere(returned)) {
-			return
-		}
-		const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-			returned.getStart(sourceFile)
-		)
-		violations.push({
-			file,
-			line: line + 1,
-			column: character + 1,
-			rule: "require-data-slot",
-			message: `Component "${name}" missing data-slot attribute.`,
-			componentName: name
-		})
-	}
-
-	const checkDeclaration = (declaration: ts.VariableDeclaration): void => {
-		const initializer = declaration.initializer
-		if (
-			ts.isIdentifier(declaration.name) &&
-			initializer !== undefined &&
-			(ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer))
-		) {
-			checkComponent(initializer, declaration.name.text)
-		}
-	}
-
+export const requireDataSlot = (sourceFile: ts.SourceFile): ReadonlyArray<Report> => {
+	const reports: Array<Report> = []
 	const walk = (node: ts.Node): void => {
-		if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
-			checkComponent(node, node.name.text)
-		}
-		if (ts.isVariableStatement(node)) {
-			for (const declaration of node.declarationList.declarations) {
-				checkDeclaration(declaration)
-			}
+		const found = componentOf(node)
+		const returned =
+			found !== undefined && /^[A-Z]/.test(found.name) ? returnedJsxOf(found.component) : undefined
+		if (found !== undefined && returned !== undefined && !hasDataSlotAnywhere(returned)) {
+			reports.push({
+				node: returned,
+				message: `Component "${found.name}" carries no data-slot attribute.`,
+				suggestion: "Give its root element a data-slot that names the component in kebab case."
+			})
 		}
 		node.forEachChild(walk)
 	}
-
 	walk(sourceFile)
-	return violations
+	return reports
 }

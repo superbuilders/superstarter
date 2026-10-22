@@ -110,7 +110,7 @@ whenever a package it depends on changes. Concurrency comes from `--concurrency`
 | `pnpm dev` / `pnpm build` / `pnpm start` | Next.js, in the app package. `build` also typechecks with the patched `tsc`.                                                                                                                                                                                  |
 | `pnpm check`                             | The gate, run by the pre-commit hook: every typecheck, superlint, oxlint, style lint, format check and fallow. Never writes.                                                                                                                                  |
 | `pnpm typecheck`                         | `tsc` for every package (the app after `next typegen`) and for the root tooling.                                                                                                                                                                              |
-| `pnpm lint`                              | Superlint for every package and the root tooling, the fixture self-tests (superlint's fixtures, the plugin rules' RuleTester cases), oxlint (type-aware, with the repository plugin) and fallow (unused files, exports, types and dependencies), in parallel. |
+| `pnpm lint`                              | Superlint for every package and the root tooling, the fixture self-tests (superlint and style fixtures and the plugin's RuleTester), oxlint (type-aware, with the repository plugin) and fallow (unused files, exports, types and dependencies), in parallel. |
 | `pnpm style`                             | The Tailwind token linter.                                                                                                                                                                                                                                    |
 | `pnpm format` / `pnpm format:write`      | Check / write: strips every comment but JSDoc and tool directives, normalizes blank lines, then oxfmt.                                                                                                                                                        |
 | `pnpm env:pull`                          | Vercel's development environment into the app's `.env.local`.                                                                                                                                                                                                 |
@@ -154,17 +154,27 @@ column, grant or parameter PostgreSQL would refuse fails `pnpm test` instead of 
     fails, and exhaustive switches with no `default`; tsc's `noImplicitReturns` proves every path returns.
   - `typescript/no-invalid-void-type`: oxlint's port refuses `void` as a generic argument
     (`Promise.withResolvers<void>()`), which the rule exists to allow.
+- **oxlint's own rules for the repository's bans:** `typescript/consistent-type-assertions` (`assertionStyle:
+  never`, so only `as const`) and `unicorn/no-instanceof-builtins` (`useErrorIsError`).
 - **The repository plugin** (`scripts/dev/oxlint-plugin.ts`, one rule per module in `scripts/dev/oxlint/rules/`,
-  each with a RuleTester self-test, run by oxlint): no `try`, `as`, `??`, IIFEs, `new Error`, `instanceof
-  Error`, evolving `null`/`[]` variables, needless template literals, untitled `<svg>`, literal
-  `superstarter.*` keys on `Span.attribute`, telemetry ownership (who registers the SDK, constructs the
-  OTLP exporters, starts posthog-js and opens spans), and Biome's cognitive complexity (at most 15).
-- **Superlint** (`scripts/dev/lint.ts`): the opinionated type-aware rules on TypeScript 7's native API,
-  including no null-and-undefined unions, no `||` fallbacks, no classes but Effect's, no timestamp columns
-  or random UUIDs, no implicit Drizzle `SELECT *`, and no Drizzle `delete` or `update` without `.where()`.
-- **Style lint** (`scripts/dev/style.ts`): every Tailwind class resolves against the theme in the app's
-  `src/styles/globals.css`; no arbitrary colors, spacing, radii or shadows; every component carries a
-  `data-slot`.
+  each with a RuleTester self-test, run by oxlint): no `try`, `??`, IIFEs, `new Error`, `||` fallbacks,
+  evolving `null`/`[]` variables, pointless type aliases, needless template literals, untitled `<svg>`,
+  literal `superstarter.*` keys on `Span.attribute`, bodies wrapped in one conditional (prefer early exits),
+  telemetry ownership (who registers the SDK, constructs the OTLP exporters, starts posthog-js and opens
+  spans), and Biome's cognitive complexity (at most 15).
+- **Superlint** (`scripts/dev/lint.ts`): the opinionated rules that need the checker, on TypeScript 7's
+  native API: no null-and-undefined unions, no classes but Effect's, no module state, no pointless
+  indirection, no timestamp columns or random UUIDs, no implicit Drizzle `SELECT *`, no Drizzle `delete` or
+  `update` without `.where()`, and program isolation for the tooling.
+- **Style lint** (`scripts/dev/style.ts`, on TypeScript 7's native API with the app's checker): every class
+  string is found (JSX `className` and `*ClassName` attributes, and every call the checker resolves to `cn`,
+  `clsx`, `twMerge` or `cva`, its variants and compound variants included, with names followed to their
+  constants) and must be statically known: a union of literal types is read literal by literal, a plain
+  `string` and an interpolation inside a class are refused. Every class compiles against the theme in the
+  app's `src/styles/globals.css`; color utilities take theme tokens only; no arbitrary colors, spacing, radii
+  or shadows; one class list never sets a property twice under the same variants, nor repeats a class; every
+  component in `src/app`, `src/components` and `src/ui` carries a unique `data-slot`. Each rule has fixtures
+  under `scripts/dev/style/fixtures/`.
 
 ## Layout
 

@@ -6,39 +6,23 @@ import {
 	listTodosStatement,
 	removeTodoStatement
 } from "@superstarter/database/queries/todos"
-import type { PostgresQueryScope } from "@superstarter/database/query/contracts"
-import { coreTodos } from "@superstarter/database/schema/core/todos"
 import { annotateOperation, observed } from "@superstarter/operational-telemetry/effect"
 import { OPERATIONAL_SPANS } from "@superstarter/operational-telemetry/spans"
-import { TodoId, TodoNotFound, TodoTitle } from "@superstarter/todo-protocol/todos"
-import { createSelectSchema } from "drizzle-orm/effect-schema"
-import { Array as Arr, Effect, Schema } from "effect"
+import { type TodoId, TodoNotFound, type TodoTitle } from "@superstarter/todo-protocol/todos"
+import { Array as Arr, Effect } from "effect"
 import { withApplicationPostgres } from "#server/postgres/runtime.ts"
 
-/** One todo as the list renders it, derived from the table so its shape has one home. */
-const Todo = createSelectSchema(coreTodos, { id: TodoId, title: TodoTitle })
-export type Todo = typeof Todo.Type
-
-const decodeTodos = Schema.decodeEffect(Schema.Array(Todo))
-
-/** Our own SQL decodes once; a row that does not decode is a defect, never a state. */
-const listTodos = (scope: PostgresQueryScope) =>
-	scope
-		.runPrepared(listTodosStatement, {})
-		.pipe(Effect.flatMap((rows) => decodeTodos(rows).pipe(Effect.orDie)))
-
 /** Every todo, newest first: UUIDv7 ids sort by creation time. */
-export const readTodos = withApplicationPostgres(withPostgresStatement(listTodos)).pipe(
-	observed(OPERATIONAL_SPANS.todosRead)
-)
+export const readTodos = withApplicationPostgres(
+	withPostgresStatement((scope) => scope.runPrepared(listTodosStatement, {}))
+).pipe(observed(OPERATIONAL_SPANS.todosRead))
 
-/** Inserts a todo and answers its new id. An INSERT that returns no row is a defect. */
+/** Inserts a todo and answers the one id PostgreSQL minted for it. */
 export const insertTodo = (title: TodoTitle) =>
 	withApplicationPostgres(
 		withPostgresStatement((scope) => scope.runPrepared(insertTodoStatement, { title }))
 	).pipe(
-		Effect.flatMap((rows) => Effect.fromOption(Arr.head(rows)).pipe(Effect.orDie)),
-		Effect.map((row) => row.id),
+		Effect.map(([row]) => row.id),
 		Effect.tap((id) =>
 			annotateOperation(OPERATIONAL_SPANS.todoCreate, { "superstarter.todo.id": id })
 		),

@@ -7,6 +7,7 @@ import {
 import { Effect, Layer, ManagedRuntime } from "effect"
 import { cacheSignal } from "react"
 import { deployment } from "#env.ts"
+import { WebObservabilityLive } from "#server/observability/pipeline.ts"
 import { type TelemetrySink, TelemetrySinkLive } from "#server/observability/sink.ts"
 import { type ApplicationPostgres, ApplicationPostgresLive } from "#server/postgres/runtime.ts"
 
@@ -20,8 +21,12 @@ const OperationalTelemetryLive = Layer.effect(
 	)
 )
 
-/** The process's services: its telemetry, where that telemetry goes, and its database pool. */
-const WebLive = Layer.mergeAll(TelemetrySinkLive, ApplicationPostgresLive).pipe(
+/** The process's services: its telemetry, where that telemetry goes, the OpenTelemetry pipeline
+ * registered on them, and its database pool. Each is built after what it stands on and released
+ * before it, so the pool ends while the pipeline can still export what its ending writes. */
+const WebLive = ApplicationPostgresLive.pipe(
+	Layer.provideMerge(WebObservabilityLive),
+	Layer.provideMerge(TelemetrySinkLive),
 	Layer.provideMerge(OperationalTelemetryLive)
 )
 
@@ -62,12 +67,9 @@ const renderSignal = (): AbortSignal | undefined => {
  * A server read run for the React render that awaits it; the render owns its lifetime. React
  * aborts `cacheSignal()` when that render ends: completed, failed, or aborted, as when Next
  * abandons a prospective or prefetch render once its response no longer needs the segment. The
- * abort interrupts the read before the response ends, so it starts no further statement or call
- * and its spans end with their true `interrupted` outcome instead of being ended by `@vercel/otel`
- * with the request's root. Outside a render (a server action) there is no signal.
+ * abort interrupts the read, so it starts no further statement or call, and each of its spans ends
+ * when its own work does, with its own outcome (`interrupted` for the abandoned ones). Outside a
+ * render (a server action) there is no signal.
  */
-export const runRenderRead = <A, E>(read: Effect.Effect<A, E, WebServices>): Promise<A> => {
-	const signal = renderSignal()
-	const options = signal === undefined ? {} : { signal }
-	return webRuntime().runPromise(read.pipe(withOperationalTelemetry), options)
-}
+export const runRenderRead = <A, E>(read: Effect.Effect<A, E, WebServices>): Promise<A> =>
+	webRuntime().runPromise(read.pipe(withOperationalTelemetry), { signal: renderSignal() })

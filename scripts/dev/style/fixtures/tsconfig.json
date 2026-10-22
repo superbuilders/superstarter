@@ -1,0 +1,13 @@
+{
+	"extends": "../../../../tsconfig.json",
+	"compilerOptions": {
+		"lib": ["dom", "dom.iterable", "esnext"],
+		"jsx": "react-jsx",
+		"types": ["node"],
+		"paths": {
+			"#lib/*": ["../../../../packages/product/nextjs-app/src/lib/*"]
+		}
+	},
+	"include": ["**/*.tsx"],
+	"exclude": []
+}

@@ -25,7 +25,7 @@ export class PostgresStatementRejected extends Schema.TaggedError<
 	PostgresStatementRejected,
 	{ readonly brand: unique symbol }
 >()("PostgresStatementRejected", {
-	operation: Schema.Literals(["construction", "statement", "transaction"]),
+	operation: Schema.Literals(["statement", "transaction"]),
 	diagnostic: PostgresDiagnostic
 }) {}
 
@@ -52,55 +52,36 @@ export type PostgresStatement<A> = QueryPromise<A> | PgAsyncPreparedQuery<{ exec
 type PostgresParameter = string | number | boolean | null | ReadonlyArray<string | number | boolean>
 export type PostgresParameters = Readonly<Record<string, PostgresParameter>>
 
-/** A named plan, built once per physical client that runs it. The name is the plan's and the
- * statement's telemetry name; spans never carry its SQL or parameters. */
-export type PreparedPostgresStatement<A> = Readonly<{
-	statementName: string
-	handleOf: (
-		database: PostgresBuilder,
-		client: Client | PoolClient
-	) => PgAsyncPreparedQuery<{ execute: A }>
-}>
+/** A Schema the scope decodes a result with, needing no services. */
+export type PostgresResultSchema = Schema.Top & { readonly DecodingServices: never }
 
 /**
- * A prepared statement's name and how to build it.
- * @public
+ * One named statement: its name, the Schema its result decodes through, and how to render it with
+ * its named placeholders. PostgreSQL parses a name once per connection (pg skips PARSE for a name
+ * it already prepared on that client), so nothing is cached here. The result decodes once: our own
+ * SQL answering anything else is a defect. Spans carry the name, never SQL text or bound values.
  */
-export type PostgresStatementPlan<A> = Readonly<{
+export type PreparedPostgresStatement<S extends PostgresResultSchema> = Readonly<{
 	name: string
-	build: (database: PostgresBuilder, name: string) => PgAsyncPreparedQuery<{ execute: A }>
+	result: S
+	build: (database: PostgresBuilder, name: string) => PgAsyncPreparedQuery<{ execute: unknown }>
 }>
 
 /**
- * Declares a named plan. It is built lazily, once per physical client, on first use.
+ * Declares a named statement, inferring its result Schema.
  * @public
  */
-export const preparePostgresStatement = <A>(
-	plan: PostgresStatementPlan<A>
-): PreparedPostgresStatement<A> => {
-	const { name: statementName, build } = plan
-	const handles = new WeakMap<Client | PoolClient, PgAsyncPreparedQuery<{ execute: A }>>()
-	return {
-		statementName,
-		handleOf: (database, client) => {
-			const existing = handles.get(client)
-			if (existing !== undefined) {
-				return existing
-			}
-			const statement = build(database, statementName)
-			handles.set(client, statement)
-			return statement
-		}
-	}
-}
+export const preparePostgresStatement = <S extends PostgresResultSchema>(
+	statement: PreparedPostgresStatement<S>
+): PreparedPostgresStatement<S> => statement
 
 /** Borrowed query custody: neither the client nor transaction control escapes. */
 export type PostgresQueryScope = Readonly<{
 	run: <A>(
 		build: (database: PostgresBuilder) => PostgresStatement<A>
 	) => Effect.Effect<A, PostgresOperationFailure>
-	runPrepared: <A>(
-		statement: PreparedPostgresStatement<A>,
+	runPrepared: <S extends PostgresResultSchema>(
+		statement: PreparedPostgresStatement<S>,
 		parameters: PostgresParameters
-	) => Effect.Effect<A, PostgresOperationFailure>
+	) => Effect.Effect<S["Type"], PostgresOperationFailure>
 }>

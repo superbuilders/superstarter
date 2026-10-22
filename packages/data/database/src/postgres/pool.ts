@@ -23,6 +23,10 @@ const POSTGRES_IDLE_MILLISECONDS = 5_000
  * one, so the next request after a quiet moment skips a TLS handshake and an IAM signature. */
 const POSTGRES_MIN_CONNECTIONS = 1
 
+/** How long a borrow waits for a client, queued behind a full pool or dialing an unreachable host,
+ * before it fails as a connect rejection rather than waiting for the host's own timeout. */
+const POSTGRES_CONNECT_TIMEOUT_MILLISECONDS = 5_000
+
 /** One pg pool and the clients it opened that no borrow has seen yet. */
 export type PostgresPool = Readonly<{ native: Pool; opened: WeakSet<PoolClient> }>
 
@@ -54,6 +58,7 @@ export const makePostgresPool = (input: PostgresPoolInput): PostgresPool => {
 		max: input.maxConnections,
 		min: POSTGRES_MIN_CONNECTIONS,
 		idleTimeoutMillis: POSTGRES_IDLE_MILLISECONDS,
+		connectionTimeoutMillis: POSTGRES_CONNECT_TIMEOUT_MILLISECONDS,
 		options: POSTGRES_SESSION_OPTIONS
 	})
 	const opened = new WeakSet<PoolClient>()
@@ -67,12 +72,36 @@ export const makePostgresPool = (input: PostgresPoolInput): PostgresPool => {
 const connectionStateOf = (pool: PostgresPool, client: PoolClient): "connected" | "reused" =>
 	pool.opened.delete(client) ? "connected" : "reused"
 
+/** A borrow that can be interrupted while it waits: a client pg hands over after its borrower was
+ * interrupted goes straight back to the pool. */
+const borrow = (pool: PostgresPool): Effect.Effect<PoolClient, PostgresConnectRejected> =>
+	Effect.callback<PoolClient, PostgresConnectRejected>((resume, signal) => {
+		void pool.native.connect().then(
+			(client) => {
+				if (signal.aborted) {
+					client.release()
+					return
+				}
+				resume(Effect.succeed(client))
+			},
+			(error: unknown) => {
+				resume(Effect.fail(connectFailureOf(error)))
+			}
+		)
+	})
+
+const released = (client: PoolClient) =>
+	Effect.sync(() => {
+		client.off("error", deliveredToStatement)
+		client.release()
+	})
+
 const withPooledPostgresOf = <A, E, R>(
 	pool: PostgresPool,
 	consume: (database: NativePostgresDatabase) => Effect.Effect<A, E, R>
 ): Effect.Effect<A, E | PostgresConnectRejected, R> =>
-	Effect.acquireUseRelease(
-		Effect.tryPromise({ try: () => pool.native.connect(), catch: connectFailureOf }).pipe(
+	Effect.uninterruptibleMask((restore) =>
+		restore(borrow(pool)).pipe(
 			Effect.tap((client) => Effect.sync(() => client.on("error", deliveredToStatement))),
 			Effect.tap((client) =>
 				annotateOperation(OPERATIONAL_SPANS.postgresConnect, {
@@ -82,18 +111,15 @@ const withPooledPostgresOf = <A, E, R>(
 					"superstarter.postgres.pool.waiting": pool.native.waitingCount
 				})
 			),
-			observed(OPERATIONAL_SPANS.postgresConnect, { "db.system.name": "postgresql" })
-		),
-		(client) => consume(drizzle({ client })),
-		(client) =>
-			Effect.sync(() => {
-				client.off("error", deliveredToStatement)
-				client.release()
-			})
+			observed(OPERATIONAL_SPANS.postgresConnect, { "db.system.name": "postgresql" }),
+			Effect.flatMap((client) =>
+				restore(consume(drizzle({ client }))).pipe(Effect.ensuring(released(client)))
+			)
+		)
 	)
 
-/** Borrow one client, run `consume`, release it. Acquisition is uninterruptible, so a client pg
- * hands to an interrupted borrower is still released. */
+/** Borrow one client, run `consume`, release it. Waiting for the client and running `consume` are
+ * interruptible; the release always runs once the borrow holds a client. */
 export const withPooledPostgres: {
 	<A, E, R>(
 		consume: (database: NativePostgresDatabase) => Effect.Effect<A, E, R>

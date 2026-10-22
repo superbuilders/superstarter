@@ -1,8 +1,8 @@
 import { Array as Arr, Option, Predicate, String as Str } from "effect"
 import * as ts from "typescript/unstable/ast"
 import { type Checker, type Type, TypeFlags } from "typescript/unstable/sync"
-import type { LintRule, RuleContext, Violation } from "#scripts/dev/lint/types.ts"
-import { violationAt } from "#scripts/dev/lint/violation.ts"
+import type { Visit } from "#scripts/dev/lint/types.ts"
+import type { Report } from "#scripts/dev/shared/finding.ts"
 
 type FunctionLike =
 	| ts.FunctionDeclaration
@@ -109,35 +109,30 @@ const boundaryKindOf = (node: Boundary): string => {
  * omittable parameter or property already has the undefined arm, so it may not add null. Parameters, return types
  * (written, or inferred on an exported function) and property signatures are checked; local variables stay free.
  */
-export const noNullUndefinedUnion: LintRule = (context: RuleContext) => {
-	const { sourceFile, checker } = context
-	const violations: Array<Violation> = []
-
-	const checkBoundary = (node: Boundary): void => {
+export const noNullUndefinedUnion: Visit = ({ sourceFile, checker }) => {
+	const checkBoundary = (node: Boundary): ReadonlyArray<Report> => {
 		const typeNode = node.type
 		const type = typeNode === undefined ? undefined : checker.getTypeFromTypeNode(typeNode)
 		if (type === undefined) {
-			return
+			return []
 		}
 		const members = membersOf(type)
 		const omittable = isOmittable(node)
 		if (!includesNull(members) || (!omittable && !includesUndefined(members))) {
-			return
+			return []
 		}
 		const name = ts.isIdentifier(node.name) ? node.name.text : node.name.getText(sourceFile)
 		const base = baseTypeOf(checker, members)
 		const reason = omittable
 			? "can be omitted and also admits null"
 			: "admits both null and undefined"
-		violations.push(
-			violationAt({
-				sourceFile,
+		return [
+			{
 				node: node.name,
-				rule: "no-null-undefined-union",
 				message: `${boundaryKindOf(node)} '${name}' ${reason}: three states for every reader.`,
 				suggestion: `Pick one absence: '${name}?: ${base}' (optional) or '${name}: ${base} | null' (nullable), or an Option.`
-			})
-		)
+			}
+		]
 	}
 
 	const returnTypeOf = (
@@ -158,41 +153,33 @@ export const noNullUndefinedUnion: LintRule = (context: RuleContext) => {
 		return Option.map(Option.fromNullishOr(inferred), (type) => ({ type, at: node }))
 	}
 
-	const checkReturn = (node: FunctionLike): void => {
+	const checkReturn = (node: FunctionLike): ReadonlyArray<Report> => {
 		const found = returnTypeOf(node)
 		if (Option.isNone(found)) {
-			return
+			return []
 		}
 		const members = membersOf(found.value.type)
 		if (!includesNull(members) || !includesUndefined(members)) {
-			return
+			return []
 		}
 		const base = baseTypeOf(checker, members)
-		violations.push(
-			violationAt({
-				sourceFile,
+		return [
+			{
 				node: found.value.at,
-				rule: "no-null-undefined-union",
 				message: `Function '${functionNameOf(node, sourceFile)}' returns both null and undefined: three states for every caller.`,
 				suggestion: `Return '${base} | undefined', '${base} | null' or an Option.`
-			})
-		)
+			}
+		]
 	}
 
-	const walk = (node: ts.Node): void => {
+	return (node) => {
 		if (
 			ts.isPropertySignatureDeclaration(node) ||
 			ts.isPropertyDeclaration(node) ||
 			ts.isParameterDeclaration(node)
 		) {
-			checkBoundary(node)
+			return checkBoundary(node)
 		}
-		if (isFunctionLike(node)) {
-			checkReturn(node)
-		}
-		node.forEachChild(walk)
+		return isFunctionLike(node) ? checkReturn(node) : []
 	}
-
-	walk(sourceFile)
-	return violations
 }

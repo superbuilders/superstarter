@@ -1,41 +1,28 @@
-import { context, type MeterProvider, TraceFlags, trace } from "@opentelemetry/api"
-import { type AnyValueMap, logs, SeverityNumber } from "@opentelemetry/api-logs"
+import type { MeterProvider } from "@opentelemetry/api"
+import { logs, SeverityNumber } from "@opentelemetry/api-logs"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import {
 	BatchLogRecordProcessor,
 	LoggerProvider,
 	type LogRecordExporter
 } from "@opentelemetry/sdk-logs"
-import type { SpanProcessor } from "@opentelemetry/sdk-trace-base"
+
 import {
 	Array as Arr,
 	Console,
 	Effect,
 	Formatter,
 	type LogLevel,
-	Record,
 	Result,
 	String as Str
 } from "effect"
 import { OperationalTelemetryProviderConflict } from "#destination.ts"
 import { type ExportHealth, exportScopeOf } from "#export-health.ts"
-import {
-	drainLifecycle,
-	type FlushMethod,
-	makeExportLedger,
-	rejectedReasons,
-	settled,
-	TelemetryFlushFailure
-} from "#flush.ts"
+import { type DrainLifecycle, drainLifecycle, makeExportLedger } from "#flush.ts"
 import { exportBisecting } from "#otlp-batch.ts"
 import { OPERATIONAL_SCOPE, operationalResourceAttributes } from "#resource.ts"
 import type { OperationalOrigin } from "#schema.ts"
-import {
-	correlationAttributes,
-	type NativeAttributes,
-	searchableTelemetryAttributes,
-	serializeEvidence
-} from "#span-export.ts"
+import { searchableTelemetryAttributes, serializeEvidence, sessionAliases } from "#span-export.ts"
 
 /**
  * @limitKind published
@@ -64,50 +51,32 @@ const severities = {
 /** Levels whose records the host console writes as errors. */
 const FAILED_LEVELS: ReadonlySet<LogLevel.LogLevel> = new Set(["Error", "Fatal"])
 
-/** One structured record and the level it was written at. */
+/** One structured record, the facts it is searched by, and the level it was written at. */
 export type OperationalLogEntry = Readonly<{
-	record: Readonly<Record<string, unknown>>
+	body: Readonly<Record<string, unknown>>
+	attributes: Readonly<Record<string, unknown>>
 	level: LogLevel.LogLevel
 }>
 
-/** Full structured body plus native searchable attributes. Correlation uses the same aliases as
- * spans, not nested JSON paths that require project settings. The host console receives the same
- * body, so Vercel Logs hold every record even when PostHog is unreachable. */
-export const emitOperationalLog = ({ record, level }: OperationalLogEntry) =>
+/** The full structured body once, plus the native scalar attributes it is searched by and
+ * PostHog's session aliases, not nested JSON paths that require project settings. The record's
+ * trace and span are the active context's, as the SDK reads it. The host console receives the
+ * same body, so Vercel Logs hold every record even when PostHog is unreachable. */
+export const emitOperationalLog = ({ body, attributes, level }: OperationalLogEntry) =>
 	Result.try(() => {
-		const fields = searchableTelemetryAttributes(Record.remove(record, "message"))
-		const { attributes: nested } = record
-		const annotations: NativeAttributes =
-			typeof nested === "object" && nested !== null && !Arr.isArray(nested)
-				? searchableTelemetryAttributes({ ...nested })
-				: {}
-		const attributes: AnyValueMap = {
-			...fields,
-			...annotations,
-			...correlationAttributes(annotations)
-		}
-		const { traceId, spanId } = fields
-		const held =
-			typeof traceId === "string" && typeof spanId === "string"
-				? trace.setSpanContext(context.active(), {
-						traceId,
-						spanId,
-						traceFlags: TraceFlags.SAMPLED
-					})
-				: context.active()
-		const evidence = Result.try(() => serializeEvidence(record))
-		const body = Result.getOrElse(
+		const searchable = searchableTelemetryAttributes(attributes)
+		const evidence = Result.try(() => serializeEvidence(body))
+		const text = Result.getOrElse(
 			Result.flatMap(evidence, (serialized) =>
 				serialized === undefined ? Result.fail(serialized) : Result.succeed(serialized)
 			),
-			() => Formatter.formatJson(record)
+			() => Formatter.formatJson(body)
 		)
 		const write = FAILED_LEVELS.has(level) ? Console.error : Console.log
-		Effect.runSync(write(body))
+		Effect.runSync(write(text))
 		logs.getLogger(OPERATIONAL_SCOPE).emit({
-			body,
-			attributes,
-			context: held,
+			body: text,
+			attributes: { ...searchable, ...sessionAliases(searchable) },
 			severityNumber: severities[level],
 			severityText: Str.toUpperCase(level)
 		})
@@ -122,8 +91,9 @@ export type OperationalLogPipeline = Readonly<{
 	health: ExportHealth
 }>
 
-/** The existing host span lifecycle flushes this log provider too. Vercel's CompositeSpanProcessor
- * waits for every processor's forceFlush after requests. SDK batching defaults are retained. The
+/** The process's one log provider, drained by the operational processor's pass: it is that
+ * pass's last step, so every log the pass's own work wrote leaves with it. SDK batching defaults
+ * are retained. The
  * process meter provider receives the SDK's own log and processor measurements
  * (`otel.sdk.log.created`, `otel.sdk.processor.log.*`), including native queue-full drops.
  * https://posthog.com/docs/logs/installation/nextjs
@@ -133,7 +103,7 @@ export const createOperationalLogProcessor = ({
 	exporter,
 	meterProvider,
 	health
-}: OperationalLogPipeline): Effect.Effect<SpanProcessor, OperationalTelemetryProviderConflict> =>
+}: OperationalLogPipeline): Effect.Effect<DrainLifecycle, OperationalTelemetryProviderConflict> =>
 	Effect.suspend(() => {
 		const ledger = makeExportLedger("logs")
 		const batch = new BatchLogRecordProcessor({
@@ -159,17 +129,12 @@ export const createOperationalLogProcessor = ({
 			},
 			maxExportBatchSize: OPERATIONAL_LOG_EXPORT_BATCH_SIZE
 		})
-		const pass = (method: FlushMethod) =>
-			Effect.gen(function* () {
-				const native = yield* settled([Promise.resolve().then(() => batch[method]())])
-				const failed = yield* ledger.receipt
-				const causes = [...rejectedReasons(native), ...failed]
-				health.observeFlush({ signal: "logs", method, causes })
-				if (Arr.isArrayNonEmpty(causes)) {
-					return yield* TelemetryFlushFailure.make({ signal: "logs", method, causes })
-				}
-			})
-		const lifecycle = drainLifecycle({ signal: "logs", pass })
+		const lifecycle = drainLifecycle({
+			signal: "logs",
+			ledger,
+			health,
+			steps: (method) => [() => batch[method]()]
+		})
 		const provider = new LoggerProvider({
 			meterProvider,
 			resource: resourceFromAttributes(operationalResourceAttributes(origin)),
@@ -186,14 +151,11 @@ export const createOperationalLogProcessor = ({
 		if (logs.setGlobalLoggerProvider(provider) !== provider) {
 			return OperationalTelemetryProviderConflict.make({ signal: "logs" })
 		}
-		const processor: SpanProcessor = {
-			onStart() {},
-			onEnd() {},
+		return Effect.succeed({
 			forceFlush: lifecycle.forceFlush,
 			shutdown: () =>
 				provider.shutdown().finally(() => {
 					logs.disable()
 				})
-		}
-		return Effect.succeed(processor)
+		})
 	})

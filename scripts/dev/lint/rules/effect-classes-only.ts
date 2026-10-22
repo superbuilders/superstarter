@@ -1,8 +1,7 @@
 import { Array as Arr, Option, Record } from "effect"
 import * as ts from "typescript/unstable/ast"
-import { declaringModuleOf, packageOfSymbol } from "#scripts/dev/lint/packages.ts"
-import type { LintRule, Violation } from "#scripts/dev/lint/types.ts"
-import { violationAt } from "#scripts/dev/lint/violation.ts"
+import type { Visit } from "#scripts/dev/lint/types.ts"
+import { declaringModuleOf, packageOfSymbol } from "#scripts/dev/shared/packages.ts"
 
 /** The factories Effect declares types with, by the module of `effect` that exports them: Schema classes and
  * errors, Context services, and every Data class. */
@@ -41,9 +40,7 @@ const extendedOf = (node: ts.ClassDeclaration | ts.ClassExpression): ts.Expressi
  * Context service, a Data class), resolved through the checker to its `effect` export, so a renamed import neither
  * hides one nor fakes one; behaviour is module functions. See rules/effect-classes-only.md.
  */
-export const effectClassesOnly: LintRule = ({ sourceFile, semantics }) => {
-	const violations: Array<Violation> = []
-
+export const effectClassesOnly: Visit = ({ semantics }) => {
 	const isEffectClassFactory = (factory: ts.PropertyAccessExpression): boolean => {
 		const member = semantics.symbolAt(factory.name)
 		if (member === undefined) {
@@ -62,33 +59,24 @@ export const effectClassesOnly: LintRule = ({ sourceFile, semantics }) => {
 		})
 	}
 
-	const checkClass = (node: ts.ClassDeclaration | ts.ClassExpression): void => {
+	return (node) => {
+		if (!ts.isClassDeclaration(node) && !ts.isClassExpression(node)) {
+			return []
+		}
 		const extended = extendedOf(node)
 		const factory = extended === undefined ? undefined : heritageFactoryOf(extended)
 		if (factory !== undefined && isEffectClassFactory(factory)) {
-			return
+			return []
 		}
 		const name =
 			ts.isClassDeclaration(node) && node.name !== undefined ? node.name.text : "(anonymous)"
-		violations.push(
-			violationAt({
-				sourceFile,
+		return [
+			{
 				node,
-				rule: "effect-classes-only",
 				message: `Class '${name}' is not an Effect class.`,
 				suggestion:
 					"Declare data as a Schema class or Schema.TaggedError, a swappable dependency as a Context.Service, and behaviour as module functions."
-			})
-		)
+			}
+		]
 	}
-
-	const walk = (node: ts.Node): void => {
-		if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
-			checkClass(node)
-		}
-		node.forEachChild(walk)
-	}
-
-	walk(sourceFile)
-	return violations
 }

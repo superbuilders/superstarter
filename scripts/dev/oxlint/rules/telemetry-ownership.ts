@@ -1,26 +1,5 @@
-import { Array as Arr, Option, String as Str } from "effect"
+import { Array as Arr, Option, Result, String as Str } from "effect"
 import type { AnyNode, CreateRule } from "#scripts/dev/oxlint/rule.ts"
-
-/** The web server's observability registration: the one place that registers the OpenTelemetry SDK and constructs
- * its OTLP exporters. */
-const WEB_OBSERVABILITY = "/packages/product/nextjs-app/src/server/observability/"
-
-/** Shared telemetry: the span registry, the tracer bridge and the logger. Host-neutral: no Vercel package, no HTTP
- * OTLP exporter, no browser analytics SDK. */
-const SHARED_TELEMETRY = "/packages/platform/operational-telemetry/"
-
-/** The browser analytics SDK starts in its own module and its provider component, never in shared client code. */
-const PRODUCT_ANALYTICS_OWNERS: ReadonlyArray<string> = [
-	"/packages/product/nextjs-app/src/lib/product-analytics.ts",
-	"/packages/product/nextjs-app/src/app/posthog-provider.tsx"
-]
-
-/** Operational paths where only the shared operational logger writes output. The global console is refused
- * everywhere by oxlint's no-console and tsgo's globalConsole; this covers Effect's Console. */
-const CONSOLE_FORBIDDEN: ReadonlyArray<string> = [
-	WEB_OBSERVABILITY,
-	"/packages/product/nextjs-app/src/instrumentation.ts"
-]
 
 const HTTP_OTLP_EXPORTER_PACKAGES: ReadonlyArray<string> = [
 	"@opentelemetry/exporter-trace-otlp-http",
@@ -66,26 +45,76 @@ const CONSOLE_OUTPUT: ReadonlyArray<string> = [
 	"warn"
 ]
 
-/** A module only its owners may import with a value binding: a type alone registers and constructs nothing. */
-type ModulePolicy = Readonly<{ module: string; owners: ReadonlyArray<string>; reason: string }>
+/** What one file may do, decided once from where it sits. `shared` is the host-neutral shared telemetry, which
+ * imports no host package and alone writes spans with Effect's own APIs. `consoleRefused` marks an operational path
+ * where only the operational logger writes output: the global console is refused everywhere by oxlint's no-console
+ * and tsgo's globalConsole, and this covers Effect's Console. `owns` lists the owned modules the file may import
+ * with a value binding. */
+type FilePolicy = Readonly<{
+	shared: boolean
+	consoleRefused: boolean
+	owns: ReadonlyArray<string>
+}>
 
-const MODULE_POLICIES: ReadonlyArray<ModulePolicy> = [
+const PRODUCT_ANALYTICS: FilePolicy = { shared: false, consoleRefused: false, owns: ["posthog-js"] }
+
+/** Every file with a role in the telemetry, by the path it sits under. The web server's observability registration
+ * registers the OpenTelemetry SDK and constructs its OTLP exporters; the browser analytics SDK starts in its own
+ * module, which the layout's analytics component calls; shared telemetry holds the span registry, the tracer bridge
+ * and the logger. */
+const FILE_POLICIES: ReadonlyArray<Readonly<{ path: string; policy: FilePolicy }>> = [
 	{
-		module: "@vercel/otel",
-		owners: [WEB_OBSERVABILITY],
-		reason: "The web registration registers the OpenTelemetry SDK, once."
+		path: "/packages/product/nextjs-app/src/server/observability/",
+		policy: {
+			shared: false,
+			consoleRefused: true,
+			owns: ["@vercel/otel", ...HTTP_OTLP_EXPORTER_PACKAGES]
+		}
 	},
-	...Arr.map(HTTP_OTLP_EXPORTER_PACKAGES, (module): ModulePolicy => ({
-		module,
-		owners: [WEB_OBSERVABILITY],
-		reason: "The web registration constructs the OTLP exporters, once."
-	})),
 	{
-		module: "posthog-js",
-		owners: PRODUCT_ANALYTICS_OWNERS,
-		reason: "The browser analytics SDK starts in its own module and provider."
+		path: "/packages/product/nextjs-app/src/instrumentation.ts",
+		policy: { shared: false, consoleRefused: true, owns: [] }
+	},
+	{ path: "/packages/product/nextjs-app/src/lib/product-analytics.ts", policy: PRODUCT_ANALYTICS },
+	{
+		path: "/packages/platform/operational-telemetry/",
+		policy: { shared: true, consoleRefused: false, owns: [] }
 	}
 ]
+
+/** Every other file: application code with no role in the telemetry. */
+const APPLICATION: FilePolicy = { shared: false, consoleRefused: false, owns: [] }
+
+const policyOf = (file: string): FilePolicy =>
+	Option.match(
+		Arr.findFirst(FILE_POLICIES, (row) => Str.includes(row.path)(file)),
+		{ onNone: () => APPLICATION, onSome: (row) => row.policy }
+	)
+
+/** The modules only their owners may import with a value binding (a type alone registers and constructs nothing),
+ * with each one's refusal. */
+const OWNED_MODULES: ReadonlyArray<Readonly<{ module: string; refusal: string }>> = Arr.map(
+	[
+		{
+			module: "@vercel/otel",
+			reason: "The web registration registers the OpenTelemetry SDK, once."
+		},
+		...Arr.map(HTTP_OTLP_EXPORTER_PACKAGES, (module) => ({
+			module,
+			reason: "The web registration constructs the OTLP exporters, once."
+		})),
+		{
+			module: "posthog-js",
+			reason: "The browser analytics SDK starts in its own module and provider."
+		}
+	],
+	({ module, reason }) => {
+		const owners = Arr.filterMap(FILE_POLICIES, (row) =>
+			Arr.contains(row.policy.owns, module) ? Result.succeed(row.path) : Result.failVoid
+		)
+		return { module, refusal: `is owned by ${Arr.join(owners, ", ")}. ${reason}` }
+	}
+)
 
 /** Exports no file imports: Vercel Logs and PostHog are the only remote observability tools. */
 const FORBIDDEN_EXPORTS: ReadonlyArray<Readonly<{ module: string; name: string }>> = [
@@ -103,9 +132,6 @@ const isModule = (source: string, module: string): boolean => {
 	}
 	return Str.startsWith(`${module}/`)(source)
 }
-
-const isUnder = (file: string, owners: ReadonlyArray<string>): boolean =>
-	Arr.some(owners, (owner) => Str.includes(owner)(file))
 
 /** The name an import or export specifier spells: an identifier or a string. */
 const nameOf = (node: AnyNode): string | undefined => {
@@ -163,9 +189,7 @@ const isTypeOnlyImport = (node: AnyNode): boolean => {
 export const telemetryOwnership: CreateRule = {
 	meta: { type: "problem" },
 	create: (context) => {
-		const file = context.filename
-		const shared = Str.includes(SHARED_TELEMETRY)(file)
-		const consoleForbidden = isUnder(file, CONSOLE_FORBIDDEN)
+		const { shared, consoleRefused, owns } = policyOf(context.filename)
 		const effectLocals = new Set<string>()
 		const consoleLocals = new Set<string>()
 		const ownedLocals = new Map<string, string>()
@@ -179,13 +203,11 @@ export const telemetryOwnership: CreateRule = {
 			if (shared && Arr.some(HOST_PACKAGES, (module) => isModule(source, module))) {
 				return `Shared operational telemetry cannot import ${source}. Keep Vercel and HTTP OTLP exporters at the web registration and the browser product-analytics SDK at its web owners.`
 			}
-			const policy = Arr.findFirst(MODULE_POLICIES, (candidate) =>
-				isModule(source, candidate.module)
-			)
-			if (typeOnly || Option.isNone(policy) || isUnder(file, policy.value.owners)) {
+			const owned = Arr.findFirst(OWNED_MODULES, (candidate) => isModule(source, candidate.module))
+			if (typeOnly || Option.isNone(owned) || Arr.contains(owns, owned.value.module)) {
 				return undefined
 			}
-			return `${source} is owned by ${Arr.join(policy.value.owners, ", ")}. ${policy.value.reason}`
+			return `${source} ${owned.value.refusal}`
 		}
 
 		const checkExportName = (node: AnyNode, source: string, name: string): void => {
@@ -261,7 +283,7 @@ export const telemetryOwnership: CreateRule = {
 				report(node, `Effect.${member.property} ${SPAN_WRITER_MESSAGE}`)
 			}
 			if (
-				consoleForbidden &&
+				consoleRefused &&
 				consoleLocals.has(member.object) &&
 				Arr.contains(CONSOLE_OUTPUT, member.property)
 			) {

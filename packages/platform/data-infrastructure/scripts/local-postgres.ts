@@ -11,6 +11,7 @@ import { Array as Arr, Effect, FileSystem, Schema, Stdio, String as Str } from "
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { withLocalPostgres } from "#database/local-postgres.ts"
 import { runMigration } from "#migrations.ts"
+import { argumentsOf } from "#script.ts"
 
 /**
  * The local development cluster: superstarter's own PostgreSQL 18 (production's major) in the
@@ -22,6 +23,7 @@ import { runMigration } from "#migrations.ts"
  *   database from the migrations.
  */
 const LocalMode = Schema.Literals(["start", "stop", "test"])
+type LocalMode = typeof LocalMode.Type
 
 const CLUSTER = `${import.meta.dirname}/../../../../out/postgres`
 const DATA = `${CLUSTER}/data`
@@ -97,14 +99,17 @@ const ensureCluster = Effect.gen(function* () {
 	}
 })
 
-/** Creates `name` when it is missing; with `fresh`, drops it first, sessions and all. */
-const ensureDatabase = (input: Readonly<{ name: string; fresh: boolean }>) =>
+/** What a mode does to its database: `ensure` creates it when it is missing; `recreate` drops it
+ * first, sessions and all. */
+type DatabaseOperation = "ensure" | "recreate"
+
+const ensureDatabase = (input: Readonly<{ name: string; operation: DatabaseOperation }>) =>
 	withLocalPostgres({
 		database: "postgres",
 		consume: (database) =>
 			withPostgresStatement(database, (scope) =>
 				Effect.gen(function* () {
-					if (input.fresh) {
+					if (input.operation === "recreate") {
 						yield* scope.run((builder) =>
 							builder.execute(
 								sql`DROP DATABASE IF EXISTS ${sql.identifier(input.name)} WITH (FORCE)`
@@ -126,7 +131,7 @@ const ensureDatabase = (input: Readonly<{ name: string; fresh: boolean }>) =>
 			)
 	})
 
-const migrated = (input: Readonly<{ name: string; fresh: boolean }>) =>
+const migrated = (input: Readonly<{ name: string; operation: DatabaseOperation }>) =>
 	ensureDatabase(input).pipe(
 		Effect.andThen(
 			withLocalPostgres({
@@ -143,19 +148,20 @@ const stop = Effect.gen(function* () {
 	}
 })
 
-const main = Effect.gen(function* () {
-	const stdio = yield* Stdio.Stdio
-	const [mode] = yield* stdio.args.pipe(
-		Effect.flatMap(Schema.decodeUnknownEffect(Schema.Tuple([LocalMode])))
+const MODES = {
+	start: ensureCluster.pipe(
+		Effect.andThen(migrated({ name: LOCAL_POSTGRES_DATABASES.development, operation: "ensure" }))
+	),
+	stop,
+	test: ensureCluster.pipe(
+		Effect.andThen(migrated({ name: LOCAL_POSTGRES_DATABASES.test, operation: "recreate" }))
 	)
-	if (mode === "stop") {
-		return yield* stop
-	}
-	yield* ensureCluster
-	const database =
-		mode === "test" ? LOCAL_POSTGRES_DATABASES.test : LOCAL_POSTGRES_DATABASES.development
-	yield* migrated({ name: database, fresh: mode === "test" })
-})
+} satisfies Readonly<Record<LocalMode, Effect.Effect<void, unknown, unknown>>>
+
+const main = Effect.flatMap(Stdio.Stdio, (stdio) => stdio.args).pipe(
+	Effect.flatMap(argumentsOf(Schema.Tuple([LocalMode]), "local-postgres <start|stop|test>")),
+	Effect.flatMap(([mode]) => MODES[mode])
+)
 
 // @effect-diagnostics-next-line strictEffectProvide:off
 NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)))

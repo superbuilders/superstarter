@@ -2,10 +2,10 @@ import "server-only"
 import { REPLAY_HEADER, replayAttributes } from "@superstarter/operational-telemetry/correlation"
 import { type OperationalTelemetry, observed } from "@superstarter/operational-telemetry/effect"
 import { failureExceptionOf, loggedFailureOf } from "@superstarter/operational-telemetry/failure"
-import type { SharedAttributes } from "@superstarter/operational-telemetry/schema"
+import { type SharedAttributes, Token } from "@superstarter/operational-telemetry/schema"
 import { OPERATIONAL_SPANS } from "@superstarter/operational-telemetry/spans"
 import type { ServerActionName } from "@superstarter/todo-protocol/action"
-import { Array as Arr, Cause, Effect, Function as Fn, Predicate } from "effect"
+import { Array as Arr, Cause, Effect, Function as Fn, Option, Predicate, Schema } from "effect"
 import type { Instrumentation } from "next"
 import { captureServerException } from "#server/observability/errors.ts"
 import type { TelemetrySink } from "#server/observability/sink.ts"
@@ -21,23 +21,25 @@ const headerOf = (request: ErrorRequest, name: string): string | undefined => {
 }
 
 /** React assigns the digest the browser boundary receives in place of the redacted message. */
-const digestOf = (error: unknown): string | undefined =>
-	Predicate.hasProperty(error, "digest") && typeof error.digest === "string"
-		? error.digest
-		: undefined
+const digestOf = (error: unknown): unknown =>
+	Predicate.hasProperty(error, "digest") ? error.digest : undefined
+
+/** An untrusted value the span carries only as a `Token`: one that does not decode is dropped,
+ * never exported raw. */
+const admitToken = Schema.decodeUnknownOption(Token)
 
 /** Next's `request.path` is the resource path with its query; only the path is exported. The
- * route file path is Next's own low-cardinality route identity, and the action header is Next's
- * opaque action id, never its arguments. */
+ * route file path is Next's own low-cardinality route identity. The action header and the replay
+ * header come from the browser and the digest from whatever was thrown, so each is admitted by the
+ * span's own Schema or left out: the action id is Next's opaque id, never its arguments. */
 const requestErrorAttributes = (
 	error: unknown,
 	request: ErrorRequest,
 	context: ErrorContext
 ): typeof OPERATIONAL_SPANS.frameworkRequestError.opened.Type => {
-	const action = headerOf(request, "next-action")
-	const digest = digestOf(error)
 	const path = URL.parse(request.path, "http://request.invalid")?.pathname
-	const replay = replayAttributes(headerOf(request, REPLAY_HEADER))["session.id"]
+	const action = admitToken(headerOf(request, "next-action"))
+	const digest = admitToken(digestOf(error))
 	return {
 		"next.router_kind": context.routerKind,
 		"next.route_path": context.routePath,
@@ -46,11 +48,14 @@ const requestErrorAttributes = (
 		...(context.revalidateReason === undefined
 			? {}
 			: { "next.revalidate_reason": context.revalidateReason }),
-		...(action === undefined ? {} : { "next.action_id": action }),
-		...(digest === undefined ? {} : { "next.error.digest": digest }),
+		...Option.match(action, { onNone: () => ({}), onSome: (id) => ({ "next.action_id": id }) }),
+		...Option.match(digest, {
+			onNone: () => ({}),
+			onSome: (admitted) => ({ "next.error.digest": admitted })
+		}),
 		"http.request.method": request.method,
 		...(path === undefined ? {} : { "url.path": path }),
-		...(typeof replay === "string" ? { "session.id": replay } : {})
+		...replayAttributes(headerOf(request, REPLAY_HEADER))
 	}
 }
 
@@ -64,15 +69,9 @@ const reportRequestError = (
 	context: ErrorContext
 ): Promise<void> => {
 	const attributes = requestErrorAttributes(error, request, context)
-	const digest = attributes["next.error.digest"]
 	return runWeb(
 		Effect.logError("request failed", loggedFailureOf(Cause.die(error))).pipe(
-			Effect.andThen(
-				captureServerException(error, {
-					...attributes,
-					...(digest === undefined ? {} : { digest })
-				})
-			),
+			Effect.andThen(captureServerException(error, attributes)),
 			Effect.andThen(Effect.die(error)),
 			observed(OPERATIONAL_SPANS.frameworkRequestError, attributes),
 			Effect.ignoreCause

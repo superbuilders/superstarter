@@ -1,7 +1,9 @@
-import { Array as Arr, Effect, type Scope } from "effect"
+import { Array as Arr, Effect, Schema, type Scope } from "effect"
 import type { FileSystem as NativeFileSystem } from "typescript/unstable/fs"
-import { API, type Project, type Snapshot } from "typescript/unstable/sync"
-import { DevtoolFailure } from "#scripts/dev/devtool-failure.ts"
+import { API, type Project } from "typescript/unstable/sync"
+import { DevtoolFailure } from "#scripts/dev/shared/devtool.ts"
+import { jsonEncoder } from "#scripts/dev/shared/json.ts"
+import { directoryOf } from "#scripts/dev/shared/repository.ts"
 
 /**
  * One native compiler session. The tsgo process lives exactly as long as the scope, and every call into it is a
@@ -22,15 +24,27 @@ export const nativeSession = (
 			})
 	)
 
-const projectIn = (snapshot: Snapshot) => (config: string) =>
+/** Opens one tsconfig project in its own snapshot. A config the compiler rejects is a failure. */
+export const openProject = (
+	input: Readonly<{ api: API; config: string }>
+): Effect.Effect<Project, DevtoolFailure, Scope.Scope> =>
 	Effect.gen(function* () {
-		const project = snapshot.getProject(config)
+		const snapshot = yield* Effect.acquireDisposable(
+			Effect.try({
+				try: () => input.api.updateSnapshot({ openProjects: [input.config] }),
+				catch: (cause) =>
+					DevtoolFailure.make({ detail: "The native compiler could not build the program", cause })
+			})
+		)
+		const project = snapshot.getProject(input.config)
 		if (project === undefined) {
-			return yield* DevtoolFailure.make({ detail: `The native compiler did not open ${config}` })
+			return yield* DevtoolFailure.make({
+				detail: `The native compiler did not open ${input.config}`
+			})
 		}
 		const diagnostics = yield* Effect.try({
 			try: () => project.program.getConfigFileParsingDiagnostics(),
-			catch: (cause) => DevtoolFailure.make({ detail: `${config} could not be read`, cause })
+			catch: (cause) => DevtoolFailure.make({ detail: `${input.config} could not be read`, cause })
 		})
 		if (Arr.isReadonlyArrayNonEmpty(diagnostics)) {
 			return yield* DevtoolFailure.make({
@@ -43,19 +57,35 @@ const projectIn = (snapshot: Snapshot) => (config: string) =>
 		return project
 	})
 
-/** Opens tsconfig projects in one snapshot, in config order. A config the compiler rejects is a failure. */
-export const openProjects = (
-	input: Readonly<{ api: API; configs: ReadonlyArray<string> }>
-): Effect.Effect<ReadonlyArray<Project>, DevtoolFailure, Scope.Scope> =>
+const OverlayConfig = Schema.Struct({
+	extends: Schema.String,
+	files: Schema.Array(Schema.String)
+})
+
+const encodeOverlay = jsonEncoder(OverlayConfig)
+
+/**
+ * Opens a tsconfig's program in a session of its own. Files the tsconfig leaves out (a scratch file a tool was
+ * pointed at) are added through an overlay: a virtual config beside the real one, so its relative paths resolve
+ * the same, that extends it and adds the files, so they are checked with the project's real options.
+ */
+export const openProgram = (
+	input: Readonly<{ config: string; extraFiles: ReadonlyArray<string> }>
+): Effect.Effect<Project, DevtoolFailure, Scope.Scope> =>
 	Effect.gen(function* () {
-		const snapshot = yield* Effect.acquireDisposable(
-			Effect.try({
-				try: () => input.api.updateSnapshot({ openProjects: [...input.configs] }),
-				catch: (cause) =>
-					DevtoolFailure.make({ detail: "The native compiler could not build the program", cause })
-			})
-		)
-		return yield* Effect.forEach(input.configs, projectIn(snapshot))
+		const cwd = directoryOf(input.config)
+		if (!Arr.isReadonlyArrayNonEmpty(input.extraFiles)) {
+			const api = yield* nativeSession({ cwd })
+			return yield* openProject({ api, config: input.config })
+		}
+		const overlayConfig = `${cwd}/.overlay.tsconfig.json`
+		const overlay = yield* encodeOverlay({ extends: input.config, files: input.extraFiles })
+		const nativeFs: NativeFileSystem = {
+			readFile: (file) => (file === overlayConfig ? overlay : undefined),
+			fileExists: (file) => (file === overlayConfig ? true : undefined)
+		}
+		const api = yield* nativeSession({ cwd, fs: nativeFs })
+		return yield* openProject({ api, config: overlayConfig })
 	})
 
 /** The root files a tsconfig selects, from its files, include and exclude, without building a program. */

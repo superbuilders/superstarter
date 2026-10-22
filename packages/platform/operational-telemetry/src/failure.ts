@@ -42,7 +42,6 @@ const DETAIL_CODES = {
 	"postgres-statement": {
 		field: "operation",
 		codes: {
-			construction: "postgres-query-construction",
 			statement: "postgres-statement-rejected",
 			transaction: "postgres-transaction-boundary"
 		}

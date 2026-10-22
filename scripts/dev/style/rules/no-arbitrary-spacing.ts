@@ -64,7 +64,6 @@ const SPACING_ROOTS: ReadonlyArray<string> = [
  * tokens are theme references.
  */
 export const noArbitrarySpacing: ClassRule = arbitraryValueBan({
-	rule: "no-arbitrary-spacing",
 	roots: SPACING_ROOTS,
 	isThemeReference: (value) =>
 		Arr.some(["var(--", "--spacing(", "--spacing-"], (marker) => Str.includes(marker)(value)),

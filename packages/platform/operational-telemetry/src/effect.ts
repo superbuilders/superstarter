@@ -1,3 +1,5 @@
+// @effect-diagnostics nodeBuiltinImport:off
+import { AsyncLocalStorage } from "node:async_hooks"
 import {
 	context,
 	type Context as OtelContext,
@@ -23,7 +25,6 @@ import {
 	Logger,
 	Option,
 	Record,
-	Ref,
 	References,
 	type Schema,
 	Tracer
@@ -34,9 +35,14 @@ import { failureCodesOf, failureExceptionOf } from "#failure.ts"
 import { emitOperationalLog } from "#logs.ts"
 import { attributesOfDeployment, OPERATIONAL_SCOPE } from "#resource.ts"
 
-import type { OperationalDeployment, OperationalOrigin, SharedAttributes } from "#schema.ts"
+import type {
+	OperationalDeployment,
+	OperationalOrigin,
+	OutsideRequests,
+	SharedAttributes
+} from "#schema.ts"
 
-import { correlationAttributes, definedAttributes, telemetryAttributes } from "#span-export.ts"
+import { correlationAttributes, telemetryAttributes } from "#span-export.ts"
 import type { OperationalSpan, OperationScope } from "#spans.ts"
 
 const spanKinds = {
@@ -92,14 +98,6 @@ const recordCompletion = (span: Span, exit: Exit.Exit<unknown, unknown>): void =
 	span.setStatus({ code: SpanStatusCode.ERROR, message: `${exception.name}: ${exception.message}` })
 }
 
-/** HTTP status marks an error from the side that owns it: a server span on 5xx, a client span on
- * 4xx or 5xx. A server's 4xx is the caller's error, not this operation's.
- * https://opentelemetry.io/docs/specs/semconv/http/http-spans/#status */
-const isHttpError = (kind: Tracer.SpanKind, status: unknown): boolean => {
-	const threshold = kind === "server" ? 500 : 400
-	return typeof status === "number" && status >= threshold
-}
-
 /** The ids an Effect span carries. A host that issued ids of its own makes its SDK span the Effect
  * span's identity and the one native children parent on (`hosted`); an unsampled or unregistered
  * host hands back the parent's or no ids, and the Effect span carries Effect's. */
@@ -130,26 +128,31 @@ const contextUnder = (sdkSpanOf: SdkSpanOf, active: Tracer.AnySpan | undefined):
 		: trace.setSpan(context.active(), sdk)
 }
 
-/** The OTel context a new span starts under: none for a root, else its Effect parent's ids, else
+/** The OTel context a span that is not a root starts under: its Effect parent's ids, else
  * whatever the host has active. */
-const parentContextOf = (root: boolean, parent: Tracer.AnySpan | undefined): OtelContext => {
-	if (root) {
-		return ROOT_CONTEXT
-	}
-	return parent === undefined
-		? context.active()
-		: trace.setSpanContext(context.active(), spanContextOf(parent))
-}
+const underParent = Option.match({
+	onNone: () => context.active(),
+	onSome: (span: Tracer.AnySpan) => trace.setSpanContext(context.active(), spanContextOf(span))
+})
 
-/** The roster attributes an Effect parent span already carries. */
-const attributesOfParent = (parent: Tracer.AnySpan | undefined) =>
-	parent?._tag === "Span"
-		? definedAttributes(telemetryAttributes(Record.fromEntries(parent.attributes)))
-		: {}
+/** The attributes an Effect parent span already carries. */
+const attributesOfParent = Option.match({
+	onNone: (): Readonly<Record<string, unknown>> => ({}),
+	onSome: (span: Tracer.AnySpan): Readonly<Record<string, unknown>> =>
+		span._tag === "Span" ? Record.fromEntries(span.attributes) : {}
+})
 
-/** Effect supplies attributes after span construction. NativeSpan owns Effect's state; the host
- * provider owns native ids, transport and lifetime. No second SDK. */
-const operationalTracer = (deployment: OperationalDeployment): Tracer.Tracer => {
+/**
+ * Effect supplies attributes after span construction. NativeSpan owns Effect's state; the host
+ * provider owns native ids, transport and lifetime. No second SDK. Every write to the SDK span
+ * happens only while it records: a span the host ended (Next ends its own spans when their work
+ * fails) takes no attribute, event, link or end from Effect, and a hosted span the host ended
+ * first is counted as `ended_by_host`.
+ */
+const operationalTracer = (
+	deployment: OperationalDeployment,
+	outsideRequests: OutsideRequests
+): Tracer.Tracer => {
 	/** The SDK span each hosted Effect span opened. A native child started under the active OTel
 	 * context (a fetch or PostgreSQL client span) parents on `trace.getSpan(context)`: with the SDK
 	 * span there, the span processor inherits the parent's attributes (`parentAttributes` in
@@ -160,15 +163,12 @@ const operationalTracer = (deployment: OperationalDeployment): Tracer.Tracer => 
 	return Tracer.make({
 		span(options) {
 			const native = new Tracer.NativeSpan(options)
-			const parent = Option.getOrUndefined(options.parent)
-			const parentContext = parentContextOf(options.root, parent)
+			const parentContext = options.root ? ROOT_CONTEXT : underParent(options.parent)
 			const correlationContext = options.root ? context.active() : parentContext
-			const inherited = definedAttributes(
-				correlationAttributes({
-					...requestCorrelation(correlationContext),
-					...attributesOfParent(parent)
-				})
-			)
+			const inherited = correlationAttributes({
+				...requestCorrelation(correlationContext),
+				...attributesOfParent(options.parent)
+			})
 			const span = trace.getTracer(OPERATIONAL_SCOPE).startSpan(
 				options.name,
 				{
@@ -179,9 +179,8 @@ const operationalTracer = (deployment: OperationalDeployment): Tracer.Tracer => 
 				},
 				parentContext
 			)
-			const recorded = span.isRecording()
 			const { identity, hosted } = identityOf(span, native, parentContext)
-			for (const [key, value] of Record.toEntries(inherited)) {
+			for (const [key, value] of Record.toEntries<string, unknown>(inherited)) {
 				native.attribute(key, value)
 			}
 			const bridged: Tracer.Span = {
@@ -204,32 +203,42 @@ const operationalTracer = (deployment: OperationalDeployment): Tracer.Tracer => 
 				},
 				attribute(key, value) {
 					native.attribute(key, value)
-					span.setAttributes(telemetryAttributes({ [key]: value }))
+					if (span.isRecording()) {
+						span.setAttributes(telemetryAttributes({ [key]: value }))
+					}
 				},
 				event(name, at, attributes = {}) {
-					span.addEvent(name, telemetryAttributes(attributes), hrTimeOf(at))
+					if (span.isRecording()) {
+						span.addEvent(name, telemetryAttributes(attributes), hrTimeOf(at))
+					}
 				},
 				addLinks(links) {
 					native.addLinks(links)
-					span.addLinks(Arr.map(links, otelLink))
+					if (span.isRecording()) {
+						span.addLinks(Arr.map(links, otelLink))
+					}
 				},
 				end(at, exit) {
 					if (native.status._tag === "Ended") {
 						return
 					}
 					native.end(at, exit)
-					if (recorded && !span.isRecording()) {
-						metrics
-							.getMeter(OPERATIONAL_SCOPE)
-							.createCounter("superstarter.telemetry.span.ended_by_host", { unit: "{span}" })
-							.add(1, { "span.name": options.name, "superstarter.effect.outcome": outcomeOf(exit) })
+					if (span.isRecording()) {
+						recordCompletion(span, exit)
+						span.end(hrTimeOf(at))
 						return
 					}
-					recordCompletion(span, exit)
-					if (isHttpError(options.kind, native.attributes.get("http.response.status_code"))) {
-						span.setStatus({ code: SpanStatusCode.ERROR })
+					if (hosted !== undefined) {
+						outsideRequests(() => {
+							metrics
+								.getMeter(OPERATIONAL_SCOPE)
+								.createCounter("superstarter.telemetry.span.ended_by_host", { unit: "{span}" })
+								.add(1, {
+									"span.name": options.name,
+									"superstarter.effect.outcome": outcomeOf(exit)
+								})
+						})
 					}
-					span.end(hrTimeOf(at))
 				}
 			}
 			if (hosted !== undefined) {
@@ -255,46 +264,49 @@ const operationalLogger = ({ service, deployment }: OperationalOrigin) =>
 		const held =
 			current === undefined ? trace.getSpanContext(context.active()) : spanContextOf(current)
 		const spanAttributes = current?._tag === "Span" ? Record.fromEntries(current.attributes) : {}
+		const attributes = { ...requestCorrelation(), ...formatted.annotations, ...spanAttributes }
 		emitOperationalLog({
-			record: {
+			body: {
 				v: 2,
 				service,
 				deployment,
 				...formatted,
-				traceId: held?.traceId,
-				spanId: held?.spanId,
-				attributes: { ...requestCorrelation(), ...formatted.annotations, ...spanAttributes }
+				...(held === undefined ? {} : { traceId: held.traceId, spanId: held.spanId }),
+				attributes
 			},
+			attributes,
 			level: options.logLevel
 		})
 	})
 
 /** The process's telemetry: its origin (with the instance id minted once for it), the one tracer and
- * logger every Effect span and log goes through, and the cold start the first request span claims.
- * One value per process, built by the host's runtime: a second tracer would not know the SDK spans
- * the first one opened. */
+ * logger every Effect span and log goes through, and the async context outside every request. One
+ * value per process, built by the host's runtime: a second tracer would not know the SDK spans the
+ * first one opened. */
 export class OperationalTelemetry extends Context.Service<
 	OperationalTelemetry,
 	Readonly<{
 		origin: OperationalOrigin
 		tracer: Tracer.Tracer
 		loggers: ReadonlySet<Logger.Logger<unknown, void>>
-		claimColdStart: Effect.Effect<boolean>
+		outsideRequests: OutsideRequests
 	}>
 >()("@superstarter/operational-telemetry/effect/OperationalTelemetry") {}
 
-/** The process's telemetry for a host's runtime to provide: the instance id is minted here, once. */
+/** The process's telemetry for a host's runtime to provide: the instance id is minted here, once,
+ * and the async context is captured here, once. The host builds it before its first request (Next's
+ * instrumentation registers it), so the captured context belongs to no request. */
 export const makeOperationalTelemetry = (
 	process: Readonly<Omit<OperationalOrigin, "instanceId">>
 ): Effect.Effect<OperationalTelemetry["Service"]> =>
-	Effect.gen(function* () {
+	Effect.sync(() => {
 		const origin: OperationalOrigin = { ...process, instanceId: v7() }
-		const coldStart = yield* Ref.make(true)
+		const outsideRequests: OutsideRequests = AsyncLocalStorage.snapshot()
 		return OperationalTelemetry.of({
 			origin,
-			tracer: operationalTracer(origin.deployment),
+			tracer: operationalTracer(origin.deployment, outsideRequests),
 			loggers: new Set([operationalLogger(origin)]),
-			claimColdStart: Ref.getAndSet(coldStart, false)
+			outsideRequests
 		})
 	})
 
@@ -308,24 +320,6 @@ const withTracerAndLoggers =
 			Effect.provideService(Logger.CurrentLoggers, telemetry.loggers)
 		)
 
-/** OpenTelemetry `faas.coldstart` on the first recording request span this process serves, and on
- * no later one. A span the host already ended (Next's render span, when its error hook runs) is
- * never written to. https://opentelemetry.io/docs/specs/semconv/faas/faas-spans/ */
-const markColdStart = (telemetry: OperationalTelemetry["Service"]): Effect.Effect<void> =>
-	Effect.suspend(() => {
-		const active = trace.getActiveSpan()
-		if (active?.isRecording() !== true) {
-			return Effect.void
-		}
-		return Effect.flatMap(telemetry.claimColdStart, (first) =>
-			first
-				? Effect.sync(() => {
-						active.setAttributes({ "faas.coldstart": true } satisfies SharedAttributes)
-					})
-				: Effect.void
-		)
-	})
-
 /** Host execution boundary. Effect's fiber context remains the sole owner of application tracing;
  * native libraries share the host OTel context. */
 export const withOperationalTelemetry = <A, E, R>(
@@ -338,7 +332,7 @@ export const withOperationalTelemetry = <A, E, R>(
 				parent !== undefined && isSpanContextValid(parent)
 					? work.pipe(Effect.withParentSpan(Tracer.externalSpan(parent)))
 					: work
-			return markColdStart(telemetry).pipe(Effect.andThen(rooted), withTracerAndLoggers(telemetry))
+			return rooted.pipe(withTracerAndLoggers(telemetry))
 		})
 	)
 

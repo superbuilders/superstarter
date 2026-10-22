@@ -11,14 +11,14 @@
 		"node": ">=24"
 	},
 	"scripts": {
-		"dev": "next dev",
+		"dev": "NEXT_MANUAL_SIG_HANDLE=true NEXT_EXIT_TIMEOUT_MS=5000 next dev",
 		"build": "next build",
-		"start": "next start",
+		"start": "NEXT_MANUAL_SIG_HANDLE=true next start",
 		"env:pull": "pnpm dlx vercel@65.0.0 env pull .env.local --environment=development --yes",
 		"typegen": "next typegen",
 		"typecheck": "tsc --noEmit -p tsconfig.json",
 		"lint": "node ../../../scripts/dev/lint.ts",
-		"test": "pnpm --filter @superstarter/data-infrastructure run db:test && LOCAL_POSTGRES_DATABASE=superstarter_test node --conditions=react-server --test integration/*.test.ts"
+		"test": "LOCAL_POSTGRES_DATABASE=superstarter_test node --conditions=react-server --test integration/*.test.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/rds-signer": "3.1154.0",

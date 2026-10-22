@@ -48,3 +48,7 @@ export const homeDirectory = Config.NonEmptyString("HOME")
 /** A named AWS profile in the operator's shell. The AWS SDK prefers it to environment credentials,
  * so it would shadow the session `scripts/with-aws.ts` injects. */
 export const awsProfile = Config.option(Config.NonEmptyString("AWS_PROFILE"))
+
+/** The URL drizzle-kit dials for Drizzle Studio: `scripts/studio.ts` builds it from the master
+ * secret and hands it to the child process, never to a file. */
+export const databaseUrl = Config.Redacted("DATABASE_URL")

@@ -1,6 +1,15 @@
 import type { Attributes } from "@opentelemetry/api"
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base"
-import { Array as Arr, Formatter, Option, Predicate, Record, Schema, String as Str } from "effect"
+import {
+	Array as Arr,
+	Formatter,
+	Option,
+	Predicate,
+	Record,
+	Result,
+	Schema,
+	String as Str
+} from "effect"
 import { SqlState } from "#failure.ts"
 import type { SharedAttributes } from "#schema.ts"
 
@@ -54,7 +63,8 @@ const isNativeSlot = (kind: "string" | "number" | "boolean") =>
 	Predicate.or(Predicate.isNullish, (item: unknown) => typeof item === kind)
 
 /** The values every OTLP exporter encodes natively: scalars and homogeneous arrays, including
- * their nullish slots. Anything else reaches an exporter as JSON text. */
+ * their nullish slots. Anything else reaches an exporter as JSON text. An absent value is no
+ * attribute at all, never a key holding `undefined`. */
 type NativeAttributeValue =
 	| string
 	| number
@@ -62,17 +72,11 @@ type NativeAttributeValue =
 	| Array<string | null | undefined>
 	| Array<number | null | undefined>
 	| Array<boolean | null | undefined>
-	| undefined
 export type NativeAttributes = Readonly<Record<string, NativeAttributeValue>>
 
 /** Structured evidence is serialized only when the destination needs attributes. */
 const isNativeAttribute = (value: unknown): value is NativeAttributeValue => {
-	if (
-		value === undefined ||
-		typeof value === "string" ||
-		typeof value === "number" ||
-		typeof value === "boolean"
-	) {
+	if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
 		return true
 	}
 	return (
@@ -83,17 +87,20 @@ const isNativeAttribute = (value: unknown): value is NativeAttributeValue => {
 	)
 }
 
+/** Every present value as an attribute: native values as they are, anything else as JSON text. */
 export const telemetryAttributes = (values: Readonly<Record<string, unknown>>): NativeAttributes =>
-	Record.map(values, (value) => (isNativeAttribute(value) ? value : Formatter.formatJson(value)))
+	Record.filterMap(values, (value) => {
+		if (value === undefined) {
+			return Result.failVoid
+		}
+		return Result.succeed(isNativeAttribute(value) ? value : Formatter.formatJson(value))
+	})
 
 /** Logs retain the complete record in their body once. Native scalar fields are
  * searchable; duplicating nested JSON into attributes adds bytes without evidence. */
 export const searchableTelemetryAttributes = (
 	values: Readonly<Record<string, unknown>>
 ): NativeAttributes => Record.filter(values, isNativeAttribute)
-
-export const definedAttributes = (attributes: Attributes): Attributes =>
-	Record.filter(attributes, (value) => value !== undefined)
 
 /** The coordinates every child span inherits and every sink spells one way: the Effect tracer
  * copies them onto each Effect child (`effect.ts`), the span processor onto each SDK child, fetch
@@ -102,15 +109,31 @@ export const CORRELATION_KEYS = [
 	"session.id"
 ] as const satisfies readonly (keyof SharedAttributes)[]
 
-/** The correlation coordinates of one attribute set, with PostHog's protocol aliases for the
- * replay session. Aliases, not content rules: one representation serves logs and tracing. */
+/** The replay session one attribute set carries, when it carries one. */
+const sessionOf = (attributes: Readonly<Record<string, unknown>>): Option.Option<string> => {
+	const session: unknown = attributes["session.id"]
+	return typeof session === "string" ? Option.some(session) : Option.none()
+}
+
+/** The correlation a child inherits from one attribute set: the replay session, carried once as
+ * `session.id`. */
 export const correlationAttributes = (
 	attributes: Readonly<Record<string, unknown>>
-): Readonly<Record<string, string | undefined>> => {
-	const session: unknown = attributes["session.id"]
-	const replay = typeof session === "string" ? session : undefined
-	return { "session.id": replay, sessionId: replay, $session_id: replay }
-}
+): Readonly<{ "session.id"?: string }> =>
+	Option.match(sessionOf(attributes), {
+		onNone: () => ({}),
+		onSome: (session) => ({ "session.id": session })
+	})
+
+/** PostHog's protocol aliases for the replay session, added only where a record leaves the
+ * process: at span export, at log emission and on a server exception. */
+export const sessionAliases = (
+	attributes: Readonly<Record<string, unknown>>
+): Readonly<{ sessionId?: string; $session_id?: string }> =>
+	Option.match(sessionOf(attributes), {
+		onNone: () => ({}),
+		onSome: (session) => ({ sessionId: session, $session_id: session })
+	})
 
 /** An outbound HTTP request as its span admits it: the method, the parsed request URL and the
  * caller's declared route template. `@vercel/otel/fetch` names every client span
@@ -153,14 +176,16 @@ const QUERY_BEARING_ATTRIBUTES = ["http.target", "http.route", "http.referer", "
 const withoutQuery = (value: string): string =>
 	Option.getOrElse(Arr.head(Str.split(value, "?")), () => value)
 
-const queryFreeAttributes = (attributes: Attributes): Attributes =>
-	Record.fromEntries([
-		...Arr.flatMap(QUERY_BEARING_ATTRIBUTES, (key) => {
+/** The attributes with every request line cut at its query and `url.query` gone. */
+const queryFreeAttributes = (attributes: Attributes): Attributes => ({
+	...Record.remove<string, Attributes[string], "url.query">(attributes, "url.query"),
+	...Record.fromEntries(
+		Arr.flatMap(QUERY_BEARING_ATTRIBUTES, (key) => {
 			const value = attributes[key]
 			return typeof value === "string" ? [[key, withoutQuery(value)] as const] : []
-		}),
-		...("url.query" in attributes ? [["url.query", undefined] as const] : [])
-	])
+		})
+	)
+})
 
 /** An HTTP client span is named by its method and route template, or by its server address when
  * the caller declared no template (the HTTP client naming convention, with the address standing
@@ -184,11 +209,10 @@ const exportedIdentityOf = (span: ReadableSpan): ExportedIdentity => {
 	}
 }
 
-/** The native span with its request identity query-free and PostHog's session coordinates added.
+/** The native span with its request identity query-free and PostHog's session aliases added.
  * Built at export time only, never at span end. */
 export const operationalSpan = (span: ReadableSpan): ReadableSpan => {
 	const identity = exportedIdentityOf(span)
-	const attributes = { ...span.attributes, ...identity.attributes }
 	const parent = span.parentSpanContext
 	return {
 		name: identity.name,
@@ -200,7 +224,7 @@ export const operationalSpan = (span: ReadableSpan): ReadableSpan => {
 		duration: span.duration,
 		ended: span.ended,
 		status: span.status,
-		attributes: { ...attributes, ...definedAttributes(correlationAttributes(attributes)) },
+		attributes: { ...identity.attributes, ...sessionAliases(identity.attributes) },
 		links: span.links,
 		events: span.events,
 		resource: span.resource,

@@ -1,58 +1,51 @@
 import "server-only"
-import { RuntimeNodeInstrumentation } from "@opentelemetry/instrumentation-runtime-node"
-import {
-	outboundTraceContextPropagator,
-	replayPropagator
-} from "@superstarter/operational-telemetry/correlation"
 import { OperationalTelemetry } from "@superstarter/operational-telemetry/effect"
-import { observeSdkDiagnostics } from "@superstarter/operational-telemetry/export-health"
-import {
-	metricExportProcessor,
-	startOperationalMetrics
-} from "@superstarter/operational-telemetry/metrics"
-import { operationalProcessor } from "@superstarter/operational-telemetry/remote"
-import { operationalResourceAttributes } from "@superstarter/operational-telemetry/resource"
-import { nativeSpanLimits } from "@superstarter/operational-telemetry/sdk-limits"
-import { registerOTel } from "@vercel/otel"
-import { Effect } from "effect"
-import { TelemetrySink } from "#server/observability/sink.ts"
+import type { OperationalDeployment } from "@superstarter/operational-telemetry/schema"
+import { Effect, Record } from "effect"
 import { webRuntime } from "#server/runtime.ts"
 
-/** Order is the dependency: SDK diagnostics first, so no registration message is discarded; the
- * meter provider before every component that measures itself; the log provider (inside the
- * operational processor) before the tracer, so the first log of the process is exported. Next's
- * tracer emits every framework phase, not only its default span allowlist, when the deployment
- * sets `NEXT_OTEL_VERBOSE=1`. */
-const registration = Effect.gen(function* () {
-	const { origin } = yield* OperationalTelemetry
-	const { exporters } = yield* TelemetrySink
-	observeSdkDiagnostics(origin)
-	const metricsOwner = yield* startOperationalMetrics({
-		origin,
-		exporter: exporters.metrics,
-		host: { observe: exporters.host },
-		cadence: exporters.cadence
-	})
-	const { meterProvider } = metricsOwner
-	const processor = yield* operationalProcessor({
-		origin,
-		exporters: exporters.bind(meterProvider),
-		meterProvider,
-		requestDrain: exporters.requestDrain
-	})
-	registerOTel({
-		serviceName: origin.service,
-		autoDetectResources: false,
-		resourceDetectors: [],
-		propagators: [outboundTraceContextPropagator, "baggage", replayPropagator],
-		spanProcessors: [processor, metricExportProcessor(metricsOwner)],
-		traceSampler: "always_on",
-		spanLimits: nativeSpanLimits,
-		instrumentations: ["fetch", new RuntimeNodeInstrumentation({ captureUncaughtException: true })],
-		attributes: operationalResourceAttributes(origin)
-	})
-})
+/** The signals that stop a server, by POSIX number: a process a signal stopped exits with 128 plus
+ * the signal's number, as Next's own handler would. */
+const STOP_SIGNALS = { SIGINT: 2, SIGTERM: 15 } as const
 
-/** Registers this process's telemetry on its one runtime, so the instrumentation bundle and every
- * app bundle report under the same instance, tracer and sinks. */
-export const registerWebObservability = (): Promise<void> => webRuntime().runPromise(registration)
+/** How long disposing the runtime may take before the process exits anyway. */
+const DISPOSAL_BOUND = "5 seconds"
+
+/**
+ * The process's one exit hook. A stop signal disposes the web runtime, which ends the PostgreSQL
+ * pool and then shuts the telemetry pipeline down, so the last metrics, spans and logs are written,
+ * then exits. Next installs no handler of its own (`NEXT_MANUAL_SIG_HANDLE=true` in the app's
+ * scripts): its handler exits as soon as its own cleanup ends, before an async disposal finishes.
+ * A signal that arrives while the process is stopping changes nothing; the bound still holds.
+ */
+const exitOnStop = (dispose: Effect.Effect<void>): void => {
+	let stopping = false
+	for (const signal of Record.keys(STOP_SIGNALS)) {
+		process.on(signal, () => {
+			if (stopping) {
+				return
+			}
+			stopping = true
+			Effect.runFork(
+				dispose.pipe(
+					Effect.timeout(DISPOSAL_BOUND),
+					Effect.ignore,
+					Effect.andThen(
+						Effect.sync(() => {
+							process.exit(128 + STOP_SIGNALS[signal])
+						})
+					)
+				)
+			)
+		})
+	}
+}
+
+/** Builds this process's one runtime, which registers its telemetry, so the instrumentation bundle
+ * and every app bundle report under the same instance, tracer and sinks; installs the exit hook;
+ * and answers the deployment the runtime admitted. */
+export const registerWebObservability = (): Promise<OperationalDeployment> => {
+	const runtime = webRuntime()
+	exitOnStop(runtime.disposeEffect)
+	return runtime.runPromise(Effect.map(OperationalTelemetry, ({ origin }) => origin.deployment))
+}

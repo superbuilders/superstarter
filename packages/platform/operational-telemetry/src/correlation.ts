@@ -7,18 +7,20 @@ import {
 	type TextMapPropagator,
 	trace
 } from "@opentelemetry/api"
-import { Result, Schema, String as Str } from "effect"
+import { Option, Schema, String as Str } from "effect"
+import { Uuid } from "#schema.ts"
 
 const replayKey = createContextKey("superstarter.posthog.replay")
 /** The header posthog-js adds to same-origin requests (`tracing_headers`) with its session id. */
 export const REPLAY_HEADER = "x-posthog-session-id"
-const decodeReplay = Schema.decodeUnknownResult(Schema.String.check(Schema.isUUID()))
+const decodeReplay = Schema.decodeUnknownOption(Uuid)
 
 /** An untrusted correlation header is admitted once; it never grants identity or access. */
-export const replayAttributes = (value: unknown): Attributes => {
-	const admitted = decodeReplay(value)
-	return Result.isSuccess(admitted) ? { "session.id": admitted.success } : {}
-}
+export const replayAttributes = (value: unknown): Readonly<{ "session.id"?: typeof Uuid.Type }> =>
+	Option.match(decodeReplay(value), {
+		onNone: () => ({}),
+		onSome: (session) => ({ "session.id": session })
+	})
 
 /** The replay session the request carried, held in the OTel context the propagator extracted. */
 export const requestCorrelation = (parent: Context = context.active()): Attributes => {

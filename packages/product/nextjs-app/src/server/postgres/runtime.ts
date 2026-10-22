@@ -68,8 +68,8 @@ const applicationPoolOf = (target: DatabaseTarget): PostgresPool => {
  * process that never reads the database (or whose configuration is missing) still serves
  * telemetry; missing configuration is a deployment defect and dies there. `attachDatabasePool`
  * closes idle connections before Vercel suspends the instance, because no idle timeout runs while
- * it is suspended; no shutdown hook exists, so the pool's release runs only where a runtime is
- * disposed.
+ * it is suspended. The pool ends when its runtime is disposed: for the web runtime, when a stop
+ * signal reaches the process's exit hook.
  * https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package#attachdatabasepool
  */
 export class ApplicationPostgres extends Context.Service<

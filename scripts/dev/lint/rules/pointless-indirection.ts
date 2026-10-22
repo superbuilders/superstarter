@@ -1,14 +1,15 @@
 import { Array as Arr } from "effect"
 import * as ts from "typescript/unstable/ast"
 import type { Symbol as NativeSymbol } from "typescript/unstable/sync"
-import type { LintRule, RuleContext, Violation } from "#scripts/dev/lint/types.ts"
-import { violationAt } from "#scripts/dev/lint/violation.ts"
+import type { RuleContext, Visit } from "#scripts/dev/lint/types.ts"
+import type { Report } from "#scripts/dev/shared/finding.ts"
 
 type Wrapper = ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression
 
-const MESSAGE =
-	"Pointless indirection. This function just wraps a value or call without computation."
-const SUGGESTION = "Inline the expression or use the value directly"
+const POINTLESS: Omit<Report, "node"> = {
+	message: "Pointless indirection. This function just wraps a value or call without computation.",
+	suggestion: "Inline the expression or use the value directly"
+}
 
 const isTrivialCall = (expression: ts.CallExpression): boolean =>
 	Arr.every(
@@ -111,24 +112,17 @@ const hasExportModifier = (node: ts.FunctionDeclaration | ts.VariableStatement):
 	node.modifiers !== undefined &&
 	Arr.some(node.modifiers, (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)
 
-/** Names exported through `export { name }` clauses anywhere in the file. */
-const exportedNamesOf = (sourceFile: ts.SourceFile): ReadonlySet<string> => {
-	const names = new Set<string>()
-	const collect = (node: ts.Node): void => {
-		if (
-			ts.isExportDeclaration(node) &&
-			node.exportClause !== undefined &&
-			ts.isNamedExports(node.exportClause)
-		) {
-			for (const element of node.exportClause.elements) {
-				names.add(element.name.text)
-			}
-		}
-		node.forEachChild(collect)
-	}
-	collect(sourceFile)
-	return names
-}
+/** Names exported through the file's `export { name }` clauses. */
+const exportedNamesOf = (sourceFile: ts.SourceFile): ReadonlySet<string> =>
+	new Set(
+		Arr.flatMap(sourceFile.statements, (statement) =>
+			ts.isExportDeclaration(statement) &&
+			statement.exportClause !== undefined &&
+			ts.isNamedExports(statement.exportClause)
+				? Arr.map(statement.exportClause.elements, (element) => element.name.text)
+				: []
+		)
+	)
 
 /** How many times the file names each symbol, declarations included, by the checker's symbol identity: a shadowed
  * or same-named binding is a different symbol. A shorthand property `{ run }` names the value it reads. */
@@ -154,19 +148,25 @@ const referenceCountsOf = (context: RuleContext): ReadonlyMap<number, number> =>
 }
 
 /**
- * A local function whose body only returns a value or makes one call, without computation or narrowing, and
- * that is used once (counted by the checker's symbols), is indirection: inline the expression where it is used. A wrapper used in several places
- * names a shared expression, which inlining would duplicate, and exported functions are public API; both stay.
+ * A local function whose body only returns a value or makes one call, without computation or narrowing, and that
+ * is used once (counted by the checker's symbols), is indirection: inline the expression where it is used. A
+ * wrapper used in several places names a shared expression, which inlining would duplicate, and exported functions
+ * are public API; both stay. The file's reference counts are taken once, at its first candidate.
  */
-export const noPointlessIndirection: LintRule = (context) => {
+export const noPointlessIndirection: Visit = (context) => {
 	const { sourceFile, semantics } = context
-	const violations: Array<Violation> = []
 	const exportedNames = exportedNamesOf(sourceFile)
-	const referenceCounts = referenceCountsOf(context)
+	let referenceCounts: ReadonlyMap<number, number> | undefined = undefined
+	const countsOf = (): ReadonlyMap<number, number> => {
+		if (referenceCounts === undefined) {
+			referenceCounts = referenceCountsOf(context)
+		}
+		return referenceCounts
+	}
 	/** Named by its declaration and more than one use; an unresolved name is left alone. */
 	const isReused = (name: ts.Identifier): boolean => {
 		const symbol = semantics.symbolAt(name)
-		const references = symbol === undefined ? undefined : referenceCounts.get(symbol.id)
+		const references = symbol === undefined ? undefined : countsOf().get(symbol.id)
 		return references === undefined || references > 2
 	}
 
@@ -178,66 +178,43 @@ export const noPointlessIndirection: LintRule = (context) => {
 		return hasExportModifier(list.parent) || exportedNames.has(name)
 	}
 
-	const checkFunctionDeclaration = (node: ts.FunctionDeclaration): void => {
+	const checkFunctionDeclaration = (node: ts.FunctionDeclaration): ReadonlyArray<Report> => {
 		const name = node.name
 		if (
 			name === undefined ||
 			hasExportModifier(node) ||
 			exportedNames.has(name.text) ||
+			!isPointlessIndirection(node) ||
 			isReused(name)
 		) {
-			return
+			return []
 		}
-		if (isPointlessIndirection(node)) {
-			violations.push(
-				violationAt({
-					sourceFile,
-					node: name,
-					rule: "no-pointless-indirection",
-					message: MESSAGE,
-					suggestion: SUGGESTION
-				})
-			)
-		}
+		return [{ node: name, ...POINTLESS }]
 	}
 
-	const checkVariableDeclaration = (node: ts.VariableDeclaration): void => {
+	const checkVariableDeclaration = (node: ts.VariableDeclaration): ReadonlyArray<Report> => {
 		const initializer = node.initializer
 		if (
 			initializer === undefined ||
 			(!ts.isArrowFunction(initializer) && !ts.isFunctionExpression(initializer))
 		) {
-			return
+			return []
 		}
 		if (
 			!ts.isIdentifier(node.name) ||
 			isExportedVariable(node.name.text, node) ||
-			isReused(node.name) ||
-			!isPointlessIndirection(initializer)
+			!isPointlessIndirection(initializer) ||
+			isReused(node.name)
 		) {
-			return
+			return []
 		}
-		violations.push(
-			violationAt({
-				sourceFile,
-				node: node.name,
-				rule: "no-pointless-indirection",
-				message: MESSAGE,
-				suggestion: SUGGESTION
-			})
-		)
+		return [{ node: node.name, ...POINTLESS }]
 	}
 
-	const walk = (node: ts.Node): void => {
+	return (node) => {
 		if (ts.isFunctionDeclaration(node)) {
-			checkFunctionDeclaration(node)
+			return checkFunctionDeclaration(node)
 		}
-		if (ts.isVariableDeclaration(node)) {
-			checkVariableDeclaration(node)
-		}
-		node.forEachChild(walk)
+		return ts.isVariableDeclaration(node) ? checkVariableDeclaration(node) : []
 	}
-
-	walk(sourceFile)
-	return violations
 }

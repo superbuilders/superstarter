@@ -13,7 +13,7 @@ import { Array as Arr, Console, Effect, Record, Result } from "effect"
 import type { FlushMethod } from "#flush.ts"
 import type { Completion, ExportOutcome, OtlpSignal } from "#otlp-batch.ts"
 import { OPERATIONAL_SCOPE } from "#resource.ts"
-import type { OperationalOrigin } from "#schema.ts"
+import type { OperationalOrigin, OutsideRequests } from "#schema.ts"
 import { serializeEvidence } from "#span-export.ts"
 
 const boundaries = {
@@ -29,7 +29,9 @@ export type ExportScope =
 	| Readonly<{ kind: "unavailable" }>
 	| Readonly<{ kind: "records"; records: readonly ExportCoordinate[]; unscopedRecords: number }>
 
-const unavailableScope = (): ExportScope => ({ kind: "unavailable" })
+/** The scope of records that carry no native coordinates (metric points), and of any whose
+ * coordinates cannot be read. */
+export const unavailableScope = (): ExportScope => ({ kind: "unavailable" })
 
 /** Writes a receipt to the host console, never through the OTel pipeline whose failure it may
  * report. A receipt that cannot be written is dropped rather than failing its caller. */
@@ -38,6 +40,21 @@ const writeReceipt = (receipt: string | undefined, failed: boolean): void => {
 		Effect.runSync(failed ? Console.error(receipt) : Console.log(receipt))
 	})
 }
+
+/** The one envelope every receipt carries: the process that wrote it, and what happened. */
+const receiptOf = (
+	origin: OperationalOrigin,
+	event: string,
+	facts: Readonly<Record<string, unknown>>
+): string | undefined =>
+	serializeEvidence({
+		v: 1,
+		service: origin.service,
+		deployment: origin.deployment,
+		instanceId: origin.instanceId,
+		event,
+		...facts
+	})
 
 /** Native SDK coordinates, not another synthetic span contract. */
 export const exportScopeOf = (
@@ -65,8 +82,8 @@ export const exportScopeOf = (
 }
 
 /** The scope a receipt names, or none when the scope itself cannot be read. */
-const scopeFor = (scopeOf: (() => ExportScope) | undefined): ExportScope =>
-	Result.getOrElse(Result.try(scopeOf === undefined ? unavailableScope : scopeOf), unavailableScope)
+const scopeFor = (scopeOf: () => ExportScope): ExportScope =>
+	Result.getOrElse(Result.try(scopeOf), unavailableScope)
 
 /** One send's settlement at the exporter: its signal, wire records, completion and outcome, how
  * long it took, and the coordinates its records carried. */
@@ -76,14 +93,14 @@ type ExportObservation = Readonly<{
 	result: Completion
 	outcome: ExportOutcome
 	milliseconds: number
-	scopeOf: (() => ExportScope) | undefined
+	scopeOf: () => ExportScope
 }>
 
 /** Records a single record the receiver refused as too large, dropped by the export. */
 type DropObservation = Readonly<{
 	signal: OtlpSignal
 	count: number
-	scopeOf: (() => ExportScope) | undefined
+	scopeOf: () => ExportScope
 }>
 
 /** One drain pass of one owner: which signal, which lifecycle method, and what failed. */
@@ -142,13 +159,8 @@ export const makeExportHealth = (
 				() => "error serialization failed"
 			)
 			writeReceipt(
-				serializeEvidence({
-					v: 1,
-					service: origin.service,
-					deployment: origin.deployment,
-					instanceId: origin.instanceId,
+				receiptOf(origin, "telemetry-export-failed", {
 					boundary: boundaries[signal],
-					event: "telemetry-export-failed",
 					signal,
 					outcome,
 					count,
@@ -161,13 +173,8 @@ export const makeExportHealth = (
 		observeDropped: ({ signal, count, scopeOf }) => {
 			dropped.add(count, { signal, reason: "too-large" })
 			writeReceipt(
-				serializeEvidence({
-					v: 1,
-					service: origin.service,
-					deployment: origin.deployment,
-					instanceId: origin.instanceId,
+				receiptOf(origin, "telemetry-record-dropped", {
 					boundary: boundaries[signal],
-					event: "telemetry-record-dropped",
 					signal,
 					reason: "too-large",
 					count,
@@ -182,19 +189,7 @@ export const makeExportHealth = (
 			if (outcome === "completed") {
 				return
 			}
-			writeReceipt(
-				serializeEvidence({
-					v: 1,
-					service: origin.service,
-					deployment: origin.deployment,
-					instanceId: origin.instanceId,
-					event: "telemetry-flush-failed",
-					signal,
-					method,
-					causes
-				}),
-				true
-			)
+			writeReceipt(receiptOf(origin, "telemetry-flush-failed", { signal, method, causes }), true)
 		},
 		observeSpanLoss: (span) => {
 			const counts = {
@@ -217,11 +212,7 @@ export const makeExportHealth = (
 				lost.add(count, { kind })
 			}
 			writeReceipt(
-				serializeEvidence({
-					v: 1,
-					service: origin.service,
-					deployment: origin.deployment,
-					event: "telemetry-sdk-data-dropped",
+				receiptOf(origin, "telemetry-sdk-data-dropped", {
 					dropped: counts,
 					scope: exportScopeOf([{ context: span.spanContext(), time: span.startTime }])
 				}),
@@ -241,10 +232,14 @@ const LOUD_LEVELS: ReadonlySet<DiagnosticLevel> = new Set(["error", "warn"])
  * them. They go to the host console only, as closed JSON receipts: routing SDK diagnostics through
  * the OTel log provider would make a failing log export report itself. Warnings and errors are
  * also counted, so a dashboard sees them without reading Vercel Logs. The logger is installed
- * before the meter provider exists, so each count reads the meter then. `OTEL_LOG_LEVEL`, when
- * set, still replaces this logger in `@vercel/otel` registration.
+ * before the meter provider exists, so each count reads the meter then, outside the request that
+ * may have caused it. `OTEL_LOG_LEVEL`, when set, still replaces this logger in `@vercel/otel`
+ * registration.
  * https://opentelemetry.io/docs/languages/js/getting-started/nodejs/#troubleshooting */
-export const observeSdkDiagnostics = (origin: OperationalOrigin): void => {
+export const observeSdkDiagnostics = ({
+	origin,
+	outsideRequests
+}: Readonly<{ origin: OperationalOrigin; outsideRequests: OutsideRequests }>): void => {
 	let counting = false
 	const count = (level: DiagnosticLevel): void => {
 		if (counting || !LOUD_LEVELS.has(level)) {
@@ -252,10 +247,12 @@ export const observeSdkDiagnostics = (origin: OperationalOrigin): void => {
 		}
 		counting = true
 		Result.try(() => {
-			metrics
-				.getMeter(OPERATIONAL_SCOPE)
-				.createCounter("superstarter.telemetry.sdk.diagnostics", { unit: "{diagnostic}" })
-				.add(1, { level })
+			outsideRequests(() => {
+				metrics
+					.getMeter(OPERATIONAL_SCOPE)
+					.createCounter("superstarter.telemetry.sdk.diagnostics", { unit: "{diagnostic}" })
+					.add(1, { level })
+			})
 		})
 		counting = false
 	}
@@ -264,26 +261,8 @@ export const observeSdkDiagnostics = (origin: OperationalOrigin): void => {
 		(message: string, ...args: ReadonlyArray<unknown>): void => {
 			count(level)
 			const receipt = Result.getOrElse(
-				Result.try(() =>
-					serializeEvidence({
-						v: 1,
-						service: origin.service,
-						deployment: origin.deployment,
-						instanceId: origin.instanceId,
-						event: "telemetry-sdk-diagnostic",
-						level,
-						message,
-						args
-					})
-				),
-				() =>
-					serializeEvidence({
-						v: 1,
-						service: origin.service,
-						event: "telemetry-sdk-diagnostic",
-						level,
-						message
-					})
+				Result.try(() => receiptOf(origin, "telemetry-sdk-diagnostic", { level, message, args })),
+				() => receiptOf(origin, "telemetry-sdk-diagnostic", { level, message })
 			)
 			writeReceipt(receipt, LOUD_LEVELS.has(level))
 		}

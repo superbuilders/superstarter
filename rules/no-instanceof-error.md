@@ -1,6 +1,6 @@
 # No `instanceof Error`
 
-`x instanceof Error` is banned (oxlint `superstarter/no-instanceof-error`). It says that something is an error, not which one. Effect already knows which, because its error channel is typed.
+`x instanceof Error` is banned (oxlint `unicorn/no-instanceof-builtins` with `useErrorIsError`, which also refuses `instanceof` on the primitive wrappers and `Array`). It says that something is an error, not which one. Effect already knows which, because its error channel is typed.
 
 ## Match by tag
 

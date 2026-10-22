@@ -40,7 +40,7 @@ export const coreTodos = core.table(
 
 The helpers live in `@superstarter/database/lib/uuid-time`:
 
-- `timestampFromUuidv7(id: string): Option<DateTime.Utc>` gives the creation instant, or `None` when the id's prefix does not parse.
+- `timestampFromUuidv7(id: Uuidv7): DateTime.Utc` gives the creation instant. Every table's id brands `Uuidv7` (`TodoId` does), so any row id passes.
 - `uuidv7LowerBound(instant: DateTime.Utc): string` gives the smallest UUIDv7 minted at or after `instant`.
 
 ```ts

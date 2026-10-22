@@ -1,8 +1,13 @@
 import { Schema } from "effect"
 
-/** Every rule the style linter reports; no-invalid-color also reports arbitrary color values as no-arbitrary-color. */
-const STYLE_RULE_IDS = [
+/** Every rule the style linter reports, by the id it reports under: its name in the output and its fixture
+ * directory. */
+export const STYLE_RULES = [
 	"no-unresolved-class",
+	"no-unverifiable-class",
+	"no-dynamic-class",
+	"no-conflicting-classes",
+	"no-duplicate-class",
 	"no-invalid-color",
 	"no-arbitrary-color",
 	"no-arbitrary-spacing",
@@ -12,24 +17,14 @@ const STYLE_RULE_IDS = [
 	"no-duplicate-data-slot"
 ] as const
 
-const StyleRuleId = Schema.Literals(STYLE_RULE_IDS)
+export type StyleRule = (typeof STYLE_RULES)[number]
 
-export type StyleRuleId = typeof StyleRuleId.Type
+/** One class as written: its text and where it starts, 1-based. */
+export type ClassToken = Readonly<{ text: string; file: string; line: number; column: number }>
 
-export const StyleViolation = Schema.Struct({
-	file: Schema.String,
-	line: Schema.Int,
-	column: Schema.Int,
-	rule: StyleRuleId,
-	message: Schema.String,
-	className: Schema.optional(Schema.String),
-	componentName: Schema.optional(Schema.String)
-})
-
-export type StyleViolation = typeof StyleViolation.Type
-
-/** One class name written in a source file, at the position of the literal it came from. */
-export type ClassLocation = Readonly<{ file: string; text: string; line: number; column: number }>
+/** The classes of one static class string: one literal, or one literal type of a union. Conflicts and duplicates
+ * are judged within one list; across lists, `cn` resolves them on purpose. */
+export type ClassList = ReadonlyArray<ClassToken>
 
 /** A Tailwind utility value: an arbitrary `[...]` value or a named theme value. */
 const UtilityValue = Schema.Union([
@@ -51,20 +46,39 @@ export const Candidate = Schema.Union([
 
 export type Candidate = typeof Candidate.Type
 
-/** The loaded Tailwind design system, behind the few typed operations the style rules use. */
-export type DesignSystem = Readonly<{
-	/** Tailwind's parse of a class name; a parse Tailwind returns in an unknown shape is left out. */
-	parseCandidate: (className: string) => ReadonlyArray<Candidate>
-	/** Whether each class name compiles to CSS, in input order. */
-	resolvesToCss: (classNames: ReadonlyArray<string>) => ReadonlyArray<boolean>
-	/** Theme colors that reference a CSS variable: the design tokens. */
-	allowedColors: ReadonlySet<string>
-	/** Every theme color, Tailwind's default palette included. */
-	allColors: ReadonlySet<string>
-	/** The token names of each non-empty theme namespace (`--animate`, `--radius`, ...); null names the bare token. */
-	themeNamespaces: ReadonlyMap<string, ReadonlySet<string | null>>
+/** Tailwind's parse of one class: a candidate, or nothing Tailwind recognizes as one. */
+export type ParsedClass = Candidate | Readonly<{ kind: "unparsed" }>
+
+/** What a class compiles to, as far as conflicts go: the variants it applies under, as written, and the CSS
+ * properties it declares, sorted and joined. */
+export type CompiledClass = Readonly<{ variants: string; properties: string }>
+
+/** One class with what the design system says about it: Tailwind's parse, and its compiled CSS when it
+ * compiles. */
+export type ExplainedClass = ClassToken &
+	Readonly<{
+		candidate: ParsedClass
+		compiled: CompiledClass | undefined
+	}>
+
+/** The named values a utility root takes from the theme: the namespaces they come from and their token names. */
+export type Vocabulary = Readonly<{
+	namespaces: ReadonlyArray<string>
+	tokens: ReadonlyArray<string>
 }>
 
-export type ClassRule = (
-	input: Readonly<{ classes: ReadonlyArray<ClassLocation>; system: DesignSystem }>
-) => ReadonlyArray<StyleViolation>
+/** The theme the stylesheet defines: its colors, the design tokens among them (the colors that reference a CSS
+ * variable), and the vocabulary of each root that takes named values; a root without one takes bare values only. */
+export type Theme = Readonly<{
+	colors: ReadonlySet<string>
+	colorTokens: ReadonlySet<string>
+	vocabularies: ReadonlyMap<string, Vocabulary>
+}>
+
+/** What a class rule reads: one class list, explained, and the theme. */
+export type ClassRuleInput = Readonly<{ list: ReadonlyArray<ExplainedClass>; theme: Theme }>
+
+/** What a class rule says about one class of the list; the engine stamps the rule's id. */
+export type ClassVerdict = Readonly<{ token: ClassToken; message: string; suggestion?: string }>
+
+export type ClassRule = (input: ClassRuleInput) => ReadonlyArray<ClassVerdict>

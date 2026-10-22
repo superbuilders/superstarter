@@ -11,17 +11,13 @@ import { Cli } from "alchemy/Report"
 import { Array as Arr, Console, Effect, HashSet, Layer, Path, Record, Schema, Stdio } from "effect"
 import type * as Entrypoint from "#alchemy.run.ts"
 import { Environment } from "#environment.ts"
+import { argumentsOf } from "#script.ts"
 
 /** `deploy <environment> <logical-id>...`: the environment is the stage, and the logical IDs are
  * every resource the reviewed plan showed changing. */
 const Arguments = Schema.TupleWithRest(Schema.Tuple([Environment, Schema.NonEmptyString]), [
 	Schema.NonEmptyString
 ])
-
-class DeployUsage extends Schema.TaggedError<DeployUsage, { readonly brand: unique symbol }>()(
-	"DeployUsage",
-	{ usage: Schema.Literal("deploy <environment> <logical-id>...") }
-) {}
 
 class InfrastructureScopeRefused extends Schema.TaggedError<
 	InfrastructureScopeRefused,
@@ -61,14 +57,14 @@ const changedIdsOf = (plan: Plan): Effect.Effect<ReadonlyArray<string>> => {
 /**
  * Plan, admit and apply in one run. The fresh plan that is applied must change only the resources
  * the operator named: an earlier plan cannot authorize drift introduced since, and a security group
- * reconciles the ingress it observes, including temporary rules.
+ * reconciles the ingress it observes, including temporary rules. The plan is admitted where its
+ * apply session starts, the one gate every apply passes, so nothing applies before it is admitted.
  */
 const program = Effect.gen(function* () {
 	const stdio = yield* Stdio.Stdio
 	const path = yield* Path.Path
 	const [stage, ...ids] = yield* stdio.args.pipe(
-		Effect.flatMap(Schema.decodeUnknownEffect(Arguments)),
-		Effect.mapError(() => DeployUsage.make({ usage: "deploy <environment> <logical-id>..." }))
+		Effect.flatMap(argumentsOf(Arguments, "deploy <environment> <logical-id>..."))
 	)
 	const intended = HashSet.fromIterable(ids)
 	const logging = yield* Cli
@@ -81,13 +77,10 @@ const program = Effect.gen(function* () {
 	})
 	const scopedCli = Cli.of({
 		...logging,
-		approvePlan: (plan, options) =>
-			logging.displayPlan(plan, options).pipe(Effect.andThen(admitPlan(plan)), Effect.as(true)),
 		startApplySession: (plan, options) =>
 			admitPlan(plan).pipe(Effect.andThen(logging.startApplySession(plan, options)))
 	})
 	const deploy = Effect.gen(function* () {
-		const cli = yield* Cli
 		const display = { stage }
 		const input: Stack.PlanInput = {
 			target: { entrypoint: path.resolve(import.meta.dirname, "../alchemy.run.ts"), stage },
@@ -98,13 +91,6 @@ const program = Effect.gen(function* () {
 			Effect.flatMap(Stack.plan<typeof Entrypoint>),
 			Effect.orDie
 		)
-		const changed = yield* changedIdsOf(snapshot.native)
-		if (Arr.isReadonlyArrayNonEmpty(changed)) {
-			const approved = yield* cli.approvePlan(snapshot.native, display)
-			if (!approved) {
-				return
-			}
-		}
 		const outputs = yield* Stack.apply(snapshot).pipe(renderApply(snapshot.native, display))
 		yield* Console.log(outputs)
 	})

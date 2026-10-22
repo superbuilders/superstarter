@@ -70,7 +70,7 @@ Pass `signal` on, so that interruption aborts the call.
 - **Several tags:** `Effect.catchTags({ TodoNotFound: …, PostgresTransientFailure: … })`.
 - **A different domain failure:** `Effect.mapError`.
 - **Our own bug:** `Effect.orDie`, for a failure that cannot happen unless our code is wrong, such as a row of our own SQL that does not decode or a missing `Config` at runtime.
-- **Retry:** `PostgresTransientFailure` (SQLSTATE 40001 or 40P01) means the attempt changed nothing and may succeed when run again. Nothing retries automatically. The caller decides, with `retryPostgresTransient` (`@superstarter/database/postgres/retry`): three more attempts, exponentially spaced from 20 ms. The todo lifecycle suite proves it against a real conflict.
+- **Retry:** `PostgresTransientFailure` (SQLSTATE 40001 or 40P01) means the attempt changed nothing and may succeed when run again. Nothing retries automatically. The caller decides, with `retryPostgresTransient` (`@superstarter/database/postgres/retry`): three more attempts, spaced exponentially from 20 ms with jitter, so contenders that collided do not collide again in step. The todo lifecycle suite proves it against a real conflict.
 
   ```ts
   flipTodo(id).pipe(retryPostgresTransient)
@@ -78,7 +78,7 @@ Pass `signal` on, so that interruption aborts the call.
 
 ## Boundaries
 
-- **Server actions** run through `effectAction` (`packages/product/nextjs-app/src/server/effect-action.ts`). A failure the action's contract names crosses to the browser as itself, decoded back into the same class. Every other cause is reported once and crosses as the opaque `ActionFailed`. The client never sees an exception or an error's text; it writes its own message per `_tag`.
+- **Server actions** run through `effectAction` (`packages/product/nextjs-app/src/server/effect-action.ts`). A failure the action's contract names crosses to the browser as itself, decoded back into the same class, when it is the run's only reason. Every other cause, a refusal beside another failure included, is reported once and crosses as the opaque `ActionFailed`. The client never sees an exception or an error's text; it writes its own message per `_tag`.
 - **Render reads** reject the promise the page passed down, and the route's error boundary renders.
 - **Scripts** end in `NodeRuntime.runMain(main)`, which reports a failure and sets the exit code.
 - **Native callbacks:** `throw` appears only where a native callback's contract demands it, such as pg's `password` callback, and it throws a tagged error.
