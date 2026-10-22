@@ -17,6 +17,7 @@
 		"./postgres/diagnostic": "./src/postgres/diagnostic.ts",
 		"./postgres/pool": "./src/postgres/pool.ts",
 		"./postgres/principals": "./src/postgres/principals.ts",
+		"./postgres/rds": "./src/postgres/rds.ts",
 		"./postgres/rds-ca": "./src/postgres/rds-ca.ts",
 		"./postgres/retry": "./src/postgres/retry.ts",
 		"./postgres/transaction": "./src/postgres/transaction.ts",

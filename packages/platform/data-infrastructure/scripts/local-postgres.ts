@@ -4,9 +4,10 @@ import {
 	LOCAL_POSTGRES_DATABASES,
 	LOCAL_POSTGRES_PORT
 } from "@superstarter/database/postgres/connection"
+import { POSTGRES_MASTER_USERNAME } from "@superstarter/database/postgres/principals"
 import { withPostgresStatement } from "@superstarter/database/postgres/transaction"
 import { eq, sql } from "drizzle-orm"
-import { Array as Arr, Effect, FileSystem, Schema, String as Str } from "effect"
+import { Array as Arr, Effect, FileSystem, Schema, Stdio, String as Str } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { withLocalPostgres } from "#database/local-postgres.ts"
 import { runMigration } from "#migrations.ts"
@@ -75,7 +76,7 @@ const ensureCluster = Effect.gen(function* () {
 		yield* succeeds("initdb", "initdb", [
 			"--pgdata",
 			DATA,
-			"--username=postgres",
+			`--username=${POSTGRES_MASTER_USERNAME}`,
 			"--auth=trust",
 			"--encoding=UTF8",
 			"--locale-provider=builtin",
@@ -143,8 +144,9 @@ const stop = Effect.gen(function* () {
 })
 
 const main = Effect.gen(function* () {
-	const [mode] = yield* Schema.decodeUnknownEffect(Schema.Tuple([LocalMode]))(
-		Arr.drop(process.argv, 2)
+	const stdio = yield* Stdio.Stdio
+	const [mode] = yield* stdio.args.pipe(
+		Effect.flatMap(Schema.decodeUnknownEffect(Schema.Tuple([LocalMode])))
 	)
 	if (mode === "stop") {
 		return yield* stop

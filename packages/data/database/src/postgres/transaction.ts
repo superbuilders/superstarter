@@ -15,30 +15,49 @@ import {
 
 type ScopeConsumer<A, E, R> = (scope: PostgresQueryScope) => Effect.Effect<A, E, R>
 
-/** The one decode of a native failure: a transient SQLSTATE becomes its own error, every other
- * refusal keeps its admitted diagnostic. */
-const operationFailureOf =
-	(operation: "construction" | "statement" | "transaction") =>
+/** A scope lender, data-first or data-last: `consume` runs with a scope over the database. */
+type ScopeRunner = {
+	<A, E, R>(
+		consume: ScopeConsumer<A, E, R>
+	): (database: NativePostgresDatabase) => Effect.Effect<A, E | PostgresOperationFailure, R>
+	<A, E, R>(
+		database: NativePostgresDatabase,
+		consume: ScopeConsumer<A, E, R>
+	): Effect.Effect<A, E | PostgresOperationFailure, R>
+}
+
+/** The one decode of an issued statement's or transaction's native failure: a transient SQLSTATE
+ * becomes its own error, every other refusal keeps its admitted diagnostic. */
+const issueFailureOf =
+	(operation: PostgresTransientFailure["operation"]) =>
 	(error: unknown): PostgresOperationFailure => {
 		const diagnostic = postgresDiagnosticOf(error)
 		const reason = transientReasonOf(diagnostic)
-		if (reason === undefined || operation === "construction") {
+		if (reason === undefined) {
 			return PostgresStatementRejected.make({ operation, diagnostic })
 		}
 		return PostgresTransientFailure.make({ operation, reason })
 	}
 
 /** Builders construct synchronously and issue nothing; a throw while building is the statement's
- * own failure. Issuing is uninterruptible, so a client is never released mid-protocol. */
+ * own failure, and never a transient one, since nothing was issued. Issuing is uninterruptible, so
+ * a client is never released mid-protocol. */
 const issue = <Statement, A>(
 	build: () => Statement,
 	execute: (statement: Statement) => Promise<A>
 ): Effect.Effect<A, PostgresOperationFailure> =>
-	Effect.try({ try: build, catch: operationFailureOf("construction") }).pipe(
+	Effect.try({
+		try: build,
+		catch: (error) =>
+			PostgresStatementRejected.make({
+				operation: "construction",
+				diagnostic: postgresDiagnosticOf(error)
+			})
+	}).pipe(
 		Effect.flatMap((statement) =>
 			Effect.tryPromise({
 				try: () => execute(statement),
-				catch: operationFailureOf("statement")
+				catch: issueFailureOf("statement")
 			}).pipe(Effect.uninterruptible)
 		)
 	)
@@ -66,7 +85,7 @@ const transactionCauseOf = <E>(
 	if (failed !== undefined && error instanceof TransactionRollbackError) {
 		return failed
 	}
-	const native = Cause.fail(operationFailureOf("transaction")(error))
+	const native = Cause.fail(issueFailureOf("transaction")(error))
 	if (failed === undefined) {
 		return native
 	}
@@ -126,15 +145,7 @@ const READ_ONLY: PgTransactionConfig = {
 
 /** One autocommit statement scope, without BEGIN and COMMIT round trips. Each statement is its own
  * SERIALIZABLE transaction through the session default. */
-export const withPostgresStatement: {
-	<A, E, R>(
-		consume: ScopeConsumer<A, E, R>
-	): (database: NativePostgresDatabase) => Effect.Effect<A, E | PostgresOperationFailure, R>
-	<A, E, R>(
-		database: NativePostgresDatabase,
-		consume: ScopeConsumer<A, E, R>
-	): Effect.Effect<A, E | PostgresOperationFailure, R>
-} = Fn.dual(
+export const withPostgresStatement: ScopeRunner = Fn.dual(
 	2,
 	<A, E, R>(
 		database: NativePostgresDatabase,
@@ -147,15 +158,7 @@ export const withPostgresStatement: {
  * A SERIALIZABLE read-write transaction: several statements that commit together or not at all.
  * @public
  */
-export const withPostgresTransaction: {
-	<A, E, R>(
-		consume: ScopeConsumer<A, E, R>
-	): (database: NativePostgresDatabase) => Effect.Effect<A, E | PostgresOperationFailure, R>
-	<A, E, R>(
-		database: NativePostgresDatabase,
-		consume: ScopeConsumer<A, E, R>
-	): Effect.Effect<A, E | PostgresOperationFailure, R>
-} = Fn.dual(
+export const withPostgresTransaction: ScopeRunner = Fn.dual(
 	2,
 	<A, E, R>(
 		database: NativePostgresDatabase,
@@ -168,15 +171,7 @@ export const withPostgresTransaction: {
  * A SERIALIZABLE READ ONLY DEFERRABLE transaction: several reads that must agree on one snapshot.
  * @public
  */
-export const withPostgresReadTransaction: {
-	<A, E, R>(
-		consume: ScopeConsumer<A, E, R>
-	): (database: NativePostgresDatabase) => Effect.Effect<A, E | PostgresOperationFailure, R>
-	<A, E, R>(
-		database: NativePostgresDatabase,
-		consume: ScopeConsumer<A, E, R>
-	): Effect.Effect<A, E | PostgresOperationFailure, R>
-} = Fn.dual(
+export const withPostgresReadTransaction: ScopeRunner = Fn.dual(
 	2,
 	<A, E, R>(
 		database: NativePostgresDatabase,

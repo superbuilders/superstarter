@@ -16,7 +16,7 @@ A class that extends `Error` is banned (tsgo `extendsNativeError`). An expected 
 
 ```ts
 import { Schema } from "effect"
-import { TodoId } from "#lib/todos.ts"
+import { TodoId } from "@superstarter/todo-protocol/todos"
 
 /** The todo a toggle or delete names no longer exists. */
 export class TodoNotFound extends Schema.TaggedError<

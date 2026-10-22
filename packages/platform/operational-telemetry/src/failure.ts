@@ -264,8 +264,13 @@ const failureTagOf = (cause: Cause.Cause<unknown>): string =>
 		() => "EffectFailure"
 	)
 
-/** What a SQLSTATE looks like on the wire: five digits or upper-case letters. */
-const SQLSTATE = /^[0-9A-Z]{5}$/
+/** A PostgreSQL SQLSTATE as the wire spells it: five digits or upper-case letters. */
+export const SqlState = Schema.String.check(Schema.isPattern(/^[0-9A-Z]{5}$/)).pipe(
+	Schema.brand("SqlState")
+)
+export type SqlState = typeof SqlState.Type
+
+const isSqlState = Schema.is(SqlState)
 
 /** The admitted PostgreSQL diagnostic a failure carries, recognized by shape rather than class
  * (Next's error hook runs in its own bundle copy of the database modules): a statement or
@@ -294,9 +299,7 @@ const sqlStateOf = (value: unknown): Option.Option<string> => {
 		return Option.none()
 	}
 	const sqlState = diagnostic.sqlState
-	return typeof sqlState === "string" && SQLSTATE.test(sqlState)
-		? Option.some(sqlState)
-		: Option.none()
+	return isSqlState(sqlState) ? Option.some(sqlState) : Option.none()
 }
 
 /** What a reporter logs about any cause: its closed failure reasons, the SQLSTATEs PostgreSQL

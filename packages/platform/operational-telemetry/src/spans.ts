@@ -7,6 +7,10 @@ import { Count, FrameworkVocabulary, Token, Uuid } from "#schema.ts"
  * `annotateOperation` needs it, so a fact can only be written to an operation the work runs inside. */
 export type OperationScope<Name extends string> = Readonly<{ "~operation": Name }>
 
+/** The key only this registry holds. No other module can name it, so an operation is an
+ * `OPERATIONAL_SPANS` entry and never an object literal built elsewhere. */
+const REGISTERED = Symbol("superstarter/operational-span")
+
 /**
  * One operation the application observes: the span name it exports and every attribute its span may
  * carry. `opened` is what the span opens with, required where the operation always knows it;
@@ -17,6 +21,7 @@ export type OperationalSpan<
 	Opened extends Schema.Struct.Fields,
 	Learned extends Schema.Struct.Fields
 > = Readonly<{
+	[REGISTERED]: true
 	name: Name
 	opened: Schema.Struct<Opened>
 	learned: Schema.Struct<Learned>
@@ -32,6 +37,7 @@ const operationalSpan = <
 >(
 	spec: Readonly<{ name: Name; opened: Opened; learned: Learned }>
 ): OperationalSpan<Name, Opened, Learned> => ({
+	[REGISTERED]: true,
 	name: spec.name,
 	opened: Schema.Struct(spec.opened),
 	learned: Schema.Struct(spec.learned),

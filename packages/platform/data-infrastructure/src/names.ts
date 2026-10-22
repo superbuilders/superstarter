@@ -1,9 +1,8 @@
+import { AWS_REGION } from "@superstarter/database/postgres/rds"
+import { VERCEL_TARGETS } from "@superstarter/operational-telemetry/schema"
 import { Array as Arr, Record } from "effect"
 import type { VercelProject, VercelTeamSlug } from "#env.ts"
-import { AWS_REGION, type Environment, PROJECT } from "#environment.ts"
-
-/** The Vercel environments whose deployments assume the runtime role. */
-const VERCEL_TARGETS = ["production", "preview", "development"] as const
+import { type Environment, PROJECT } from "#environment.ts"
 
 /**
  * The tags on every AWS resource superstarter creates. `"shared"` marks the account singletons that
@@ -35,7 +34,8 @@ export const vercelOidcProviderArn = (
 	target: Readonly<{ account: string; team: VercelTeamSlug }>
 ) => `arn:aws:iam::${target.account}:oidc-provider/${vercelIssuer(target.team)}` as const
 
-/** The OIDC subjects Vercel signs for the project's deployments, one per Vercel environment. */
+/** The OIDC subjects Vercel signs for the project's deployments, one per Vercel environment: every
+ * one of them assumes the runtime role. */
 export const vercelSubjectsOf = (vercel: VercelProject) =>
 	Arr.map(
 		VERCEL_TARGETS,

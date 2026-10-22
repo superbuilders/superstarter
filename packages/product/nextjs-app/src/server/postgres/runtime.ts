@@ -7,6 +7,7 @@ import {
 	withPooledPostgres
 } from "@superstarter/database/postgres/pool"
 import { POSTGRES_PORT, POSTGRES_PRINCIPALS } from "@superstarter/database/postgres/principals"
+import { AWS_REGION } from "@superstarter/database/postgres/rds"
 import {
 	type NativePostgresDatabase,
 	PostgresConnectRejected
@@ -18,7 +19,7 @@ import {
 } from "@superstarter/operational-telemetry/effect"
 import { attachDatabasePool } from "@vercel/functions"
 import { Context, Effect, Layer, Scope } from "effect"
-import { AWS_REGION, type DatabaseTarget, databaseTarget } from "#env.ts"
+import { type DatabaseTarget, databaseTarget } from "#env.ts"
 import { productionAwsCredentialsOf } from "#server/aws/production.ts"
 
 /** Connections one function instance may hold to the database. */

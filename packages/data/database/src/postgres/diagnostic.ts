@@ -1,12 +1,8 @@
+import { SqlState } from "@superstarter/operational-telemetry/failure"
+import type { PostgresTransientFailure } from "@superstarter/todo-protocol/transient-failure"
 import { DrizzleQueryError } from "drizzle-orm/errors"
 import { Match, Predicate, Schema } from "effect"
 import { DatabaseError } from "pg"
-
-/** A PostgreSQL SQLSTATE: five digits or upper-case letters. */
-const SqlState = Schema.String.check(Schema.isPattern(/^[0-9A-Z]{5}$/)).pipe(
-	Schema.brand("SqlState")
-)
-type SqlState = typeof SqlState.Type
 
 /** Node's code for a socket that failed below the protocol: refused, reset, timed out, unresolved. */
 const TransportCode = Schema.Literals([
@@ -29,7 +25,7 @@ export const PostgresDiagnostic = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("sqlstate"),
 		sqlState: SqlState,
-		constraint: Schema.UndefinedOr(Schema.String)
+		constraint: Schema.optionalKey(Schema.String)
 	}),
 	Schema.Struct({ kind: Schema.Literal("transport"), code: TransportCode }),
 	Schema.Struct({ kind: Schema.Literal("unclassified") })
@@ -55,14 +51,20 @@ export const postgresDiagnosticOf = (error: unknown): PostgresDiagnostic =>
 	Match.value(driverFailureOf(error)).pipe(
 		Match.when(isDatabaseError, (native): PostgresDiagnostic => {
 			const sqlState = native.code
-			return isSqlState(sqlState)
-				? { kind: "sqlstate", sqlState, constraint: native.constraint }
-				: { kind: "unclassified" }
+			if (!isSqlState(sqlState)) {
+				return { kind: "unclassified" }
+			}
+			const { constraint } = native
+			return {
+				kind: "sqlstate",
+				sqlState,
+				...(constraint === undefined ? {} : { constraint })
+			}
 		}),
 		Match.orElse(transportDiagnosticOf)
 	)
 
-export type TransientReason = "serialization-failure" | "deadlock"
+type TransientReason = PostgresTransientFailure["reason"]
 
 /** A SERIALIZABLE conflict (40001) and a deadlock (40P01) leave the attempt without effect, so it
  * may succeed when run again. Callers decide whether to retry; nothing here retries. */

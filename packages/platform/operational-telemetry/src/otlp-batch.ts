@@ -1,229 +1,76 @@
-import { metrics } from "@opentelemetry/api"
 import { ExportResultCode } from "@opentelemetry/core"
 import type { LogRecordExporter } from "@opentelemetry/sdk-logs"
-import { Array as Arr, Cause, Effect, Result, Schema } from "effect"
-import type { Oversized, TelemetryEvidenceEnvelopeTooLarge } from "#evidence-parts.ts"
-import { OPERATIONAL_SCOPE } from "#resource.ts"
+import { Array as Arr, Cause, Effect, Predicate, Result, Schema } from "effect"
+import type { ExportHealth, ExportScope } from "#export-health.ts"
 
 /** The native exporter's completion: a result code and, when it failed, its error. */
 export type Completion = Parameters<Parameters<LogRecordExporter["export"]>[1]>[0]
 
-/**
- * @limitKind published
- * @owner PostHog OTLP export
- * @unit bytes
- * @scope one uncompressed OTLP logs, traces or metrics HTTP request
- * @constraint configurable default
- * @source https://github.com/PostHog/posthog/blob/master/rust/capture-logs/src/config.rs
- * MAX_REQUEST_BODY_SIZE_BYTES defaults to 2097152; main.rs applies the shared /i/v1/{logs,traces,metrics} body
- * limit after decompression. Adopt that receiver default as our packet bound;
- * this does not claim the hosted project's effective setting was inspected.
- * @verified 2026-09-20
- */
-const POSTHOG_OTLP_REQUEST_BYTES = 2 * 1024 * 1024
-
-/**
- * @limitKind derived
- * @owner PostHog OTLP export measurements
- * @unit bytes
- * @scope packet-size histogram boundaries, never admission or sampling
- * @derivation Binary byte-size decades through the request bound, POSTHOG_OTLP_REQUEST_BYTES.
- * Shared boundaries permit aggregation across all signals and service processes; the overflow
- * bucket stays present.
- */
-const PACKET_BYTE_BUCKETS: ReadonlyArray<number> = Arr.makeBy(
-	Math.ceil(Math.log2(POSTHOG_OTLP_REQUEST_BYTES)) + 1,
-	(exponent) => 2 ** exponent
-)
-
-type OtlpBatchLimits = Readonly<{ bytes: number; records: number }>
-
-export const operationalBatchLimits: OtlpBatchLimits = {
-	bytes: POSTHOG_OTLP_REQUEST_BYTES,
-	records: Number.POSITIVE_INFINITY
-}
-
-/** A packet that was never handed to the exporter: its serialization or the export run itself
- * failed. */
-class TelemetryBatchExportRefused extends Schema.TaggedError<
-	TelemetryBatchExportRefused,
-	{ readonly brand: unique symbol }
->()("TelemetryBatchExportRefused", {
-	reason: Schema.Literals(["serialization", "export"]),
-	cause: Schema.Unknown
-}) {}
-
-/** One record whose own bytes exceed the packet bound and that has no evidence expansion. */
-class TelemetryRecordTooLarge extends Schema.TaggedError<
-	TelemetryRecordTooLarge,
-	{ readonly brand: unique symbol }
->()("TelemetryRecordTooLarge", {
-	bytes: Schema.Int,
-	limitBytes: Schema.Int
-}) {}
-
-/** The native serializer threw or returned no bytes. */
-class TelemetrySerializationFailed extends Schema.TaggedError<
-	TelemetrySerializationFailed,
-	{ readonly brand: unique symbol }
->()("TelemetrySerializationFailed", {
-	cause: Schema.Unknown
-}) {}
-
-/** Why a candidate packet was never handed to the exporter. */
-type PacketRefusal =
-	| TelemetrySerializationFailed
-	| TelemetryRecordTooLarge
-	| TelemetryEvidenceEnvelopeTooLarge
-
-/** The native exporter threw instead of calling back. */
-class TelemetrySendThrew extends Schema.TaggedError<
-	TelemetrySendThrew,
-	{ readonly brand: unique symbol }
->()("TelemetrySendThrew", {
-	cause: Schema.Unknown
-}) {}
-
 export type OtlpSignal = "logs" | "traces" | "metrics"
 
-/** One export batch: its records, the native serializer and exporter, the host's completion and
- * observation callbacks, the receiver's limits, and how an oversized record splits into evidence
- * parts. */
-export type SizedBatch<T> = Readonly<{
-	items: readonly T[]
-	serialize: (items: readonly T[]) => Uint8Array | undefined
-	send: (items: readonly T[], callback: (result: Completion) => void) => void
-	callback: (result: Completion) => void
-	observe: (records: readonly T[], result: Completion, kind: "export" | "refused") => void
-	limits: OtlpBatchLimits
+/** How one send settled at the exporter. */
+export type ExportOutcome = "acknowledged" | "rejected" | "too-large"
+
+/**
+ * PostHog refuses an OTLP request body over its limit with 413 and has no per-record cap: hosted
+ * ingestion takes 10 MiB, a self-hosted one 2 MiB by default. Its SDK spec answers a 413 by halving
+ * the batch and retrying the same records, and drops a single record that is still refused, with a
+ * warning; nothing splits a record. The native OTLP exporter does not retry a 413, and the local
+ * file sink never answers one.
+ * https://github.com/PostHog/sdk-specs/blob/main/openspec/specs/logs/spec.md
+ */
+const isTooLarge = (error: unknown): boolean =>
+	Predicate.hasProperty(error, "code") && error.code === 413
+
+/** The receiver refused one record on its own as too large: it is dropped, never split or retried. */
+class TelemetryRecordRefused extends Schema.TaggedError<
+	TelemetryRecordRefused,
+	{ readonly brand: unique symbol }
+>()("TelemetryRecordRefused", {
+	reason: Schema.Literal("too-large")
+}) {}
+
+/** The native exporter threw instead of calling back, or the export run itself died; the batch's
+ * completion is still delivered, so the SDK processor never waits on it. */
+class TelemetryExportThrew extends Schema.TaggedError<
+	TelemetryExportThrew,
+	{ readonly brand: unique symbol }
+>()("TelemetryExportThrew", {
+	cause: Schema.Unknown
+}) {}
+
+/** One batch export: its signal and records, how the native exporter sends them, where the batch's
+ * completion goes, the owner's export health, and the coordinates its records carry. */
+export type BisectedExport<T> = Readonly<{
 	signal: OtlpSignal
-	expandOversized?: (
-		oversized: Oversized<T>
-	) => Effect.Effect<readonly T[], TelemetryEvidenceEnvelopeTooLarge>
+	records: readonly T[]
+	send: (records: readonly T[], callback: (result: Completion) => void) => void
+	callback: (result: Completion) => void
+	health: ExportHealth
+	scopeOf?: (records: readonly T[]) => ExportScope
 }>
 
-type Candidate<T> = Readonly<{ items: readonly T[]; phase: "original" | "evidence" }>
-type Packet<T> =
-	| Readonly<{ kind: "send"; bytes: number }>
-	| Readonly<{ kind: "split"; children: readonly Candidate<T>[] }>
+const SUCCEEDED: Completion = { code: ExportResultCode.SUCCESS }
 
-/** The count quota is enforced before any byte serialization, including evidence expansion. */
-const countPackets = <T>(
-	items: readonly T[],
-	records: number,
-	phase: Candidate<T>["phase"]
-): readonly Candidate<T>[] => {
-	if (!Arr.isReadonlyArrayNonEmpty(items)) {
-		return []
+const outcomeOf = (result: Completion): ExportOutcome => {
+	if (result.code === ExportResultCode.SUCCESS) {
+		return "acknowledged"
 	}
-	if (items.length <= records) {
-		return [{ items, phase }]
-	}
-	return Arr.map(Arr.chunksOf(items, records), (chunk) => ({ items: chunk, phase }))
+	return isTooLarge(result.error) ? "too-large" : "rejected"
 }
 
-const refused = (reason: "serialization" | "export", cause: unknown): Completion => ({
-	code: 1,
-	error: TelemetryBatchExportRefused.make({ reason, cause })
-})
-
-/** The first failure of a sequence of packets, else the last success. */
+/** The first failure of a sequence of sends, else the last success. */
 const firstFailureOf = (first: Completion, next: Completion): Completion =>
 	first.code === ExportResultCode.SUCCESS ? next : first
 
-/** Count admission precedes serialization. Byte admission uses the native SDK serializer; the
- * native exporter still owns transport and retries. Oversized evidence expands only once, then
- * every final part is checked against the same envelope. Packets go out one at a time, in order. */
-export const exportSizedBatch = <T>(batch: SizedBatch<T>): void => {
-	const { limits, observe } = batch
-	const meter = metrics.getMeter(OPERATIONAL_SCOPE)
-	const attributes = { signal: batch.signal }
-	const serializationDuration = meter.createHistogram(
-		"superstarter.telemetry.serialization.duration",
-		{ unit: "ms" }
-	)
-	const serializationBytes = meter.createCounter("superstarter.telemetry.serialization.bytes", {
-		unit: "By"
-	})
-	const packetBytes = meter.createHistogram("superstarter.telemetry.packet.bytes", {
-		unit: "By",
-		advice: { explicitBucketBoundaries: [...PACKET_BYTE_BUCKETS] }
-	})
-	const packetRecords = meter.createHistogram("superstarter.telemetry.packet.records")
-	const exportDuration = meter.createHistogram("superstarter.telemetry.export.duration", {
-		unit: "ms"
-	})
-	const serialized = (
-		records: readonly T[]
-	): Result.Result<Uint8Array, TelemetrySerializationFailed> => {
-		const started = performance.now()
-		const bytes = Result.try({
-			try: () => batch.serialize(records),
-			catch: (cause) => TelemetrySerializationFailed.make({ cause })
-		})
-		serializationDuration.record(performance.now() - started, attributes)
-		return Result.flatMap(bytes, (output) => {
-			if (output === undefined) {
-				return Result.fail(
-					TelemetrySerializationFailed.make({ cause: "native serializer returned no bytes" })
-				)
-			}
-			serializationBytes.add(output.byteLength, attributes)
-			return Result.succeed(output)
-		})
-	}
-	const fits = (part: T): boolean =>
-		Result.match(serialized([part]), {
-			onFailure: () => false,
-			onSuccess: (bytes) => bytes.byteLength <= limits.bytes
-		})
-	const expand = (
-		candidate: Candidate<T>,
-		bytes: Uint8Array
-	): Effect.Effect<Packet<T>, PacketRefusal> => {
-		const item = Arr.head(candidate.items)
-		const expandOversized = batch.expandOversized
-		if (candidate.phase !== "original" || item._tag === "None" || expandOversized === undefined) {
-			return TelemetryRecordTooLarge.make({ bytes: bytes.byteLength, limitBytes: limits.bytes })
-		}
-		return expandOversized({ item: item.value, serialized: bytes, fits }).pipe(
-			Effect.flatMap((expanded) => {
-				if (!Arr.isReadonlyArrayNonEmpty(expanded)) {
-					return TelemetryRecordTooLarge.make({
-						bytes: bytes.byteLength,
-						limitBytes: limits.bytes
-					})
-				}
-				meter.createCounter("superstarter.telemetry.evidence.originals").add(1, attributes)
-				meter
-					.createCounter("superstarter.telemetry.evidence.parts")
-					.add(expanded.length - 1, attributes)
-				return Effect.succeed<Packet<T>>({
-					kind: "split",
-					children: countPackets(expanded, limits.records, "evidence")
-				})
-			})
-		)
-	}
-	const prepare = (candidate: Candidate<T>): Effect.Effect<Packet<T>, PacketRefusal> => {
-		const bytes = serialized(candidate.items)
-		if (Result.isFailure(bytes)) {
-			return Effect.fail(bytes.failure)
-		}
-		if (bytes.success.byteLength <= limits.bytes) {
-			return Effect.succeed({ kind: "send", bytes: bytes.success.byteLength })
-		}
-		if (candidate.items.length > 1) {
-			const middle = Math.ceil(candidate.items.length / 2)
-			return Effect.succeed({
-				kind: "split",
-				children: [
-					{ ...candidate, items: Arr.take(candidate.items, middle) },
-					{ ...candidate, items: Arr.drop(candidate.items, middle) }
-				]
-			})
-		}
-		return expand(candidate, bytes.success)
+/** Sends the batch as it is and halves it on each 413, sending the halves in order; a single
+ * record still refused is dropped with its receipt. The batch's completion is the first failure,
+ * else success. */
+export const exportBisecting = <T>(batch: BisectedExport<T>): void => {
+	const { signal, health } = batch
+	const scopeOf = (records: readonly T[]) => {
+		const scope = batch.scopeOf
+		return scope === undefined ? undefined : () => scope(records)
 	}
 	const sent = (records: readonly T[]): Effect.Effect<Completion> =>
 		Effect.callback<Completion>((resume) => {
@@ -234,49 +81,67 @@ export const exportSizedBatch = <T>(batch: SizedBatch<T>): void => {
 			})
 			if (Result.isFailure(handed)) {
 				resume(
-					Effect.succeed({ code: 1, error: TelemetrySendThrew.make({ cause: handed.failure }) })
+					Effect.succeed({
+						code: ExportResultCode.FAILED,
+						error: TelemetryExportThrew.make({ cause: handed.failure })
+					})
 				)
 			}
 		})
-	const transmit = (records: readonly T[], bytes: number): Effect.Effect<Completion> => {
-		packetBytes.record(bytes, attributes)
-		packetRecords.record(records.length, attributes)
+	const transmit = (records: readonly T[]) => {
+		health.observeExportAttempt({ signal, count: records.length })
 		const started = performance.now()
 		return sent(records).pipe(
-			Effect.tap((result) =>
-				Effect.sync(() => {
-					const outcome = result.code === ExportResultCode.SUCCESS ? "acknowledged" : "failed"
-					exportDuration.record(performance.now() - started, { ...attributes, outcome })
-					observe(records, result, "export")
+			Effect.map((result) => {
+				const outcome = outcomeOf(result)
+				health.observeExport({
+					signal,
+					count: records.length,
+					result,
+					outcome,
+					milliseconds: performance.now() - started,
+					scopeOf: scopeOf(records)
 				})
-			)
-		)
-	}
-	const exportCandidate = (candidate: Candidate<T>): Effect.Effect<Completion> =>
-		prepare(candidate).pipe(
-			Effect.matchEffect({
-				onFailure: (cause) =>
-					Effect.sync(() => {
-						const result = refused("serialization", cause)
-						observe(candidate.items, result, "refused")
-						return result
-					}),
-				onSuccess: (packet) =>
-					packet.kind === "split"
-						? exportCandidates(packet.children)
-						: transmit(candidate.items, packet.bytes)
+				return { result, outcome }
 			})
 		)
-	const exportCandidates = (candidates: readonly Candidate<T>[]): Effect.Effect<Completion> =>
-		Effect.reduce(
-			candidates,
-			(): Completion => ({ code: 0 }),
-			(first, candidate) =>
-				exportCandidate(candidate).pipe(Effect.map((next) => firstFailureOf(first, next)))
+	}
+	const exportRecords = (records: readonly T[]): Effect.Effect<Completion> =>
+		transmit(records).pipe(
+			Effect.flatMap(({ result, outcome }) => {
+				if (outcome !== "too-large") {
+					return Effect.succeed(result)
+				}
+				if (records.length > 1) {
+					const middle = Math.ceil(records.length / 2)
+					return exportInOrder([Arr.take(records, middle), Arr.drop(records, middle)])
+				}
+				return Effect.sync((): Completion => {
+					health.observeDropped({ signal, count: records.length, scopeOf: scopeOf(records) })
+					return {
+						code: ExportResultCode.FAILED,
+						error: TelemetryRecordRefused.make({ reason: "too-large" })
+					}
+				})
+			})
 		)
+	const exportInOrder = (parts: ReadonlyArray<readonly T[]>): Effect.Effect<Completion> =>
+		Effect.reduce(
+			parts,
+			(): Completion => SUCCEEDED,
+			(first, part) => exportRecords(part).pipe(Effect.map((next) => firstFailureOf(first, next)))
+		)
+	const work = Arr.isReadonlyArrayNonEmpty(batch.records)
+		? exportRecords(batch.records)
+		: Effect.succeed(SUCCEEDED)
 	Effect.runFork(
-		exportCandidates(countPackets(batch.items, limits.records, "original")).pipe(
-			Effect.catchCause((cause) => Effect.succeed(refused("export", Cause.squash(cause)))),
+		work.pipe(
+			Effect.catchCause((cause) =>
+				Effect.succeed<Completion>({
+					code: ExportResultCode.FAILED,
+					error: TelemetryExportThrew.make({ cause: Cause.squash(cause) })
+				})
+			),
 			Effect.tap((result) =>
 				Effect.sync(() => {
 					batch.callback(result)

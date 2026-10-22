@@ -21,9 +21,12 @@ export const observeStatement =
 	<A, E, R>(statement: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
 		statement.pipe(observed(OPERATIONAL_SPANS.postgresStatement, statementAttributesOf(identity)))
 
+type TransactionAccess =
+	(typeof OPERATIONAL_SPANS.postgresTransaction.opened.Type)["superstarter.postgres.access"]
+
 /** One span per transaction, around BEGIN through COMMIT or ROLLBACK. */
 export const observeTransaction =
-	(access: "read-write" | "read-only") =>
+	(access: TransactionAccess) =>
 	<A, E, R>(transaction: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
 		transaction.pipe(
 			observed(OPERATIONAL_SPANS.postgresTransaction, {

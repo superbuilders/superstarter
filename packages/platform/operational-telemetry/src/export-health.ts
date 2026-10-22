@@ -4,13 +4,14 @@ import {
 	diag,
 	type HrTime,
 	isSpanContextValid,
+	type Meter,
 	metrics,
 	type SpanContext
 } from "@opentelemetry/api"
-import { ExportResultCode } from "@opentelemetry/core"
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base"
 import { Array as Arr, Console, Effect, Record, Result } from "effect"
-import type { Completion, OtlpSignal } from "#otlp-batch.ts"
+import type { FlushMethod } from "#flush.ts"
+import type { Completion, ExportOutcome, OtlpSignal } from "#otlp-batch.ts"
 import { OPERATIONAL_SCOPE } from "#resource.ts"
 import type { OperationalOrigin } from "#schema.ts"
 import { serializeEvidence } from "#span-export.ts"
@@ -22,9 +23,12 @@ const boundaries = {
 } as const satisfies Record<OtlpSignal, string>
 
 type ExportCoordinate = Readonly<{ traceId: string; spanId: string; timeUnixNanoseconds: string }>
-type ExportScope =
+
+/** The native coordinates a packet's records carried, for a receipt that names what failed. */
+export type ExportScope =
 	| Readonly<{ kind: "unavailable" }>
 	| Readonly<{ kind: "records"; records: readonly ExportCoordinate[]; unscopedRecords: number }>
+
 const unavailableScope = (): ExportScope => ({ kind: "unavailable" })
 
 /** Writes a receipt to the host console, never through the OTel pipeline whose failure it may
@@ -33,17 +37,6 @@ const writeReceipt = (receipt: string | undefined, failed: boolean): void => {
 	Result.try(() => {
 		Effect.runSync(failed ? Console.error(receipt) : Console.log(receipt))
 	})
-}
-
-/** Count wire records only at the exporter handoff. Evidence parts are wire records too; these
- * counters must never be subtracted from SDK queue records. */
-export const observeExportAttempt = (
-	attempt: Readonly<{ signal: OtlpSignal; count: number }>
-): void => {
-	metrics
-		.getMeter(OPERATIONAL_SCOPE)
-		.createCounter("superstarter.telemetry.export.attempted", { unit: "{wire_record}" })
-		.add(attempt.count, { signal: attempt.signal })
 }
 
 /** Native SDK coordinates, not another synthetic span contract. */
@@ -71,129 +64,171 @@ export const exportScopeOf = (
 	}
 }
 
-/** One packet's settlement at the exporter: its signal, wire records, the exporter's completion,
- * the coordinates it carried, and whether it reached the exporter at all. */
-export type ExportObservation = Readonly<{
-	origin: OperationalOrigin
+/** The scope a receipt names, or none when the scope itself cannot be read. */
+const scopeFor = (scopeOf: (() => ExportScope) | undefined): ExportScope =>
+	Result.getOrElse(Result.try(scopeOf === undefined ? unavailableScope : scopeOf), unavailableScope)
+
+/** One send's settlement at the exporter: its signal, wire records, completion and outcome, how
+ * long it took, and the coordinates its records carried. */
+type ExportObservation = Readonly<{
 	signal: OtlpSignal
 	count: number
 	result: Completion
-	scopeOf?: () => ExportScope
-	kind: "export" | "refused"
+	outcome: ExportOutcome
+	milliseconds: number
+	scopeOf: (() => ExportScope) | undefined
 }>
 
-/** Exporter callbacks expose acknowledgements, not proof that a query can read the data. Backend
- * query qualification remains a separate operator action. The original exporter error is
- * retained, not classified through message heuristics. */
-export const observeExport = (observation: ExportObservation): void => {
-	const { origin, signal, count, result, kind } = observation
-	const acknowledgement = result.code === ExportResultCode.SUCCESS ? "acknowledged" : "rejected"
-	const outcome = kind === "refused" ? "refused" : acknowledgement
-	const meter = metrics.getMeter(OPERATIONAL_SCOPE)
-	meter.createCounter("superstarter.telemetry.export.batches").add(1, { signal, outcome })
-	meter
-		.createCounter("superstarter.telemetry.export.items", { unit: "{wire_record}" })
-		.add(count, { signal, outcome })
-	if (outcome === "acknowledged") {
-		return
-	}
-	const diagnostic = Result.getOrElse(
-		Result.try(() => serializeEvidence(result.error)),
-		() => "error serialization failed"
-	)
-	const scopeOf = observation.scopeOf === undefined ? unavailableScope : observation.scopeOf
-	const scope = Result.getOrElse(Result.try(scopeOf), unavailableScope)
-	writeReceipt(
-		serializeEvidence({
-			v: 1,
-			service: origin.service,
-			deployment: origin.deployment,
-			instanceId: origin.instanceId,
-			boundary: boundaries[signal],
-			event: "telemetry-export-failed",
-			signal,
-			outcome,
-			count,
-			diagnostic,
-			scope
-		}),
-		true
-	)
-}
+/** Records a single record the receiver refused as too large, dropped by the export. */
+type DropObservation = Readonly<{
+	signal: OtlpSignal
+	count: number
+	scopeOf: (() => ExportScope) | undefined
+}>
 
 /** One drain pass of one owner: which signal, which lifecycle method, and what failed. */
-export type FlushObservation = Readonly<{
-	origin: OperationalOrigin
+type FlushObservation = Readonly<{
 	signal: OtlpSignal | "all"
-	method: "forceFlush" | "shutdown"
+	method: FlushMethod
 	causes: readonly unknown[]
 }>
 
-/** Flush failures are lifecycle evidence, never zero-item export batches. The independent console
- * receipt remains visible if PostHog itself is unavailable. */
-export const observeFlush = ({ origin, signal, method, causes }: FlushObservation): void => {
-	const outcome = Arr.isReadonlyArrayNonEmpty(causes) ? "failed" : "completed"
-	metrics
-		.getMeter(OPERATIONAL_SCOPE)
-		.createCounter("superstarter.telemetry.flush.passes")
-		.add(1, { signal, method, outcome })
-	if (outcome === "completed") {
-		return
-	}
-	writeReceipt(
-		serializeEvidence({
-			v: 1,
-			service: origin.service,
-			deployment: origin.deployment,
-			instanceId: origin.instanceId,
-			event: "telemetry-flush-failed",
-			signal,
-			method,
-			causes
-		}),
-		true
-	)
-}
+/** One pipeline owner's export health: the counters and histogram its exports and drains record,
+ * created once from the owner's meter, and the console receipts its failures write. */
+export type ExportHealth = Readonly<{
+	observeExportAttempt: (attempt: Readonly<{ signal: OtlpSignal; count: number }>) => void
+	observeExport: (observation: ExportObservation) => void
+	observeDropped: (observation: DropObservation) => void
+	observeFlush: (observation: FlushObservation) => void
+	observeSpanLoss: (span: ReadableSpan) => void
+}>
 
-/** One observation per native span before export. Includes nested SDK event and link losses;
- * preserving counters in OTLP alone is not an alert. */
-export const observeSpanLoss = (
-	loss: Readonly<{ origin: OperationalOrigin; span: ReadableSpan }>
-): void => {
-	const { origin, span } = loss
-	const dropped = {
-		attributes: span.droppedAttributesCount,
-		events: span.droppedEventsCount,
-		links: span.droppedLinksCount,
-		eventAttributes: Arr.reduce(span.events, 0, (count, event) => {
-			const lost = event.droppedAttributesCount === undefined ? 0 : event.droppedAttributesCount
-			return count + lost
-		}),
-		linkAttributes: Arr.reduce(span.links, 0, (count, link) => {
-			const lost = link.droppedAttributesCount === undefined ? 0 : link.droppedAttributesCount
-			return count + lost
-		})
+/**
+ * The export health of one owner. Exporter callbacks expose acknowledgements, not proof that a
+ * query can read the data; backend query qualification remains a separate operator action. The
+ * original exporter error is retained, never classified through message heuristics. Failure
+ * receipts reach the host console, independent of PostHog, so they stay visible when it is down.
+ */
+export const makeExportHealth = (
+	owner: Readonly<{ origin: OperationalOrigin; meter: Meter }>
+): ExportHealth => {
+	const { origin, meter } = owner
+	const attempted = meter.createCounter("superstarter.telemetry.export.attempted", {
+		unit: "{wire_record}"
+	})
+	const batches = meter.createCounter("superstarter.telemetry.export.batches")
+	const items = meter.createCounter("superstarter.telemetry.export.items", {
+		unit: "{wire_record}"
+	})
+	const duration = meter.createHistogram("superstarter.telemetry.export.duration", { unit: "ms" })
+	const dropped = meter.createCounter("superstarter.telemetry.export.dropped", {
+		unit: "{wire_record}"
+	})
+	const flushes = meter.createCounter("superstarter.telemetry.flush.passes")
+	const lost = meter.createCounter("superstarter.telemetry.sdk.dropped")
+	return {
+		observeExportAttempt: ({ signal, count }) => {
+			attempted.add(count, { signal })
+		},
+		observeExport: ({ signal, count, result, outcome, milliseconds, scopeOf }) => {
+			batches.add(1, { signal, outcome })
+			items.add(count, { signal, outcome })
+			duration.record(milliseconds, { signal, outcome })
+			if (outcome !== "rejected") {
+				return
+			}
+			const diagnostic = Result.getOrElse(
+				Result.try(() => serializeEvidence(result.error)),
+				() => "error serialization failed"
+			)
+			writeReceipt(
+				serializeEvidence({
+					v: 1,
+					service: origin.service,
+					deployment: origin.deployment,
+					instanceId: origin.instanceId,
+					boundary: boundaries[signal],
+					event: "telemetry-export-failed",
+					signal,
+					outcome,
+					count,
+					diagnostic,
+					scope: scopeFor(scopeOf)
+				}),
+				true
+			)
+		},
+		observeDropped: ({ signal, count, scopeOf }) => {
+			dropped.add(count, { signal, reason: "too-large" })
+			writeReceipt(
+				serializeEvidence({
+					v: 1,
+					service: origin.service,
+					deployment: origin.deployment,
+					instanceId: origin.instanceId,
+					boundary: boundaries[signal],
+					event: "telemetry-record-dropped",
+					signal,
+					reason: "too-large",
+					count,
+					scope: scopeFor(scopeOf)
+				}),
+				true
+			)
+		},
+		observeFlush: ({ signal, method, causes }) => {
+			const outcome = Arr.isReadonlyArrayNonEmpty(causes) ? "failed" : "completed"
+			flushes.add(1, { signal, method, outcome })
+			if (outcome === "completed") {
+				return
+			}
+			writeReceipt(
+				serializeEvidence({
+					v: 1,
+					service: origin.service,
+					deployment: origin.deployment,
+					instanceId: origin.instanceId,
+					event: "telemetry-flush-failed",
+					signal,
+					method,
+					causes
+				}),
+				true
+			)
+		},
+		observeSpanLoss: (span) => {
+			const counts = {
+				attributes: span.droppedAttributesCount,
+				events: span.droppedEventsCount,
+				links: span.droppedLinksCount,
+				eventAttributes: Arr.reduce(span.events, 0, (count, event) => {
+					const loss = event.droppedAttributesCount === undefined ? 0 : event.droppedAttributesCount
+					return count + loss
+				}),
+				linkAttributes: Arr.reduce(span.links, 0, (count, link) => {
+					const loss = link.droppedAttributesCount === undefined ? 0 : link.droppedAttributesCount
+					return count + loss
+				})
+			}
+			if (Arr.every(Record.values(counts), (count) => count === 0)) {
+				return
+			}
+			for (const [kind, count] of Record.toEntries(counts)) {
+				lost.add(count, { kind })
+			}
+			writeReceipt(
+				serializeEvidence({
+					v: 1,
+					service: origin.service,
+					deployment: origin.deployment,
+					event: "telemetry-sdk-data-dropped",
+					dropped: counts,
+					scope: exportScopeOf([{ context: span.spanContext(), time: span.startTime }])
+				}),
+				true
+			)
+		}
 	}
-	if (Arr.every(Record.values(dropped), (count) => count === 0)) {
-		return
-	}
-	const counter = metrics
-		.getMeter(OPERATIONAL_SCOPE)
-		.createCounter("superstarter.telemetry.sdk.dropped")
-	for (const [kind, count] of Record.toEntries(dropped)) {
-		counter.add(count, { kind })
-	}
-	writeReceipt(
-		serializeEvidence({
-			v: 1,
-			service: origin.service,
-			deployment: origin.deployment,
-			event: "telemetry-sdk-data-dropped",
-			dropped,
-			scope: exportScopeOf([{ context: span.spanContext(), time: span.startTime }])
-		}),
-		true
-	)
 }
 
 type DiagnosticLevel = keyof DiagLogger
@@ -205,8 +240,9 @@ const LOUD_LEVELS: ReadonlySet<DiagnosticLevel> = new Set(["error", "warn"])
  * overflow, collection timeouts and duplicate registration. Without a logger the API discards
  * them. They go to the host console only, as closed JSON receipts: routing SDK diagnostics through
  * the OTel log provider would make a failing log export report itself. Warnings and errors are
- * also counted, so a dashboard sees them without reading Vercel Logs. `OTEL_LOG_LEVEL`, when set,
- * still replaces this logger in `@vercel/otel` registration.
+ * also counted, so a dashboard sees them without reading Vercel Logs. The logger is installed
+ * before the meter provider exists, so each count reads the meter then. `OTEL_LOG_LEVEL`, when
+ * set, still replaces this logger in `@vercel/otel` registration.
  * https://opentelemetry.io/docs/languages/js/getting-started/nodejs/#troubleshooting */
 export const observeSdkDiagnostics = (origin: OperationalOrigin): void => {
 	let counting = false

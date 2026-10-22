@@ -1,21 +1,20 @@
 import type { Attributes } from "@opentelemetry/api"
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-base"
-import { Array as Arr, Formatter, Option, Predicate, Record, String as Str } from "effect"
+import { Array as Arr, Formatter, Option, Predicate, Record, Schema, String as Str } from "effect"
+import { SqlState } from "#failure.ts"
 import type { SharedAttributes } from "#schema.ts"
 
-/** A PostgreSQL error report is recognized by protocol, not content: its `code` is a five-character
- * SQLSTATE. Three of its fields quote the failing statement's data rather than describe the
- * failure: DETAIL ("Key (...)=(...)", "Failing row contains (...)"), WHERE (the PL/pgSQL context
- * with its variable values) and the internal query. Row values can be a user's words, so a
- * diagnostic crosses with its SQLSTATE, message, hint and object names only.
+/** Three fields of a PostgreSQL error report quote the failing statement's data rather than
+ * describe the failure: DETAIL ("Key (...)=(...)", "Failing row contains (...)"), WHERE (the
+ * PL/pgSQL context with its variable values) and the internal query. Row values can be a user's
+ * words, so a diagnostic crosses with its SQLSTATE, message, hint and object names only.
  * https://www.postgresql.org/docs/current/protocol-error-fields.html */
-const SQLSTATE = /^[0-9A-Z]{5}$/
 const POSTGRES_ROW_VALUE_FIELDS: ReadonlySet<string> = new Set(["detail", "where", "internalQuery"])
 
-const isPostgresErrorReport = (item: object): boolean => {
-	const code: unknown = Reflect.get(item, "code")
-	return typeof code === "string" && SQLSTATE.test(code)
-}
+const isSqlState = Schema.is(SqlState)
+
+/** A PostgreSQL error report is recognized by protocol, not content: its `code` is a SQLSTATE. */
+const isPostgresErrorReport = (item: object): boolean => isSqlState(Reflect.get(item, "code"))
 
 const withoutPostgresRowValues = (
 	entries: readonly (readonly [string, unknown])[]

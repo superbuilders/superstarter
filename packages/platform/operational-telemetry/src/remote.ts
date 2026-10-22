@@ -1,42 +1,40 @@
 import { type Attributes, type MeterProvider, type Span, trace } from "@opentelemetry/api"
-import { ExportResultCode } from "@opentelemetry/core"
-import { JsonTraceSerializer } from "@opentelemetry/otlp-transformer"
 import type { LogRecordExporter } from "@opentelemetry/sdk-logs"
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace"
 import type { ReadableSpan, SpanExporter, SpanProcessor } from "@opentelemetry/sdk-trace-base"
-import { Array as Arr, Cause, Effect, Exit, Schema } from "effect"
+import { Array as Arr, Effect, Function as Fn } from "effect"
 import { requestCorrelation } from "#correlation.ts"
 import type { OperationalTelemetryProviderConflict } from "#destination.ts"
-import { spanEvidenceParts } from "#evidence-parts.ts"
+import { exportScopeOf, makeExportHealth } from "#export-health.ts"
 import {
-	exportScopeOf,
-	observeExport,
-	observeExportAttempt,
-	observeFlush,
-	observeSpanLoss
-} from "#export-health.ts"
-import { coalescedFlush, rejectedReasons, settled } from "#flush.ts"
+	drainLifecycle,
+	type FlushMethod,
+	makeExportLedger,
+	rejectedReasons,
+	settled,
+	TelemetryFlushFailure
+} from "#flush.ts"
 import { createOperationalLogProcessor } from "#logs.ts"
 import { createSpanMeasurements } from "#metrics.ts"
-import { exportSizedBatch, operationalBatchLimits } from "#otlp-batch.ts"
+import { exportBisecting } from "#otlp-batch.ts"
+import { OPERATIONAL_SCOPE } from "#resource.ts"
 import type { OperationalOrigin } from "#schema.ts"
 import { traceBatchDefaults } from "#sdk-limits.ts"
 import { correlationAttributes, definedAttributes, operationalSpan } from "#span-export.ts"
-
-/** A drain or shutdown of the whole pipeline left a signal, an exporter or a packet unsettled. */
-class TelemetryFlushFailure extends Schema.TaggedError<
-	TelemetryFlushFailure,
-	{ readonly brand: unique symbol }
->()("TelemetryFlushFailure", {
-	method: Schema.Literals(["forceFlush", "shutdown"]),
-	causes: Schema.Array(Schema.Unknown)
-}) {}
 
 /** A trace exporter the drain can flush: PostHog's OTLP exporter or the local file sink. */
 export type TraceExporter = SpanExporter & Readonly<{ forceFlush: () => Promise<void> }>
 
 /** The trace and log exporters of one backend. */
 export type OperationalExporters = Readonly<{ traces: TraceExporter; logs: LogRecordExporter }>
+
+/**
+ * Who drains the pipeline when a request ends. `host`: the host's own per-request flush, as
+ * `@vercel/otel` flushes every span processor under `waitUntil` once a request's root span ends on
+ * Vercel. `root-span`: the pipeline itself, as each root span ends, where no host flushes (a local
+ * process), so a request's spans and logs are written as soon as the request ends.
+ */
+export type RequestDrain = "host" | "root-span"
 
 /** The SDK's own span, as the active span of a child's parent context; an external or
  * non-recording span has no attributes to inherit. */
@@ -48,87 +46,64 @@ const parentAttributes = (parent: Parameters<SpanProcessor["onStart"]>[1]): Attr
 	return span !== undefined && isReadable(span) ? span.attributes : {}
 }
 
-/** The process's telemetry pipeline: who it describes, its backend's trace and log exporters, and
- * the installed meter provider every SDK component measures itself through. */
+/** The process's telemetry pipeline: who it describes, its backend's trace and log exporters, the
+ * installed meter provider every SDK component measures itself through, and who drains it when a
+ * request ends. */
 export type OperationalPipeline = Readonly<{
 	origin: OperationalOrigin
 	exporters: OperationalExporters
 	meterProvider: MeterProvider
+	requestDrain: RequestDrain
 }>
 
-/** One content policy, two native receivers with PostHog's published packet limits (the local
- * sink writes the same packets), one drain owner. Spans
- * project through `operationalSpan` in their batch exporter, never at span end. The pipeline,
- * including the process log provider, exists as soon as this owner does: a log emitted before the
- * first span is exported too. SDK self-observability binds to the installed meter provider the
- * caller passes. Metrics are not drained here: the metric reader exports on its own cadence,
- * never on a request's finalization. */
+/** One content policy, two native receivers (the local sink writes the same packets PostHog
+ * receives), one drain owner. Spans project through `operationalSpan` in their batch exporter,
+ * never at span end. The pipeline, including the process log provider, exists as soon as this
+ * owner does: a log emitted before the first span is exported too. SDK self-observability binds to
+ * the installed meter provider the caller passes. Metrics are not drained here: the metric reader
+ * exports on its own cadence, never on a request's finalization. */
 export const operationalProcessor = ({
 	origin,
 	exporters,
-	meterProvider
-}: OperationalPipeline): Effect.Effect<SpanProcessor, OperationalTelemetryProviderConflict> =>
-	createOperationalLogProcessor({ origin, exporter: exporters.logs, meterProvider }).pipe(
+	meterProvider,
+	requestDrain
+}: OperationalPipeline): Effect.Effect<SpanProcessor, OperationalTelemetryProviderConflict> => {
+	const health = makeExportHealth({ origin, meter: meterProvider.getMeter(OPERATIONAL_SCOPE) })
+	return createOperationalLogProcessor({
+		origin,
+		exporter: exporters.logs,
+		meterProvider,
+		health
+	}).pipe(
 		Effect.map((logs): SpanProcessor => {
-			const inFlight = new Set<Promise<void>>()
-			let exportFailure: { failedBatches: number; firstExportFailure: unknown } | undefined =
-				undefined
+			const ledger = makeExportLedger("traces")
 			const measurements = createSpanMeasurements(meterProvider)
 			const traces = new BatchSpanProcessor({
 				...traceBatchDefaults,
 				selfObsMeterProvider: meterProvider,
 				exporter: {
 					export(batch, callback) {
-						const completed = Promise.withResolvers<void>()
-						inFlight.add(completed.promise)
-						exportSizedBatch({
-							items: Arr.map(batch, operationalSpan),
-							serialize: (records) => JsonTraceSerializer.serializeRequest([...records]),
+						exportBisecting<ReadableSpan>({
+							signal: "traces",
+							records: Arr.map(batch, operationalSpan),
 							send: (records, done) => {
-								observeExportAttempt({ signal: "traces", count: records.length })
 								exporters.traces.export([...records], done)
 							},
-							callback: (result) => {
-								if (result.code !== ExportResultCode.SUCCESS) {
-									const held =
-										exportFailure === undefined
-											? {
-													failedBatches: 0,
-													firstExportFailure: result.error === undefined ? result : result.error
-												}
-											: exportFailure
-									held.failedBatches += 1
-									exportFailure = held
-								}
-								inFlight.delete(completed.promise)
-								completed.resolve()
-								callback(result)
-							},
-							observe: (records, result, kind) => {
-								observeExport({
-									origin,
-									signal: "traces",
-									count: records.length,
-									result,
-									scopeOf: () =>
-										exportScopeOf(
-											Arr.map(records, (span) => ({
-												context: span.spanContext(),
-												time: span.startTime
-											}))
-										),
-									kind
-								})
-							},
-							limits: operationalBatchLimits,
-							signal: "traces",
-							expandOversized: spanEvidenceParts
+							callback: ledger.track(callback),
+							health,
+							scopeOf: (records) =>
+								exportScopeOf(
+									Arr.map(records, (span) => ({
+										context: span.spanContext(),
+										time: span.startTime
+									}))
+								)
 						})
 					},
 					shutdown: () => exporters.traces.shutdown()
 				}
 			})
-			const finish = (method: "forceFlush" | "shutdown") =>
+			const pass = (method: FlushMethod) =>
 				Effect.gen(function* () {
 					const signals = yield* settled([
 						Promise.resolve().then(() => traces[method]()),
@@ -137,34 +112,19 @@ export const operationalProcessor = ({
 					const pending = yield* settled([
 						Promise.resolve().then(() => exporters.traces.forceFlush())
 					])
-					yield* settled([...inFlight])
+					const failed = yield* ledger.receipt
 					const receipts = yield* settled([Promise.resolve().then(() => logs[method]())])
-					const failed = exportFailure === undefined ? [] : [{ signal: "traces", ...exportFailure }]
 					const causes = [...rejectedReasons([...signals, ...pending, ...receipts]), ...failed]
-					exportFailure = undefined
-					observeFlush({ origin, signal: "all", method, causes })
+					health.observeFlush({ signal: "all", method, causes })
 					if (Arr.isArrayNonEmpty(causes)) {
-						return yield* TelemetryFlushFailure.make({ method, causes })
+						return yield* TelemetryFlushFailure.make({ signal: "all", method, causes })
 					}
 				})
-			const drain = coalescedFlush(() => Effect.runPromise(finish("forceFlush")))
-			const shutdownPass = Effect.gen(function* () {
-				const flushed = yield* settled([drain()])
-				const closed = yield* Effect.exit(finish("shutdown"))
-				const unclosed = Exit.isFailure(closed) ? [Cause.squash(closed.cause)] : []
-				const causes = [...rejectedReasons(flushed), ...unclosed]
-				if (Arr.isArrayNonEmpty(causes)) {
-					return yield* TelemetryFlushFailure.make({ method: "shutdown", causes })
+			const lifecycle = drainLifecycle({ signal: "all", pass })
+			const drainAtRequestEnd = (span: ReadableSpan): void => {
+				if (requestDrain === "root-span" && span.parentSpanContext === undefined) {
+					void lifecycle.forceFlush().then(Fn.constVoid, Fn.constVoid)
 				}
-			})
-			let closing: Promise<void> | undefined = undefined
-			const shutdown = (): Promise<void> => {
-				if (closing !== undefined) {
-					return closing
-				}
-				const receipt = Effect.runPromise(shutdownPass)
-				closing = receipt
-				return receipt
 			}
 			return {
 				onStart(span, parent) {
@@ -180,12 +140,14 @@ export const operationalProcessor = ({
 					traces.onStart(span, parent)
 				},
 				onEnd(span) {
-					observeSpanLoss({ origin, span })
+					health.observeSpanLoss(span)
 					measurements.onEnd(span)
 					traces.onEnd(span)
+					drainAtRequestEnd(span)
 				},
-				forceFlush: () => (closing === undefined ? drain() : closing),
-				shutdown
+				forceFlush: lifecycle.forceFlush,
+				shutdown: lifecycle.shutdown
 			}
 		})
 	)
+}

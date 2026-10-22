@@ -6,11 +6,13 @@ import { Pool, type PoolClient } from "pg"
 import {
 	connectFailureOf,
 	deliveredToStatement,
+	type LocalPostgresDatabase,
 	localTransportOptionsOf,
 	POSTGRES_SESSION_OPTIONS,
 	postgresTransportOptionsOf
 } from "#postgres/connection.ts"
 import type { PostgresPrincipal } from "#postgres/principals.ts"
+import type { RdsEndpoint } from "#postgres/rds.ts"
 import type { NativePostgresDatabase, PostgresConnectRejected } from "#query/contracts.ts"
 
 /** Vercel's guidance for Fluid compute: a short idle timeout closes unused connections quickly
@@ -27,8 +29,8 @@ export type PostgresPool = Readonly<{ native: Pool; opened: WeakSet<PoolClient> 
 /** How the pool signs in: to RDS with an IAM token signed per new physical connection (one lives
  * fifteen minutes), or to the local development cluster, which trusts localhost. */
 export type PostgresPoolConnection =
-	| Readonly<{ kind: "rds-iam"; host: string; password: () => Promise<string> }>
-	| Readonly<{ kind: "local"; database: string }>
+	| Readonly<{ kind: "rds-iam"; host: RdsEndpoint; password: () => Promise<string> }>
+	| Readonly<{ kind: "local"; database: LocalPostgresDatabase }>
 
 export type PostgresPoolInput = Readonly<{
 	connection: PostgresPoolConnection

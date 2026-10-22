@@ -41,14 +41,19 @@ Working rules live in [AGENTS.md](AGENTS.md); each rule's rationale lives in [ru
   learned fact, and only types inside that operation's `observed`. Every log carries its span's
   attributes. Where it all goes is decided once, from the deployment (`telemetryBackend` in the app's
   `src/env.ts`):
-  - **On Vercel** (production and preview), spans, logs and metrics export to PostHog over OTLP, server
-    exceptions go to PostHog Error Tracking, and posthog-js runs in the browser. The project token is
-    required there.
+  - **On Vercel** (production and preview), spans, logs and metrics export to PostHog over gzipped OTLP,
+    flushed by `@vercel/otel` as each request ends; server exceptions go to PostHog Error Tracking, and
+    posthog-js runs in the browser. The project token is required there. A batch PostHog refuses as too
+    large (413) is halved and resent, as PostHog's SDK spec does; a single record it still refuses is
+    dropped with a console receipt.
   - **Locally** (`pnpm dev`, a local `pnpm build`/`start`), nothing reaches PostHog and no token is read.
     Each signal is appended to the app's `out/telemetry/traces.jsonl`, `logs.jsonl` and `metrics.jsonl`, one
     OTLP/JSON export request per line (the OpenTelemetry Collector file exporter's format); server
     exceptions go to `out/telemetry/exceptions.jsonl` beside them; logs also print to the terminal; the browser
-    starts no analytics. Metrics are written once a minute.
+    starts no analytics. A request's spans and logs are written as soon as it ends; metrics once a minute.
+- **Vercel-focused, never Vercel-dependent.** `pnpm db:local && pnpm dev`, a local `pnpm build && pnpm
+  start` and `pnpm test` run with no env file and offline: every local default lives in an env module
+  (`Config.withDefault`), the Geist font ships in the `geist` package, and telemetry stays on disk.
 - **Config is code.** Each package that reads environment declares every variable it reads as an Effect
   `Config` in its own `src/env.ts` (the app, the infrastructure package). The database package reads none:
   connection facts are passed in. The browser never reads env; the server passes what the client needs.
@@ -85,8 +90,8 @@ pnpm install                 # also patches tsc with @effect/tsgo and installs t
 5. **Run locally.** `pnpm db:local` starts superstarter's own PostgreSQL 18 (Homebrew's, production's
    major) in the gitignored `out/postgres/`, on localhost:5434 with trust authentication, creating the
    cluster the first time; then it migrates the `superstarter` database and applies the programs. It is
-   idempotent, so rerun it whenever. The app signs in to it as `app` when
-   `LOCAL_POSTGRES_DATABASE=superstarter` is in the app's `.env.development.local`.
+   idempotent, so rerun it whenever. The app signs in to it as `app`, to `superstarter` unless
+   `LOCAL_POSTGRES_DATABASE` names another (`pnpm test` names `superstarter_test`); no env file is needed.
 
    ```sh
    pnpm db:local
@@ -100,20 +105,20 @@ Turborepo: a task whose inputs did not change replays its cached result, and a p
 whenever a package it depends on changes. Concurrency comes from `--concurrency`, else
 `CHECK_CONCURRENCY` in the shell, else in the root `.env.local`, else Turbo's default.
 
-| Command                                  | What it does                                                                                                                                                                                          |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev` / `pnpm build` / `pnpm start` | Next.js, in the app package. `build` also typechecks with the patched `tsc`.                                                                                                                          |
-| `pnpm check`                             | The gate, run by the pre-commit hook: every typecheck, superlint, oxlint, style lint, format check and fallow. Never writes.                                                                          |
-| `pnpm typecheck`                         | `tsc` for every package (the app after `next typegen`) and for the root tooling.                                                                                                                      |
-| `pnpm lint`                              | Superlint for every package and the root tooling with its fixture self-test, oxlint (type-aware, with the repository plugin) and fallow (unused files, exports, types and dependencies), in parallel. |
-| `pnpm style`                             | The Tailwind token linter.                                                                                                                                                                            |
-| `pnpm format` / `pnpm format:write`      | Check / write: strips every comment but JSDoc and tool directives, normalizes blank lines, then oxfmt.                                                                                                |
-| `pnpm env:pull`                          | Vercel's development environment into the app's `.env.local`.                                                                                                                                         |
-| `pnpm test`                              | Rebuilds the throwaway `superstarter_test` database from the migrations, then runs the prepared-statement suites and the todo lifecycle suite. Never cached, and not part of `pnpm check`.            |
-| `pnpm db:local` / `pnpm db:local:stop`   | Start (creating it the first time) / stop the local PostgreSQL 18 on localhost:5434; `db:local` also migrates `superstarter` and applies the programs.                                                |
-| `pnpm db:generate`                       | Draft a migration from schema changes. A person drafts and reviews every migration.                                                                                                                   |
-| `pnpm db:migrate status` / `apply`       | On RDS: packaged against applied migrations / apply the pending ones through the native migrator, then the SQL programs.                                                                              |
-| `pnpm db:studio`                         | Drizzle Studio on RDS, signed in as the master user.                                                                                                                                                  |
+| Command                                  | What it does                                                                                                                                                                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Next.js, in the app package. `build` also typechecks with the patched `tsc`.                                                                                                                                                                                  |
+| `pnpm check`                             | The gate, run by the pre-commit hook: every typecheck, superlint, oxlint, style lint, format check and fallow. Never writes.                                                                                                                                  |
+| `pnpm typecheck`                         | `tsc` for every package (the app after `next typegen`) and for the root tooling.                                                                                                                                                                              |
+| `pnpm lint`                              | Superlint for every package and the root tooling, the fixture self-tests (superlint's fixtures, the plugin rules' RuleTester cases), oxlint (type-aware, with the repository plugin) and fallow (unused files, exports, types and dependencies), in parallel. |
+| `pnpm style`                             | The Tailwind token linter.                                                                                                                                                                                                                                    |
+| `pnpm format` / `pnpm format:write`      | Check / write: strips every comment but JSDoc and tool directives, normalizes blank lines, then oxfmt.                                                                                                                                                        |
+| `pnpm env:pull`                          | Vercel's development environment into the app's `.env.local`.                                                                                                                                                                                                 |
+| `pnpm test`                              | Rebuilds the throwaway `superstarter_test` database from the migrations, then runs the prepared-statement suites and the todo lifecycle suite. Never cached, and not part of `pnpm check`.                                                                    |
+| `pnpm db:local` / `pnpm db:local:stop`   | Start (creating it the first time) / stop the local PostgreSQL 18 on localhost:5434; `db:local` also migrates `superstarter` and applies the programs.                                                                                                        |
+| `pnpm db:generate`                       | Draft a migration from schema changes. A person drafts and reviews every migration.                                                                                                                                                                           |
+| `pnpm db:migrate status` / `apply`       | On RDS: packaged against applied migrations / apply the pending ones through the native migrator, then the SQL programs.                                                                                                                                      |
+| `pnpm db:studio`                         | Drizzle Studio on RDS, signed in as the master user.                                                                                                                                                                                                          |
 
 Schema changes are migrations only: there is no push and no ad hoc SQL. `db:generate` runs in
 `@superstarter/database`, whose drizzle-kit config never connects; the other `db:*` commands are
@@ -149,9 +154,11 @@ column, grant or parameter PostgreSQL would refuse fails `pnpm test` instead of 
     fails, and exhaustive switches with no `default`; tsc's `noImplicitReturns` proves every path returns.
   - `typescript/no-invalid-void-type`: oxlint's port refuses `void` as a generic argument
     (`Promise.withResolvers<void>()`), which the rule exists to allow.
-- **The repository plugin** (`scripts/dev/oxlint-plugin.ts`, run by oxlint): no `try`, `as`, `??`, IIFEs,
-  `new Error`, `instanceof Error`, evolving `null`/`[]` variables, needless template literals, untitled
-  `<svg>`, span names or attribute keys outside the rosters, and Biome's cognitive complexity (at most 15).
+- **The repository plugin** (`scripts/dev/oxlint-plugin.ts`, one rule per module in `scripts/dev/oxlint/rules/`,
+  each with a RuleTester self-test, run by oxlint): no `try`, `as`, `??`, IIFEs, `new Error`, `instanceof
+  Error`, evolving `null`/`[]` variables, needless template literals, untitled `<svg>`, literal
+  `superstarter.*` keys on `Span.attribute`, telemetry ownership (who registers the SDK, constructs the
+  OTLP exporters, starts posthog-js and opens spans), and Biome's cognitive complexity (at most 15).
 - **Superlint** (`scripts/dev/lint.ts`): the opinionated type-aware rules on TypeScript 7's native API,
   including no null-and-undefined unions, no `||` fallbacks, no classes but Effect's, no timestamp columns
   or random UUIDs, no implicit Drizzle `SELECT *`, and no Drizzle `delete` or `update` without `.where()`.

@@ -7,8 +7,6 @@ import {
 import { ExportResultCode } from "@opentelemetry/core"
 import { resourceFromAttributes } from "@opentelemetry/resources"
 import {
-	AggregationTemporality,
-	AggregationType,
 	type CollectionResult,
 	type IMetricReader,
 	MeterProvider,
@@ -21,8 +19,9 @@ import type { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base"
 import { Array as Arr, DateTime, Duration, Effect, Order, Record, Result, Schema } from "effect"
 import { v7 } from "uuid"
 import { OperationalTelemetryProviderConflict } from "#destination.ts"
+import { makeExportHealth } from "#export-health.ts"
 import { emitOperationalLog } from "#logs.ts"
-import { boundedMetricExporter } from "#metric-export.ts"
+import { aggregationOf, boundedMetricExporter } from "#metric-export.ts"
 import { OPERATIONAL_SCOPE, operationalResourceAttributes } from "#resource.ts"
 
 import {
@@ -194,14 +193,7 @@ const invocationMetricReader = (exporter: PushMetricExporter): InvocationMetricR
 			}
 			producer = metricProducer
 		},
-		selectAggregation: (kind) =>
-			exporter.selectAggregation === undefined
-				? { type: AggregationType.DEFAULT }
-				: exporter.selectAggregation(kind),
-		selectAggregationTemporality: (kind) =>
-			exporter.selectAggregationTemporality === undefined
-				? AggregationTemporality.CUMULATIVE
-				: exporter.selectAggregationTemporality(kind),
+		...aggregationOf(exporter),
 		selectCardinalityLimit: () => METRIC_CARDINALITY_LIMIT,
 		collect,
 		forceFlush: (options) => {
@@ -291,7 +283,7 @@ export const startOperationalMetrics = ({
 	OperationalTelemetryProviderConflict
 > =>
 	Effect.suspend(() => {
-		const transport = boundedMetricExporter({ exporter, origin })
+		const transport = boundedMetricExporter({ exporter, health: () => health })
 		const observedExporter: PushMetricExporter = {
 			export: (data, callback) => {
 				const startedAtMilliseconds = epochMillisecondsNow()
@@ -337,20 +329,14 @@ export const startOperationalMetrics = ({
 			},
 			forceFlush: () => transport.forceFlush(),
 			shutdown: () => transport.shutdown(),
-			selectAggregation: (kind) =>
-				exporter.selectAggregation === undefined
-					? { type: AggregationType.DEFAULT }
-					: exporter.selectAggregation(kind),
-			selectAggregationTemporality: (kind) =>
-				exporter.selectAggregationTemporality === undefined
-					? AggregationTemporality.CUMULATIVE
-					: exporter.selectAggregationTemporality(kind)
+			...aggregationOf(exporter)
 		}
 		const { reader, exportIfDue } = readerOf(cadence, observedExporter)
 		const provider = new MeterProvider({
 			resource: resourceFromAttributes(operationalResourceAttributes(origin)),
 			readers: [reader]
 		})
+		const health = makeExportHealth({ origin, meter: provider.getMeter(OPERATIONAL_SCOPE) })
 		if (!metrics.setGlobalMeterProvider(provider)) {
 			return OperationalTelemetryProviderConflict.make({ signal: "metrics" })
 		}
@@ -425,7 +411,6 @@ export const createSpanMeasurements = (meterProvider: ApiMeterProvider): SpanPro
 		.addCallback((result) => {
 			const memory = process.memoryUsage()
 			result.observe(memory.rss, { kind: "rss" })
-			result.observe(memory.heapUsed, { kind: "heap-used" })
 			result.observe(process.resourceUsage().maxRSS * 1024, {
 				kind: "rss-peak-since-process-start"
 			})

@@ -10,6 +10,3 @@ export const Environment = Schema.Literals(ENVIRONMENTS)
 export type Environment = typeof Environment.Type
 
 export const PROJECT = "superstarter"
-
-/** Every resource lives in one region: the database, IAM database authentication and the state. */
-export const AWS_REGION = "us-east-1"

@@ -2,9 +2,9 @@ import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { Credentials, createLazyProvider } from "@distilled.cloud/aws/Credentials"
 import * as Region from "@distilled.cloud/aws/Region"
+import { AWS_REGION } from "@superstarter/database/postgres/rds"
 import { AWSEnvironment } from "alchemy/AWS"
 import { Effect, Layer, Schema } from "effect"
-import { AWS_REGION } from "#environment.ts"
 
 /** The caller STS reports. No account is configured: this template admits whichever account the
  * operator's credentials belong to, and every account-scoped name derives from it. */
@@ -34,8 +34,9 @@ class NativeAwsRejected extends Schema.TaggedError<
 
 /**
  * The operator's AWS session, behind every Alchemy provider, the state store and bootstrap: the AWS
- * SDK's Node provider chain (environment variables first, which `scripts/with-aws.ts` sets, then
- * profiles, SSO and credential_process) and its account, read once through STS. The chain keeps
+ * SDK's Node provider chain (environment variables first unless an `AWS_PROFILE` is set, which
+ * `scripts/with-aws.ts` sets and refuses to run under; then SSO, profiles and credential_process)
+ * and its account, read once through STS. The chain keeps
  * its own refresh behavior; nothing here mints or persists credentials. Distilled takes the
  * credential source as an Effect, and the SDK's refusal surfaces as a defect because its class is
  * not public.

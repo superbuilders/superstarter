@@ -11,8 +11,9 @@ import { captureServerException } from "#server/observability/errors.ts"
 import type { TelemetrySink } from "#server/observability/sink.ts"
 import { runWeb } from "#server/runtime.ts"
 
-type ErrorRequest = Parameters<Instrumentation.onRequestError>[1]
-type ErrorContext = Parameters<Instrumentation.onRequestError>[2]
+/** The request and route context Next hands its request-error hook. */
+export type ErrorRequest = Parameters<Instrumentation.onRequestError>[1]
+export type ErrorContext = Parameters<Instrumentation.onRequestError>[2]
 
 const headerOf = (request: ErrorRequest, name: string): string | undefined => {
 	const value = request.headers[name]

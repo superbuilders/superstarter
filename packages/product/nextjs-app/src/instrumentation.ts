@@ -1,5 +1,6 @@
 import { Function as Fn } from "effect"
 import type { Instrumentation } from "next"
+import type { ErrorContext, ErrorRequest } from "#server/observability/request-error.ts"
 
 declare global {
 	namespace NodeJS {
@@ -9,9 +10,6 @@ declare global {
 		}
 	}
 }
-
-type ErrorRequest = Parameters<Instrumentation.onRequestError>[1]
-type ErrorContext = Parameters<Instrumentation.onRequestError>[2]
 
 /** Next compiles this file for the Edge runtime too, where the telemetry (Node code) never runs.
  * The Node graph loads only behind Next's compile-time runtime check, so no Edge bundle holds it. */

@@ -5,7 +5,7 @@ import { useEffect } from "react"
 import { captureProductException } from "#lib/product-analytics.ts"
 
 /** A failure of the root layout itself: Next's native error presentation, captured whole. */
-const GlobalError = ({ error }: Readonly<{ error: unknown }>) => {
+export default function GlobalError({ error }: Readonly<{ error: unknown }>) {
 	useEffect(() => {
 		captureProductException(error, { boundary: "global" })
 	}, [error])
@@ -17,5 +17,3 @@ const GlobalError = ({ error }: Readonly<{ error: unknown }>) => {
 		</html>
 	)
 }
-
-export default GlobalError

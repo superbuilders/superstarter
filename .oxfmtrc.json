@@ -20,9 +20,5 @@
 	"sortTailwindcss": {
 		"stylesheet": "./packages/product/nextjs-app/src/styles/globals.css"
 	},
-	"ignorePatterns": [
-		"pnpm-lock.yaml",
-		"packages/product/nextjs-app/src/ui/**",
-		"scripts/dev/lint/fixtures/**"
-	]
+	"ignorePatterns": ["packages/product/nextjs-app/src/ui/**", "scripts/dev/lint/fixtures/**"]
 }

@@ -1,3 +1,8 @@
+import {
+	POSTGRES_MASTER_USERNAME,
+	POSTGRES_PORT,
+	POSTGRES_PRINCIPALS
+} from "@superstarter/database/postgres/principals"
 import type { SubnetId, VpcId } from "alchemy/AWS/EC2"
 import * as EC2 from "alchemy/AWS/EC2"
 import type * as IAM from "alchemy/AWS/IAM"
@@ -6,14 +11,6 @@ import type { Input } from "alchemy/Input"
 import * as Output from "alchemy/Output"
 import { Duration, Effect, Schema } from "effect"
 import { databaseUserArn, type Names } from "#names.ts"
-
-const POSTGRES_PORT = 5432
-
-/** The admin login RDS creates. Its password exists only in the Secrets Manager secret RDS manages. */
-const MASTER_USERNAME = "postgres"
-
-/** The login the app connects as with an IAM token; `db:push:programs` creates it. */
-const APP_USER = "app"
 
 /**
  * One VPC with two public subnets in distinct zones: an RDS subnet group needs two zones even for a
@@ -120,7 +117,7 @@ export const postgresInstance = Effect.fn(function* (
 		allocatedStorage: 20,
 		storageType: "gp3",
 		storageEncrypted: true,
-		masterUsername: MASTER_USERNAME,
+		masterUsername: POSTGRES_MASTER_USERNAME,
 		manageMasterUserPassword: true,
 		enableIAMDatabaseAuthentication: true,
 		port: POSTGRES_PORT,
@@ -148,7 +145,11 @@ export const postgresInstance = Effect.fn(function* (
 			Resource: [
 				dbiResourceId.pipe(
 					Output.map((id) =>
-						databaseUserArn({ account: input.account, dbiResourceId: id, user: APP_USER })
+						databaseUserArn({
+							account: input.account,
+							dbiResourceId: id,
+							user: POSTGRES_PRINCIPALS.app
+						})
 					)
 				)
 			]

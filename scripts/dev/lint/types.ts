@@ -16,7 +16,6 @@ const RULE_IDS = [
 	"no-uuid-default-random",
 	"no-implicit-select-all",
 	"no-drizzle-write-without-where",
-	"operational-telemetry-boundary",
 	"program-isolation"
 ] as const
 

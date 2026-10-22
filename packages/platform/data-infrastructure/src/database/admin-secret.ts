@@ -1,8 +1,8 @@
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager"
+import { AWS_REGION } from "@superstarter/database/postgres/rds"
 import { awsCredentialsProvider } from "@vercel/oidc-aws-credentials-provider"
 import { Effect, Redacted, Schema } from "effect"
 import { awsRoleArn, databaseAdminSecretArn } from "#env.ts"
-import { AWS_REGION } from "#environment.ts"
 
 /** The RDS-managed master secret's JSON shape. */
 const AdminSecretJson = Schema.fromJsonString(

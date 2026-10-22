@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { postgresDiagnosticOf } from "#postgres/diagnostic.ts"
 import { POSTGRES_DATABASE_NAME, POSTGRES_PORT } from "#postgres/principals.ts"
 import { RDS_US_EAST_1_CA_PEM } from "#postgres/rds-ca.ts"
+import type { RdsEndpoint } from "#postgres/rds.ts"
 import { PostgresConnectRejected } from "#query/contracts.ts"
 
 /** How often PostgreSQL checks, during a running query, that its client is still connected. A
@@ -17,7 +18,7 @@ export const POSTGRES_SESSION_OPTIONS = `-c search_path=pg_catalog -c timezone=U
 
 /** Certificate-verified TLS 1.3 against the pinned RDS authorities; the driver refuses anything
  * else, including a plaintext session. */
-export const postgresTransportOptionsOf = (host: string) =>
+export const postgresTransportOptionsOf = (host: RdsEndpoint) =>
 	({
 		host,
 		port: POSTGRES_PORT,
@@ -41,6 +42,13 @@ export const LOCAL_POSTGRES_DATABASES = {
 	development: "superstarter",
 	test: "superstarter_test"
 } as const
+
+/** A database the application signs in to on the local cluster: development's or the test suite's. */
+export const LocalPostgresDatabase = Schema.Literals([
+	LOCAL_POSTGRES_DATABASES.development,
+	LOCAL_POSTGRES_DATABASES.test
+])
+export type LocalPostgresDatabase = typeof LocalPostgresDatabase.Type
 
 export const localTransportOptionsOf = (database: string) =>
 	({ host: "localhost", port: LOCAL_POSTGRES_PORT, database }) as const

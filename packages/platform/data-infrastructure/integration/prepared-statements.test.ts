@@ -2,28 +2,20 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
-	cardinality,
 	pgAttribute,
 	pgClass,
 	pgConstraint,
-	pgNamespace,
-	pgPreparedStatements
+	pgNamespace
 } from "@superstarter/database/catalog/pg-catalog"
-import { POSTGRES_PRINCIPALS } from "@superstarter/database/postgres/principals"
 import { withPostgresReadTransaction } from "@superstarter/database/postgres/transaction"
-import type {
-	NativePostgresDatabase,
-	PostgresBuilder
-} from "@superstarter/database/query/contracts"
-import { and, eq, gt, inArray, type Query } from "drizzle-orm"
-import { QueryBuilder } from "drizzle-orm/pg-core"
-import { Array as Arr, Effect, String as Str } from "effect"
+import type { NativePostgresDatabase } from "@superstarter/database/query/contracts"
+import { coreTodos } from "@superstarter/database/schema/core/todos"
+import { and, eq, gt, type Query } from "drizzle-orm"
+import { getTableConfig, QueryBuilder } from "drizzle-orm/pg-core"
+import { Array as Arr, Effect, Record, String as Str } from "effect"
 import * as ts from "typescript/unstable/ast"
 import { assertSameMembers, root, withPrograms } from "#integration/database-program.ts"
-import {
-	PREPARED_STATEMENT_NAME,
-	prepareWithoutExecution
-} from "#integration/prepare-without-execution.ts"
+import { preparedOnce } from "#integration/prepare-without-execution.ts"
 import { borrowPreparedDatabase } from "#integration/prepared-target.ts"
 
 /**
@@ -35,7 +27,8 @@ import { borrowPreparedDatabase } from "#integration/prepared-target.ts"
  * definition must be registered here.
  *
  * The same borrowed session reads the schema facts the application relies on from the catalog:
- * the todo CHECK constraints exist and are validated, and the todo columns are NOT NULL.
+ * `core.todos` holds exactly the CHECK constraints and columns its table declares, every CHECK
+ * validated and every column's nullability as declared.
  */
 
 const DATABASE_SOURCES = "packages/data/database/src/"
@@ -106,72 +99,33 @@ type Definition = Readonly<{
 /** Every relation definition, each exactly as its view is declared (`.as(build)`). */
 const DEFINITIONS: ReadonlyArray<Definition> = []
 
-/** The prepared plan's catalog row: how many parameter types PostgreSQL inferred, and whether it
- * resolved a result row. */
-const preparedPlan = (database: PostgresBuilder) =>
-	database
-		.select({
-			parameters: cardinality(pgPreparedStatements.parameter_types),
-			results: cardinality(pgPreparedStatements.result_types)
-		})
-		.from(pgPreparedStatements)
-		.where(eq(pgPreparedStatements.name, PREPARED_STATEMENT_NAME))
-
-type Plan = Awaited<ReturnType<ReturnType<typeof preparedPlan>["execute"]>>[number]
-
-/** PostgreSQL's inferred plan against the builder's own binding: one inferred parameter type per
- * parameter the statement binds, and a resolved result row. */
-const assertPlanMatches = (
-	plans: ReadonlyArray<Plan>,
-	query: Readonly<{ sql: string; params: ReadonlyArray<unknown> }>
-) => {
-	const [plan] = plans
-	assert.ok(plan !== undefined, "the prepared plan is catalogued")
-	assert.equal(
-		plan.parameters,
-		query.params.length,
-		"PostgreSQL inferred one type per parameter the statement binds"
-	)
-	assert.ok(plan.results !== null && plan.results > 0, "PostgreSQL resolved the result row")
-	return plan
-}
-
-/** One definition: rendered over a bare builder, PREPARE under the application role, its plan
- * read back. */
-const preparedOnce = (database: NativePostgresDatabase, built: Definition) => {
-	const query = built.build(new QueryBuilder()).toSQL()
-	return prepareWithoutExecution({
-		database,
-		statement: query.sql,
-		role: POSTGRES_PRINCIPALS.app,
-		inspect: (scope) =>
-			scope.run(preparedPlan).pipe(Effect.map((plans) => assertPlanMatches(plans, query)))
-	})
-}
-
-const CORE = "core"
-
-/** The todo CHECKs: a todo's id is a UUIDv7, and its title is never blank. */
-const TODO_CHECKS = ["todos_id_v7_ck", "todos_title_ck"] as const
-
-/** Every todo column holds a value. */
-const TODO_COLUMNS = ["id", "title", "completed"] as const
-
-/** The schema carries its todo facts: read under one snapshot, nothing written. */
+/** The schema carries what `core.todos` declares, read from the table itself under one snapshot,
+ * nothing written. */
 const schemaCarriesTheFacts = (database: NativePostgresDatabase) =>
 	withPostgresReadTransaction(database, (scope) =>
 		Effect.gen(function* () {
+			const declared = getTableConfig(coreTodos)
+			const { schema, name } = declared
+			assert.ok(schema !== undefined, "core.todos names its schema")
+			const table = `${schema}.${name}`
 			const checks = yield* scope.run((builder) =>
 				builder
 					.select({ name: pgConstraint.conname, validated: pgConstraint.convalidated })
 					.from(pgConstraint)
-					.innerJoin(pgNamespace, eq(pgNamespace.oid, pgConstraint.connamespace))
-					.where(and(eq(pgNamespace.nspname, CORE), eq(pgConstraint.contype, "c")))
+					.innerJoin(pgClass, eq(pgClass.oid, pgConstraint.conrelid))
+					.innerJoin(pgNamespace, eq(pgNamespace.oid, pgClass.relnamespace))
+					.where(
+						and(
+							eq(pgNamespace.nspname, schema),
+							eq(pgClass.relname, name),
+							eq(pgConstraint.contype, "c")
+						)
+					)
 			)
 			assertSameMembers({
-				actual: Arr.map(checks, ({ name }) => name),
-				expected: [...TODO_CHECKS],
-				where: "the CHECK constraints of core"
+				actual: Arr.map(checks, (check) => check.name),
+				expected: Arr.map(declared.checks, (check) => check.name),
+				where: `the CHECK constraints of ${table}`
 			})
 			for (const check of checks) {
 				assert.ok(check.validated, `${check.name} is validated`)
@@ -184,8 +138,8 @@ const schemaCarriesTheFacts = (database: NativePostgresDatabase) =>
 					.innerJoin(pgNamespace, eq(pgNamespace.oid, pgClass.relnamespace))
 					.where(
 						and(
-							eq(pgNamespace.nspname, CORE),
-							inArray(pgClass.relname, ["todos"]),
+							eq(pgNamespace.nspname, schema),
+							eq(pgClass.relname, name),
 							gt(pgAttribute.attnum, 0),
 							eq(pgAttribute.attisdropped, false)
 						)
@@ -193,11 +147,18 @@ const schemaCarriesTheFacts = (database: NativePostgresDatabase) =>
 			)
 			assertSameMembers({
 				actual: Arr.map(columns, ({ column }) => column),
-				expected: [...TODO_COLUMNS],
-				where: "the columns of core.todos"
+				expected: Arr.map(declared.columns, (column) => column.name),
+				where: `the columns of ${table}`
 			})
+			const nullability = Record.fromEntries(
+				Arr.map(declared.columns, (column) => [column.name, column.notNull] as const)
+			)
 			for (const column of columns) {
-				assert.ok(column.notNull, `core.todos.${column.column} is NOT NULL`)
+				assert.equal(
+					column.notNull,
+					nullability[column.column],
+					`${table}.${column.column} is NOT NULL exactly when its table declares it`
+				)
 			}
 		})
 	)
@@ -218,7 +179,11 @@ void test("every relation definition is accepted by PostgreSQL", { concurrency: 
 				...Arr.map(DEFINITIONS, (built) =>
 					suite.test(`${built.exported} [${built.variant}]`, () =>
 						Effect.runPromise(
-							borrowPreparedDatabase((database) => Effect.asVoid(preparedOnce(database, built)))
+							borrowPreparedDatabase((database) =>
+								Effect.asVoid(
+									preparedOnce({ database, query: built.build(new QueryBuilder()).toSQL() })
+								)
+							)
 						)
 					)
 				)

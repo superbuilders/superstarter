@@ -51,11 +51,7 @@ Wrap the work with `observed(operation, opened)` from `@superstarter/operational
 ```ts
 export const removeTodo = (id: TodoId) =>
 	withApplicationPostgres(
-		withPostgresStatement((scope) =>
-			scope.run((database) =>
-				database.delete(coreTodos).where(eq(coreTodos.id, id)).returning({ id: coreTodos.id })
-			)
-		)
+		withPostgresStatement((scope) => scope.runPrepared(removeTodoStatement, { id }))
 	).pipe(
 		Effect.flatMap(affectedOf(id)),
 		observed(OPERATIONAL_SPANS.todoDelete, { "superstarter.todo.id": id })
@@ -74,8 +70,8 @@ Every log written inside a span carries the span's attributes, so a log never re
 
 ## The rosters are closed
 
-- **Span names** are roster members, never literals or generated strings (oxlint `superstarter/no-literal-span-name`, over `observed`, `Effect.withSpan`, `Effect.fn` and `Effect.makeSpanScoped`).
-- **`superstarter.*` attribute keys** go through `observed` or `annotateOperation`, which type them (oxlint `superstarter/no-literal-attribute-key`). `Effect.annotateCurrentSpan`, and literal keys on `Span.attribute` or in `withSpan` options, are refused.
+- **Operations** are roster members. `observed` takes an `OperationalSpan`, and an `OperationalSpan` carries a key only `spans.ts` holds, so an operation built anywhere else does not type. Outside the telemetry package, Effect's own span writers (`Effect.withSpan`, `Effect.makeSpanScoped`, `Effect.annotateCurrentSpan`, `Effect.linkSpans` and the rest) and a named `Effect.fn("…")` are refused (oxlint `superstarter/telemetry-ownership`).
+- **`superstarter.*` attribute keys** go through `observed` or `annotateOperation`, which type them. A literal `superstarter.*` key on `Span.attribute` is refused (oxlint `superstarter/no-literal-attribute-key`).
 - **Attribute values** are identifiers, codes, counts and durations, never free text.
 - **Shared attributes:** keys no single operation owns (the deployment, the replay session, the cold start, the outcome the tracer records at a span's end) are `SharedAttributes` (`@superstarter/operational-telemetry/schema`), written only by the telemetry and the server's reporting.
 - **Extending:** a new operation is a new `OPERATIONAL_SPANS` entry; a new fact is a new key in that operation's `opened` or `learned`.
@@ -84,4 +80,10 @@ Every log written inside a span carries the span's attributes, so a log never re
 
 The process's telemetry is one `OperationalTelemetry` service (`@superstarter/operational-telemetry/effect`): its origin with the instance id minted once, the one tracer and logger, and the cold start the first request span claims. The web app builds it, with the telemetry sink and the database pool, into one `ManagedRuntime` anchored on `globalThis` (`packages/product/nextjs-app/src/server/runtime.ts`), the process's only global, shared by the instrumentation bundle and every app bundle. Every entry point (render reads, server actions, the request-error hook, registration) runs on it under `withOperationalTelemetry`, which roots the work under the request's span. Work scheduled with Next's `after()` uses `withBackgroundOperationalTelemetry`: its own root span, linked to the request that scheduled it.
 
-`@superstarter/operational-telemetry` stays host-neutral. One registration module in the web server registers the OpenTelemetry SDK and builds the OTLP exporters, and superlint `operational-telemetry-boundary` refuses those imports anywhere else.
+`@superstarter/operational-telemetry` stays host-neutral. One registration module in the web server registers the OpenTelemetry SDK and builds the OTLP exporters, and oxlint `superstarter/telemetry-ownership` refuses those imports anywhere else, `posthog-js` outside its two owners, and Effect `Console` output in the observability paths.
+
+## Delivery
+
+- **Vercel:** `@vercel/otel` flushes every span processor under `waitUntil` once a request's root span ends, so a request's spans and logs leave with it. Metrics export when a request's flush finds their minute has passed.
+- **Locally:** the pipeline drains itself as each root span ends, so the JSONL under the app's `out/telemetry/` holds a request's spans and logs as soon as it ends. Metrics are written once a minute.
+- **Size:** PostHog refuses an OTLP body over its limit with 413 (10 MiB hosted, 2 MiB self-hosted by default). Following PostHog's SDK spec, a refused batch is halved and the halves sent in order; a single record still refused is dropped with a console receipt and `superstarter.telemetry.export.dropped`. Nothing splits a record, and every log body also reaches the console. The OTLP exporters send gzip.

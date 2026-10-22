@@ -24,6 +24,9 @@ them, never weaken them.
   old form.
 - **Never defend against a trusted component.** Our own SQL output decodes through its Schema once; a
   decode failure is a defect that dies loudly, never a state with its own arm.
+- **Vercel-focused, never Vercel-dependent.** Everything runs locally with no env file: `pnpm db:local`,
+  `pnpm dev`, a local `pnpm build && pnpm start` and `pnpm test`. A local default lives in its package's
+  env module as `Config.withDefault`, never in a committed `.env`.
 
 ## Workspace
 
@@ -55,8 +58,8 @@ other package's export by name, without an extension (`@superstarter/database/po
 - `pnpm check` is the gate and the pre-commit hook. It runs Turborepo tasks through `scripts/dev/check.ts`:
   each package's typecheck and superlint (`scripts/dev/lint.ts`, the opinionated type-aware rules, on
   TypeScript 7's native API, run in the package), and the root's tooling typecheck, repository superlint,
-  oxlint (type-aware through tsgolint, with the repository's syntax rules in
-  `scripts/dev/oxlint-plugin.ts`), the style linter, oxfmt and the blank-line and brace formatter in check
+  oxlint (type-aware through tsgolint, with the repository's syntax rules in `scripts/dev/oxlint/rules/`,
+  each with a RuleTester self-test), the style linter, oxfmt and the blank-line and brace formatter in check
   mode, and fallow for dead code. Turbo replays any task whose inputs did not change; a package's checks
   rerun when any package it depends on changes. Nothing in the gate writes files; `pnpm format:write` does.
   A rule that can live in oxlint lives there; superlint keeps the rules oxlint cannot express.

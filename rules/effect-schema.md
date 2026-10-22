@@ -65,12 +65,7 @@ const decodeTodos = Schema.decodeEffect(Schema.Array(Todo))
 
 const listTodos = (scope: PostgresQueryScope) =>
 	scope
-		.run((database) =>
-			database
-				.select({ id: coreTodos.id, title: coreTodos.title, completed: coreTodos.completed })
-				.from(coreTodos)
-				.orderBy(desc(coreTodos.id))
-		)
+		.runPrepared(listTodosStatement, {})
 		.pipe(Effect.flatMap((rows) => decodeTodos(rows).pipe(Effect.orDie)))
 ```
 
@@ -80,8 +75,8 @@ A row's Schema is derived from its Drizzle table with `drizzle-orm/effect-schema
 
 ```ts
 import { createSelectSchema } from "drizzle-orm/effect-schema"
-import { coreTodos } from "#db/schema/core/todos.ts"
-import { TodoId, TodoTitle } from "#lib/todos.ts"
+import { coreTodos } from "@superstarter/database/schema/core/todos"
+import { TodoId, TodoTitle } from "@superstarter/todo-protocol/todos"
 
 /** One todo as the list renders it, derived from the table so its shape has one home. */
 export const Todo = createSelectSchema(coreTodos, { id: TodoId, title: TodoTitle })
@@ -92,17 +87,30 @@ A constant that both sides need lives with the Schema, and the table reads it: `
 
 ## Environment: `Config.schema`
 
-Each package that reads environment declares every variable in its own `src/env.ts` as an Effect `Config` (the app, the infrastructure package; the database package reads none). Nothing else reads `process.env` (tsgo `processEnv`, oxlint `node/no-process-env`). A variable with a format gets a branded Schema:
+Each package that reads environment declares every variable in its own `src/env.ts` as an Effect `Config` (the app, the infrastructure package; the database package reads none). Nothing else reads `process.env` (tsgo `processEnv`, oxlint `node/no-process-env`). A variable with a format gets a branded Schema. The Schema has one home, with the fact it checks, and every env module that reads the variable imports it:
 
 ```ts
+// @superstarter/database/postgres/rds
 export const RdsEndpoint = Schema.String.check(
-	Schema.isPattern(/^[a-z0-9-]+\.[a-z0-9]+\.us-east-1\.rds\.amazonaws\.com$/)
+	Schema.isPattern(new RegExp(`^[a-z0-9-]+\\.[a-z0-9]+\\.${AWS_REGION}\\.rds\\.amazonaws\\.com$`))
 ).pipe(Schema.brand("RdsEndpoint"))
 export type RdsEndpoint = typeof RdsEndpoint.Type
 
+// the app's src/env.ts
 /** The RDS endpoint, no scheme and no port. */
-export const databaseHost = Config.schema(RdsEndpoint, "DATABASE_HOST")
+const databaseHost = Config.schema(RdsEndpoint, "DATABASE_HOST")
 ```
+
+A variable a local process can do without carries its local value as its default, so `pnpm dev`, a local build and `pnpm test` need no env file. The default lives in the env module, never in a committed `.env`:
+
+```ts
+/** `superstarter` unless `pnpm test` names its throwaway `superstarter_test`. */
+const localDatabase = Config.schema(LocalPostgresDatabase, "LOCAL_POSTGRES_DATABASE").pipe(
+	Config.withDefault(LOCAL_POSTGRES_DATABASES.development)
+)
+```
+
+A malformed value still fails; only an absent one takes the default.
 
 Yield a Config inside an Effect (`yield* databaseHost`). A missing or malformed variable is a `ConfigError`; when it can only mean a broken deployment, `Effect.orDie` it. The browser never reads env: the server passes what a client component needs as a prop.
 

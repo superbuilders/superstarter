@@ -7,7 +7,10 @@ import { captureProductException } from "#lib/product-analytics.ts"
  * recorded the failure stays mounted, which `global-error` cannot keep. The error is captured
  * whole, with the digest that joins a Server Component failure to its server log. The screen is
  * plain elements: a boundary should not depend on the kit whose failure it may be showing. */
-const RootError = ({ error, retry }: Readonly<{ error: unknown; retry: () => void }>) => {
+export default function RootError({
+	error,
+	retry
+}: Readonly<{ error: unknown; retry: () => void }>) {
 	useEffect(() => {
 		captureProductException(error, { boundary: "root" })
 	}, [error])
@@ -28,5 +31,3 @@ const RootError = ({ error, retry }: Readonly<{ error: unknown; retry: () => voi
 		</main>
 	)
 }
-
-export default RootError

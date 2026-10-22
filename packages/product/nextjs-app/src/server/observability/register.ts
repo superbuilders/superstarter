@@ -36,8 +36,9 @@ const registration = Effect.gen(function* () {
 	const { meterProvider } = metricsOwner
 	const processor = yield* operationalProcessor({
 		origin,
-		exporters: exporters.signals(meterProvider),
-		meterProvider
+		exporters: exporters.bind(meterProvider),
+		meterProvider,
+		requestDrain: exporters.requestDrain
 	})
 	registerOTel({
 		serviceName: origin.service,

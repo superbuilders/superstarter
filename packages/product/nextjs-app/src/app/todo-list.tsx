@@ -35,9 +35,18 @@ const callDelete = callAction(DeleteTodo, deleteTodo)
 
 type ChangeRefused = TodoNotFound | PostgresTransientFailure | ActionFailed | ActionUnconfirmed
 
+/** What the list tells the person about their last change: nothing, a title to write first, or
+ * why the change was refused. */
+type Notice =
+	| Readonly<{ kind: "none" }>
+	| Readonly<{ kind: "title-required" }>
+	| Readonly<{ kind: "refused"; refusal: ChangeRefused["_tag"] }>
+
+const NO_NOTICE: Notice = { kind: "none" }
+
 /** Every way a change can be refused, said to the person; the refusal's tag is all the message
  * depends on. A defect is not here: it rejects the transition and reaches the error boundary. */
-const messageOf = (refusal: ChangeRefused["_tag"]): string => {
+const refusalText = (refusal: ChangeRefused["_tag"]): string => {
 	switch (refusal) {
 		case "TodoNotFound":
 			return "That todo no longer exists. Reload to see the current list."
@@ -50,11 +59,25 @@ const messageOf = (refusal: ChangeRefused["_tag"]): string => {
 	}
 }
 
-/** An empty message clears the last refusal. */
-const messageAfter = (change: Effect.Effect<unknown, ChangeRefused>): Promise<string> =>
+const noticeText = (notice: Notice): string | undefined => {
+	switch (notice.kind) {
+		case "none":
+			return undefined
+		case "title-required":
+			return "Write a title first."
+		case "refused":
+			return refusalText(notice.refusal)
+	}
+}
+
+/** A settled change's notice: none once it landed, which clears the last refusal, else its own. */
+const noticeAfter = (change: Effect.Effect<unknown, ChangeRefused>): Promise<Notice> =>
 	Effect.runPromise(
 		change.pipe(
-			Effect.match({ onSuccess: () => "", onFailure: (refusal) => messageOf(refusal._tag) })
+			Effect.match({
+				onSuccess: (): Notice => NO_NOTICE,
+				onFailure: (refusal): Notice => ({ kind: "refused", refusal: refusal._tag })
+			})
 		)
 	)
 
@@ -99,33 +122,40 @@ export function TodoList({ todos }: Readonly<{ todos: Promise<ReadonlyArray<Todo
 	const saved = use(todos)
 	const [rows, applyOptimistic] = useOptimistic(savedRowsOf(saved), applyChange)
 	const [draft, setDraft] = useState("")
-	const [message, setMessage] = useState("")
+	const [notice, setNotice] = useState(NO_NOTICE)
 	const [pending, startTransition] = useTransition()
+
+	/** A state update after an action's await is a transition of its own. */
+	const settle = (settled: Notice): void => {
+		startTransition(() => {
+			setNotice(settled)
+		})
+	}
 
 	const create = (): void => {
 		const title = Str.trim(draft)
 		if (!isTitle(title)) {
-			setMessage("Write a title first.")
+			setNotice({ kind: "title-required" })
 			return
 		}
 		setDraft("")
 		startTransition(() => {
 			applyOptimistic({ kind: "create", key: v7(), title })
-			return messageAfter(callCreate(title)).then(setMessage)
+			return noticeAfter(callCreate(title)).then(settle)
 		})
 	}
 
 	const toggle = (todo: Todo): void => {
 		startTransition(() => {
 			applyOptimistic({ kind: "toggle", todo })
-			return messageAfter(callToggle(todo.id)).then(setMessage)
+			return noticeAfter(callToggle(todo.id)).then(settle)
 		})
 	}
 
 	const remove = (todo: Todo): void => {
 		startTransition(() => {
 			applyOptimistic({ kind: "delete", todo })
-			return messageAfter(callDelete(todo.id)).then(setMessage)
+			return noticeAfter(callDelete(todo.id)).then(settle)
 		})
 	}
 
@@ -145,7 +175,7 @@ export function TodoList({ todos }: Readonly<{ todos: Promise<ReadonlyArray<Todo
 				/>
 				<Button type="submit">Add</Button>
 			</form>
-			<output className="text-sm text-destructive empty:hidden">{message}</output>
+			<output className="text-sm text-destructive empty:hidden">{noticeText(notice)}</output>
 			<p className="text-center text-sm text-muted-foreground" hidden={!isEmpty}>
 				No todos yet
 			</p>

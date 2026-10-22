@@ -5,7 +5,7 @@ import type { Symbol as NativeSymbol } from "typescript/unstable/sync"
  * The package a declaration file belongs to, from its last node_modules segment. Declaration paths come from the
  * compiler's node handles, which are lower-cased on a case-insensitive file system; package names are lower case.
  */
-export const packageNameFromFile = (file: string): string | undefined => {
+const packageNameFromFile = (file: string): string | undefined => {
 	const marker = "/node_modules/"
 	const index = Str.lastIndexOf(marker)(file)
 	if (Option.isNone(index)) {

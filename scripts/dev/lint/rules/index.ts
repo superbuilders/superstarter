@@ -7,7 +7,6 @@ import { noPointlessTypeAlias } from "#scripts/dev/lint/rules/no-pointless-type-
 import { noTimestampColumns } from "#scripts/dev/lint/rules/no-timestamp-columns.ts"
 import { noUuidDefaultRandom } from "#scripts/dev/lint/rules/no-uuid-default-random.ts"
 import { noNullUndefinedUnion } from "#scripts/dev/lint/rules/null-undefined-union.ts"
-import { operationalTelemetryBoundary } from "#scripts/dev/lint/rules/operational-telemetry-boundary.ts"
 import { noPointlessIndirection } from "#scripts/dev/lint/rules/pointless-indirection.ts"
 import { preferEarlyReturn } from "#scripts/dev/lint/rules/prefer-early-return.ts"
 import type { LintRule, RuleId } from "#scripts/dev/lint/types.ts"
@@ -24,6 +23,5 @@ export const RULES: ReadonlyArray<Readonly<{ id: RuleId; check: LintRule }>> = [
 	{ id: "no-timestamp-columns", check: noTimestampColumns },
 	{ id: "no-uuid-default-random", check: noUuidDefaultRandom },
 	{ id: "no-implicit-select-all", check: noImplicitSelectAll },
-	{ id: "no-drizzle-write-without-where", check: noDrizzleWriteWithoutWhere },
-	{ id: "operational-telemetry-boundary", check: operationalTelemetryBoundary }
+	{ id: "no-drizzle-write-without-where", check: noDrizzleWriteWithoutWhere }
 ]

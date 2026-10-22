@@ -6,6 +6,7 @@ import {
 	OTLPMetricExporter
 } from "@opentelemetry/exporter-metrics-otlp-http"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
+import { CompressionAlgorithm } from "@opentelemetry/otlp-exporter-base"
 import type { PushMetricExporter } from "@opentelemetry/sdk-metrics"
 import {
 	POSTHOG_INGESTION_ORIGIN,
@@ -13,7 +14,7 @@ import {
 } from "@superstarter/operational-telemetry/destination"
 import { makeLocalTelemetryFiles } from "@superstarter/operational-telemetry/file-export"
 import type { MetricCadence } from "@superstarter/operational-telemetry/metrics"
-import type { OperationalExporters } from "@superstarter/operational-telemetry/remote"
+import type { OperationalExporters, RequestDrain } from "@superstarter/operational-telemetry/remote"
 import type { OperationalMetricExportHost } from "@superstarter/operational-telemetry/schema"
 import { serializeEvidence } from "@superstarter/operational-telemetry/span-export"
 import { getDeadline } from "@vercel/functions"
@@ -33,13 +34,15 @@ const observeFunctionHost = (): OperationalMetricExportHost => {
 	}
 }
 
-/** One backend's exporters. The metric exporter exists first, because the meter provider it feeds
- * is what the trace and log exporters measure themselves through. */
+/** One backend's exporters and who drains them at a request's end. The metric exporter exists
+ * first, because the meter provider it feeds is what every exporter measures itself through:
+ * `bind` hands that provider to the metric exporter and builds the trace and log exporters on it. */
 type BackendExporters = Readonly<{
 	metrics: PushMetricExporter
 	cadence: MetricCadence
 	host: () => OperationalMetricExportHost
-	signals: (meterProvider: MeterProvider) => OperationalExporters
+	bind: (meterProvider: MeterProvider) => OperationalExporters
+	requestDrain: RequestDrain
 }>
 
 /** One server exception and the coordinates it is reported with. */
@@ -47,11 +50,13 @@ type ServerException = Readonly<{ error: unknown; properties: Readonly<Record<st
 
 /**
  * Where this process's telemetry goes, built once by the web runtime. On a Vercel deployment:
- * PostHog's OTLP endpoints with the project token, and the server's one PostHog client, which
+ * PostHog's OTLP endpoints with the project token, gzip-compressed as PostHog's SDK spec asks,
+ * drained by `@vercel/otel` when each request ends, and the server's one PostHog client, which
  * captures exceptions explicitly and never autocaptures. Locally: the JSONL files under
- * `out/telemetry/`, in the same OTLP/JSON, with nothing sent anywhere; an exception is one line in
- * `exceptions.jsonl` with the error's own properties, message and stack included, because the file
- * never leaves the machine. Only the PostHog arm reads the project token.
+ * `out/telemetry/`, in the same OTLP/JSON, with nothing sent anywhere and the pipeline drained as
+ * each request's root span ends; an exception is one line in `exceptions.jsonl` with the error's
+ * own properties, message and stack included, because the file never leaves the machine. Only
+ * the PostHog arm reads the project token.
  */
 export class TelemetrySink extends Context.Service<
 	TelemetrySink,
@@ -70,7 +75,8 @@ const sinkOf = Effect.gen(function* () {
 				metrics: files.metrics,
 				cadence: "periodic",
 				host: () => ({ kind: "process" }),
-				signals: () => ({ traces: files.traces, logs: files.logs })
+				bind: () => ({ traces: files.traces, logs: files.logs }),
+				requestDrain: "root-span"
 			},
 			sendException: ({ error, properties }) =>
 				Effect.tryPromise(() =>
@@ -92,18 +98,32 @@ const sinkOf = Effect.gen(function* () {
 		host: POSTHOG_INGESTION_ORIGIN,
 		enableExceptionAutocapture: false
 	})
+	const metrics = new OTLPMetricExporter({
+		...requests.metrics,
+		compression: CompressionAlgorithm.GZIP,
+		temporalityPreference: AggregationTemporalityPreference.DELTA
+	})
 	return TelemetrySink.of({
 		exporters: {
-			metrics: new OTLPMetricExporter({
-				...requests.metrics,
-				temporalityPreference: AggregationTemporalityPreference.DELTA
-			}),
+			metrics,
 			cadence: "invocation",
 			host: observeFunctionHost,
-			signals: (meterProvider) => ({
-				traces: new OTLPTraceExporter({ ...requests.traces, selfObsMeterProvider: meterProvider }),
-				logs: new OTLPLogExporter({ ...requests.logs, selfObsMeterProvider: meterProvider })
-			})
+			bind: (meterProvider) => {
+				metrics.setSelfObsMeterProvider(meterProvider)
+				return {
+					traces: new OTLPTraceExporter({
+						...requests.traces,
+						compression: CompressionAlgorithm.GZIP,
+						selfObsMeterProvider: meterProvider
+					}),
+					logs: new OTLPLogExporter({
+						...requests.logs,
+						compression: CompressionAlgorithm.GZIP,
+						selfObsMeterProvider: meterProvider
+					})
+				}
+			},
+			requestDrain: "host"
 		},
 		sendException: ({ error, properties }) =>
 			Effect.tryPromise(() => posthog.captureExceptionImmediate(error, undefined, properties))

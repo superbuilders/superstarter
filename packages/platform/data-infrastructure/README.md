@@ -26,6 +26,8 @@ Every command runs through `scripts/with-aws.ts`. It reads the DevFactory creden
 (`~/Downloads/credentials.json`, or the file `DEVFACTORY_CREDS_PATH` names), refuses a session that
 expires within 60 seconds, and runs the command with that session in its environment. The AWS
 SDK's Node provider chain picks it up, and STS reports the account, so no account ID is configured.
+It refuses to run while `AWS_PROFILE` is set: the SDK prefers a named profile to environment
+credentials, so every call would run as that profile instead. Unset it first.
 
 Alchemy's state lives in the S3 bucket `superstarter-state-<account>-us-east-1-an`, encrypted with
 the KMS key `alias/superstarter-state`. Nothing is committed and no state password exists.

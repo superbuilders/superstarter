@@ -1,20 +1,13 @@
 import {
+	LOCAL_POSTGRES_DATABASES,
+	LocalPostgresDatabase
+} from "@superstarter/database/postgres/connection"
+import { AwsRoleArn, RdsEndpoint } from "@superstarter/database/postgres/rds"
+import {
 	type OperationalDeployment,
 	VERCEL_TARGETS
 } from "@superstarter/operational-telemetry/schema"
 import { Config, Option, Schema } from "effect"
-
-export const AWS_REGION = "us-east-1"
-
-const AwsRoleArn = Schema.String.check(
-	Schema.isPattern(/^arn:aws:iam::[0-9]{12}:role\/[A-Za-z0-9+=,.@_/-]+$/)
-).pipe(Schema.brand("AwsRoleArn"))
-export type AwsRoleArn = typeof AwsRoleArn.Type
-
-const RdsEndpoint = Schema.String.check(
-	Schema.isPattern(/^[a-z0-9-]+\.[a-z0-9]+\.us-east-1\.rds\.amazonaws\.com$/)
-).pipe(Schema.brand("RdsEndpoint"))
-export type RdsEndpoint = typeof RdsEndpoint.Type
 
 const PosthogProjectToken = Schema.String.check(Schema.isPattern(/^phc_[A-Za-z0-9]+$/)).pipe(
 	Schema.brand("PosthogProjectToken")
@@ -27,14 +20,11 @@ const awsRoleArn = Config.schema(AwsRoleArn, "AWS_ROLE_ARN")
 /** The RDS endpoint, no scheme and no port. */
 const databaseHost = Config.schema(RdsEndpoint, "DATABASE_HOST")
 
-/** A local database name as PostgreSQL spells an unquoted identifier. */
-const LocalDatabaseName = Schema.String.check(Schema.isPattern(/^[a-z_][a-z0-9_]{0,62}$/)).pipe(
-	Schema.brand("LocalDatabaseName")
+/** The local database the app reads and writes: `superstarter` unless `pnpm test` names its
+ * throwaway `superstarter_test`, so a local process needs no environment at all. */
+const localDatabase = Config.schema(LocalPostgresDatabase, "LOCAL_POSTGRES_DATABASE").pipe(
+	Config.withDefault(LOCAL_POSTGRES_DATABASES.development)
 )
-
-/** The local database the app reads and writes: `superstarter` in development, the throwaway
- * `superstarter_test` under `pnpm test`. */
-const localDatabase = Config.schema(LocalDatabaseName, "LOCAL_POSTGRES_DATABASE")
 
 /** PostHog's project token, for OTLP export, server exceptions and the browser client. Read only
  * through `telemetryBackend`, on a hosted deployment. */
@@ -64,7 +54,7 @@ export const deployment: Config.Config<OperationalDeployment> = Config.option(
  * only its own variables. */
 export type DatabaseTarget =
 	| Readonly<{ kind: "rds"; host: RdsEndpoint; roleArn: AwsRoleArn }>
-	| Readonly<{ kind: "local"; database: string }>
+	| Readonly<{ kind: "local"; database: LocalPostgresDatabase }>
 
 const databaseTargetOf = (current: OperationalDeployment): Config.Config<DatabaseTarget> =>
 	current.kind === "hosted"

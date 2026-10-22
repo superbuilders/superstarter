@@ -296,6 +296,9 @@ importers:
       '@superstarter/database':
         specifier: workspace:*
         version: link:../../data/database
+      '@superstarter/operational-telemetry':
+        specifier: workspace:*
+        version: link:../operational-telemetry
       '@vercel/oidc-aws-credentials-provider':
         specifier: 3.3.14
         version: 3.3.14
@@ -406,6 +409,9 @@ importers:
       '@opentelemetry/instrumentation-runtime-node':
         specifier: 0.36.0
         version: 0.36.0(@opentelemetry/api@1.10.0)
+      '@opentelemetry/otlp-exporter-base':
+        specifier: 0.223.0
+        version: 0.223.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/resources':
         specifier: 2.12.0
         version: 2.12.0(@opentelemetry/api@1.10.0)
@@ -448,6 +454,9 @@ importers:
       effect:
         specifier: 4.0.5
         version: 4.0.5
+      geist:
+        specifier: 1.8.1
+        version: 1.8.1(next@16.4.2(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))
       lucide-react:
         specifier: 1.61.0
         version: 1.61.0(@types/react@19.3.0)(react@19.3.1)
@@ -3036,6 +3045,11 @@ packages:
 
   fuzzysort@3.1.0:
     resolution: {integrity: sha512-sR9BNCjBg6LNgwvxlBd0sBABvQitkLzoVY9MYYROQVX/FvfJ4Mai9LsGhDgd8qYdds0bY77VzYd5iuB+v5rwQQ==}
+
+  geist@1.8.1:
+    resolution: {integrity: sha512-oSBhuzTvwZqGAZVC4swTRo61G/JHojtEVNR3DCToU+4nUBkG48ndKNvj4Ma7zZ+OlJkYDLT66HS+hrFszkovTg==}
+    peerDependencies:
+      next: '>=13.2.0'
 
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
@@ -6469,6 +6483,10 @@ snapshots:
   function-bind@1.1.2: {}
 
   fuzzysort@3.1.0: {}
+
+  geist@1.8.1(next@16.4.2(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)):
+    dependencies:
+      next: 16.4.2(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
 
   gensync@1.0.0-beta.2: {}
 

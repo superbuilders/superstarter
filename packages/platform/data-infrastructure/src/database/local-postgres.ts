@@ -3,6 +3,7 @@ import {
 	localTransportOptionsOf,
 	POSTGRES_SESSION_OPTIONS
 } from "@superstarter/database/postgres/connection"
+import { POSTGRES_MASTER_USERNAME } from "@superstarter/database/postgres/principals"
 import type { NativePostgresDatabase } from "@superstarter/database/query/contracts"
 import type { Effect } from "effect"
 
@@ -17,7 +18,7 @@ export const withLocalPostgres = <A, E, R>(
 	withNativePostgresClient(
 		{
 			...localTransportOptionsOf(input.database),
-			user: "postgres",
+			user: POSTGRES_MASTER_USERNAME,
 			application_name: "superstarter-local",
 			options: POSTGRES_SESSION_OPTIONS
 		},

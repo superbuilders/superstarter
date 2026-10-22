@@ -1,17 +1,19 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
+import { AWS_REGION } from "@superstarter/database/postgres/rds"
 import {
 	Config,
 	DateTime,
 	Duration,
 	Effect,
 	FileSystem,
+	Option,
 	Path,
 	Redacted,
 	Schema,
 	Stdio
 } from "effect"
 import { ChildProcess } from "effect/process"
-import { AWS_REGION } from "#environment.ts"
+import { awsProfile, devFactoryCredentialsPath, homeDirectory } from "#env.ts"
 
 /** The DevFactory AWS portal's credential dump: one temporary session. The secrets stay redacted,
  * so no log line or failure can print them. */
@@ -44,6 +46,13 @@ class DevFactoryCredentialsInvalid extends Schema.TaggedError<
 	{ readonly brand: unique symbol }
 >()("DevFactoryCredentialsInvalid", { path: Schema.String }) {}
 
+/** A named AWS profile in the shell wins over the environment credentials this script injects, so
+ * every AWS call would run as that profile instead of the DevFactory session. */
+class DevFactoryCredentialsShadowed extends Schema.TaggedError<
+	DevFactoryCredentialsShadowed,
+	{ readonly brand: unique symbol }
+>()("DevFactoryCredentialsShadowed", { profile: Schema.NonEmptyString }) {}
+
 class DevFactoryCredentialsExpiring extends Schema.TaggedError<
 	DevFactoryCredentialsExpiring,
 	{ readonly brand: unique symbol }
@@ -52,8 +61,9 @@ class DevFactoryCredentialsExpiring extends Schema.TaggedError<
 /**
  * Run one command with the DevFactory session in its environment: the dump at
  * `~/Downloads/credentials.json`, or wherever `DEVFACTORY_CREDS_PATH` points. The AWS SDK's provider
- * chain reads these variables first, so the command's every AWS call uses this session. The
- * command's exit code becomes this process's.
+ * chain reads these variables first unless an `AWS_PROFILE` is set, so this refuses to run under
+ * one, and the command's every AWS call uses this session. The command's exit code becomes this
+ * process's.
  */
 const program = Effect.gen(function* () {
 	const fs = yield* FileSystem.FileSystem
@@ -63,11 +73,13 @@ const program = Effect.gen(function* () {
 		Effect.flatMap(Schema.decodeUnknownEffect(Arguments)),
 		Effect.mapError(() => WithAwsUsage.make({ usage: "with-aws <command> [args...]" }))
 	)
-	const file = yield* Config.NonEmptyString("DEVFACTORY_CREDS_PATH").pipe(
+	const shadowing = yield* awsProfile
+	if (Option.isSome(shadowing)) {
+		return yield* DevFactoryCredentialsShadowed.make({ profile: shadowing.value })
+	}
+	const file = yield* devFactoryCredentialsPath.pipe(
 		Config.orElse(() =>
-			Config.NonEmptyString("HOME").pipe(
-				Config.map((home) => path.join(home, "Downloads", "credentials.json"))
-			)
+			homeDirectory.pipe(Config.map((home) => path.join(home, "Downloads", "credentials.json")))
 		)
 	)
 	if (!(yield* fs.exists(file))) {

@@ -30,10 +30,12 @@
 			"outputs": []
 		},
 		"//#lint:fixtures": {
-			"description": "Hash superlint, its rules and their fixtures: every rule must report exactly its fixtures' marked lines.",
+			"description": "Hash superlint, its rules and their fixtures, and the oxlint plugin's rules and their RuleTester cases: every rule must report exactly its fixtures' marked lines and its invalid cases.",
 			"inputs": [
 				"scripts/dev/lint.ts",
 				"scripts/dev/lint/**",
+				"scripts/dev/oxlint-plugin.ts",
+				"scripts/dev/oxlint/**",
 				"scripts/dev/shared/**",
 				"scripts/dev/devtool-failure.ts",
 				"tsconfig.json",
@@ -78,22 +80,11 @@
 			"outputs": []
 		},
 		"//#format:check": {
-			"description": "Hash formatter operands, the formatter configuration and Git ignore rules.",
+			"description": "Hash every Git-visible file oxfmt walks from the root, which follows the Git ignore rules, and the formatter configuration; files it cannot format are no operands.",
 			"inputs": [
-				"{scripts,packages,rules}/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs,json,jsonc,css,md,yaml,yml}",
-				"{scripts,packages}/**/.gitignore",
-				"package.json",
-				"turbo.json",
-				"tsconfig.json",
-				"pnpm-workspace.yaml",
-				".oxlintrc.json",
-				".oxfmtrc.json",
-				".fallowrc.json",
-				"AGENTS.md",
-				"README.md",
-				".gitignore",
-				"!**/{node_modules,.git,.next,.turbo,dist,out,.output,.swc}/**",
-				"!**/next-env.d.ts"
+				"$TURBO_DEFAULT$",
+				"!**/*.{png,jpg,jpeg,webp,avif,gif,ico,svg,woff,woff2,sql,patch,jsonl,ndjson,log}",
+				"!**/.turbo/**"
 			],
 			"outputs": []
 		},

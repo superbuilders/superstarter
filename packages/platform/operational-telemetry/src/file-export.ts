@@ -1,4 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
+import { ExportResultCode } from "@opentelemetry/core"
 import {
 	JsonLogsSerializer,
 	JsonMetricsSerializer,
@@ -82,7 +83,7 @@ export const makeLocalTelemetryFiles: Effect.Effect<LocalTelemetryFiles> = Effec
 	): void => {
 		if (request === undefined) {
 			callback({
-				code: 1,
+				code: ExportResultCode.FAILED,
 				error: TelemetryFileWriteFailed.make({
 					stream,
 					cause: "native serializer returned no bytes"
@@ -92,10 +93,13 @@ export const makeLocalTelemetryFiles: Effect.Effect<LocalTelemetryFiles> = Effec
 		}
 		append({ stream, line: textDecoder.decode(request) }).then(
 			() => {
-				callback({ code: 0 })
+				callback({ code: ExportResultCode.SUCCESS })
 			},
 			(cause: unknown) => {
-				callback({ code: 1, error: TelemetryFileWriteFailed.make({ stream, cause }) })
+				callback({
+					code: ExportResultCode.FAILED,
+					error: TelemetryFileWriteFailed.make({ stream, cause })
+				})
 			}
 		)
 	}

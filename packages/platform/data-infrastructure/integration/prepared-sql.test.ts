@@ -2,15 +2,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { NodeServices } from "@effect/platform-node"
-import { cardinality, pgPreparedStatements } from "@superstarter/database/catalog/pg-catalog"
-import { POSTGRES_PRINCIPALS } from "@superstarter/database/postgres/principals"
 import * as todos from "@superstarter/database/queries/todos"
-import type {
-	NativePostgresDatabase,
-	PostgresBuilder,
-	PreparedPostgresStatement
-} from "@superstarter/database/query/contracts"
-import { eq } from "drizzle-orm"
+import type { PreparedPostgresStatement } from "@superstarter/database/query/contracts"
 import { Array as Arr, Effect, FileSystem, Predicate, Record, Result, String as Str } from "effect"
 import * as ts from "typescript/unstable/ast"
 import type { Checker, Project } from "typescript/unstable/sync"
@@ -20,11 +13,7 @@ import {
 	schemaIsRepository,
 	withPrograms
 } from "#integration/database-program.ts"
-
-import {
-	PREPARED_STATEMENT_NAME,
-	prepareWithoutExecution
-} from "#integration/prepare-without-execution.ts"
+import { preparedOnce } from "#integration/prepare-without-execution.ts"
 import { borrowPreparedDatabase } from "#integration/prepared-target.ts"
 
 /**
@@ -193,51 +182,6 @@ const exportedStatements = () =>
 		)
 	)
 
-/** The prepared plan's catalog row: how many parameter types PostgreSQL inferred, and whether it
- * resolved a result row. */
-const preparedPlan = (database: PostgresBuilder) =>
-	database
-		.select({
-			parameters: cardinality(pgPreparedStatements.parameter_types),
-			results: cardinality(pgPreparedStatements.result_types)
-		})
-		.from(pgPreparedStatements)
-		.where(eq(pgPreparedStatements.name, PREPARED_STATEMENT_NAME))
-
-type Plan = Awaited<ReturnType<ReturnType<typeof preparedPlan>["execute"]>>[number]
-
-/** PostgreSQL's inferred plan against the statement's own declaration: one inferred parameter
- * type per parameter the statement binds, and a resolved result row. */
-const assertPlanMatches = (
-	plans: ReadonlyArray<Plan>,
-	query: Readonly<{ sql: string; params: ReadonlyArray<unknown> }>
-) => {
-	const [plan] = plans
-	assert.ok(plan !== undefined, "the prepared plan is catalogued")
-	assert.equal(
-		plan.parameters,
-		query.params.length,
-		"PostgreSQL inferred one type per parameter the statement binds"
-	)
-	assert.ok(plan.results !== null && plan.results > 0, "PostgreSQL resolved the result row")
-	return plan
-}
-
-/** One statement: PREPARE under the application role, then its plan read back and compared. */
-const preparedOnce = (
-	database: NativePostgresDatabase,
-	statement: PreparedPostgresStatement<ReadonlyArray<unknown>>
-) => {
-	const query = statement.handleOf(database, database.$client).getQuery()
-	return prepareWithoutExecution({
-		database,
-		statement: query.sql,
-		role: POSTGRES_PRINCIPALS.app,
-		inspect: (scope) =>
-			scope.run(preparedPlan).pipe(Effect.map((plans) => assertPlanMatches(plans, query)))
-	})
-}
-
 /** The scan's findings against the registry: every check the suite makes before it connects. */
 const assertRegistry = (
 	found: Readonly<{
@@ -280,7 +224,12 @@ void test(
 						suite.test(key, () =>
 							Effect.runPromise(
 								borrowPreparedDatabase((database) =>
-									Effect.asVoid(preparedOnce(database, statement))
+									Effect.asVoid(
+										preparedOnce({
+											database,
+											query: statement.handleOf(database, database.$client).getQuery()
+										})
+									)
 								)
 							)
 						)

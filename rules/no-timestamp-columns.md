@@ -45,7 +45,7 @@ The helpers live in `@superstarter/database/lib/uuid-time`:
 
 ```ts
 import { sql } from "drizzle-orm"
-import { uuidv7LowerBound } from "#db/lib/uuid-time.ts"
+import { uuidv7LowerBound } from "@superstarter/database/lib/uuid-time"
 
 // Todos created since `cutoff`, served by the primary-key index
 const recentTodos = (scope: PostgresQueryScope, cutoff: DateTime.Utc) =>
