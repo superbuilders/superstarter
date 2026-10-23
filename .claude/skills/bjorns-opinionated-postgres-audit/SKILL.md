@@ -1,53 +1,66 @@
 ---
 name: bjorns-opinionated-postgres-audit
-description: Use when creating or changing a Drizzle table on PostgreSQL, or writing, changing or reviewing a Drizzle query. Gives exact rules for how tables are shaped (no redundant columns, no "one wide table for several kinds of row", no timestamp columns, named constraints) and how queries are written (no raw SQL identifiers, correct number decoding, CTE naming, aggregates, DISTINCT). Invoke it on its own to audit the current diff; it covers both tables and queries, because a change to one usually changes the other.
+description: Apply when creating or modifying any Drizzle table schema on PostgreSQL, or writing, modifying or reviewing any Drizzle query. Two halves. Schema law covers strict BCNF, the ban on monomorphic discriminated-union tables (header plus typed sidecars instead), the uuidv7-only, no-timestamp law, constraint conventions and migration discipline. Query law covers nine rules (templated schema objects, builder subqueries, globally unique CTE aliases, int8 decoding, decoder-preserving joins, fused statements with effective-union reads, native aggregates with uuid casts, DISTINCT ordering, no windowed DISTINCT) plus sidecar read discipline. Invoke standalone to audit the current diff; each half's procedure cross-checks the other.
 ---
 
 # Bjorn's Opinionated Postgres Audit
 
-This skill has two parts. **Part 1** says how a table must be shaped. **Part 2** says how a query must be written. Both follow one idea: **put the guarantee where the compiler can see it.** If the database already guarantees a fact, the TypeScript type of every row should say so too. Then no reader has to check the fact again, cast around it, or trust a comment.
+One skill, two halves. **Schema law** governs how relations are shaped. **Query law** governs how they are read and written. Both apply one principle, _representation first_:
 
-Drizzle derives a column's TypeScript type from **one thing only: whether the column is nullable.** It cannot see CHECK constraints, triggers or conventions. So a nullable column reads as `T | null` everywhere, even when a CHECK guarantees it is set. Most of the table rules below exist to turn such guarantees into NOT NULL columns and joins, which Drizzle _can_ see.
+- **Push each invariant into the relation and its inferred type,** so the compiler carries the proof. This is _parse, don't validate_: establish a fact once, structurally, instead of re-checking it at every consumer.
+- **Make illegal states unrepresentable,** rather than representable but guarded.
 
-## Before you start
+The load-bearing fact behind most of schema law: **Drizzle infers a column's TypeScript type from its nullability alone.** CHECK constraints, triggers and conventions are invisible to it. A column a CHECK guarantees present still infers `T | null` at every read site, so every consumer must re-narrow it (a validation) or defeat the type with `as` / `!`. A NOT NULL column infers `T`, and an inner join carries a relation's non-nullability into the result type. That is a parse: the inferred signature is the enforced spec.
 
-This skill does not know the project's layout. Find these first:
+A schema change almost always ripples into queries, and a query change often exposes a schema defect. So a standalone invocation runs **both** audit procedures over the diff.
 
-1. The directory holding the Drizzle table modules, and the module that collects them into the schema object.
-2. The directory holding the query code.
-3. The project's migration workflow: who generates migrations, who applies them, and which databases you may touch.
-4. The project's own rules (`CLAUDE.md`, `AGENTS.md`, `rules/`, a lint config). **Where they say something different from this skill, follow the project.**
+## Preconditions
 
-When you audit, work over the diff against the main branch (`git diff origin/main --stat`), and apply both parts to every changed table and query.
+This skill is project-neutral. Before applying it, establish:
 
-# Part 1: How a table is shaped
+1. Where the Drizzle table modules live, and which module aggregates them into the schema object.
+2. Where the query modules live.
+3. The project's migration workflow: who generates migrations, who applies them, and to which databases.
+4. The project's own rules (`CLAUDE.md`, `AGENTS.md`, `rules/`, lint configuration). **Where they conflict with this skill, the project wins.**
 
-## 1.1 Every column depends on the whole key and nothing else
+Audit against the merge base: `git diff origin/main --stat`.
 
-**The rule.** For each table, list its keys: the primary key, and every UNIQUE constraint that really identifies a row. Then, for each other column, ask: _is this value determined by a whole key of this row, and only by that?_ If a parent row, another column, or a part of a key already determines the value, the column is redundant. Remove it. (This is Boyce–Codd normal form, BCNF.)
+# Part I: Schema law
 
-**Spot it.** The two shapes this usually takes:
+Every new or changed table passes all of these before it ships.
 
-- **A child copies a fact its parent already has.** A `lessons` row has `unit_id`, and the unit already knows its `course_id`, yet `lessons` also stores `course_id`. That counts even if `course_id` was added only so a composite foreign key could check membership.
-- **A table stores something a join can compute.** A `runs` table stores both `version_id` and `course_id`, but the version determines the course.
+## I.1 Strict BCNF: analyze, don't guess
 
-**Refactor.**
+A relation is in **Boyce–Codd normal form** when every non-trivial functional dependency `X → A` has a superkey `X`. For every new or changed table, write down:
 
-1. Delete the redundant column from the table.
-2. Every reader that used it now joins to the row that determines it (`lessons → units → courses`).
-3. If the column was there to enforce a rule (for example, "a lesson's unit belongs to the run's course"), move that rule into the **one function that writes the row**. That function checks the rule before it writes and fails with a named error when the rule is broken. Test that error.
-4. In the table's doc comment, say which column was left out on purpose and which writer now holds the rule.
+1. **Every candidate key:** the primary key, and every UNIQUE that is in fact a key.
+2. **Every functional dependency (FD).** For each non-key attribute, ask whether it is determined by **each whole candidate key**, or instead by a proper subset of a key, another non-key attribute, or a parent row reached through a foreign key.
+3. **Every violation:** any FD `X → A` where `X` is not a superkey. The attribute `A` is removed from this relation.
+
+Put the analysis in the table's doc comment whenever a column was deliberately omitted.
+
+**The two recurring violations.**
+
+- **Parent-determined attributes** (transitive dependencies through a foreign key). A `lessons` row references `unit_id`, and `unit_id → course_id` holds in `units`, so `lessons.course_id` is redundant. The same applies when a column exists only to make a composite-FK membership check possible.
+- **Derivable facts.** Never store an attribute that a stored key determines through joins. A run that stores `version_id` does not also store `course_id` if `version_id → course_id`. A closure table carries no denormalized "target" columns.
+
+**Refactoring procedure.**
+
+1. Drop the violating attribute.
+2. Rewrite every reader to recover it by join along the dependency (`lessons ⋈ units`).
+3. If the attribute enforced an invariant (for example, "the lesson's unit belongs to the run's course"), move the invariant to the relation's **single writer**. The writer asserts it before any write and fails with a named error. Unit-test the error.
+4. Record the trade in the table's doc comment: which attribute was omitted, which FD makes it derivable, and which writer owns the invariant.
 
 ```ts
-// BEFORE: course_id is determined by unit_id → units.course_id
+// VIOLATION: unit_id → course_id holds in units, so course_id is transitively dependent
 export const lessons = pgTable("lessons", {
 	id: uuid("id").default(sql`uuidv7()`).notNull(),
 	unitId: uuid("unit_id").notNull(),
 	courseId: uuid("course_id").notNull()
 })
 
-// AFTER: the course comes from the unit, by join
-/** One lesson of a unit. Its course is its unit's course, read by join, never stored here. */
+// BCNF: the course is recovered by joining units
+/** One lesson of a unit. Its course is derivable (lessons ⋈ units) and is not stored. */
 export const lessons = pgTable(
 	"lessons",
 	{
@@ -61,56 +74,52 @@ export const lessons = pgTable(
 )
 ```
 
-## 1.2 Several kinds of row: one header table plus one table per kind
+## I.2 Discriminated unions: header plus typed sidecars, never a monomorphic DU table
 
-**The rule.** When a table holds several _kinds_ of row, and each kind has its own fields (a "sum type" or "discriminated union"), do **not** put every kind's fields into one wide table as nullable columns. Instead:
+**The banned shape.** A _monomorphic discriminated-union (DU) table_ models a sum type as **one wide relation**. Each arm's columns are nullable, and a CHECK gates them on a discriminant. In the worse variant there is no discriminant at all, and the arm is inferred from the null pattern. Illegal states are representable and merely guarded: two arms' payloads set at once, a discriminant whose arm's payload is null, another arm's payload present. And because Drizzle ignores the CHECK, every read infers each payload column as `T | null`. The proof lives in Postgres and is thrown away before the compiler sees it.
 
-- a **header** table holds what every kind has, plus a NOT NULL `kind` column;
-- one **sidecar** table per kind that carries data holds that kind's fields, all NOT NULL.
+**Detection.** Any of these makes a relation a monomorphic DU:
 
-**Spot it.** Any of these means the table is several kinds of row squeezed into one:
+- a CHECK whose predicate gates one column's presence on another column's value: `(kind = 'automatic') = (score IS NOT NULL)`, or an XOR / all-null-or-all-set group;
+- a cluster of nullable columns that are in practice all set together or all null together;
+- a `kind` / `type` / `status` / `outcome` enum beside nullable payload columns, with no sidecars.
 
-- a `kind`, `type`, `status` or `outcome` column next to nullable columns that only some kinds use;
-- a CHECK that ties one column's presence to another column's value, e.g. `(kind = 'automatic') = (score IS NOT NULL)`;
-- a group of nullable columns that are always all set together or all null together;
-- no kind column at all, where readers work out the kind from which columns are null.
+**The required shape.**
 
-**Why.** In the wide table, impossible rows (an automatic grading with a grader, a row with both kinds' fields set) can be written; only a CHECK stops them. And because Drizzle ignores the CHECK, every reader sees `score: number | null` and must check it again or cast it with `as` / `!`. In the split form, the sidecar's columns are NOT NULL, so an inner join gives `score: number` with nothing to check.
+- **Header.**
+  - It holds the NOT NULL discriminant (`kind`) and the facts common to **every** arm, all NOT NULL.
+  - It carries `UNIQUE (id, kind)`. That constraint's only purpose is to be the composite-FK target for the sidecars, so one header row cannot acquire two conflicting arms.
+- **One typed sidecar per payload-bearing arm.**
+  - Its primary key is the header id.
+  - Every payload column is NOT NULL. The only nullable columns allowed are _semantically honest optionals_, a field genuinely absent within that arm, and each one is justified in the doc comment.
+  - It pins its arm with a **generated constant discriminant**, `kind: kindEnum("kind").generatedAlwaysAs(sql\`'<arm>'::<kind_enum>\`)`, plus a composite FK `(id, kind) → header (id, kind)`.
+  - A generated column cannot be written, so a wrong-arm value is unrepresentable and no `CHECK (kind = '<arm>')` is needed. The FK proves the header agrees.
+- **Payload-less arms get no sidecar.** A tombstone or empty arm's emptiness _is_ the absence of a sidecar row. Do not manufacture an empty relation for it.
 
-**Refactor.**
+**Naming.** A sidecar carries its header's **full stem**: the header's name in the singular, plus the arm noun. Header `gradings` has sidecars `grading_automatic_results` and `grading_manual_reviews`. A sidecar that shares only a domain prefix (`automatic_results`) is wrong, because it does not read as a specialization of its header.
 
-1. Create a `pgEnum` for the kinds, and export its values array as a constant.
-2. Make the **header**: the id, the columns every kind has (NOT NULL), and `kind` (NOT NULL). Give it a `UNIQUE (id, kind)` constraint. Its only job is to be the target of the sidecars' foreign keys.
-3. Make one **sidecar** per kind that has its own data:
-   - Its name starts with the header's name in the singular, then names the kind. For a header `gradings`, the sidecars are `grading_automatic_results` and `grading_manual_reviews`. A name that shares only a prefix (`automatic_results`) is wrong, because it doesn't read as part of `gradings`.
-   - Its primary key is the header's id.
-   - It has a `kind` column **generated as that kind's constant**, so it can't hold any other value.
-   - It has a composite foreign key `(header_id, kind) → header (id, kind)`, so it can only attach to a header of its own kind.
-   - All of its data columns are NOT NULL. Allow a nullable column only when the value can really be missing _within that kind_, and justify each one in the doc comment.
-4. A kind with no data of its own gets **no** sidecar. Its having no sidecar row is its data.
-5. Write the header and its sidecar **in one transaction**, in one function. A foreign key only stops a sidecar from existing without its header, not a header from existing without its sidecar. Say this in the header's doc comment.
-6. Move the data: create the new tables, copy rows across in a migration, update every reader (see 2.10) and writer, then drop the old columns.
+**Completeness is deliberately conceded.** A composite FK enforces child → parent only, so an orphan header (its `kind` set, its sidecar row never written) is representable. Close it with **writer-transaction discipline**: the header and its sidecar are inserted in one transaction, by one writer. State this in the header's doc comment. Compile-time arm safety at every read site is worth far more than this one write-time invariant.
 
 ```ts
-// BEFORE: one wide table, the kinds told apart by nulls and a CHECK
+// BANNED: a monomorphic DU table, with the arms gated by a CHECK the type system cannot see
 export const gradings = pgTable(
 	"gradings",
 	{
 		id: uuid("id").default(sql`uuidv7()`).notNull(),
 		kind: gradingKind("kind").notNull(),
-		score: integer("score"), // automatic only
-		graderId: uuid("grader_id"), // manual only
-		comment: text("comment") // manual only
+		score: integer("score"), // arm: automatic
+		graderId: uuid("grader_id"), // arm: manual
+		comment: text("comment") // arm: manual
 	},
 	(t) => [check("gradings_arm_ck", sql`(${t.kind} = 'automatic') = (${t.score} IS NOT NULL)`)]
 )
 
-// AFTER: a header plus one sidecar per kind
+// REQUIRED: a header plus typed sidecars
 export const GRADING_KINDS = ["automatic", "manual"] as const
 export const gradingKind = pgEnum("grading_kind", GRADING_KINDS)
 
-/** One grading of a submission. Its kind's data lives in exactly one sidecar, written in the
- * same transaction as this row. */
+/** One grading of a submission: the discriminant and the facts every arm shares. Its arm's
+ * payload lives in exactly one sidecar, inserted in the same transaction as this row. */
 export const gradings = pgTable(
 	"gradings",
 	{
@@ -124,7 +133,7 @@ export const gradings = pgTable(
 	]
 )
 
-/** The result of an automatic grading. */
+/** The automatic arm's payload, pinned to its arm by a generated discriminant. */
 export const gradingAutomaticResults = pgTable(
 	"grading_automatic_results",
 	{
@@ -143,7 +152,7 @@ export const gradingAutomaticResults = pgTable(
 	]
 )
 
-/** A person's review of a manual grading. */
+/** The manual arm's payload, pinned to its arm by a generated discriminant. */
 export const gradingManualReviews = pgTable(
 	"grading_manual_reviews",
 	{
@@ -163,113 +172,108 @@ export const gradingManualReviews = pgTable(
 )
 ```
 
-**About the generated `kind` column.**
+**The generated-constant pin.**
 
-- A generated column can't be written to, so the wrong kind can't be stored. That makes `CHECK (kind = 'automatic')` unnecessary.
-- If you find an older sidecar that pins its kind with `.default('<kind>')` plus a CHECK, upgrade it to the generated form. A default can be overwritten; a generated value can't.
-- Postgres allows a generated column on the referencing side of a plain foreign key. It refuses `ON UPDATE CASCADE`, `SET NULL` and `SET DEFAULT` onto that column, which this pattern never needs.
-- The first time you use this in a project, check that the generated SQL declares the column `STORED`, and apply it once to a throwaway database. If Postgres refuses it there, fall back to `.default('<kind>')` plus the CHECK for that table.
+- It supersedes the older `.default('<arm>')` plus `CHECK (kind = '<arm>')` idiom: a default is writable, a generated constant is not. Upgrade any sidecar still using the default form.
+- Postgres accepts a generated column on the **referencing** side of a plain (`NO ACTION`) foreign key. It rejects only referential actions that would write the column (`ON UPDATE CASCADE`, `SET NULL`, `SET DEFAULT` onto it), and the pin carries none.
+- On first adoption in a project, confirm the migration declares the column `STORED`, and apply it to a disposable database. The per-table fallback is the default-plus-CHECK form.
 
-**One sidecar shared by several kinds.** Sometimes a sidecar applies to a _set_ of kinds: say a `transmissions` record exists for the outcomes `delivered` and `rejected`, but not for `unaddressable`. A generated constant can't express "one of these". Instead:
+**Set-gated variance: the set-pin.** When a sidecar's presence is gated by a **multi-value** predicate (`outcome IN ('delivered', 'rejected')`) rather than one arm, a generated constant cannot pin it. The pin generalizes to the set:
 
-- give the sidecar a real `kind` column;
-- keep the same composite foreign key to `(id, kind)`, so its `kind` must match its header's;
+- carry a real `kind` column on the sidecar;
+- pin it with the same composite FK `(id, kind) → header (id, kind)`, so the copy cannot drift;
 - add `CHECK (kind IN ('delivered', 'rejected'))`.
 
-Now the sidecar can't attach to an `unaddressable` header. Key the sidecar by the header id alone, with no `kind` column, only when the header has no `UNIQUE (id, kind)` to point at. Don't invent a separate kind column for the sidecar; use the header's real one.
+The sidecar now structurally cannot attach to a header outside the set. Only completeness (an in-set header implies a sidecar row) remains writer discipline, the same residue every DU carries. Key the sidecar by the header id alone, with no `kind` column, only when the header lacks a usable `UNIQUE (id, kind)` target. In either case, name the completeness guarantee in the doc comment, and never invent a fake discriminant; the set-pin uses the real one.
 
-**Don't split too far.** A sidecar must correspond to a kind: it exists **if and only if** the header has that kind. A one-to-one table that exists for _every_ header row, whatever its kind, is not this pattern. It splits a table for nothing, so merge it back into the header. Split exactly until impossible rows can't be written, and no further.
+**The decomposition limit: do not over-decompose.** A _mandatory_ 1:1 sidecar, present for every header row, adds no FD and encodes no arm. It is pointless decomposition, and it collapses back into its parent: one relation, one key, no new FDs. The test that separates the two cases: **does the sidecar correspond to an arm, present if and only if `kind = X`?** If yes, split. If it is always-present metadata, left over from a formerly shared or polymorphic parent, collapse it. Decompose exactly until illegal states vanish, and no further.
 
-## 1.3 The id is the clock: no timestamp columns
+**Migration procedure.** Create the header and sidecars, backfill them from the wide table in a custom migration, cut every reader (II.10) and writer over, then drop the wide columns. It is a hard cutover: no dual reads.
 
-**The rule.** Every primary key is a UUIDv7 that the database mints. A UUIDv7 starts with the time it was made, in milliseconds. So the id already records when the row was created, and sorting by id sorts by creation time. Do not add `created_at`, `updated_at` or any other timestamp column.
+## I.3 uuidv7 ids are the clock: no timestamp columns
 
-```ts
-id: uuid("id").default(sql`uuidv7()`).notNull()
-```
+Every primary key is a database-minted UUIDv7: `id: uuid("id").default(sql\`uuidv7()\`).notNull()`, with a `<table>_pk`constraint.`uuidv7()` is built into PostgreSQL 18; on older versions, use an extension. A UUIDv7's leading 48 bits are a big-endian Unix-millisecond timestamp, so:
 
-`uuidv7()` is built into PostgreSQL 18. On an older version, use an extension or the project's own generator.
+- `ORDER BY id` is creation order, served by the primary-key index;
+- the creation instant is `uuid_extract_timestamp(id)` on PostgreSQL 17+, or as Unix milliseconds, `('x' || substr(replace(id::text, '-', ''), 1, 12))::bit(48)::bigint`.
 
-**Refactor a timestamp column.**
+**Never add `created_at`, `updated_at` or any timestamp column.**
 
-- _Creation time:_ delete the column. Order with `ORDER BY id` (`DESC` for newest first). Read the time with `uuid_extract_timestamp(id)` on PostgreSQL 17+. Otherwise compute unix milliseconds with `('x' || substr(replace(id::text, '-', ''), 1, 12))::bit(48)::bigint`.
-- _"Updated at" or a changing status:_ don't update the row in place. Append a new row for each change. The current state is the newest row: `SELECT DISTINCT ON (subject_id) … ORDER BY subject_id, id DESC`. To undo something, append another row; don't delete.
-- _A time that isn't creation time_ (an expiry, a schedule, a third party's timestamp): store it as unix milliseconds in a `bigint` whose name says the unit (`expires_at_unix_ms`), or model the event as its own row, whose id is its time.
+- **Append-only ledgers get correctness from facts, not mutation timestamps.**
+- **The current outcome is the latest header by uuidv7 id:** `SELECT DISTINCT ON (subject_id) … ORDER BY subject_id, id DESC`. This is the append-only analogue of an updatable status column. Recover by appending a new header, never by deleting or updating.
+- **A non-creation time** (an expiry, a schedule, a source system's claimed time): store Unix milliseconds in a `bigint` named for its unit (`expires_at_unix_ms`), or model the event as its own row, whose id is its time.
 
-## 1.4 Constraint conventions
+## I.4 Constraint conventions
 
-- **Name every constraint explicitly,** from the full table name: `<table>_pk`, `fk_<table>_<target>`, `<table>_<columns>_uq`, `<table>_<rule>_ck`. Sidecars inherit their header's name, so their constraints do too. Keep each name under Postgres's 63-byte limit.
-- **Integer position columns** (a step's order within its parent) get `UNIQUE (parent_id, position)` and `CHECK (position >= 0)`.
-- **Enums** use `pgEnum` with an exported `as const` array of values, so TypeScript types come from the array. When an enum mirrors a union in the app code, use exactly the same strings, so writes need no mapping.
-- **Composite foreign keys** exist only to make invalid rows impossible: pinning a sidecar to its header's kind (1.2), or requiring a reference to point at a valid member. Never use one as an excuse to keep a redundant column (1.1).
-- **Say in the doc comment** whether a row is append-only, replaced wholesale, or first-write-wins. If anything may overwrite it, name that caller.
+- **Every constraint is named explicitly,** from the full table name: `<table>_pk`, `fk_<table>_<target>`, `<table>_<columns>_uq`, `<table>_<rule>_ck`. Sidecars inherit their header's stem, so their constraint names do too. Every name stays under Postgres's 63-byte identifier limit.
+- **Ordinal columns** get `UNIQUE (parent_id, position)` and `CHECK (position >= 0)`.
+- **Enums** are `pgEnum` with an exported `as const` values array, so types derive from the array. Enum names carry no prefixes from dead models. When a header's `kind` enum mirrors an application-side union, the token strings are identical, so writes need no mapping.
+- **Composite FKs are for key references that make invalid states unrepresentable:** the discriminant pin of I.2, and membership references (a citation pointing at a valid member's key). They are never for smuggling a redundant column past BCNF (I.1).
+- **The doc comment states the write semantics:** first-write-wins or overwrite. An overwrite exception names its sanctioned caller.
 
-## 1.5 Migrations
+## I.5 Migration discipline
 
-- **Never write or edit a generated migration file by hand:** not the SQL, the snapshots or the journal. Migration files are only ever drizzle-kit's output. A data backfill goes in a separate custom migration (`drizzle-kit generate --custom`).
-- **Generate migrations only the way the project says.** Some projects have agents generate them; some have a person do it. Follow the project.
-- **Never apply a migration, or push a schema, to a shared database** (preview, staging, production) unless the owner tells you to. A local throwaway database is fine when the project allows it.
-- **If you find a hand-written or hand-edited migration file:** stop, tell the user, and don't commit it.
+- **Migration files are drizzle-kit output only.** Never hand-write or hand-edit anything in the migrations directory: SQL, snapshots or the journal. Backfills and data migrations go in a separate `drizzle-kit generate --custom` migration.
+- **Generation follows the project's workflow.** Some projects have agents generate migrations (dry-run with `--explain` first); others reserve it for a person.
+- **Applying is human-owned.** Never run `drizzle-kit migrate`, `push` or the project's migrate command against a shared database (preview, staging, production). A local disposable database is acceptable where the project allows it.
+- **If a hand-written or hand-edited migration file appears:** stop, surface it, and do not commit it.
 
-## 1.6 Register the table and document it
+## I.6 Registration and doc comment
 
-- Add a new table module wherever the project collects its schema, keeping that list in the project's existing order.
-- The table's doc comment says:
-  - what one row _is_;
-  - how it is written (append-only, replaced wholesale, first-write-wins);
-  - any column deliberately left out under 1.1;
-  - any rule a writer must keep, including "the header and its sidecar are written together" (1.2).
+- A new table module registers in the project's schema aggregate, in that aggregate's existing order.
+- The doc comment states:
+  - what one row **is**;
+  - the write discipline (append-only, wipe-and-replace, first-write-wins);
+  - the BCNF analysis whenever a column was deliberately omitted;
+  - every writer-owned invariant, including header-to-sidecar completeness (I.2).
 
-## Part 1 audit (run all of it)
+## Part I audit procedure (run all of it when invoked standalone)
 
-1. **List the tables:** `git diff origin/main --stat -- <schema directory>`. For each new or changed table, do the 1.1 check: list its keys, then for every other column ask what determines it. Remove each redundant column, and move its rule to the one writer.
-2. **Look for several kinds of row in one table (1.2) on every changed table:**
-   - Run `grep -rn "check(" <schema directory>`. For each CHECK, ask whether it ties one nullable column's presence to another column. If so, split the table.
-   - Flag every enum `kind`/`type`/`status`/`outcome` column that sits beside nullable data columns and has no sidecars.
-   - Flag every sidecar that pins its kind with `.default('<kind>')` plus a CHECK, and upgrade it to the generated column.
-   - Check the reverse too: merge back any one-to-one table that doesn't correspond to a kind.
-3. **Look for timestamp columns:** `grep -rn "timestamp\|createdAt\|created_at\|updatedAt\|updated_at" <schema directory>` must find nothing outside doc comments.
-4. **Check the migrations:** `git diff origin/main -- <migrations directory>`. Every changed file must come from the project's migration workflow (1.5).
-5. **Check the writers:** for each column removed under 1.1, confirm the writer checks its rule, fails with a named error, and has a test. For each header, confirm the header and its sidecar are written in one transaction.
-6. **Run the project's typecheck and its full checks.** A schema change ripples into every query that touches the table.
-7. **If any query changed, run Part 2's audit too.**
+1. **Enumerate the tables:** `git diff origin/main --stat -- <schema directory>`. Run the I.1 FD analysis on each new or changed relation.
+2. **Run the DU analysis (I.2) on each new or changed relation.** Is it a sum type? Apply the detection rules, then decompose into header plus typed sidecars, or set-pinned sidecars for set-gated arms. Then check the inverse: collapse any mandatory 1:1 sidecar that encodes no arm. Seed searches:
+   - `grep -rn "check(" <schema directory>`: review each CHECK for a presence-gating, cross-column predicate over nullable columns.
+   - Flag any `kind` / `type` / `status` / `outcome` enum that coexists with nullable payload columns and has no sidecar.
+   - Flag any sidecar still pinning its arm with `.default('<arm>')` plus `CHECK (kind = '<arm>')`, and upgrade it to the generated-constant pin.
+3. **Search for timestamp columns:** `grep -rn "timestamp\|createdAt\|created_at\|updatedAt\|updated_at" <schema directory>` must return nothing outside doc-comment prose.
+4. **Check the migrations:** `git diff origin/main -- <migrations directory>`. Every changed file is drizzle-kit output produced through the project's workflow. A hand-written or hand-edited migration is an incident.
+5. **Check writer obligations:** for each column dropped for BCNF, confirm the writer asserts its invariant before any write, with a named error and a unit test. For each DU header, confirm the header and its sidecar are inserted in one transaction.
+6. **Run the project's typecheck and full gate.** A schema change ripples into the schema aggregate and every query touching the relation.
+7. **Cross-check with Part II** whenever a query changed alongside the schema, especially sidecar reads (II.10).
 
-# Part 2: How a query is written
+# Part II: Query law
 
-Each rule here prevents a bug that typechecks and then fails, or returns wrong data, at runtime. All nine are Drizzle and PostgreSQL facts. When the Drizzle version matters, check it against the one the project uses.
+Nine laws, then the read discipline for discriminated unions, then the audit procedure. These are not style preferences. Each one closes a class of defect that typechecks and then fails, or returns wrong data, at runtime. They are Drizzle and PostgreSQL rendering facts; re-verify any that depend on version against the version the project pins.
 
-## 2.1 Interpolate real columns, never type a column name
+## II.1 Template schema objects, never identifier text
 
-**The rule.** Inside a `sql` template, every table, column and CTE field is an interpolated Drizzle object (`${orders.customerId}`), never the column's name typed as text (`"customer_id"`). Typed text keeps compiling after a rename and breaks only at runtime.
+Inside a `sql` template, every table, column and CTE field is an **interpolated schema or CTE object** (`${orders.customerId}`), never identifier text (`"customer_id"`). Identifier text survives a rename silently and fails only at runtime.
 
 ```ts
-// BEFORE
+// VIOLATION
 sql`"customer_id" = ${customerId}`
-// AFTER
+// CORRECT
 sql`${orders.customerId} = ${customerId}`
 ```
 
-**The only exception** is a name that exists only in SQL: the column names of a `VALUES` list, or a row variable passed to `to_jsonb`. Put that text in **one** small helper module (`valuesTable`, `valuesColumn`, `jsonbRow`, …) and call the helpers everywhere. Never write the text inline.
+The one sanctioned exception is an identifier that exists only in SQL: `VALUES`-list column aliases, and row variables passed to `to_jsonb`. Confine that text to **one** helper module (`valuesTable`, `valuesColumn`, `jsonbRow`, `jsonbAggRows`, …) and call its helpers. Never inline an equivalent.
 
-## 2.2 No hand-written subqueries: interpolate a query builder
+## II.2 No raw `(select …)` or `(values …)` strings: interpolate builders
 
-**The rule.** Never write `(SELECT …)` or `(VALUES …)` as text inside a `sql` template. Interpolate a `db.select(...)` builder instead. Drizzle wraps it in parentheses and keeps it built from real columns.
+A `db.select(...)` builder interpolated into a `sql` template is auto-parenthesized into a proper **scalar subquery**, built from column objects end to end. A correlated subquery is `eq(column, db.select({ x: cte.field }).from(cte))`, never template text. `eq`, `lt`, `gt` and `inArray` all accept `SQLWrapper` subqueries.
 
 ```ts
-// BEFORE
+// VIOLATION
 sql`${orders.total} > (SELECT avg(total) FROM orders)`
-// AFTER
+// CORRECT
 gt(orders.total, db.select({ average: avg(orders.total) }).from(orders))
 ```
 
-`eq`, `lt`, `gt`, `inArray` and the other operators accept a builder subquery directly. Write a correlated subquery as `eq(column, db.select({ x: cte.field }).from(cte))`, not as text.
+## II.3 Globally unique CTE field aliases per statement
 
-## 2.3 Give every CTE field a name unique within the whole statement
-
-**The rule.** When you alias a field in a CTE (`.as("customer_id")`), Drizzle refers to it by that bare name in the rest of the query. If two CTEs in one query both define `customer_id`, Postgres fails with "column reference is ambiguous", even though it typechecks. Prefix every CTE field with its CTE's name.
+Drizzle renders an aliased CTE field by its **bare alias**. If two CTEs in one join scope both define `customer_id`, Postgres raises a runtime "column reference is ambiguous" error that typechecks fine. Namespace every CTE's fields with the CTE's name (`recent_*`, `flagged_*`, `served_*`, …), and choose the names up front.
 
 ```ts
-// BEFORE: both CTEs expose customer_id
+// VIOLATION: both CTEs expose the bare alias customer_id
 const recent = db
 	.$with("recent")
 	.as(db.select({ customerId: sql`${orders.customerId}`.as("customer_id") }).from(orders))
@@ -277,119 +281,136 @@ const flagged = db
 	.$with("flagged")
 	.as(db.select({ customerId: sql`${flags.customerId}`.as("customer_id") }).from(flags))
 
-// AFTER: each name says which CTE it belongs to
+// CORRECT: aliases namespaced per CTE
 const recent = db
 	.$with("recent")
-	.as(db.select({ recentCustomerId: sql`${orders.customerId}`.as("recent_customer_id") }).from(orders))
+	.as(
+		db
+			.select({ recentCustomerId: sql`${orders.customerId}`.as("recent_customer_id") })
+			.from(orders)
+	)
 const flagged = db
 	.$with("flagged")
-	.as(db.select({ flaggedCustomerId: sql`${flags.customerId}`.as("flagged_customer_id") }).from(flags))
+	.as(
+		db
+			.select({ flaggedCustomerId: sql`${flags.customerId}`.as("flagged_customer_id") })
+			.from(flags)
+	)
 ```
 
-A camelCase key used only inside one CTE, for example to pack a JSON object, doesn't need the prefix.
+camelCase aliases are exempt only as JSONB-packing keys consumed strictly within their own CTE's scope.
 
-## 2.4 Decode 64-bit integers to numbers
+## II.4 The int8 decode law
 
-**The rule.** node-postgres returns `bigint` values, including every `count(*)` and every `sum(...)` of integers, as JavaScript **strings**. Writing `sql<number>` only changes the TypeScript type; at runtime the value is still the string `"42"`. Decode it one of these ways:
+node-postgres parses `int8` (OID 20) as a JavaScript **string**, to avoid silent precision loss past 2^53. So every `count(*)`, every integer `sum(...)` and every `bigint` column arrives as a string. A raw `sql<number>` fragment has a **no-op decoder**: the annotation is a type lie. Decode by one of these:
 
 ```ts
-// BEFORE: typed number, actually "42"
+// VIOLATION: typed number, decoded as the string "42"
 const total = sql<number>`count(*)`
 
-// AFTER: pick one
-count() // Drizzle's count() decodes to a number
+// CORRECT
+count() // Drizzle's count() carries mapWith(Number)
 countDistinct(orders.customerId) // so does countDistinct()
-sql`sum(${orders.quantity})`.mapWith(Number) // decode explicitly
-sql<number>`count(*)::int` // cast in SQL when the value fits in 32 bits
-sql<number>`(('x' || substr(replace(${orders.id}::text, '-', ''), 1, 12))::bit(48)::bigint)::float8` // a UUIDv7's milliseconds, exact below 2^53
+sql`sum(${orders.quantity})`.mapWith(Number) // an explicit decoder
+sql<number>`count(*)::int` // an in-SQL cast, for true counts
+sql<number>`(('x' || substr(replace(${orders.id}::text, '-', ''), 1, 12))::bit(48)::bigint)::float8` // uuidv7 millisecond math, exact below 2^53
 ```
 
-Never write a bare `sql<number>` around anything that produces a `bigint`.
+Never write a bare `sql<number>` over an int8 producer.
 
-## 2.5 Join a one-row CTE; don't re-wrap its fields
+## II.5 One-row CTEs join; they don't re-project
 
-**The rule.** Selecting a CTE field directly (`totals.orderCount`) keeps the decoder Drizzle attached to it, such as `count()`'s number decoding. Wrapping the field in a new `sql` template (`sql<number>\`${totals.orderCount}\``) drops the decoder. So when a CTE returns exactly one row (an aggregate, a `LIMIT 1`lookup, a`RETURNING`clause), join it into the final query on`true` and select its fields directly.
+A **direct** CTE-field reference in an outer `.select({...})` preserves the field's decoder. Re-projecting it through a fresh `sql` template destroys the decoder. So one-row CTEs (aggregates, `LIMIT 1` probes, `RETURNING` CTEs) are joined into the final select `ON true`, with direct field references.
 
 ```ts
 const totals = db.$with("totals").as(db.select({ totalsOrderCount: count() }).from(orders))
 
-// BEFORE: the field is re-wrapped in a new template, so the count comes back as a string
-db.with(totals).select({ id: customers.id, orderCount: sql<number>`${totals.totalsOrderCount}` }).from(customers).leftJoin(totals, sql`true`)
+// VIOLATION: re-projected through a fresh template, so count()'s decoder is lost
+db.with(totals)
+	.select({ id: customers.id, orderCount: sql<number>`${totals.totalsOrderCount}` })
+	.from(customers)
+	.leftJoin(totals, sql`true`)
 
-// AFTER: join on true and select the field itself
-db.with(totals).select({ id: customers.id, orderCount: totals.totalsOrderCount }).from(customers).leftJoin(totals, sql`true`)
+// CORRECT: a direct field reference keeps the decoder
+db.with(totals)
+	.select({ id: customers.id, orderCount: totals.totalsOrderCount })
+	.from(customers)
+	.leftJoin(totals, sql`true`)
 ```
 
-Use builder subqueries (2.2) for correlations inside other CTEs. Don't use them to project a one-row CTE into the final select.
+Builder scalar subqueries (II.2) are for correlations inside other CTE bodies, not for final-select projection of a joinable one-row CTE.
 
-## 2.6 One operation, one statement; read your own write through a union
+## II.6 Fused statements and the effective-union discipline
 
-**The rule.** When one logical operation needs several reads and writes, prefer **one statement**: a chain of CTEs (`WITH a AS (...), b AS (...) ...`) instead of several round trips. This matters most on hot paths. Use an explicit transaction where the project's rules require one, or where the steps can't be expressed as one statement.
+**One logical operation is one statement:** a `WITH` chain rather than several round trips, especially on hot paths. Use an explicit transaction where the project requires one, or where the operation cannot be expressed as one statement.
 
-**The trap.** Every CTE in a statement sees the database as it was **when the statement started**. A CTE that reads a table cannot see rows another CTE in the same statement just inserted. So when a later step must take the new row into account, read _the existing rows plus the new row_, never the table you just wrote:
+**Snapshot semantics.** All sub-statements of a `WITH` chain, data-modifying CTEs included, execute against the **same snapshot**, taken at statement start. Sibling CTEs cannot see one another's effects on the target tables. So a predicate evaluated after a write must read the **effective union**, _existing facts ∪ the row being written_, through a CTE under a stable name. It must never read the table the statement just wrote.
 
 ```sql
 WITH inserted AS (
 	INSERT INTO completions (run_id, step_id) VALUES ($1, $2) RETURNING step_id AS inserted_step_id
 ),
-effective AS (
-	SELECT step_id AS effective_step_id FROM completions WHERE run_id = $1  -- rows from before this statement
+effective_completions AS (
+	SELECT step_id AS effective_step_id FROM completions WHERE run_id = $1  -- the pre-statement snapshot
 	UNION
 	SELECT inserted_step_id FROM inserted                                   -- the row this statement writes
 )
-SELECT count(*)::int = $3 AS run_complete FROM effective
+SELECT count(*)::int = $3 AS run_complete FROM effective_completions
 ```
 
-Build the same shape with `db.$with(...)`. When several statements share it, give the union CTE one stable name, so a shared builder can supply it.
+Build the same shape with `db.$with`. Make the effective-union CTE injectable under a stable name, so every statement built from a shared builder reads the same source.
 
-## 2.7 Use Drizzle's aggregate functions; cast a uuid to text before `min`/`max`
+## II.7 Native aggregates; cast a uuid first, inside the function
 
-**The rule.** Drizzle ships `count()`, `countDistinct()`, `sum()`, `avg()`, `min()` and `max()`. Use them, not `sql\`max(...)\``. When the argument needs a cast, the cast goes *inside* the function: `max(sql\`${column}::text\`)`, not `sql\`max(${column}::text)\``.
+Drizzle ships `count()`, `countDistinct()`, `sum()`, `avg()`, `min()` and `max()`. Use them, never a raw `sql\`max(...)\``. When the argument needs a cast, the raw SQL goes **inside** the function: `max(sql\`${column}::text\`)`, never `sql\`max(${column}::text)\``.
 
-**Postgres has no `min()` or `max()` for `uuid`.** `max(orders.id)` typechecks, then fails with `function max(uuid) does not exist`. Cast to text first. A uuid's text sorts the same way as its bytes, and a UUIDv7's bytes sort by time, so the text maximum is the newest row:
+**PostgreSQL defines no `min` or `max` aggregate over `uuid`.** `max(orders.id)` typechecks, then throws `function max(uuid) does not exist`. Cast first. uuid text sorts identically to uuid byte order, and uuidv7 byte order is time order, so the text maximum is the latest row.
 
 ```ts
-// BEFORE: fails at runtime
+// VIOLATION: runtime error
 max(orders.id)
-// AFTER
+// CORRECT
 max(sql`${orders.id}::text`)
 ```
 
-Compare the result with other ids cast to text, or cast it back with `::uuid` when it must join a uuid column. `ORDER BY` on a uuid works without a cast; only `min`/`max` are missing.
+Compare the result with other `::text`-cast ids, or cast the scalar back with `::uuid` where it must join a uuid column. `selectDistinctOn(...).orderBy(desc(orders.id))` needs no cast: `ORDER BY` over uuid is defined, and only the `min`/`max` aggregates are missing.
 
-## 2.8 `SELECT DISTINCT` can only order by what it selects: remove duplicates at the source
+## II.8 `SELECT DISTINCT` orders only by its own select list: dedupe at the source
 
-**The rule.** With `SELECT DISTINCT`, Postgres requires every `ORDER BY` expression to be **exactly** one of the selected expressions. Even a cast makes them different: select `coalesce(x, 0)::int` and order by `coalesce(x, 0)`, and the query fails at runtime even though it typechecks. Don't fix it by copying the cast into `ORDER BY`; that ties the two together forever. Remove the reason for `DISTINCT` instead:
+Postgres rejects a `SELECT DISTINCT` whose `ORDER BY` expressions are not **identical** to members of the select list, and a decoder cast is enough to break identity. Selecting `coalesce(x, 0)::int` while ordering by `coalesce(x, 0)` is a runtime error that typechecks fine. Never patch it by duplicating the cast into `ORDER BY`; the select list and the ordering would then have to co-evolve forever. Remove the need for `DISTINCT` at the boundary, and dedupe at the **source**:
 
-- if the duplicates come from a `unionAll`, use `union`;
-- if you want one row per key, use `selectDistinctOn([key], …)` with that key leading the `ORDER BY`;
-- otherwise remove duplicates in a grouped CTE, then select from it with a plain query, which may order by anything.
+- `union` instead of `unionAll` when the union legs are the duplication;
+- `selectDistinctOn([key], …)`, with `key` leading the `ORDER BY`, when you want one row per key;
+- a grouped CTE otherwise. A plain outer select may then order by anything.
 
-## 2.9 No `DISTINCT` inside a window function: count in a grouped subquery and join it back
+## II.9 No `DISTINCT` inside window aggregates: spread via a grouped join
 
-**The rule.** Postgres does not support `DISTINCT` in window functions. `count(DISTINCT x) OVER (PARTITION BY k)` fails at runtime even though it typechecks. When a windowed query needs a per-partition distinct count, compute it in a grouped subquery and join it back:
+Postgres does not implement `DISTINCT` for window functions. `count(DISTINCT x) OVER (PARTITION BY k)` is a runtime error that typechecks fine. When a windowed query needs a per-partition distinct count, compute it in a **grouped subquery** on the partition key and join it back onto the windowed rows. Use the nested `row_number()` idiom when the key is not a single expression.
 
 ```ts
-// BEFORE: fails at runtime
+// VIOLATION: runtime error
 sql<number>`count(DISTINCT ${events.userId}) OVER (PARTITION BY ${events.campaignId})`
 
-// AFTER: count per campaign in a grouped subquery, join it to the rows
+// CORRECT: a grouped subquery on the partition key, joined back
 const reach = db
 	.select({ reachCampaignId: events.campaignId, reachUsers: countDistinct(events.userId) })
 	.from(events)
 	.groupBy(events.campaignId)
 	.as("reach")
-db.select({ id: events.id, users: reach.reachUsers }).from(events).innerJoin(reach, eq(reach.reachCampaignId, events.campaignId))
+db.select({ id: events.id, users: reach.reachUsers })
+	.from(events)
+	.innerJoin(reach, eq(reach.reachCampaignId, events.campaignId))
 ```
 
-When the partition isn't a single expression, use a nested `row_number()` instead. A line containing both `distinct` and `over (` is always wrong.
+`distinct` and `over (` on the same line is always wrong.
 
-## 2.10 Reading a header and its sidecars (pairs with 1.2)
+## II.10 Reading discriminated unions (pairs with I.2)
 
-Read so that the type keeps what the schema guarantees:
+Read a header and its typed sidecars so that the proof survives into the result type:
 
-- **When you already know the kind, inner-join its sidecar.** Its columns are NOT NULL, so they come back typed `T`, with no `as`, no `!` and no null check. The join also filters to that kind for free, because headers of other kinds have no row there. Prefer it to `WHERE kind = ...` when you want only that kind.
-- **When a row may be any kind, left-join every sidecar and decode each row once, on `kind`.** Branch on the NOT NULL `kind` column a single time. Never work out the kind from which sidecar columns are null. That repeats what `kind` already says, and it silently decodes wrong once two kinds share a column name. Inside each branch, that kind's columns must be present; if one is missing, the header has no sidecar row, so throw instead of defaulting.
+- **Known arm: inner-join the sidecar.** When the statement has already selected one arm, inner-join its sidecar and reference the payload columns directly. They infer NOT NULL: no re-narrowing, no `as`, no `!`.
+- **The join is the arm filter.** Inner-joining a payload-bearing sidecar restricts to that arm for free, because a header of any other arm has no row there. Prefer the join to an explicit `WHERE kind = …` when you want only that arm.
+- **Union boundary: left-join every sidecar and decode once, on the discriminant.** Where a row may be any arm, left-join every sidecar and branch on the NOT NULL `kind` **a single time**, at the boundary that turns rows into a domain union. Never decode by an N-column `!== null` conjunction across the joined sidecars. That re-derives the discriminant the header already states, and it silently mis-decodes the day two arms share a nullable column name. Within an arm's branch, a missing payload column means an orphan header (I.2), which is a defect: fail loudly, never default.
 
 ```ts
 type Grading =
@@ -408,42 +429,48 @@ const rows = await db
 	.leftJoin(gradingAutomaticResults, eq(gradingAutomaticResults.gradingId, gradings.id))
 	.leftJoin(gradingManualReviews, eq(gradingManualReviews.gradingId, gradings.id))
 
-/** The one place a grading row becomes a Grading. A missing sidecar row is corruption, not a case. */
+/** The union boundary: each row decodes once, on its discriminant. An absent payload is an
+ * orphan header, a defect. */
 const gradingOf = (row: (typeof rows)[number]): Grading => {
 	switch (row.kind) {
 		case "automatic":
-			if (row.score === null) throw new GradingSidecarMissing(row.id)
+			if (row.score === null) throw new OrphanGradingHeader(row.id)
 			return { kind: "automatic", id: row.id, score: row.score }
 		case "manual":
-			if (row.graderId === null || row.comment === null) throw new GradingSidecarMissing(row.id)
+			if (row.graderId === null || row.comment === null) throw new OrphanGradingHeader(row.id)
 			return { kind: "manual", id: row.id, graderId: row.graderId, comment: row.comment }
 	}
 }
 ```
 
-Use the project's own failure type in place of `GradingSidecarMissing`. In an Effect codebase, that means a tagged error, or a defect via `Effect.orDie`.
+Substitute the project's failure representation for `OrphanGradingHeader`. In an Effect codebase, that is a tagged error, or a defect via `Effect.orDie`.
 
-- **A sidecar shared by a set of kinds (1.2) needs care.** Inner-join it only when the query has already restricted rows to that set. Otherwise left-join it, and treat a missing row as "this row's kind isn't in the set".
+- **Set-pinned sidecars carry the same guarantee for their set.** A sidecar keyed by the header id alone (present iff `outcome IN (…)`, with no FK pin) carries a weaker one: inner-join it only when the surrounding predicate already restricts to that set. Otherwise left-join it, and treat absence as "not in the set".
 
-## Part 2 audit (run all of it)
+## Part II audit procedure (run all of it when invoked standalone)
 
 1. **Run the project's lint and typecheck.** Both must be clean.
-2. **Run these searches over the query directory. Each hit is a fix, unless the note says to review it:**
-   - `grep -rn '\`(select' <query directory>`: hand-written subqueries (2.2). Exclude the one helper module (2.1).
-   - `grep -rn 'sql<number>' <query directory>`: review each. If it wraps anything that produces a `bigint`, decode it (2.4).
-   - `grep -rn 'selectDistinct(' <query directory>`: if it has an `.orderBy`, every ordering expression must be exactly a selected one; prefer restructuring (2.8).
-   - `grep -rni 'distinct.*over (' <query directory>`: always a bug (2.9).
-   - `grep -rnE 'sql[<\`][^\`]_\`?(max|min|count|sum|avg)\(' <query directory>`: review each. It's a 2.7 violation only when Drizzle's function could express it. `count(_) FILTER (WHERE …)`, counts compared inside a predicate, and JSON or array aggregates have no Drizzle function; leave them as raw SQL, decoded per 2.4.
-   - `grep -rn 'max(\|min(' <query directory>`: review each whose argument is a uuid column; it needs the `::text` cast inside (2.7).
-3. **For every new or changed multi-CTE statement:** if you added a CTE to a shared builder, add it to every other statement that uses that builder. If the project counts statements per operation in tests, keep those counts from growing.
-4. **For every new CTE:** confirm its field names are unique in every statement that uses it (2.3).
-5. **For every read of a header with sidecars:** a known kind inner-joins its sidecar with no `as` or `!`, and a mixed read decodes once on `kind` (2.10). An `as` or `!` that overrides a nullable column a CHECK guarantees means the table needs 1.2. Fix the schema, not the read.
-6. **Check the migrations:** a change that touches only queries adds no migration (1.5).
+2. **Searches.** Each hit is a fix unless marked "review":
+   - `grep -rn '\`(select' <query directory>`, excluding the identifier helper module (II.1): raw scalar subqueries (II.2).
+   - `grep -rn 'sql<number>' <query directory>`: review each hit for an int8 producer without a decoder (II.4).
+   - `grep -rn 'selectDistinct(' <query directory>`: if a hit carries `.orderBy`, every `ORDER BY` expression must be an identical select-list member, casts included. Prefer restructuring per II.8.
+   - `grep -rni 'distinct.*over (' <query directory>`: a windowed `DISTINCT` is always a runtime error (II.9).
+   - `grep -rnE 'sql[<\`][^\`]_\`?(max|min|count|sum|avg)\(' <query directory>`: review raw-SQL aggregate heads. A hit violates II.7 only when the native function could express it. `count(_) FILTER (WHERE …)`, count comparisons inside predicates, and JSONB or array aggregates have no native form; they stay raw, decoded per II.4.
+   - `grep -rn 'max(\|min(' <query directory>`: review each hit whose argument is a uuid column object. It needs the `::text` cast inside (II.7).
+3. **For every new or changed fused statement:**
+   - if a CTE was added to a shared builder, add it to every `WITH` list that must carry it (search the builder's other consumers);
+   - verify the statement-count budget did not regress, where the project asserts one in tests.
+4. **For every new CTE:** confirm its field aliases are globally unique in every statement that joins it (II.3).
+5. **For every read of a discriminated union:**
+   - known-arm reads inner-join the sidecar, with no `as` or `!` re-narrowing;
+   - union-boundary reads decode once on the NOT NULL discriminant, never by an N-column `!== null` conjunction (II.10);
+   - an `as` or `!` defeating a CHECK-guarded nullable is a schema smell; route it back to I.2.
+6. **Check the migrations:** `git diff origin/main -- <migrations directory>` contains only workflow-generated migrations for this branch's schema changes. A query-only change never adds a migration (I.5).
 
-## Stop and rethink when you see
+## Red flags: stop and re-derive
 
-- **A `??`, a ternary in SQL construction, or an `as` added to quiet a type error around a query result.** The error is usually telling you a value isn't decoded the way you think (2.4, 2.5).
-- **An `as` or `!` turning a CHECK-guaranteed column non-null.** The fix belongs in the schema (1.2), not at the read.
-- **An `insert(...).select(...)`.** The select must list every column of the target table, in the table's column order, because the values map by position.
-- **A test double for the database that returns rows as objects.** Drizzle asks node-postgres for rows as arrays (`rowMode: "array"`) for mapped selects, so fake rows must be arrays in select order.
-- **Several places in one run inserting into a table keyed by `(run_id, something)`.** A later step that changes an earlier step's decision then inserts a duplicate key. Decide first, then write: collect the run's decisions in one in-memory map that later steps update, and insert the whole map once at the end.
+- **A `??`, an inline ternary in SQL construction, or an `as` cast appearing to "fix" a type error around a query result.** The type error is reporting a decoder problem (II.4, II.5).
+- **An `as` or `!` re-narrowing a column to non-null that a CHECK already guarantees.** Drizzle infers types from nullability only, so a CHECK-guarded column reads `T | null` regardless. The fix is schema-side (a NOT NULL typed sidecar, I.2), not a cast at the read.
+- **An `insert(...).select(...)`.** The select must list every column of the target table, in definition order: the mapping is positional.
+- **A scripted-driver test returning object rows.** Drizzle requests `rowMode: "array"` for mapped selects, so fixtures must be positional arrays in select order.
+- **A writer inserting into a relation with a per-run unique key (`(run_id, evidence_id)`) from more than one call site in the same run.** A later phase repointing an earlier phase's row duplicates the key. Use _decide, then write_: accumulate the run's decisions in one in-memory plan (a `Map<key, value>` that later phases mutate), and insert the whole plan exactly once at the end.
