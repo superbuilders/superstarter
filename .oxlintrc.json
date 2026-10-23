@@ -72,7 +72,7 @@
 				"paths": [
 					{
 						"name": "zod",
-						"message": "Zod is banned. Admit outside values with Effect Schema (`import { Schema } from \"effect\"`), where a Schema shares its type's name. See rules/effect-schema.md."
+						"message": "Zod is banned. Admit outside values with Effect Schema (`import { Schema } from \"effect\"`), where a Schema shares its type's name."
 					},
 					{
 						"name": "react",
@@ -83,7 +83,7 @@
 				"patterns": [
 					{
 						"group": ["./*", "../*"],
-						"message": "Relative imports are banned. Use a `#` subpath import with the real file extension (`#lib/cn.ts`, `#scripts/dev/shared/devtool.ts`). See rules/no-relative-imports.md."
+						"message": "Relative imports are banned. Use a `#` subpath import with the real file extension (`#lib/cn.ts`, `#scripts/dev/shared/devtool.ts`)."
 					}
 				]
 			}

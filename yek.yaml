@@ -6,7 +6,5 @@ ignore_patterns:
   - "packages/product/nextjs-app/public/**"
   - "packages/product/nextjs-app/src/ui/**"
 priority_rules:
-  - score: 99
-    pattern: "^rules/"
   - score: 100
     pattern: "^\\.oxlintrc\\.json$"

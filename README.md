@@ -5,7 +5,7 @@ TypeScript 7 with every Effect language-service diagnostic as an error, a semant
 TypeScript 7 native API, type-aware oxlint, a Tailwind token linter and a dead-code gate. The example app is a
 todo list: server actions, PostgreSQL on RDS behind Drizzle, and traces, logs and metrics in PostHog
 (on Vercel) or in local JSONL files (everywhere else).
-Working rules live in [AGENTS.md](AGENTS.md); each rule's rationale lives in [rules/](rules).
+Working rules live in [AGENTS.md](AGENTS.md), and the checks enforce them.
 
 ## Stack
 
@@ -82,7 +82,8 @@ pnpm install                 # also patches tsc with @effect/tsgo and installs t
    pnpm env:pull
    ```
 
-   Set `NEXT_OTEL_VERBOSE=1` in Vercel as well if you want every Next.js framework span.
+   A local process traces every Next.js framework phase; set `NEXT_OTEL_VERBOSE=1` in Vercel to trace them
+   there too.
 
 4. **Database.** `pnpm db:migrate apply` applies the reviewed migrations through Drizzle's native
    migrator, then the SQL programs: the `app` login, its `rds_iam` membership and its grants on `core`.
@@ -129,52 +130,28 @@ column, grant or parameter PostgreSQL would refuse fails `pnpm test` instead of 
 
 ## Strictness
 
-- **TypeScript.** The root `tsconfig.json`, which every package extends, turns on `strict`, `exactOptionalPropertyTypes`,
-  `noUncheckedIndexedAccess`, `noPropertyAccessFromIndexSignature`, `noUncheckedSideEffectImports`,
-  `noImplicitReturns`, `erasableSyntaxOnly` and the unused checks.
-- **Effect.** All 130 `@effect/tsgo` diagnostics are errors, suggestions included, so `tsc` refuses, for
-  example:
-  - `async` functions, native array, string and record methods, `Date`, `Math.random`, `process.env`,
-    `console` and Node built-ins that Effect replaces;
-  - an exported two-argument function without a pipeable form;
-  - an error tag that differs from its class name.
+`pnpm check` is the gate, and its configuration is the specification. Every diagnostic says what is wrong
+and how to fix it.
 
-  One exception: `unstableApiUsage` is off, because Effect's whole Node platform layer is marked unstable.
-  Server actions need no exemption: `effectAction` returns a plain function, which Next accepts as a
-  `"use server"` export.
+- **TypeScript:** the root `tsconfig.json`, which every package extends, at full strictness, with every
+  `@effect/tsgo` diagnostic an error. Only `unstableApiUsage` is off, because Effect's whole Node platform
+  layer is marked unstable.
+- **oxlint:** `.oxlintrc.json`, type-aware through tsgolint, plus the repository plugin in
+  `scripts/dev/oxlint/rules/`, one rule per module, each with a RuleTester self-test.
+- **Superlint:** `scripts/dev/lint/rules/`, the rules that need the type checker, each with fixtures.
+- **Style lint:** `scripts/dev/style/rules/`, every Tailwind class resolved through the app's checker and
+  compiled against its theme, each rule with fixtures.
+- **Dead code:** fallow.
 
-- **oxlint** (`.oxlintrc.json`): the correctness and suspicious categories, every type-aware rule tsgolint
-  offers (no floating promises, no unnecessary conditions, exhaustive switches with no needless default,
-  strict boolean expressions), React, accessibility and Next.js rules, and no relative imports, Zod, `process.env`,
-  `console` or inline styles. Five rules stay off on purpose:
-  - `typescript/prefer-nullish-coalescing`: `??` is banned.
-  - `typescript/promise-function-async`: `async` is banned.
-  - `eslint/no-redeclare`: tsc reports redeclarations, and a Schema shares its type's name.
-  - `typescript/consistent-return`: it contradicts `return yield*`, which tsgo requires for an Effect that only
-    fails, and exhaustive switches with no `default`; tsc's `noImplicitReturns` proves every path returns.
-  - `typescript/no-invalid-void-type`: oxlint's port refuses `void` as a generic argument
-    (`Promise.withResolvers<void>()`), which the rule exists to allow.
-- **oxlint's own rules for the repository's bans:** `typescript/consistent-type-assertions` (`assertionStyle:
-  never`, so only `as const`) and `unicorn/no-instanceof-builtins` (`useErrorIsError`).
-- **The repository plugin** (`scripts/dev/oxlint-plugin.ts`, one rule per module in `scripts/dev/oxlint/rules/`,
-  each with a RuleTester self-test, run by oxlint): no `try`, `??`, IIFEs, `new Error`, `||` fallbacks,
-  evolving `null`/`[]` variables, pointless type aliases, needless template literals, untitled `<svg>`,
-  literal `superstarter.*` keys on `Span.attribute`, bodies wrapped in one conditional (prefer early exits),
-  telemetry ownership (who registers the SDK, constructs the OTLP exporters, starts posthog-js and opens
-  spans), and Biome's cognitive complexity (at most 15).
-- **Superlint** (`scripts/dev/lint.ts`): the opinionated rules that need the checker, on TypeScript 7's
-  native API: no null-and-undefined unions, no classes but Effect's, no module state, no pointless
-  indirection, no timestamp columns or random UUIDs, no implicit Drizzle `SELECT *`, no Drizzle `delete` or
-  `update` without `.where()`, and program isolation for the tooling.
-- **Style lint** (`scripts/dev/style.ts`, on TypeScript 7's native API with the app's checker): every class
-  string is found (JSX `className` and `*ClassName` attributes, and every call the checker resolves to `cn`,
-  `clsx`, `twMerge` or `cva`, its variants and compound variants included, with names followed to their
-  constants) and must be statically known: a union of literal types is read literal by literal, a plain
-  `string` and an interpolation inside a class are refused. Every class compiles against the theme in the
-  app's `src/styles/globals.css`; color utilities take theme tokens only; no arbitrary colors, spacing, radii
-  or shadows; one class list never sets a property twice under the same variants, nor repeats a class; every
-  component in `src/app`, `src/components` and `src/ui` carries a unique `data-slot`. Each rule has fixtures
-  under `scripts/dev/style/fixtures/`.
+Five oxlint rules stay off on purpose:
+
+- `typescript/prefer-nullish-coalescing`: `??` is banned.
+- `typescript/promise-function-async`: `async` is banned.
+- `eslint/no-redeclare`: tsc reports redeclarations, and a Schema shares its type's name.
+- `typescript/consistent-return`: it contradicts `return yield*`, which tsgo requires for an Effect that only
+  fails, and exhaustive switches with no `default`; tsc's `noImplicitReturns` proves every path returns.
+- `typescript/no-invalid-void-type`: oxlint's port refuses `void` as a generic argument
+  (`Promise.withResolvers<void>()`), which the rule exists to allow.
 
 ## Layout
 
@@ -189,7 +166,6 @@ packages/
   data/
     database/               Drizzle schema (core.*), postgres pool/connection/transaction, query contracts, SQL programs
 scripts/dev/                check launcher, superlint, oxlint plugin, formatter, style linter
-rules/                      one document per rule: the rule and why
 turbo.json                  the task graph: per-package typecheck and lint, root tooling tasks
 tsconfig.json               the strict base every package extends, and the tooling program
 ```

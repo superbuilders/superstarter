@@ -1,10 +1,11 @@
 import { Array as Arr } from "effect"
-import { type CreateRule, docs, type Expression } from "#scripts/dev/oxlint/rule.ts"
+import { type CreateRule, type Expression } from "#scripts/dev/oxlint/rule.ts"
 
 /** The Option functions whose only work is turning absence back into a marker. */
 const BRIDGES: ReadonlyArray<string> = ["getOrUndefined", "getOrNull"]
 
-const MESSAGE = `An Option is bridged back to an absent marker. Keep it an Option to its consumer (Option.match, Option.map, Option.exists, Option.isSome), or make the absent case a variant of its own. ${docs("no-option-bridge")}`
+const MESSAGE =
+	"An Option is bridged back to an absent marker. Keep it an Option to its consumer (Option.match, Option.map, Option.exists, Option.isSome), or make the absent case a variant of its own."
 
 /** `undefined`, `void 0`, `null`, `-1`, `NaN` or `Number.NaN`: a value standing in for "none". */
 const isAbsentMarker = (node: Expression): boolean => {

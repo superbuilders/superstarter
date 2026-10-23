@@ -38,7 +38,7 @@ const extendedOf = (node: ts.ClassDeclaration | ts.ClassExpression): ts.Expressi
 /**
  * Effect owns the classes a module declares. A class is one of Effect's class idioms (a Schema class or error, a
  * Context service, a Data class), resolved through the checker to its `effect` export, so a renamed import neither
- * hides one nor fakes one; behaviour is module functions. See rules/effect-classes-only.md.
+ * hides one nor fakes one; behaviour is module functions.
  */
 export const effectClassesOnly: Visit = ({ semantics }) => {
 	const isEffectClassFactory = (factory: ts.PropertyAccessExpression): boolean => {

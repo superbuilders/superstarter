@@ -10,8 +10,6 @@ export type AnyNode = Extract<Program["body"][number], { type: "ExpressionStatem
 export type NodeOf<T extends AnyNode["type"]> = Extract<AnyNode, { type: T }>
 export type Expression = NodeOf<"ExpressionStatement">["expression"]
 
-export const docs = (rule: string): string => `See rules/${rule}.md.`
-
 /** The application's source: a workspace package's src/, except the telemetry package that defines the span and
  * attribute registries. */
 export const isApplicationSource = (filename: string): boolean =>

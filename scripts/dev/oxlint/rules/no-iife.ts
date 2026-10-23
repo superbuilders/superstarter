@@ -1,4 +1,4 @@
-import { type CreateRule, docs } from "#scripts/dev/oxlint/rule.ts"
+import type { CreateRule } from "#scripts/dev/oxlint/rule.ts"
 
 export const noIife: CreateRule = {
 	meta: { type: "problem" },
@@ -10,7 +10,8 @@ export const noIife: CreateRule = {
 			) {
 				context.report({
 					node,
-					message: `IIFE usage is disallowed. Define a named function and call it, or restructure the code so it needs no function. ${docs("no-iife")}`
+					message:
+						"IIFE usage is disallowed. Define a named function and call it, or restructure the code so it needs no function."
 				})
 			}
 		}

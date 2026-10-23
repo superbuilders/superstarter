@@ -1,4 +1,4 @@
-# @superstarter/infrastructure
+# @superstarter/data-infrastructure
 
 Superstarter's AWS infrastructure, declared with [Alchemy 2](https://alchemy.run) on Effect.
 

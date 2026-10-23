@@ -8,8 +8,8 @@ import { noNullUndefinedUnion } from "#scripts/dev/lint/rules/null-undefined-uni
 import { noPointlessIndirection } from "#scripts/dev/lint/rules/pointless-indirection.ts"
 import type { Visit } from "#scripts/dev/lint/types.ts"
 
-/** Every rule superlint runs, by the id it reports under: its name in the output, its fixture directory and its
- * rules/*.md doc. Every rule visits every owned file. */
+/** Every rule superlint runs, by the id it reports under: its name in the output and its fixture directory. Every
+ * rule visits every owned file. */
 export const RULES: ReadonlyArray<Readonly<{ id: string; visit: Visit }>> = [
 	{ id: "no-null-undefined-union", visit: noNullUndefinedUnion },
 	{ id: "effect-classes-only", visit: effectClassesOnly },

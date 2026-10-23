@@ -1,5 +1,5 @@
 import { Array as Arr } from "effect"
-import { type AnyNode, type CreateRule, docs } from "#scripts/dev/oxlint/rule.ts"
+import { type AnyNode, type CreateRule } from "#scripts/dev/oxlint/rule.ts"
 
 /** The statements whose condition or returned expression may be boolean logic. */
 const isAllowedParent = (current: AnyNode, parent: AnyNode): boolean => {
@@ -52,7 +52,8 @@ export const noLogicalOrFallback: CreateRule = {
 			if (node.operator === "||" && !isInAllowedPosition(node)) {
 				context.report({
 					node,
-					message: `Logical OR (||) banned for fallbacks. Only allowed in conditionals and return statements. Branch in an if, or compose named predicates with Predicate.or. ${docs("no-logical-or-fallback")}`
+					message:
+						"Logical OR (||) banned for fallbacks. Only allowed in conditionals and return statements. Branch in an if, or compose named predicates with Predicate.or."
 				})
 			}
 		}

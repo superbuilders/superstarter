@@ -1,5 +1,5 @@
 import { Array as Arr, String as Str } from "effect"
-import { type CreateRule } from "#scripts/dev/oxlint/rule.ts"
+import type { CreateRule } from "#scripts/dev/oxlint/rule.ts"
 
 export const noUnusedTemplateLiteral: CreateRule = {
 	meta: { type: "suggestion" },

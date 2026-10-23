@@ -193,7 +193,7 @@ const globalWritesOf = (
  * A module holds no state that every request of the process shares. It refuses a module-level `let` or `var`, a
  * module-level constant whose type (by the checker) is a mutable container, and a write to the global object
  * unless the same file declares that global in `declare global`. There is one such declaration in the
- * application: the web runtime's anchor. See rules/no-module-state.md.
+ * application: the web runtime's anchor.
  */
 export const noModuleState: Visit = (context) => {
 	const declaredGlobals = declaredGlobalsOf(context.sourceFile)

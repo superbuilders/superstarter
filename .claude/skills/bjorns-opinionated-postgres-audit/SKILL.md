@@ -21,7 +21,7 @@ This skill is project-neutral. Before applying it, establish:
 1. Where the Drizzle table modules live, and which module aggregates them into the schema object.
 2. Where the query modules live.
 3. The project's migration workflow: who generates migrations, who applies them, and to which databases.
-4. The project's own rules (`CLAUDE.md`, `AGENTS.md`, `rules/`, lint configuration). **Where they conflict with this skill, the project wins.**
+4. The project's own instructions (`CLAUDE.md`, `AGENTS.md`) and lint configuration. **Where they conflict with this skill, the project wins.**
 
 Audit against the merge base: `git diff origin/main --stat`.
 

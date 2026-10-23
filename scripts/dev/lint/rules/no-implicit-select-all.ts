@@ -53,8 +53,7 @@ const messageOf = (method: string): string => {
 
 /**
  * Every Drizzle select, returning and relational find names its columns. The builder is recognised by the type its
- * method resolves to, not by a receiver name, so a query scope's `database` is checked like `db` and `tx`. See
- * rules/no-implicit-select-all.md.
+ * method resolves to, not by a receiver name, so a query scope's `database` is checked like `db` and `tx`.
  */
 export const noImplicitSelectAll: Visit =
 	({ semantics }) =>
@@ -66,8 +65,7 @@ export const noImplicitSelectAll: Visit =
 		return [
 			{
 				node: call.node.expression.name,
-				message: messageOf(call.node.expression.name.text),
-				suggestion: "See rules/no-implicit-select-all.md."
+				message: messageOf(call.node.expression.name.text)
 			}
 		]
 	}

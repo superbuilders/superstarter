@@ -1,6 +1,7 @@
-import { type CreateRule, docs } from "#scripts/dev/oxlint/rule.ts"
+import type { CreateRule } from "#scripts/dev/oxlint/rule.ts"
 
-const NEW_ERROR_MESSAGE = `Constructing Error is disallowed. Define a Schema.TaggedError class (its tag equals its name) and fail with \`yield* Failure.make({ ... })\` or \`Effect.fail(...)\`, so the failure is typed and can be handled with Effect.catchTag. ${docs("no-new-error")}`
+const NEW_ERROR_MESSAGE =
+	"Constructing Error is disallowed. Define a Schema.TaggedError class (its tag equals its name) and fail with `yield* Failure.make({ ... })` or `Effect.fail(...)`, so the failure is typed and can be handled with Effect.catchTag."
 
 export const noNewError: CreateRule = {
 	meta: { type: "problem" },
