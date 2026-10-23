@@ -1,173 +1,255 @@
 # superstarter
 
-A Next.js starter on Effect. Everything in it is typed end to end and checked harder than usual:
-TypeScript 7 with every Effect language-service diagnostic as an error, a semantic linter on the
-TypeScript 7 native API, type-aware oxlint, a Tailwind token linter and a dead-code gate. The example app is a
-todo list: server actions, PostgreSQL on RDS behind Drizzle, and traces, logs and metrics in PostHog
-(on Vercel) or in local JSONL files (everywhere else).
-Working rules live in [AGENTS.md](AGENTS.md), and the checks enforce them.
+A Next.js starter to copy, built on Effect. The example app is a todo list: server actions, PostgreSQL through
+Drizzle, traces, logs and metrics, and AWS infrastructure declared in code.
+
+What sets it apart is that its opinions are **enforced, not suggested**. TypeScript 7 runs with every Effect
+language-service diagnostic as an error. Type-aware oxlint carries the repository's own rules, a semantic linter
+runs on the TypeScript checker, a Tailwind linter resolves every class through the same checker, and a dead-code
+gate runs alongside them. One `pnpm check` runs everything, and it is the pre-commit hook. A convention that
+matters is a diagnostic, and every diagnostic says how to fix what it found.
+
+[AGENTS.md](AGENTS.md) is the working contract for anyone, human or agent, changing the code.
+
+## Quick start
+
+Everything runs locally, offline, with no env file. You need Node 24+, pnpm, and PostgreSQL 18's server binaries
+(`initdb`, `pg_ctl`) on `PATH`, for example Homebrew's `postgresql@18`.
+
+```sh
+pnpm install    # also patches tsc with @effect/tsgo and installs the pre-commit hook
+pnpm db:local   # creates and starts a private PostgreSQL 18 on localhost:5434, then migrates it
+pnpm dev        # http://localhost:3000
+```
+
+- **`pnpm test`** rebuilds a throwaway `superstarter_test` database from the migrations and runs the integration
+  suites against it.
+- **`pnpm check`** runs the whole gate.
+- **Telemetry:** locally, spans, logs and metrics go to `packages/product/nextjs-app/out/telemetry/*.jsonl`, in
+  the same OTLP/JSON a deployment sends to PostHog. Read them to see what a change emits.
 
 ## Stack
 
-| Layer          | Choice                                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------------ |
-| Runtime        | Node 24+, running TypeScript by type stripping; pnpm                                                   |
-| Framework      | Next.js 16.4 (App Router, Cache Components, React Compiler), React 19.3                                |
-| Language       | TypeScript 7.0.2 patched by `@effect/tsgo`, Effect 4                                                   |
-| Data           | PostgreSQL 18.3 on RDS, Drizzle ORM 1.0, `pg`; RDS IAM auth through Vercel OIDC                        |
-| Telemetry      | Effect's tracer and logger bridged to OpenTelemetry (`@vercel/otel`): PostHog or local JSONL           |
-| UI             | shadcn (Base UI, `base-nova`), Tailwind 4                                                              |
-| Infrastructure | Alchemy 2 on Effect, in [packages/platform/data-infrastructure](packages/platform/data-infrastructure) |
-| Workspace      | pnpm workspaces and Turborepo: per-package typecheck and lint, cached                                  |
-| Checks         | oxlint + tsgolint, oxfmt, superlint, style lint, fallow, lefthook                                      |
+| Layer          | Choice                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------- |
+| Runtime        | Node 24+, running TypeScript by type stripping; pnpm workspaces and Turborepo          |
+| Framework      | Next.js 16 (App Router, Cache Components, React Compiler), React 19                    |
+| Language       | TypeScript 7, patched by `@effect/tsgo`; Effect 4                                      |
+| Data           | PostgreSQL 18 (RDS in production), Drizzle 1.0, `pg`; RDS IAM auth through Vercel OIDC |
+| Telemetry      | Effect's tracer and logger bridged to OpenTelemetry: PostHog on Vercel, JSONL locally  |
+| UI             | shadcn (Base UI, `base-nova`), Tailwind 4                                              |
+| Infrastructure | Alchemy 2                                                                              |
+| Checks         | oxlint + tsgolint, superlint, style lint, oxfmt, fallow, lefthook                      |
 
-## How it fits together
+## The opinions
 
-- **Server first.** Pages are server components that are never async: a page builds a promise of its
-  data and hands it to a client component that calls `use()` inside `<Suspense>`. A mutation is a server
-  action built by `effectAction` from a contract (`@superstarter/todo-protocol/todo-contracts`): its name and its payload,
-  success and error Schemas. The browser calls it through `callAction` as an Effect that fails with the
-  contract's own error classes.
-- **Effect inside, Promises at the edges.** Reads and writes are Effect values; Next's boundaries run them
-  with `runRenderRead` (pages, tied to React's `cacheSignal`) and `effectAction` (server actions). Failures are
-  `Schema.TaggedError` values in the type, never exceptions.
-- **One database path.** `withApplicationPostgres` borrows a pooled connection that signed in as `app`
-  with an RDS IAM token. `withPostgresStatement`, `withPostgresTransaction` and
-  `withPostgresReadTransaction` lend a scope that can only build and run statements. Every transaction is
-  SERIALIZABLE; a 40001 or 40P01 comes back as a typed `PostgresTransientFailure`. Primary keys are
-  UUIDv7 minted by PostgreSQL, and there are no timestamp columns.
-- **Typed telemetry.** Each operation in `OPERATIONAL_SPANS` declares its span name and the Schemas of
-  every attribute its span may carry. `observed` wraps work in that span; `annotateOperation` writes a
-  learned fact, and only types inside that operation's `observed`. Every log carries its span's
-  attributes. Where it all goes is decided once, from the deployment (`telemetryBackend` in the app's
-  `src/env.ts`):
-  - **On Vercel** (production and preview), spans, logs and metrics export to PostHog over gzipped OTLP,
-    flushed by `@vercel/otel` as each request ends; server exceptions go to PostHog Error Tracking, and
-    posthog-js runs in the browser. The project token is required there. A batch PostHog refuses as too
-    large (413) is halved and resent, as PostHog's SDK spec does; a single record it still refuses is
-    dropped with a console receipt.
-  - **Locally** (`pnpm dev`, a local `pnpm build`/`start`), nothing reaches PostHog and no token is read.
-    Each signal is appended to the app's `out/telemetry/traces.jsonl`, `logs.jsonl` and `metrics.jsonl`, one
-    OTLP/JSON export request per line (the OpenTelemetry Collector file exporter's format); server
-    exceptions go to `out/telemetry/exceptions.jsonl` beside them; logs also print to the terminal; the browser
-    starts no analytics. A request's spans and logs are written as soon as it ends; metrics once a minute.
-- **Vercel-focused, never Vercel-dependent.** `pnpm db:local && pnpm dev`, a local `pnpm build && pnpm
-  start` and `pnpm test` run with no env file and offline: every local default lives in an env module
-  (`Config.withDefault`), the Geist font ships in the `geist` package, and telemetry stays on disk.
-- **Config is code.** Each package that reads environment declares every variable it reads as an Effect
-  `Config` in its own `src/env.ts` (the app, the infrastructure package). The database package reads none:
-  connection facts are passed in. The browser never reads env; the server passes what the client needs.
+Each one is a decision with a reason, and nearly all are enforced by `pnpm check`.
 
-## Setup
+### Design
 
-You need Node 24 or later, pnpm, a Vercel project, and an AWS account for the infrastructure.
+- **Representation over control flow.** When a new case appears, change the types so it stops being special or
+  stops being expressible, rather than adding a branch, flag, guard or sentinel. This is _parse, don't validate_:
+  admit a value once at the boundary, by an Effect Schema, and let its type carry the proof inward. Never
+  re-check it inside. _Make illegal states unrepresentable_: a closed result is a `kind` union, absence is an
+  `Option` or a variant, and a missing value is never papered over with a fallback.
+- **Delete before you add.** A fix removes the cause. A new rule, guard or branch needs evidence that deleting
+  something could not do the job.
+- **Hard cutovers.** A change replaces the old way everywhere at once: no shims, aliases, deprecated paths or
+  readers of an old form.
+- **Never defend against a trusted component.** Rows from our own SQL decode through their Schema once. A decode
+  failure is a defect that dies loudly, never a state with its own branch.
+- **Vercel-focused, never Vercel-dependent.** The deployment target is Vercel, but `pnpm db:local`, `pnpm dev`,
+  `pnpm build && pnpm start` and `pnpm test` all run locally with no env file. A local default lives in its
+  package's env module as a `Config.withDefault`, never in a committed `.env`.
+- **Code is the documentation.** Types, lint rules and the code itself are the specification. The only comments
+  are JSDoc on declarations and tool directives; the formatter strips everything else. Markdown exists only for
+  what code cannot express: why a design exists, what it rejects, and facts from outside.
 
-```sh
-pnpm install                 # also patches tsc with @effect/tsgo and installs the git hook
-```
+### Effect everywhere
 
-1. **Infrastructure.** Follow [packages/platform/data-infrastructure/README.md](packages/platform/data-infrastructure/README.md):
-   bootstrap once, plan, deploy. The deploy prints `AWS_ROLE_ARN`, `DATABASE_HOST` and
-   `DATABASE_ADMIN_SECRET_ARN`.
-2. **Vercel project.** Set the project's Root Directory to `packages/product/nextjs-app` in the Vercel
-   dashboard. The app's [vercel.json](packages/product/nextjs-app/vercel.json) installs the workspace
-   with `pnpm install --frozen-lockfile` and builds with `pnpm run build`; Turbo does not run on Vercel.
-3. **Environment.** Set those three in the Vercel project, and `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`
-   for its deployments ([the app's .env.example](packages/product/nextjs-app/.env.example) describes
-   each), then pull them, with `VERCEL_OIDC_TOKEN`, into the app's `.env.local`. The database scripts read
-   that file too. The PostHog token is only ever read on a Vercel deployment; locally, telemetry goes to
-   the app's `out/telemetry/` and needs no env (the build needs none either):
+- **Errors are values.** Every expected failure is a `Schema.TaggedError` named `<Subject><State>`
+  (`TodoNotFound`, `PostgresTransientFailure`), its tag equal to its class name and its fields closed Schemas.
+  A bug is a defect, not a typed error.
+- **No `async`, `try`, `throw` or Promise chains in application code.** `Effect.tryPromise` captures a native
+  failure where it occurs, maps it to a tagged error, and passes the abort signal on. Next's boundaries are the
+  only Promises: `runRenderRead` for pages and `effectAction` for server actions. The single sanctioned `throw`
+  is in a native callback whose contract demands one.
+- **No ambient effects.** No `Date`, `Math.random`, timers, `console`, `fetch`, synchronous Node APIs or
+  `process.env`. Use `DateTime`/`Clock`, `Random`, `Effect.sleep`, `Effect.log*`, Effect's platform services
+  and `Config`. Each package that reads environment declares every variable in its own `src/env.ts`.
+- **No escape hatches.** No `as` (except `as const`), `!`, `??`, `||` as a fallback, `instanceof Error`,
+  `new Error`, IIFEs, or unions of `null` and `undefined`. No turning an `Option` back into `undefined`, `null`,
+  `-1` or `NaN`. No classes except Effect's (Schema classes, tagged errors, service keys). No module-level
+  mutable state: what outlives a request is a service of the one web runtime.
+- **Pipeable APIs.** An exported function of two or more parameters is written with `Function.dual`, so it works
+  data-first and in a pipe.
 
-   ```sh
-   pnpm env:pull
-   ```
+### Data
 
-   A local process traces every Next.js framework phase; set `NEXT_OTEL_VERBOSE=1` in Vercel to trace them
-   there too.
+- **UUIDv7 keys and no timestamp columns.** PostgreSQL mints every primary key with `uuidv7()`, and a CHECK pins
+  its version. The id's leading 48 bits are its creation time, so `ORDER BY id` is creation order and a timestamp
+  column would only store the same fact twice.
+- **SERIALIZABLE everywhere.** Every transaction runs SERIALIZABLE, and a transaction owns its `BEGIN`, `COMMIT`
+  and `ROLLBACK` under an uninterruptible region, so an interrupted fiber never returns a connection
+  mid-transaction. A serialization failure or deadlock (40001, 40P01) is a typed `PostgresTransientFailure` that
+  the caller chooses to retry, with jittered backoff.
+- **Every statement is declared, prepared and proven.** Each statement the app runs is a
+  `preparePostgresStatement` with a name and a result Schema, and its rows decode once. A test suite finds every
+  statement through the compiler and `PREPARE`s it as the app's own database login against the migrated test
+  database. A column, grant or parameter PostgreSQL would refuse fails `pnpm test`, not production.
+- **Explicit everything.** Sessions run with `search_path=pg_catalog`, so every statement names its schema. No
+  query reads every column implicitly, and no `delete` or `update` lacks a `.where()`. Every constraint is named.
+- **Migrations only.** There is no `push`, and generated migrations are never edited by hand. People draft and
+  review migrations, and people apply them to shared databases.
+- **Normalized relations.** Tables are in BCNF. A sum type is a header table plus one typed table per kind, never
+  one wide table with nullable columns gated by a CHECK, because Drizzle types a column from its nullability
+  alone. The full rules are in the `bjorns-opinionated-postgres-audit` skill (`.claude/skills/`).
 
-4. **Database.** `pnpm db:migrate apply` applies the reviewed migrations through Drizzle's native
-   migrator, then the SQL programs: the `app` login, its `rds_iam` membership and its grants on `core`.
-   It signs in as the RDS master user through the Vercel OIDC role, so no AWS keys are needed.
-5. **Run locally.** `pnpm db:local` starts superstarter's own PostgreSQL 18 (Homebrew's, production's
-   major) in the gitignored `out/postgres/`, on localhost:5434 with trust authentication, creating the
-   cluster the first time; then it migrates the `superstarter` database and applies the programs. It is
-   idempotent, so rerun it whenever. The app signs in to it as `app`, to `superstarter` unless
-   `LOCAL_POSTGRES_DATABASE` names another (`pnpm test` names `superstarter_test`); no env file is needed.
+### Server and UI
 
-   ```sh
-   pnpm db:local
-   pnpm dev
-   ```
+- **Pages are never async.** A page builds the promise of its data
+  (`connection().then(() => runRenderRead(read))`) and hands it to a client component that calls `use()` inside
+  `<Suspense>`. Reads start together and stream independently; a build never opens a database session.
+- **Server actions are contracts.** A browser-safe contract names the action and Schemas its payload, success
+  and errors. On the server, `effectAction` decodes the payload, runs the handler, and answers the encoded
+  `Exit`:
+  - a failure the contract names crosses as itself, when it is the run's only reason;
+  - anything else is reported once and crosses as the opaque `ActionFailed`;
+  - `redirect()` and `notFound()` navigate.
+
+  The client calls the action as an Effect and switches exhaustively on `_tag`. A request that never answered is
+  `ActionUnconfirmed`, and it is never retried automatically.
+
+- **Tailwind tokens only, statically known.** The style linter finds every class string through the TypeScript
+  checker and refuses:
+  - a class that does not compile against the theme;
+  - a color outside the theme, and an arbitrary value;
+  - a class it cannot read whole from the source;
+  - two classes setting the same property.
+
+  Map state to fixed class strings; never interpolate into a class. Every component carries a `data-slot`.
+
+- **The React Compiler is mandatory.** A component it cannot compile fails the build, so `useMemo`,
+  `useCallback` and `memo` never appear.
+
+### Telemetry
+
+- **A closed, typed roster of operations.** Every span is an entry of `OPERATIONAL_SPANS`: its name, plus
+  Schemas for the attributes it opens with and the ones it learns. `observed` opens the span.
+  `annotateOperation` writes a learned fact, and it only typechecks inside that operation's `observed`. An
+  operation built anywhere else does not typecheck. The web server's observability modules alone register the
+  OpenTelemetry SDK and construct its exporters.
+- **Wide logs.** Effect logs carry their span's attributes, so a log never repeats its context. A message is a
+  terse literal; its facts are structured. Logs never contain secrets, request bodies, queries or what a person
+  typed.
+- **PostHog's SDK spec, and local parity.** On Vercel, gzipped OTLP goes to PostHog, flushed as each request
+  ends. A batch PostHog refuses as too large is halved and resent, and a single record it still refuses is
+  dropped with a receipt. Locally, identical OTLP/JSON goes to JSONL files, Next's own framework spans are on,
+  and the token is never read. A SIGINT or SIGTERM disposes the runtime within five seconds, so the last
+  metrics, spans and logs are written before the process exits.
+
+### Tooling
+
+- **Node runs TypeScript directly.** There is no bundler and no loader for scripts. Every package exports its
+  raw TypeScript, and imports go through a package's `#` subpath map with the real file extension, or across
+  packages by export name. There are no relative imports.
+- **One gate that never writes.** `pnpm check` is the pre-commit hook, and it only refuses: `pnpm format:write`
+  is the only command that changes files. Turborepo replays any check whose inputs did not change.
+- **Rules are proven.** Each repository lint rule ships with fixtures or RuleTester cases that pin exactly what
+  it must and must not report.
+- **Lints record decisions.** A lint rule is an owner's decision. It is strengthened, never weakened, and never
+  suppressed to make a change pass.
+
+### Deliberate exceptions
+
+These are switched off on purpose, each for a reason:
+
+- `@effect/tsgo`'s `unstableApiUsage` is off, because Effect's whole Node platform layer is marked unstable.
+- Five oxlint rules are off:
+  - `typescript/prefer-nullish-coalescing`: `??` is banned.
+  - `typescript/promise-function-async`: `async` is banned.
+  - `eslint/no-redeclare`: tsc already reports redeclarations, and a Schema shares its type's name.
+  - `typescript/consistent-return`: it contradicts `return yield*`, which tsgo requires for an Effect that only
+    fails, and exhaustive switches without a `default`. tsc's `noImplicitReturns` already proves every path
+    returns.
+  - `typescript/no-invalid-void-type`: oxlint's port refuses `void` as a generic argument
+    (`Promise.withResolvers<void>()`), which the rule exists to allow.
+
+## How a request flows
+
+- **A page read:**
+  1. The page calls `runRenderRead(readTodos)`, which runs the Effect on the process's single `ManagedRuntime`,
+     tied to React's `cacheSignal`.
+  2. The read borrows a pooled connection (`withApplicationPostgres`) and runs a prepared statement.
+  3. The rows decode through the statement's Schema.
+  4. Every step is a span in the request's trace.
+- **A mutation:**
+  1. The client's `callAction(contract, action)` encodes the payload and calls the server action.
+  2. `effectAction` decodes it and runs the handler (for example `flipTodo(id).pipe(retryPostgresTransient)`)
+     inside one `superstarter.action` span.
+  3. The handler revalidates the page, and the action answers with the encoded `Exit`.
+  4. The client decodes the `Exit` back into the contract's own error classes.
+- **The runtime:** one `ManagedRuntime`, anchored on `globalThis`, holds the process's services:
+  - its telemetry;
+  - the OpenTelemetry pipeline;
+  - the PostgreSQL pool.
+
+  Next's instrumentation builds the runtime before the first request, and the exit hook disposes it.
+
+## Deploying
+
+You need a Vercel project and an AWS account.
+
+1. **Infrastructure.** Follow [the infrastructure package's README](packages/platform/data-infrastructure/README.md):
+   bootstrap once, plan, then deploy, naming every resource the plan changes. The deploy prints
+   `AWS_ROLE_ARN`, `DATABASE_HOST` and `DATABASE_ADMIN_SECRET_ARN`.
+2. **The Vercel project.**
+   - Set its Root Directory to `packages/product/nextjs-app`. Its [vercel.json](packages/product/nextjs-app/vercel.json)
+     installs with `pnpm install --frozen-lockfile` and builds with `pnpm run build`.
+   - Set the three values above, and `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`, as described in the app's
+     [.env.example](packages/product/nextjs-app/.env.example).
+   - To trace every Next.js framework phase there too, set `NEXT_OTEL_VERBOSE=1`.
+3. **Operator access.** `pnpm env:pull` writes the Vercel project's development environment, with
+   `VERCEL_OIDC_TOKEN`, into the app's `.env.local`. The database operator scripts read that file.
+4. **Migrations.** `pnpm db:migrate apply` signs in as the RDS master user through the Vercel OIDC role. It applies
+   the pending reviewed migrations through Drizzle's native migrator, then the idempotent SQL programs: the
+   `app` login, its `rds_iam` membership and its grants.
 
 ## Commands
 
-Every command runs from the repository root. The checks go through `scripts/dev/check.ts`, which runs
-Turborepo: a task whose inputs did not change replays its cached result, and a package's checks rerun
-whenever a package it depends on changes. Concurrency comes from `--concurrency`, else
-`CHECK_CONCURRENCY` in the shell, else in the root `.env.local`, else Turbo's default.
+Run every command from the repository root.
 
-| Command                                  | What it does                                                                                                                                                                                                                                                  |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev` / `pnpm build` / `pnpm start` | Next.js, in the app package. `build` also typechecks with the patched `tsc`.                                                                                                                                                                                  |
-| `pnpm check`                             | The gate, run by the pre-commit hook: every typecheck, superlint, oxlint, style lint, format check and fallow. Never writes.                                                                                                                                  |
-| `pnpm typecheck`                         | `tsc` for every package (the app after `next typegen`) and for the root tooling.                                                                                                                                                                              |
-| `pnpm lint`                              | Superlint for every package and the root tooling, the fixture self-tests (superlint and style fixtures and the plugin's RuleTester), oxlint (type-aware, with the repository plugin) and fallow (unused files, exports, types and dependencies), in parallel. |
-| `pnpm style`                             | The Tailwind token linter.                                                                                                                                                                                                                                    |
-| `pnpm format` / `pnpm format:write`      | Check / write: strips every comment but JSDoc and tool directives, normalizes blank lines, then oxfmt.                                                                                                                                                        |
-| `pnpm env:pull`                          | Vercel's development environment into the app's `.env.local`.                                                                                                                                                                                                 |
-| `pnpm test`                              | Rebuilds the throwaway `superstarter_test` database from the migrations, then runs the prepared-statement suites and the todo lifecycle suite. Never cached, and not part of `pnpm check`.                                                                    |
-| `pnpm db:local` / `pnpm db:local:stop`   | Start (creating it the first time) / stop the local PostgreSQL 18 on localhost:5434; `db:local` also migrates `superstarter` and applies the programs.                                                                                                        |
-| `pnpm db:generate`                       | Draft a migration from schema changes. A person drafts and reviews every migration.                                                                                                                                                                           |
-| `pnpm db:migrate status` / `apply`       | On RDS: packaged against applied migrations / apply the pending ones through the native migrator, then the SQL programs.                                                                                                                                      |
-| `pnpm db:studio`                         | Drizzle Studio on RDS, signed in as the master user.                                                                                                                                                                                                          |
+| Command                                  | What it does                                                                                                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev` / `pnpm build` / `pnpm start` | Next.js in the app package. `dev` and `start` dispose the runtime on a stop signal, so the last telemetry lands. |
+| `pnpm check`                             | The gate and pre-commit hook: every typecheck and linter, the fixture self-tests, the format check and fallow.   |
+| `pnpm typecheck` / `lint` / `style`      | Parts of the gate on their own.                                                                                  |
+| `pnpm format` / `pnpm format:write`      | Check / write formatting: strip every comment but JSDoc and tool directives, normalize blank lines, then oxfmt.  |
+| `pnpm test`                              | Rebuild `superstarter_test` from the migrations, then run the prepared-statement and todo lifecycle suites.      |
+| `pnpm db:local` / `pnpm db:local:stop`   | Start (creating it the first time) and migrate the local PostgreSQL 18 on localhost:5434 / stop it.              |
+| `pnpm db:generate`                       | Draft a migration from schema changes, for a person to review.                                                   |
+| `pnpm db:migrate status` / `apply`       | On RDS: compare packaged and applied migrations / apply the pending ones, then the SQL programs.                 |
+| `pnpm db:studio`                         | Drizzle Studio on RDS, as the master user.                                                                       |
+| `pnpm env:pull`                          | Vercel's development environment into the app's `.env.local`.                                                    |
 
-Schema changes are migrations only: there is no push and no ad hoc SQL. `db:generate` runs in
-`@superstarter/database`, whose drizzle-kit config never connects; the other `db:*` commands are
-operator scripts in `@superstarter/data-infrastructure`. Every statement the app runs is a declared
-`preparePostgresStatement` in `@superstarter/database/queries/*`; the prepared-statement suite finds
-each one through the compiler and PREPAREs it under `app` against the migrated test database, so a
-column, grant or parameter PostgreSQL would refuse fails `pnpm test` instead of production.
-
-## Strictness
-
-`pnpm check` is the gate, and its configuration is the specification. Every diagnostic says what is wrong
-and how to fix it.
-
-- **TypeScript:** the root `tsconfig.json`, which every package extends, at full strictness, with every
-  `@effect/tsgo` diagnostic an error. Only `unstableApiUsage` is off, because Effect's whole Node platform
-  layer is marked unstable.
-- **oxlint:** `.oxlintrc.json`, type-aware through tsgolint, plus the repository plugin in
-  `scripts/dev/oxlint/rules/`, one rule per module, each with a RuleTester self-test.
-- **Superlint:** `scripts/dev/lint/rules/`, the rules that need the type checker, each with fixtures.
-- **Style lint:** `scripts/dev/style/rules/`, every Tailwind class resolved through the app's checker and
-  compiled against its theme, each rule with fixtures.
-- **Dead code:** fallow.
-
-Five oxlint rules stay off on purpose:
-
-- `typescript/prefer-nullish-coalescing`: `??` is banned.
-- `typescript/promise-function-async`: `async` is banned.
-- `eslint/no-redeclare`: tsc reports redeclarations, and a Schema shares its type's name.
-- `typescript/consistent-return`: it contradicts `return yield*`, which tsgo requires for an Effect that only
-  fails, and exhaustive switches with no `default`; tsc's `noImplicitReturns` proves every path returns.
-- `typescript/no-invalid-void-type`: oxlint's port refuses `void` as a generic argument
-  (`Promise.withResolvers<void>()`), which the rule exists to allow.
+The checks run through Turborepo, so an unchanged task replays its cached result. Set concurrency with
+`--concurrency`, or with `CHECK_CONCURRENCY` in the shell or the root `.env.local`.
 
 ## Layout
 
 ```
 packages/
   product/
-    nextjs-app/             the Next app: pages, server actions and reads, telemetry registration, shadcn UI, env
-    todo-protocol/          browser-safe types the database, server and browser share: todos, action contracts
+    nextjs-app/             pages, server actions and reads, the telemetry pipeline, shadcn UI, env
+    todo-protocol/          browser-safe types every layer shares: todo identity, action contracts, wire failures
   platform/
-    operational-telemetry/  the span registry, the Effect→OTel bridge, PostHog and file export
-    data-infrastructure/    Alchemy 2 stack (network, RDS, Vercel runtime role) and the database operator scripts
+    operational-telemetry/  the span registry, the Effect→OpenTelemetry bridge, PostHog and file export
+    data-infrastructure/    the Alchemy stack and the database operator scripts
   data/
-    database/               Drizzle schema (core.*), postgres pool/connection/transaction, query contracts, SQL programs
-scripts/dev/                check launcher, superlint, oxlint plugin, formatter, style linter
-turbo.json                  the task graph: per-package typecheck and lint, root tooling tasks
-tsconfig.json               the strict base every package extends, and the tooling program
+    database/               the Drizzle schema, Postgres scopes and pool, prepared statements, SQL programs, migrations
+scripts/dev/                the check launcher, superlint, the oxlint plugin, the formatter, the style linter
+.claude/skills/             agent skills
+patches/                    pinned patches to dependencies
 ```
 
 ## License

@@ -30,7 +30,7 @@ them, never weaken them.
 
 ## Workspace
 
-A Turborepo workspace in edullm's shape. Every package sits at `packages/<category>/<name>`, is named
+A Turborepo workspace. Every package sits at `packages/<category>/<name>`, is named
 `@superstarter/<name>`, and exports its raw TypeScript (no build step):
 
 - `packages/product/nextjs-app`: the Next app (pages, server actions, the server's telemetry registration,

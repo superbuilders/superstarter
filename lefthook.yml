@@ -1,4 +1,4 @@
-# One check-only gate, as in edullm: the hook never formats or stages files, it only refuses a failing commit.
+# One check-only gate: the hook never formats or stages files, it only refuses a failing commit.
 pre-commit:
   jobs:
     - name: check
